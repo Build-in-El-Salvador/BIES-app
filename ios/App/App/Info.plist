@@ -28,7 +28,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -45,12 +45,14 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>BIES uses your location to verify you are at the coworking space when you check in.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>BIES needs access to your photo library so you can upload profile pictures, banners, and event or project images.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>BIES needs camera access so you can take photos for your profile, events, and projects.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>BIES uses the microphone only when you record a video to post.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>BIES saves images to your photo library when you ask it to.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>lightning</string>
