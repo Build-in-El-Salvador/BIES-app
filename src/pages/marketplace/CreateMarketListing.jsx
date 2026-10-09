@@ -88,7 +88,7 @@ const CreateMarketListing = ({ editMode = false }) => {
             }
         })();
         return () => { cancelled = true; };
-    }, [editMode, naddr]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [editMode, naddr]);  
 
     const toggleCategory = (slug) =>
         setCategories((prev) =>

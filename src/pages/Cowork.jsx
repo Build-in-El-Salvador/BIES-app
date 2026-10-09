@@ -61,7 +61,7 @@ const Cowork = () => {
     useEffect(() => {
         if (justCreated.length === 0) return;
         setJustCreated((prev) => prev.filter((s) => !sessions.some((h) => h.id === s.id)));
-    }, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [sessions]);  
 
     const activeSessions = useMemo(() => {
         const byId = new Map();

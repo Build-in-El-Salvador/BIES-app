@@ -785,6 +785,7 @@ export default ProjectDetails;
 // ─── Subcomponents ──────────────────────────────────────────────────────────
 
 const ProjectSection = ({ section, pieColors, isSidebar }) => {
+    const lightbox = useLightbox();
     const stype = section.type || 'TEXT';
     return (
         <section className={`pd-card ${isSidebar ? 'pd-sidebar-section' : 'pd-about'}`}>
