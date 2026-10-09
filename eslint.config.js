@@ -19,9 +19,11 @@ export default [
       'relay-proxy/**',
       'coverage/**',
       'public/**',
-      // Capacitor copies the built web bundle into the iOS app. It is minified
-      // build output, not source — linting it produced 165 of 176 total errors.
+      // Capacitor copies the built web bundle into the iOS and Android apps. It
+      // is minified build output, not source — linting it produced 165 of 176
+      // total errors.
       'ios/**',
+      'android/**',
       '*.config.js',
     ],
   },
