@@ -1,0 +1,114 @@
+# Minimal CI for the three Node projects in this repo: the root frontend,
+# server/, and relay-proxy/. Before this existed nothing automated ran the
+# build, tests, lint, or audit — which is how `npm run lint` stayed broken for
+# 6.5 weeks and dependencies drifted to 40+ known advisories unnoticed.
+#
+# Node version split is deliberate:
+#   - Production images build on node:20-alpine, so build/typecheck jobs use 20
+#     for parity (this is what catches things like engine-incompatible binaries).
+#   - `npm run test:unit` passes glob patterns to `node --test`, which only
+#     expands them on Node 21+. On Node 20 it fails with "Could not find
+#     'tests/unit/**/*.test.js'". That job therefore runs on 22.
+#     Worth aligning later — either expand the globs in the script or add an
+#     `engines` field — so tests and production agree on a runtime.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-quality:
+    name: Frontend — lint & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # see note above: node --test globs need 21+
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:unit
+
+  frontend-build:
+    name: Frontend — production build (Node 20 parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # matches node:20-alpine in Dockerfile stage 1
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_URL: /api # mirrors Dockerfile stage 1
+
+  server:
+    name: Server — typecheck & tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # matches node:20-alpine in Dockerfile stage 2
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate # required before tsc, as in Dockerfile stage 2
+      - run: npm run build
+      - run: npm test
+
+  relay-proxy:
+    name: Relay proxy — install & syntax
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay-proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: relay-proxy/package-lock.json
+      # npm ci (not npm install) so the lockfile is authoritative, matching the
+      # relay-proxy Dockerfile. This service is internet-facing via nginx /relay.
+      - run: npm ci --omit=dev
+      - run: node --check index.js
+
+  audit:
+    name: Dependency audit (informational)
+    runs-on: ubuntu-latest
+    # Informational for now: the frontend still carries build-tooling advisories
+    # (vite/esbuild/rollup) that need breaking major upgrades and never reach
+    # users. Drop continue-on-error to make this a hard gate once those land.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # --omit=dev on the two projects that ship code, so the signal reflects
+      # real production exposure rather than build tooling.
+      - name: Frontend (production tree)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Server (production tree)
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+      - name: Relay proxy
+        run: npm audit --audit-level=high
+        working-directory: relay-proxy
