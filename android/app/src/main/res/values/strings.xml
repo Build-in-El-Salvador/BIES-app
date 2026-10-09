@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BIES</string>
+    <string name="title_activity_main">BIES</string>
+    <string name="package_name">com.bies.app</string>
+    <string name="custom_url_scheme">com.bies.app</string>
+</resources>
