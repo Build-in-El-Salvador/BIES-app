@@ -31,6 +31,7 @@ import prisma from '../lib/prisma';
 import { generateToken } from '../middleware/auth';
 import { sanitize } from '../middleware/sanitize';
 import { encryptPrivateKey } from '../services/crypto.service';
+import { signAsHostedUser } from '../services/hostedSigner.service';
 import signerRoutes from '../routes/signer.routes';
 
 const mockedUserFind = prisma.user.findUnique as ReturnType<typeof vi.fn>;
@@ -184,28 +185,47 @@ describe('POST /api/signer/sign', () => {
     });
 
     it('signs relay sign-ins only for the BIES relay, and does not log them', async () => {
-        const auth = (relay: string) => ({
+        const auth = (relay: string, extra: Record<string, unknown> = {}) => ({
             kind: 22242, created_at: now(), content: '',
             tags: [['relay', relay], ['challenge', 'abc123']],
+            ...extra,
         });
 
         const ok = await sign(auth('wss://app.example.test/relay/'));
         expect(ok.status).toBe(200);
         expect(mockedLogCreate).not.toHaveBeenCalled();
 
-        expect((await sign(auth('wss://relay.elsewhere.test'))).body.reason).toBe('bad_relay');
-        expect((await sign({ ...auth('wss://app.example.test/relay'), tags: [['relay', 'wss://app.example.test/relay']] })).body.reason).toBe('bad_relay');
+        const refused = async (event: Record<string, unknown>) => (await sign(event)).body.reason;
+        expect(await refused(auth('wss://relay.elsewhere.test'))).toBe('bad_relay');
+        // No challenge
+        expect(await refused(auth('', { tags: [['relay', 'wss://app.example.test/relay']] }))).toBe('bad_relay');
+        // A second relay tag: strfry accepts any match, nostr-rs-relay takes the last.
+        expect(await refused(auth('', { tags: [['relay', 'wss://app.example.test/relay'], ['relay', 'wss://victim.test'], ['challenge', 'abc']] }))).toBe('bad_relay');
+        expect(await refused(auth('', { tags: [['relay', 'wss://victim.test'], ['relay', 'wss://app.example.test/relay'], ['challenge', 'abc']] }))).toBe('bad_relay');
+        // Extra tags, content, or a URL with a query, fragment or credentials
+        expect(await refused(auth('', { tags: [['relay', 'wss://app.example.test/relay'], ['challenge', 'abc'], ['p', 'x']] }))).toBe('bad_relay');
+        expect(await refused(auth('wss://app.example.test/relay', { content: 'I authorise…' }))).toBe('bad_relay');
+        expect(await refused(auth('wss://app.example.test/relay?x=1'))).toBe('bad_relay');
+        expect(await refused(auth('wss://app.example.test/relay#x'))).toBe('bad_relay');
+        expect(await refused(auth('wss://user:pw@app.example.test/relay'))).toBe('bad_relay');
+        expect(await refused(auth('', { tags: [['relay', 'wss://app.example.test/relay'], ['challenge', 'c'.repeat(257)]] }))).toBe('bad_relay');
     });
 
-    it('signs Blossom upload tokens only if they expire within a day', async () => {
-        const blossom = (expiration?: number) => ({
-            kind: 24242, created_at: now(), content: 'Upload',
-            tags: [['t', 'upload'], ...(expiration ? [['expiration', String(expiration)]] : [])],
-        });
+    it('signs Blossom permissions only to upload one file, expiring within a day', async () => {
+        const hash = 'ab'.repeat(32);
+        const blossom = (tags: string[][]) => ({ kind: 24242, created_at: now(), content: 'Upload photo.jpg', tags });
+        const upload = (expiration: string) => blossom([['t', 'upload'], ['x', hash], ['expiration', expiration]]);
 
-        expect((await sign(blossom(now() + 300))).status).toBe(200);
-        expect((await sign(blossom(now() + 2 * 24 * 60 * 60))).body.reason).toBe('bad_expiration');
-        expect((await sign(blossom())).body.reason).toBe('bad_expiration');
+        expect((await sign(upload(String(now() + 300)))).status).toBe(200);
+
+        const refused = async (event: Record<string, unknown>) => (await sign(event)).body.reason;
+        expect(await refused(upload(String(now() + 2 * 24 * 60 * 60)))).toBe('bad_upload_token');
+        expect(await refused(upload(String(now() - 1)))).toBe('bad_upload_token');
+        expect(await refused(upload('0x7fffffff'))).toBe('bad_upload_token');
+        expect(await refused(upload('1e10'))).toBe('bad_upload_token');
+        expect(await refused(blossom([['t', 'delete'], ['x', hash], ['expiration', String(now() + 300)]]))).toBe('bad_upload_token');
+        expect(await refused(blossom([['t', 'upload'], ['expiration', String(now() + 300)]]))).toBe('bad_upload_token');
+        expect(await refused(blossom([['t', 'upload'], ['x', hash], ['expiration', String(now() + 300)], ['expiration', String(now() + 9e6)]]))).toBe('bad_upload_token');
     });
 
     it('releases nothing if the signature cannot be logged', async () => {
@@ -225,20 +245,67 @@ describe('POST /api/signer/sign', () => {
 // ─── Log ─────────────────────────────────────────────────────────────────────
 
 describe('GET /api/signer/log', () => {
-    it('returns only this account’s signatures, newest first, capped', async () => {
-        mockedLogFind.mockResolvedValue([{ kind: 1, eventId: 'abc', source: 'app', createdAt: new Date() }]);
-
-        const res = await fetch(`${base}/api/signer/log?limit=5000`, {
+    const log = async (query: string) => {
+        const res = await fetch(`${base}/api/signer/log${query}`, {
             headers: { Authorization: `Bearer ${tokenFor('hosted')}` },
         });
+        return { status: res.status, body: (await res.json()) as any };
+    };
+
+    it('returns only this account’s signatures, newest first, capped', async () => {
+        mockedLogFind.mockResolvedValue([{ id: 'c1', kind: 1, eventId: 'abc', source: 'app', createdAt: new Date() }]);
+
+        const res = await log('?limit=5000');
 
         expect(res.status).toBe(200);
-        expect(((await res.json()) as any).signatures).toHaveLength(1);
+        expect(res.body.signatures).toHaveLength(1);
+        expect(res.body.next).toBeNull();
         expect(mockedLogFind).toHaveBeenCalledWith(expect.objectContaining({
             where: { userId: 'u-hosted' },
-            orderBy: { createdAt: 'desc' },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: 200,
         }));
+    });
+
+    it('pages back and filters by kind, so a burst of signatures cannot hide one', async () => {
+        mockedLogFind.mockResolvedValue([
+            { id: 'clxpage00000000000000001', kind: 0, eventId: 'a', source: 'app', createdAt: new Date() },
+            { id: 'clxpage00000000000000002', kind: 0, eventId: 'b', source: 'app', createdAt: new Date() },
+        ]);
+
+        const res = await log('?limit=2&kind=0&before=clxpage00000000000000000');
+
+        expect(res.body.next).toBe('clxpage00000000000000002');
+        expect(mockedLogFind).toHaveBeenCalledWith(expect.objectContaining({
+            where: { userId: 'u-hosted', kind: 0 },
+            cursor: { id: 'clxpage00000000000000000' },
+            skip: 1,
+            take: 2,
+        }));
+
+        await log('?before=not-an-id;drop');
+        expect(mockedLogFind).toHaveBeenLastCalledWith(expect.not.objectContaining({ cursor: expect.anything() }));
+    });
+});
+
+// ─── Server-side signing for suspended accounts ──────────────────────────────
+
+describe('signAsHostedUser', () => {
+    const deletion = { kind: 5, created_at: now(), tags: [['e', 'f'.repeat(64)]], content: 'Event deleted from BIES' };
+
+    it('still lets the server retract a banned member’s events, and logs it', async () => {
+        const signed = await signAsHostedUser('u-banned', deletion, 'server');
+
+        expect(signed && verifyEvent(signed)).toBe(true);
+        expect(mockedLogCreate).toHaveBeenCalledWith({
+            data: { userId: 'u-banned', kind: 5, eventId: signed!.id, source: 'server' },
+        });
+    });
+
+    it('signs nothing else for them, and nothing at all for their app', async () => {
+        expect(await signAsHostedUser('u-banned', { ...deletion, kind: 1 }, 'server')).toBeNull();
+        expect(await signAsHostedUser('u-banned', deletion, 'app')).toBeNull();
+        expect(mockedLogCreate).not.toHaveBeenCalled();
     });
 });
 

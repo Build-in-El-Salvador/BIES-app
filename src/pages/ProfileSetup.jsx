@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
 import { nip19 } from 'nostr-tools';
 import { profilesApi } from '../services/api';
+import { nostrSigner } from '../services/nostrSigner';
 import { ArrowRight, Loader2, AlertCircle, ChevronDown, ChevronUp, Send, AtSign, CheckCircle, X } from 'lucide-react';
 import NostrIcon from '../components/NostrIcon';
 
@@ -96,28 +97,32 @@ const ProfileSetup = () => {
 
             await profilesApi.update(updateData);
 
-            // Publish Nostr kind:0 — always sync to private BIES relay;
-            // if user edited the Nostr section, also broadcast to public relays
-            try {
-                const data = {};
-                if (nostrForm.name || biesName.trim()) data.name = nostrForm.name || biesName.trim();
-                if (nostrForm.about) data.about = nostrForm.about;
-                if (nostrForm.picture || nostrProfile?.picture) data.picture = nostrForm.picture || nostrProfile?.picture;
-                if (nostrForm.website || nostrProfile?.website) data.website = nostrForm.website || nostrProfile?.website;
-                if (nip05Name.trim()) data.nip05 = `${nip05Name.trim().toLowerCase()}@buildinelsalvador.com`;
-                else if (nostrForm.nip05) data.nip05 = nostrForm.nip05;
-                if (nostrForm.lud16) data.lud16 = nostrForm.lud16;
-                if (showNostrEdit && nostrForm.name) {
-                    // User edited Nostr profile — publish to all relays
-                    await nostrService.updateProfile(data);
-                } else if (nip05Name.trim() && !nostrProfile?.nip05) {
-                    // User had no NIP-05, got BIES identity — publish to public relays so it's verifiable
-                    await nostrService.updateProfile(data);
-                } else {
-                    await nostrService.updateProfileToBiesRelay(data);
+            // Email accounts skip this: the server publishes their kind:0 when the
+            // profile is saved, and a second, different kind:0 would race it.
+            if (nostrSigner.signsOnDevice) {
+                // Publish Nostr kind:0 — always sync to private BIES relay;
+                // if user edited the Nostr section, also broadcast to public relays
+                try {
+                    const data = {};
+                    if (nostrForm.name || biesName.trim()) data.name = nostrForm.name || biesName.trim();
+                    if (nostrForm.about) data.about = nostrForm.about;
+                    if (nostrForm.picture || nostrProfile?.picture) data.picture = nostrForm.picture || nostrProfile?.picture;
+                    if (nostrForm.website || nostrProfile?.website) data.website = nostrForm.website || nostrProfile?.website;
+                    if (nip05Name.trim()) data.nip05 = `${nip05Name.trim().toLowerCase()}@buildinelsalvador.com`;
+                    else if (nostrForm.nip05) data.nip05 = nostrForm.nip05;
+                    if (nostrForm.lud16) data.lud16 = nostrForm.lud16;
+                    if (showNostrEdit && nostrForm.name) {
+                        // User edited Nostr profile — publish to all relays
+                        await nostrService.updateProfile(data);
+                    } else if (nip05Name.trim() && !nostrProfile?.nip05) {
+                        // User had no NIP-05, got BIES identity — publish to public relays so it's verifiable
+                        await nostrService.updateProfile(data);
+                    } else {
+                        await nostrService.updateProfileToBiesRelay(data);
+                    }
+                } catch (nostrErr) {
+                    console.error('Nostr profile sync failed (non-blocking):', nostrErr);
                 }
-            } catch (nostrErr) {
-                console.error('Nostr profile sync failed (non-blocking):', nostrErr);
             }
 
             // Announce new user on both public and private relays

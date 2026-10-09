@@ -88,7 +88,7 @@ const CourseBuilder = () => {
     if (loading || !course || mirroredRef.current) return;
     const isAuthor = user?.id && course.author?.id && user.id === course.author.id;
     if (!isAuthor || course.status !== 'active' || course.nostrEventId) return;
-    if (!nostrSigner._mode || course.nostrPublish === 'none') return;
+    if (!nostrSigner.signsOnDevice || course.nostrPublish === 'none') return;
     mirroredRef.current = true;
 
     (async () => {

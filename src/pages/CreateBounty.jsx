@@ -56,7 +56,7 @@ const CreateBounty = () => {
     // return the signed event); custodial users let the server publish it.
     const mirrorBounty = async (created) => {
         try {
-            if (nostrSigner._mode) {
+            if (nostrSigner.signsOnDevice) {
                 const pubkey = await nostrSigner.getPublicKey();
                 const rewardLabel = `${Number(created.amount).toLocaleString()} ${rewardType === 'SATS' ? 'sats' : 'points'}`;
                 const event = {

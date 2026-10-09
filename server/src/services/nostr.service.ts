@@ -94,6 +94,7 @@ export async function publishProfileUpdate(
 ): Promise<string | null> {
     const content: Record<string, string> = {
         name: profile.name,
+        display_name: profile.name,
         about: profile.about || '',
         picture: profile.picture || '',
         website: profile.website || '',

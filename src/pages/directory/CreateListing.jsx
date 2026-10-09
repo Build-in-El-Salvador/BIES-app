@@ -222,7 +222,7 @@ const CreateListing = ({ editMode = false }) => {
                 // Best-effort client-side Nostr mirror for Nostr-native owners:
                 // the server only signs for custodial users, so an active listing
                 // without a stored event id gets mirrored from the client.
-                if (listing.status === 'active' && !listing.nostrListingEventId && nostrSigner._mode) {
+                if (listing.status === 'active' && !listing.nostrListingEventId && nostrSigner.signsOnDevice) {
                     try {
                         nostrService.publishDirectoryListing({
                             id: listing.id,

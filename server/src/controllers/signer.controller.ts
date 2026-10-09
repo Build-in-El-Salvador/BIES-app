@@ -18,7 +18,7 @@ const REFUSALS: Record<SignRefusal, string> = {
     bad_time: "The event's time is too far from now.",
     too_large: 'The event is too large.',
     bad_relay: 'BIES only signs relay sign-ins for its own relay.',
-    bad_expiration: 'Upload permissions must expire within a day.',
+    bad_upload_token: 'BIES only signs permissions to upload one file, expiring within a day.',
 };
 
 /**
@@ -65,21 +65,29 @@ export async function signForApp(req: Request, res: Response): Promise<void> {
     }
 }
 
+const ID_RE = /^[a-z0-9]{20,40}$/;
+
 /**
- * GET /api/signer/log?limit=50
- * What BIES has signed with this account's key, newest first.
+ * GET /api/signer/log?limit=50&kind=0&before=<id>
+ * What BIES has signed with this account's key, newest first. Page with
+ * `before` (the `next` of the previous page) and filter by `kind`, so a burst
+ * of harmless signatures can't hide an important one.
  */
 export async function getSignatureLog(req: Request, res: Response): Promise<void> {
     try {
         const requested = parseInt(String(req.query.limit ?? ''), 10);
         const limit = Number.isNaN(requested) ? 50 : Math.min(Math.max(requested, 1), 200);
+        const kind = parseInt(String(req.query.kind ?? ''), 10);
+        const before = typeof req.query.before === 'string' && ID_RE.test(req.query.before) ? req.query.before : null;
+
         const signatures = await prisma.hostedSignature.findMany({
-            where: { userId: req.user!.id },
-            orderBy: { createdAt: 'desc' },
+            where: { userId: req.user!.id, ...(Number.isNaN(kind) ? {} : { kind }) },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: limit,
-            select: { kind: true, eventId: true, source: true, createdAt: true },
+            ...(before ? { cursor: { id: before }, skip: 1 } : {}),
+            select: { id: true, kind: true, eventId: true, source: true, createdAt: true },
         });
-        res.json({ signatures });
+        res.json({ signatures, next: signatures.length === limit ? signatures[signatures.length - 1].id : null });
     } catch (error) {
         console.error('Signature log error:', error);
         res.status(500).json({ error: 'Failed to load the signature log' });
