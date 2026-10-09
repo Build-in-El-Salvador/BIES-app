@@ -15,6 +15,7 @@
 
 import { isNativePlatform, getPlatform } from '../utils/platform';
 import { notificationsApi } from './api';
+import { ANDROID_PUSH_ENABLED } from '../config/featureFlags';
 
 // initNativePush runs on every login and session restore, so guard the
 // listener binding with a module-level flag — otherwise a single tap would
@@ -36,6 +37,9 @@ function getPlugin() {
  */
 export async function initNativePush() {
     if (!isNativePlatform()) return;
+    // Android push needs Firebase (google-services.json) and server-side FCM,
+    // neither of which exists yet. Skip rather than call register() without it.
+    if (getPlatform() === 'android' && !ANDROID_PUSH_ENABLED) return;
 
     const push = getPlugin();
     if (!push) return; // Plugin not installed in this shell — silently skip.
