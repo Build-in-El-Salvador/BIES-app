@@ -1,16 +1,20 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 // nostr-tools is ESM-only (@noble/curves has no CJS build);
 // use dynamic import() so the compiled CJS output doesn't call require().
 import prisma from '../lib/prisma';
 import { generateToken, isAdminPubkey } from '../middleware/auth';
-import { encryptPrivateKey, decryptPrivateKey } from '../services/crypto.service';
+import { encryptPrivateKey } from '../services/crypto.service';
 import { publishRelayList } from '../services/nostr.service';
 import { HEX_PUBKEY_RE, addToRelayWhitelist } from '../services/relayWhitelist.service';
 import { recordOnboardingRedemption } from '../services/voucher.service';
 import { cache } from '../services/redis.service';
-import { config } from '../config';
+import {
+    CODE_TTL_SECONDS,
+    RESEND_COOLDOWN_SECONDS,
+    issueEmailCode,
+    verifyEmailCode,
+} from '../services/emailCode.service';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -22,6 +26,23 @@ import crypto from 'crypto';
  */
 function sanitizeProfile(profile: any): any {
     return profile ? { ...profile, coinosToken: undefined, blinkApiKey: undefined } : null;
+}
+
+/**
+ * The user as sent to the client after sign-in and from /auth/me.
+ * `hostedKey` says whether BIES holds this account's Nostr key. The key
+ * itself never leaves the server.
+ */
+function publicUser(user: any) {
+    return {
+        id: user.id,
+        email: user.email,
+        nostrPubkey: user.nostrPubkey,
+        role: user.role,
+        isAdmin: user.isAdmin,
+        hostedKey: !!user.encryptedPrivkey,
+        profile: sanitizeProfile(user.profile),
+    };
 }
 
 // ─── Fingerprint helpers (ban evasion detection) ───
@@ -83,16 +104,17 @@ async function checkBanEvasion(
 
 // ─── Validation Schemas ───
 
-export const registerSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    name: z.string().min(1).optional(),
-    voucherCode: z.string().max(64).optional(),
+const emailField = z.string().trim().toLowerCase().max(254).email();
+
+export const emailStartSchema = z.object({
+    email: emailField,
+    lang: z.enum(['en', 'es']).optional(),
 });
 
-export const loginSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(1),
+export const emailVerifySchema = z.object({
+    email: emailField,
+    code: z.string().trim().regex(/^\d{6}$/, 'The code is 6 digits'),
+    voucherCode: z.string().max(64).optional(),
 });
 
 export const nostrLoginSchema = z.object({
@@ -125,179 +147,151 @@ async function generateNip05Name(baseName: string): Promise<string | null> {
 // ─── Controllers ───
 
 /**
- * POST /auth/register
- * Register with email/password. Generates a custodial Nostr keypair.
+ * Create an account with a key BIES holds, for an address that just proved
+ * itself with a code. The key is generated and encrypted here and never sent
+ * to the client.
  */
-export async function register(req: Request, res: Response): Promise<void> {
+async function createHostedUser(email: string) {
+    const { generateSecretKey, getPublicKey } = await import('nostr-tools/pure');
+    const secretKey = generateSecretKey();
+    const nostrPubkey = getPublicKey(secretKey);
+    const encryptedPrivkey = encryptPrivateKey(Buffer.from(secretKey).toString('hex'));
+    secretKey.fill(0);
+
     try {
-        const { email, password, name, fingerprint, voucherCode } = req.body;
-
-        // Check if email already exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
-            res.status(409).json({ error: 'Email already registered' });
-            return;
-        }
-
-        // Check for ban evasion via browser fingerprint
-        const bannedUserIds = await checkBanEvasion(fingerprint);
-
-        // Hash password
-        const passwordHash = await bcrypt.hash(password, 12);
-
-        // Generate Nostr keypair for this email user (dynamic import — ESM-only package)
-        const nostrPure = await import('nostr-tools/pure');
-        const secretKey = nostrPure.generateSecretKey();
-        const nostrPubkey = nostrPure.getPublicKey(secretKey);
-        const privateKeyHex = Buffer.from(secretKey).toString('hex');
-        const encryptedPrivkey = encryptPrivateKey(privateKeyHex);
-
-        // Create user + profile in a transaction
         const user = await prisma.user.create({
             data: {
                 email,
-                passwordHash,
                 nostrPubkey,
                 encryptedPrivkey,
                 role: 'MEMBER',
-                isBanned: bannedUserIds.length > 0,
-                profile: {
-                    create: {
-                        name: name || email.split('@')[0],
-                    },
-                },
+                // The app asks for a name after the first sign-in.
+                profile: { create: { name: '' } },
             },
-            include: {
-                profile: true,
-            },
+            include: { profile: true },
         });
-
-        // Store fingerprint for this new account
-        await storeFingerprint(user.id, fingerprint, req);
-
-        // If ban evasion detected, log it and block
-        if (bannedUserIds.length > 0) {
-            await prisma.auditLog.create({
-                data: {
-                    userId: user.id,
-                    action: 'BAN_EVASION_DETECTED',
-                    resource: `user:${user.id}`,
-                    ipAddress: req.ip || null,
-                    userAgent: req.headers['user-agent'] || null,
-                    metadata: JSON.stringify({
-                        matchedBannedUsers: bannedUserIds,
-                        fingerprintHash: fingerprint,
-                    }),
-                },
-            });
-            console.log(`[Auth] Ban evasion detected: new user ${user.id} matches banned users ${bannedUserIds.join(', ')}`);
-            res.status(403).json({ error: 'Your account has been suspended' });
-            return;
+        return { user, created: true };
+    } catch (err) {
+        // Two codes for a new address verified at the same moment: the other
+        // request created the account first.
+        if ((err as { code?: string }).code === 'P2002') {
+            const existing = await prisma.user.findUnique({ where: { email }, include: { profile: true } });
+            if (existing) return { user: existing, created: false };
         }
-
-        // Add custodial pubkey to relay whitelist so email users can access the private relay
-        addToRelayWhitelist(nostrPubkey);
-
-        // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
-        recordOnboardingRedemption(voucherCode, user.id, req.ip || null).catch((err) =>
-            console.error('[Voucher] Onboarding attribution failed:', err)
-        );
-
-        // Publish NIP-65 relay list for the new custodial user
-        publishRelayList(user.id).catch((err) =>
-            console.error('[Nostr] Relay list publish failed:', err)
-        );
-
-        // Auto-generate NIP-05 name from email prefix
-        const nip05Name = await generateNip05Name(email.split('@')[0]);
-        if (nip05Name && user.profile) {
-            await prisma.profile.update({
-                where: { id: user.profile.id },
-                data: { nip05Name },
-            });
-        }
-
-        // Generate JWT
-        const token = generateToken(user.id, user.role, user.isAdmin);
-
-        res.status(201).json({
-            user: {
-                id: user.id,
-                email: user.email,
-                nostrPubkey: user.nostrPubkey,
-                role: user.role,
-                profile: sanitizeProfile(user.profile),
-            },
-            token,
-        });
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ error: 'Registration failed' });
+        throw err;
     }
 }
 
 /**
- * POST /auth/login
- * Login with email/password.
+ * POST /auth/email/start
+ * Email a 6-digit sign-in code. The answer is the same whether or not an
+ * account exists for the address.
  */
-export async function login(req: Request, res: Response): Promise<void> {
+export async function startEmailLogin(req: Request, res: Response): Promise<void> {
     try {
-        const { email, password, fingerprint } = req.body;
+        const { email, lang } = req.body as z.infer<typeof emailStartSchema>;
+        const result = await issueEmailCode(email, 'login', { ip: req.ip ?? null, lang });
 
-        const user = await prisma.user.findUnique({
-            where: { email },
+        if (result.ok) {
+            res.json({ ok: true, expiresInSeconds: CODE_TTL_SECONDS, resendAfterSeconds: RESEND_COOLDOWN_SECONDS });
+            return;
+        }
+        if (result.reason === 'send_failed') {
+            res.status(503).json({ error: "We couldn't send the email. Please try again in a minute.", reason: 'send_failed' });
+            return;
+        }
+        res.setHeader('Retry-After', String(result.retryAfterSeconds));
+        res.status(429).json({
+            error: result.reason === 'busy'
+                ? 'Sign-in by email is busy right now. Please try again later.'
+                : 'Too many codes requested. Please wait before asking for another.',
+            reason: result.reason,
+            retryAfterSeconds: result.retryAfterSeconds,
+        });
+    } catch (error) {
+        console.error('Email sign-in start error:', error);
+        res.status(500).json({ error: 'Could not send a sign-in code' });
+    }
+}
+
+/**
+ * POST /auth/email/verify
+ * Check the code. Signs in the account with this address, or creates one
+ * (with a key BIES holds) the first time.
+ */
+export async function verifyEmailLogin(req: Request, res: Response): Promise<void> {
+    try {
+        const { email, code, voucherCode } = req.body as z.infer<typeof emailVerifySchema>;
+        const result = await verifyEmailCode(email, 'login', code);
+
+        if (!result.ok) {
+            if (result.reason === 'invalid') {
+                res.status(400).json({
+                    error: result.attemptsLeft > 0
+                        ? 'That code is not right.'
+                        : 'That code is not right, and it has now expired. Request a new one.',
+                    reason: 'invalid_code',
+                    attemptsLeft: result.attemptsLeft,
+                });
+            } else {
+                res.status(400).json({ error: 'This code has expired. Request a new one.', reason: 'code_expired' });
+            }
+            return;
+        }
+
+        let user = await prisma.user.findUnique({
+            where: { email: result.email },
             include: { profile: true },
         });
+        let isNewUser = false;
 
-        if (!user || !user.passwordHash) {
-            res.status(401).json({ error: 'Invalid email or password' });
-            return;
+        if (!user) {
+            const created = await createHostedUser(result.email);
+            user = created.user;
+            isNewUser = created.created;
         }
 
-        const isValid = await bcrypt.compare(password, user.passwordHash);
-        if (!isValid) {
-            res.status(401).json({ error: 'Invalid email or password' });
+        if (user.deletedAt) {
+            res.status(403).json({ error: 'This account has been deleted', reason: 'deleted' });
             return;
         }
-
-        // Store fingerprint (even for banned users — builds the fingerprint database)
-        await storeFingerprint(user.id, fingerprint, req);
-
         if (user.isBanned) {
-            res.status(403).json({ error: 'Your account has been suspended' });
+            res.status(403).json({ error: 'Your account has been suspended', reason: 'suspended' });
             return;
         }
 
-        const token = generateToken(user.id, user.role, user.isAdmin);
+        // Relay access, re-granted on every sign-in as Nostr login does.
+        addToRelayWhitelist(user.nostrPubkey);
 
-        // Decrypt the custodial nostr private key so the client can sign
-        // NIP-42 AUTH challenges for the private relay.
-        let nostrNsec: string | undefined;
-        if (user.encryptedPrivkey) {
-            try {
-                const hexKey = decryptPrivateKey(user.encryptedPrivkey);
-                const { nip19 } = await import('nostr-tools');
-                const skBytes = Buffer.from(hexKey, 'hex');
-                nostrNsec = nip19.nsecEncode(new Uint8Array(skBytes));
-            } catch (err) {
-                console.error('Failed to decrypt custodial key for login:', err);
+        if (isNewUser) {
+            // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
+            recordOnboardingRedemption(voucherCode, user.id, req.ip || null).catch((err) =>
+                console.error('[Voucher] Onboarding attribution failed:', err)
+            );
+
+            // Publish NIP-65 relay list for the new custodial user
+            publishRelayList(user.id).catch((err) =>
+                console.error('[Nostr] Relay list publish failed:', err)
+            );
+
+            // NIP-05 name from the pubkey, never from the email address,
+            // which would publish part of it. The user can pick a handle later.
+            const nip05Name = await generateNip05Name(`nostr-${user.nostrPubkey.substring(0, 8)}`);
+            if (nip05Name && user.profile) {
+                const updatedProfile = await prisma.profile.update({
+                    where: { id: user.profile.id },
+                    data: { nip05Name },
+                });
+                user = { ...user, profile: updatedProfile };
             }
         }
 
-        res.json({
-            user: {
-                id: user.id,
-                email: user.email,
-                nostrPubkey: user.nostrPubkey,
-                role: user.role,
-                profile: sanitizeProfile(user.profile),
-            },
-            token,
-            ...(nostrNsec ? { nostrNsec } : {}),
-        });
+        res.locals.auditUserId = user.id;
+        const token = generateToken(user.id, user.role, user.isAdmin);
+        res.status(isNewUser ? 201 : 200).json({ user: publicUser(user), token, isNewUser });
     } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'Login failed' });
+        console.error('Email sign-in verify error:', error);
+        res.status(500).json({ error: 'Sign-in failed' });
     }
 }
 
@@ -487,17 +481,8 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         // Add pubkey to relay whitelist so user can publish to the BIES relay
         addToRelayWhitelist(pubkey);
 
-        res.json({
-            user: {
-                id: user.id,
-                email: user.email,
-                nostrPubkey: user.nostrPubkey,
-                role: user.role,
-                isAdmin: user.isAdmin,
-                profile: sanitizeProfile(user.profile),
-            },
-            token,
-        });
+        res.locals.auditUserId = user.id;
+        res.json({ user: publicUser(user), token });
     } catch (error) {
         console.error('Nostr login error:', error);
         res.status(500).json({ error: 'Nostr login failed' });
@@ -520,32 +505,9 @@ export async function getMe(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // Include nsec for custodial users so the client can sign NIP-42 AUTH
-        let nostrNsec: string | undefined;
-        if (user.encryptedPrivkey) {
-            try {
-                const hexKey = decryptPrivateKey(user.encryptedPrivkey);
-                const { nip19 } = await import('nostr-tools');
-                const skBytes = Buffer.from(hexKey, 'hex');
-                nostrNsec = nip19.nsecEncode(new Uint8Array(skBytes));
-            } catch (err) {
-                console.error('Failed to decrypt custodial key for /me:', err);
-            }
-        }
-
-        // Strip sensitive wallet credentials (Coinos token, Blink API key)
-        // from the profile before sending to the client
-        const profileData = sanitizeProfile(user.profile);
-
-        res.json({
-            id: user.id,
-            email: user.email,
-            nostrPubkey: user.nostrPubkey,
-            role: user.role,
-            isAdmin: user.isAdmin,
-            profile: profileData,
-            ...(nostrNsec ? { nostrNsec } : {}),
-        });
+        // Never includes the private key, even for accounts whose key BIES
+        // holds: those sign through the server.
+        res.json(publicUser(user));
     } catch (error) {
         console.error('Get me error:', error);
         res.status(500).json({ error: 'Failed to get user info' });

@@ -346,28 +346,6 @@ export const AuthProvider = ({ children }) => {
         return { ...result, needsProfileSetup: isNew };
     };
 
-    const loginWithEmail = async (email, password) => {
-        try {
-            const user = await authService.loginWithEmail(email, password);
-            setUser(user);
-            initWebSocket(user);
-            maybePromptPasskeySave();
-            return { success: true, user };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    };
-
-    const signup = async (email, password, role, name) => {
-        try {
-            const user = await authService.register(email, password, role, name);
-            setUser(user);
-            initWebSocket(user);
-            return { success: true, user };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    };
 
     /**
      * For Nostr users who need to complete profile setup after first login.
@@ -486,8 +464,6 @@ export const AuthProvider = ({ children }) => {
             completeExternalLogin,
             loginWithPasskey,
             loginWithPasskeyAndCheckNew,
-            loginWithEmail,
-            signup,
             logout,
             updateRole,
             refreshUser,

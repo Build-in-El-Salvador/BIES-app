@@ -86,7 +86,7 @@ async function uploadFile(path, formData) {
 
 // Onboarding voucher attribution (single choke point): if the visitor arrived
 // via a /join/:code invite link, the code is stashed in localStorage and
-// attached to the initial register / nostr-login request, then cleared once
+// attached to the initial sign-in request, then cleared once
 // the server accepts the request.
 const withVoucherCode = (body) => {
     const voucherCode = localStorage.getItem('bies_onboarding_code') || undefined;
@@ -99,13 +99,6 @@ const clearVoucherCode = (data) => {
 };
 
 export const authApi = {
-    register: (email, password, role, name, fingerprint) =>
-        post('/auth/register', withVoucherCode({ email, password, role, name, fingerprint }))
-            .then(clearVoucherCode),
-
-    login: (email, password, fingerprint) =>
-        post('/auth/login', { email, password, fingerprint }),
-
     nostrChallenge: (pubkey) =>
         get('/auth/nostr-challenge', { pubkey }),
 

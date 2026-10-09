@@ -60,11 +60,6 @@ export const authService = {
         try {
             const user = await authApi.me();
             authService.setCachedUser(user);
-            // Restore client-side signer for custodial users (email login)
-            // so the browser can authenticate to the private relay via NIP-42.
-            if (user.nostrNsec && !nostrSigner.hasKey) {
-                nostrSigner.setNsec(user.nostrNsec);
-            }
             return user;
         } catch {
             // Token expired or invalid
@@ -312,31 +307,6 @@ export const authService = {
         authService.setToken(token);
         authService.setCachedUser(user);
         nostrSigner.setAmberMode(state.pubkey);
-        return user;
-    },
-
-    // ─── Email/password login ───────────────────────────────────────────────
-
-    loginWithEmail: async (email, password) => {
-        const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token, nostrNsec } = await authApi.login(email, password, fingerprint);
-        authService.setToken(token);
-        authService.setCachedUser(user);
-        // Set up client-side signer so the browser can authenticate to
-        // the private relay via NIP-42.
-        if (nostrNsec) {
-            nostrSigner.setNsec(nostrNsec);
-        }
-        return user;
-    },
-
-    // ─── Registration ────────────────────────────────────────────────────────
-
-    register: async (email, password, role, name) => {
-        const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.register(email, password, role, name, fingerprint);
-        authService.setToken(token);
-        authService.setCachedUser(user);
         return user;
     },
 

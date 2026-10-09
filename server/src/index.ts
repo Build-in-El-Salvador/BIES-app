@@ -155,11 +155,15 @@ const generalLimiter = rateLimit({
     skip: (req) => req.method === 'OPTIONS',
 });
 
-// Strict auth: 20 attempts / 15 min per IP (brute force protection)
+// Sign-in: 100 requests / 15 min per IP. Not tighter, because event Wi-Fi and
+// mobile carriers put many people behind one IP. Guessing email codes is
+// limited per address in services/emailCode.service.ts.
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
-    message: { error: 'Too many auth attempts, please try again later' },
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many sign-in attempts, please try again later' },
 });
 
 // Upload: 30 per 15 min
@@ -184,6 +188,7 @@ const contactLimiter = rateLimit({
 });
 
 app.use('/api/', generalLimiter);
+app.use(['/api/auth/email', '/api/auth/nostr-challenge', '/api/auth/nostr-login'], authLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/search', searchLimiter);
 app.use('/api/contact', contactLimiter);

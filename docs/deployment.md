@@ -147,6 +147,8 @@ docker compose logs -f bies-server
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `TRUST_PROXY` | Proxies in front of the server. Production needs `2` (YunoHost nginx, then the container nginx), or every visitor shares one rate limit | `1` |
+| `RESEND_API_KEY` | Resend key ("Sending access" only) for sign-in codes. Without it, production can't send codes | — |
 | `ADMIN_PUBKEYS` | Hex Nostr pubkeys auto-promoted to ADMIN | (empty) |
 | `NOSTR_RELAYS` | Public relays for reading | `wss://relay.damus.io,...` |
 | `REDIS_URL` | Redis for distributed caching | In-memory fallback |
@@ -162,11 +164,10 @@ docker compose logs -f bies-server
 | `S3_BUCKET` | S3 bucket name | — |
 | `S3_PUBLIC_URL` | CDN URL for public files | — |
 | `COINOS_API_URL` | Coinos API base URL | `https://coinos.io/api` |
-| `SMTP_HOST` | SMTP server for emails | Emails disabled |
-| `SMTP_PORT` | SMTP port | `587` |
-| `SMTP_USER` | SMTP username | — |
-| `SMTP_PASS` | SMTP password | — |
-| `SMTP_FROM` | From address | — |
+| `EMAIL_FROM` | Sender of sign-in codes | `BIES <login@buildinelsalvador.com>` |
+| `EMAIL_CODES_MAX_PER_DAY` | Most sign-in codes sent per 24 h, all addresses together. Resend's free plan allows 100 emails a day in total | `60` |
+| `REVIEW_LOGIN_EMAIL` | App Review address that signs in with a fixed code | Off |
+| `REVIEW_LOGIN_CODE` | That fixed code: 6 digits, kept out of the code | Off |
 
 ## Docker Compose Details
 

@@ -2,10 +2,10 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import {
-    register,
-    registerSchema,
-    login,
-    loginSchema,
+    startEmailLogin,
+    emailStartSchema,
+    verifyEmailLogin,
+    emailVerifySchema,
     nostrLogin,
     getNostrChallenge,
     getMe,
@@ -15,8 +15,8 @@ import {
 const router = Router();
 
 // Public routes
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
+router.post('/email/start', validate(emailStartSchema), startEmailLogin);
+router.post('/email/verify', validate(emailVerifySchema), verifyEmailLogin);
 router.get('/nostr-challenge', getNostrChallenge);
 router.post('/nostr-login', nostrLogin);
 

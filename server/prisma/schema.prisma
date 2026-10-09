@@ -87,6 +87,28 @@ model Session {
   @@map("sessions")
 }
 
+// One-time 6-digit codes sent by email (sign-in today; confirming account
+// deletion and key export later). Nothing here is usable if leaked: the code
+// is stored as an HMAC, and the address and IP only as HMACs, so the table
+// never holds the plain address of someone who mistyped theirs. Rows are
+// deleted after 24 hours (services/emailCode.service.ts).
+model EmailCode {
+  id         String    @id @default(cuid())
+  emailHash  String    @map("email_hash")
+  purpose    String    @default("login") // login | delete_account | export_key
+  codeHash   String    @map("code_hash")
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  ipHash     String?   @map("ip_hash")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([emailHash, purpose, createdAt])
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
+  @@map("email_codes")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile
 // ─────────────────────────────────────────────────────────────────────────────

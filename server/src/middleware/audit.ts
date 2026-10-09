@@ -13,8 +13,7 @@ import prisma from '../lib/prisma';
 
 // Map of route patterns → action names
 const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
-    { method: 'POST', pattern: /^\/api\/auth\/register/, action: 'AUTH_REGISTER' },
-    { method: 'POST', pattern: /^\/api\/auth\/login/, action: 'AUTH_LOGIN' },
+    { method: 'POST', pattern: /^\/api\/auth\/email\/verify/, action: 'AUTH_EMAIL_LOGIN' },
     { method: 'POST', pattern: /^\/api\/auth\/nostr-login/, action: 'AUTH_NOSTR_LOGIN' },
     { method: 'PUT',  pattern: /^\/api\/auth\/role/, action: 'AUTH_ROLE_CHANGED' },
     { method: 'PUT',  pattern: /^\/api\/profiles\/me/, action: 'PROFILE_UPDATE' },
@@ -82,7 +81,8 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
         prisma.auditLog.create({
             data: {
-                userId: req.user?.id || null,
+                // Sign-in routes have no req.user; they name the account in res.locals.
+                userId: req.user?.id || res.locals.auditUserId || null,
                 action,
                 resource: req.path,
                 ipAddress,
