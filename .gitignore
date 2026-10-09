@@ -19,3 +19,7 @@ test-results/
 .claude/settings.local.json
 .claude/worktrees/
 *.stale-bak
+
+# Native (Capacitor) build env: holds the absolute production URLs baked into
+# the app bundle. Copy .env.native.example to create it.
+.env.native
