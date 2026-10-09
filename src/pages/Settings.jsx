@@ -126,7 +126,7 @@ const Settings = () => {
     }, []);
 
     const npub = user?.nostrPubkey ? nip19.npubEncode(user.nostrPubkey) : null;
-    const loginMethod = nostrSigner.storedMethod; // 'extension' | 'nsec' | 'bunker' | 'amber' | null
+    const loginMethod = nostrSigner.storedMethod; // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted' | null
 
     const copyToClipboard = useCallback((text, label) => {
         navigator.clipboard.writeText(text);
@@ -527,6 +527,8 @@ const Settings = () => {
                                     ? 'Your key is managed by your remote signer'
                                     : loginMethod === 'amber'
                                     ? 'Your key is managed by the Amber app on this device'
+                                    : loginMethod === 'hosted'
+                                    ? 'BIES holds your key for you'
                                     : 'Reveal your private key for backup'}
                             </p>
                         </div>
@@ -546,6 +548,11 @@ const Settings = () => {
                         <div className="key-info-banner">
                             <AlertTriangle size={16} />
                             <span>Your secret key is held by the Amber app (NIP-55). Open Amber to manage or export it.</span>
+                        </div>
+                    ) : loginMethod === 'hosted' ? (
+                        <div className="key-info-banner">
+                            <AlertTriangle size={16} />
+                            <span>You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device.</span>
                         </div>
                     ) : nsecRevealed && nsecValue ? (
                         <>
@@ -578,9 +585,10 @@ const Settings = () => {
                 </div>
 
                 {/* Passkey Quick Login (keytr) — hidden on native (no WebAuthn
-                    in WKWebView) and for external-signer sessions (extension/
-                    bunker/amber) which have no in-browser nsec. */}
-                {PASSKEY_ENABLED && !isNativePlatform() && loginMethod !== 'extension' && loginMethod !== 'bunker' && loginMethod !== 'amber' && (
+                    in WKWebView) and for sessions with no in-browser nsec:
+                    external signers (extension/bunker/amber) and email
+                    accounts (hosted). */}
+                {PASSKEY_ENABLED && !isNativePlatform() && loginMethod !== 'extension' && loginMethod !== 'bunker' && loginMethod !== 'amber' && loginMethod !== 'hosted' && (
                 <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
                     <div className="setting-info" style={{ width: '100%' }}>
                         <div className="icon-box" style={{ background: 'var(--color-primary-light, #eff6ff)', color: 'var(--color-primary)' }}><Fingerprint size={20} /></div>

@@ -60,6 +60,11 @@ export const authService = {
         try {
             const user = await authApi.me();
             authService.setCachedUser(user);
+            // Email accounts sign through the server; the key stays there.
+            const method = nostrSigner.storedMethod;
+            if (user.hostedKey && (!method || method === 'hosted')) {
+                nostrSigner.setHostedMode(user.nostrPubkey);
+            }
             return user;
         } catch {
             // Token expired or invalid
@@ -308,6 +313,23 @@ export const authService = {
         authService.setCachedUser(user);
         nostrSigner.setAmberMode(state.pubkey);
         return user;
+    },
+
+    // ─── Email sign-in ──────────────────────────────────────────────────────
+
+    /** Email a 6-digit sign-in code. lang: 'en' | 'es'. */
+    requestEmailCode: (email, lang) => authApi.emailStart(email, lang),
+
+    /**
+     * Exchange the code for a session. The first sign-in creates the account.
+     * BIES holds its key and signs on the server, so the app never gets it.
+     */
+    loginWithEmailCode: async (email, code) => {
+        const { user, token, isNewUser } = await authApi.emailVerify(email, code);
+        authService.setToken(token);
+        authService.setCachedUser(user);
+        nostrSigner.setHostedMode(user.nostrPubkey);
+        return { user, isNewUser };
     },
 
     // ─── Logout ─────────────────────────────────────────────────────────────

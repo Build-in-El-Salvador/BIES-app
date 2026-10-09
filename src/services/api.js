@@ -99,6 +99,14 @@ const clearVoucherCode = (data) => {
 };
 
 export const authApi = {
+    // Email sign-in: a 6-digit code by email, then a session. The first
+    // sign-in creates the account, with a key BIES holds.
+    emailStart: (email, lang) => post('/auth/email/start', { email, lang }),
+
+    emailVerify: (email, code) =>
+        post('/auth/email/verify', withVoucherCode({ email, code }))
+            .then(clearVoucherCode),
+
     nostrChallenge: (pubkey) =>
         get('/auth/nostr-challenge', { pubkey }),
 
@@ -109,6 +117,14 @@ export const authApi = {
     me: () => get('/auth/me'),
 
     updateRole: (role) => put('/auth/role', { role }),
+};
+
+// ─── Hosted signer (email accounts) ──────────────────────────────────────────
+// BIES holds the key: the server signs and returns the event.
+
+export const signerApi = {
+    sign: (event) => post('/signer/sign', { event }).then((data) => data.event),
+    log: (limit) => get('/signer/log', { limit }),
 };
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
