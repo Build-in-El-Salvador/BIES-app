@@ -23,7 +23,7 @@ export async function recordProjectView(req: Request, res: Response): Promise<vo
     try {
         const { projectId } = req.params;
         const userId = req.user?.id || null;
-        const ipAddress = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
 
         // Dedup key: prevent spam views within 1 hour
         const dedupKey = `view:${projectId}:${userId || ipAddress}`;

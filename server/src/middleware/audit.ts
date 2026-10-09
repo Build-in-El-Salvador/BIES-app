@@ -60,7 +60,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
     // Run after response is sent (non-blocking)
     res.on('finish', () => {
-        const ipAddress = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
         const userAgent = req.headers['user-agent'] || '';
 
         // Only log successful or client-error responses (not 5xx internal errors)

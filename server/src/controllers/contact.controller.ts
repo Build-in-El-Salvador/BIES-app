@@ -16,7 +16,7 @@ export const contactSchema = z.object({
 export async function submitContact(req: Request, res: Response): Promise<void> {
     try {
         const { name, email, role, message } = req.body;
-        const ipAddress = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
 
         const submission = await prisma.contactSubmission.create({
             data: { name, email, role, message, ipAddress },
