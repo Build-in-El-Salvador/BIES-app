@@ -377,7 +377,7 @@ function App() {
                         <UserModeProvider>
                             <LightboxProvider>
                                 <FeatureFlagsProvider>
-                                    <Router basename="/" future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                                    <Router basename="/">
                                         <AppContent />
                                     </Router>
                                 </FeatureFlagsProvider>
