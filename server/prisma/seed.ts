@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { encryptPrivateKey } from '../src/services/crypto.service';
 
@@ -152,6 +151,11 @@ const sampleProjects = [
 ];
 
 async function main() {
+    // The seed deletes every user before inserting test data.
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('Refusing to seed: NODE_ENV is production and seeding deletes all users');
+    }
+
     console.log('🌱 Seeding database...\n');
 
     // Clear existing data
@@ -168,12 +172,10 @@ async function main() {
         const sk = generateSecretKey();
         const pk = getPublicKey(sk);
         const skHex = Buffer.from(sk).toString('hex');
-        const passwordHash = await bcrypt.hash('password123', 12);
 
         const user = await prisma.user.create({
             data: {
-                email: `${builder.name.toLowerCase().replace(/\s+/g, '.')}@bies.dev`,
-                passwordHash,
+                email: `${builder.name.toLowerCase().replace(/\s+/g, '.')}@bies.test`,
                 nostrPubkey: pk,
                 encryptedPrivkey: encryptPrivateKey(skHex),
                 role: 'BUILDER',
@@ -201,12 +203,10 @@ async function main() {
         const sk = generateSecretKey();
         const pk = getPublicKey(sk);
         const skHex = Buffer.from(sk).toString('hex');
-        const passwordHash = await bcrypt.hash('password123', 12);
 
         const user = await prisma.user.create({
             data: {
-                email: `${investor.name.toLowerCase().replace(/\s+/g, '.')}@bies.dev`,
-                passwordHash,
+                email: `${investor.name.toLowerCase().replace(/\s+/g, '.')}@bies.test`,
                 nostrPubkey: pk,
                 encryptedPrivkey: encryptPrivateKey(skHex),
                 role: 'INVESTOR',
@@ -253,11 +253,9 @@ async function main() {
     const adminSk = generateSecretKey();
     const adminPk = getPublicKey(adminSk);
     const adminSkHex = Buffer.from(adminSk).toString('hex');
-    const adminPasswordHash = await bcrypt.hash('admin123', 12);
     await prisma.user.create({
         data: {
-            email: 'admin@bies.dev',
-            passwordHash: adminPasswordHash,
+            email: 'admin@bies.test',
             nostrPubkey: adminPk,
             encryptedPrivkey: encryptPrivateKey(adminSkHex),
             role: 'ADMIN',
@@ -273,12 +271,11 @@ async function main() {
             },
         },
     });
-    console.log('  ✅ Admin: admin@bies.dev');
+    console.log('  ✅ Admin: admin@bies.test');
 
     console.log('\n🎉 Seeding complete!');
-    console.log('\n📋 Login credentials (all seeded accounts):');
-    console.log('   Password: password123');
-    console.log('   Admin: admin@bies.dev / admin123');
+    console.log('\n📋 Sign in with any seeded address (admin: admin@bies.test).');
+    console.log('   Without RESEND_API_KEY, the server prints each sign-in code to its log.');
 }
 
 main()
