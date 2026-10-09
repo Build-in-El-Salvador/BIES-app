@@ -36,7 +36,7 @@
         "jsonwebtoken": "^9.0.2",
         "light-bolt11-decoder": "^3.2.0",
         "multer": "^1.4.5-lts.1",
-        "nostr-tools": "^2.23.0",
+        "nostr-tools": "^2.25.2",
         "prisma": "^5.10.0",
         "rss-parser": "^3.13.0",
         "web-push": "^3.6.7",
