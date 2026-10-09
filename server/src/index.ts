@@ -61,7 +61,9 @@ import flagsRoutes from './routes/flags.routes';
 const app = express();
 
 // ─── Trust proxy (for correct IP behind Nginx / load balancer) ───────────────
-app.set('trust proxy', 1);
+// Must match the number of proxies in front of the server, or every visitor
+// shares one IP and one rate limit. Production: TRUST_PROXY=2.
+app.set('trust proxy', config.trustProxy);
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({

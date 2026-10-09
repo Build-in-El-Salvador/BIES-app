@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import { parseTrustProxy } from '../utils/trustProxy';
 dotenv.config();
 
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -26,6 +27,9 @@ export const config = {
     // Native app WebView origins (Capacitor: capacitor://localhost on iOS,
     // https://localhost on Android) — comma-separated, env-overridable
     corsNativeOrigin: process.env.CORS_NATIVE_ORIGIN || 'capacitor://localhost,https://localhost',
+    // Proxies between the visitor and this server (see utils/trustProxy.ts).
+    // Production runs behind YunoHost nginx and the container nginx: TRUST_PROXY=2.
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
 
     // ─── Auth ───────────────────────────────────────────────────────────────
     jwtSecret: process.env.JWT_SECRET || devJwtSecret,
