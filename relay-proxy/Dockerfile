@@ -4,8 +4,8 @@ RUN addgroup -g 1001 -S appuser && adduser -u 1001 -S appuser -G appuser
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 COPY index.js ./
 
