@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 // Override for isolated verification runs; defaults match the dev stack.
 const API = process.env.BIES_E2E_API || 'http://localhost:3001/api';
@@ -6,13 +7,8 @@ const API = process.env.BIES_E2E_API || 'http://localhost:3001/api';
 test.use({ viewport: { width: 1280, height: 900 } });
 
 async function registerBuilder(request) {
-    const email = `flags-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: 'Flags Test User' },
-    });
-    expect(res.ok(), `Register failed: ${res.status()}`).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user };
+    const { token, user } = await createTestUser(request, API, 'Flags Test User');
+    return { token, user };
 }
 
 async function injectAuth(page, token, user) {

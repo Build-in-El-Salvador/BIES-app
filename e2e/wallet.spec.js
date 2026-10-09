@@ -9,16 +9,13 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 
 async function register(request, name) {
-    const email = `wallet-${Date.now()}-${Math.floor(Math.random() * 1e5)}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name },
-    });
-    expect(res.ok(), `Register failed: ${res.status()}`).toBeTruthy();
-    return res.json();
+    const { token, user } = await createTestUser(request, API, name);
+    return { token, user };
 }
 
 async function injectAuth(page, token, user) {

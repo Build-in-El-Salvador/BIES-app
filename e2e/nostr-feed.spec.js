@@ -5,6 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 const BASE = '';
@@ -12,13 +13,7 @@ const BASE = '';
 // ── Helpers ──────────────────────────────────────────────────────────
 
 async function registerUser(request, suffix) {
-    const email = `feedtest-${suffix}-${Date.now()}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: `FeedTest ${suffix}` },
-    });
-    expect(res.ok(), `Register ${suffix} failed: ${res.status()}`).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user, email, skHex };
+    return createTestUser(request, API, `FeedTest ${suffix}`);
 }
 
 async function injectAuth(page, token, user, skHex) {
