@@ -21,3 +21,17 @@ export const moneyLimiter = rateLimit({
     message: { error: 'Too many wallet requests, please try again later' },
     skip: (req) => req.method === 'OPTIONS',
 });
+
+// Sign-in: 100 requests / 15 min per IP. Not tighter, because event Wi-Fi and
+// mobile carriers put many people behind one IP; guessing email codes is
+// limited per address in services/emailCode.service.ts. Mounted on each
+// sign-in route rather than by path prefix, which `//` or odd casing in the
+// URL could slip past.
+export const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many sign-in attempts, please try again later' },
+    skip: (req) => req.method === 'OPTIONS',
+});

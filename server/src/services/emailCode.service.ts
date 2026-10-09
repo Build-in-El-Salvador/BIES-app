@@ -6,10 +6,13 @@
  * be spent on another.
  *
  * Rules:
- * - 6 digits, valid for 10 minutes, 5 tries per code. A new code replaces the
- *   previous one once it has been sent.
+ * - 6 digits, valid for 10 minutes from when the email goes out (not
+ *   before), 5 tries per code. A new code replaces the previous one once it
+ *   has been sent.
  * - Per address: one code a minute, 5 an hour, 10 a day. This also caps
- *   guessing: at most 50 tries a day against any one account.
+ *   guessing: at most 50 tries a day against any one account. The flip side:
+ *   someone who requests 10 codes for an address blocks new email sign-ins
+ *   for it for a day. Sessions already signed in are unaffected.
  * - Per IP: 50 an hour. Kept generous on purpose: event Wi-Fi and mobile
  *   carriers put many people behind one address.
  * - In total: config.email.maxCodesPerDay, so a flood can't use up the Resend
@@ -131,22 +134,34 @@ export type IssueResult =
     | { ok: false; reason: 'rate_limited' | 'busy'; retryAfterSeconds: number }
     | { ok: false; reason: 'send_failed' };
 
-/**
- * Create a code for this address and email it. The response to the caller
- * must not depend on whether an account exists, so nothing here looks at
- * users.
- */
-export async function issueEmailCode(
-    email: string,
-    purpose: EmailCodePurpose,
-    opts: { ip?: string | null; lang?: EmailLang } = {},
-): Promise<IssueResult> {
-    const now = Date.now();
-    const address = normalizeEmail(email);
-    const emailHash = hmac('email', address);
-    const ipHash = opts.ip ? hmac('ip', opts.ip) : null;
-    const review = isReviewAddress(address);
+// Checking the limits and reserving a row happen as one step: otherwise
+// parallel requests all pass the limits before any of them has inserted its
+// row. The server runs as a single process (SQLite), so an in-process queue
+// is enough.
+let reserveQueue: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
+    const run = reserveQueue.then(task, task);
+    reserveQueue = run.catch(() => undefined);
+    return run;
+}
 
+// A reserved code expires at the epoch, so it can't be verified until its
+// email has gone out: nobody can guess at it while the send is in flight,
+// and a failed send leaves nothing usable behind.
+const NOT_YET_SENT = new Date(0);
+
+type Reservation =
+    | { ok: true; id: string; createdAt: Date }
+    | { ok: false; reason: 'rate_limited' | 'busy'; retryAfterSeconds: number };
+
+async function reserveCode(
+    emailHash: string,
+    purpose: EmailCodePurpose,
+    codeHash: string,
+    ipHash: string | null,
+    review: boolean,
+): Promise<Reservation> {
+    const now = Date.now();
     await prisma.emailCode.deleteMany({ where: { createdAt: { lt: new Date(now - RETENTION_MS) } } });
 
     // Per-address limits count every purpose: they protect the inbox.
@@ -176,21 +191,37 @@ export async function issueEmailCode(
             where: { createdAt: { gte: new Date(now - DAY) } },
         });
         if (sentToday >= config.email.maxCodesPerDay) {
-            console.warn(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; refusing to send`);
+            console.error(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; email sign-in is refusing new codes`);
             return { ok: false, reason: 'busy', retryAfterSeconds: 60 * 60 };
         }
     }
 
-    const code = review ? config.reviewLogin.code : crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
     const row = await prisma.emailCode.create({
-        data: {
-            emailHash,
-            purpose,
-            codeHash: hashCode(purpose, emailHash, code),
-            expiresAt: new Date(now + CODE_TTL_SECONDS * 1000),
-            ipHash,
-        },
+        data: { emailHash, purpose, codeHash, expiresAt: NOT_YET_SENT, ipHash },
+        select: { id: true, createdAt: true },
     });
+    return { ok: true, id: row.id, createdAt: row.createdAt };
+}
+
+/**
+ * Create a code for this address and email it. The response to the caller
+ * must not depend on whether an account exists, so nothing here looks at
+ * users.
+ */
+export async function issueEmailCode(
+    email: string,
+    purpose: EmailCodePurpose,
+    opts: { ip?: string | null; lang?: EmailLang } = {},
+): Promise<IssueResult> {
+    const address = normalizeEmail(email);
+    const emailHash = hmac('email', address);
+    const ipHash = opts.ip ? hmac('ip', opts.ip) : null;
+    const review = isReviewAddress(address);
+    const code = review ? config.reviewLogin.code : crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+
+    const reserved = await oneAtATime(() =>
+        reserveCode(emailHash, purpose, hashCode(purpose, emailHash, code), ipHash, review));
+    if (!reserved.ok) return reserved;
 
     if (review) {
         console.log('[EmailCode] App Review address: fixed code issued, no email sent');
@@ -199,15 +230,21 @@ export async function issueEmailCode(
             await sendEmail(renderCodeEmail(address, code, opts.lang));
         } catch (err) {
             console.error('[EmailCode] Send failed:', err instanceof Error ? err.message : err);
-            // A failed send must not count against the limits, and must not
-            // replace a code the person already has.
-            await prisma.emailCode.delete({ where: { id: row.id } }).catch(() => {});
+            // A failed send doesn't count against the limits, and the code
+            // the person may already have keeps working.
+            await prisma.emailCode.delete({ where: { id: reserved.id } }).catch(() => {});
             return { ok: false, reason: 'send_failed' };
         }
     }
 
+    // Sent: the code works from now. Earlier codes for this address and
+    // purpose stop working; any reserved after this one are left alone.
+    await prisma.emailCode.update({
+        where: { id: reserved.id },
+        data: { expiresAt: new Date(Date.now() + CODE_TTL_SECONDS * 1000) },
+    });
     await prisma.emailCode.updateMany({
-        where: { emailHash, purpose, consumedAt: null, id: { not: row.id } },
+        where: { emailHash, purpose, consumedAt: null, createdAt: { lt: reserved.createdAt } },
         data: { consumedAt: new Date() },
     });
     return { ok: true };

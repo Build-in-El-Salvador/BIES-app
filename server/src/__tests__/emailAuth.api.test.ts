@@ -4,10 +4,12 @@
  * tables involved, with email sending mocked out.
  *
  * Covers: codes stored only as hashes, no account enumeration, the per-address
- * / per-IP / daily limits, expiry, 5 tries per code, single use, a failed send
- * keeping the previous code, account creation with a key BIES holds (and the
- * key never reaching the client), banned and deleted accounts, the App Review
- * address, and the removal of the password endpoints.
+ * / per-IP / daily limits (also under parallel requests), the sign-in rate
+ * limiter (also with `//` in the path), expiry, 5 tries per code, single use,
+ * no code usable before its email is sent, a failed send keeping the previous
+ * code, account creation with a key BIES holds (and the key never reaching
+ * the client), banned and deleted accounts, the App Review address, and the
+ * removal of the password endpoints.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -48,18 +50,32 @@ const db = vi.hoisted(() => {
 
     const clone = (row: Row | undefined) => (row ? { ...row } : null);
 
+    // Real databases answer asynchronously, so parallel requests interleave
+    // between queries. Yield a turn of the event loop on every call so the
+    // fake does too; without it, races can't show up in these tests.
+    const io = () => new Promise<void>((resolve) => setImmediate(resolve));
+
     const emailCode = {
         deleteMany: vi.fn(async ({ where }: Row) => {
+            await io();
             const before = state.codes.length;
             state.codes = state.codes.filter((r) => !matches(r, where));
             return { count: before - state.codes.length };
         }),
-        findMany: vi.fn(async ({ where, orderBy }: Row) =>
-            sorted(state.codes.filter((r) => matches(r, where)), orderBy).map(clone)),
-        findFirst: vi.fn(async ({ where, orderBy }: Row) =>
-            clone(sorted(state.codes.filter((r) => matches(r, where)), orderBy)[0])),
-        count: vi.fn(async ({ where }: Row) => state.codes.filter((r) => matches(r, where)).length),
+        findMany: vi.fn(async ({ where, orderBy }: Row) => {
+            await io();
+            return sorted(state.codes.filter((r) => matches(r, where)), orderBy).map(clone);
+        }),
+        findFirst: vi.fn(async ({ where, orderBy }: Row) => {
+            await io();
+            return clone(sorted(state.codes.filter((r) => matches(r, where)), orderBy)[0]);
+        }),
+        count: vi.fn(async ({ where }: Row) => {
+            await io();
+            return state.codes.filter((r) => matches(r, where)).length;
+        }),
         create: vi.fn(async ({ data }: Row) => {
+            await io();
             const row = {
                 id: `code-${++state.seq}`, _seq: state.seq, attempts: 0, consumedAt: null,
                 ipHash: null, createdAt: new Date(), ...data,
@@ -68,9 +84,18 @@ const db = vi.hoisted(() => {
             return clone(row);
         }),
         delete: vi.fn(async ({ where }: Row) => {
+            await io();
             state.codes = state.codes.filter((r) => r.id !== where.id);
         }),
+        update: vi.fn(async ({ where, data }: Row) => {
+            await io();
+            const row = state.codes.find((r) => r.id === where.id);
+            if (!row) throw new Error('fake prisma: no row to update');
+            Object.assign(row, data);
+            return clone(row);
+        }),
         updateMany: vi.fn(async ({ where, data }: Row) => {
+            await io();
             let count = 0;
             for (const row of state.codes) {
                 if (!matches(row, where)) continue;
@@ -154,6 +179,9 @@ let base: string;
 
 beforeAll(async () => {
     const app = express();
+    // Each test speaks from its own IP (X-Forwarded-For), so per-IP limits
+    // and the sign-in rate limiter don't carry over between tests.
+    app.set('trust proxy', true);
     app.use(express.json());
     app.use('/api/auth', authRoutes);
     await new Promise<void>((resolve) => {
@@ -169,6 +197,8 @@ afterAll(() => {
 });
 
 let clock = Date.parse('2026-10-12T15:00:00Z');
+let ipCounter = 0;
+let clientIp = '10.0.0.1';
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -178,6 +208,8 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     clock += 7 * 24 * 60 * 60 * 1000;
     vi.setSystemTime(clock);
+    ipCounter++;
+    clientIp = `10.0.${ipCounter >> 8}.${ipCounter & 255}`;
 });
 
 afterEach(() => {
@@ -192,7 +224,7 @@ function advance(ms: number) {
 async function post(path: string, body: unknown) {
     const res = await fetch(`${base}/api/auth${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': clientIp },
         body: JSON.stringify(body),
     });
     return { status: res.status, headers: res.headers, body: (await res.json().catch(() => null)) as any };
@@ -230,7 +262,7 @@ describe('POST /api/auth/email/start', () => {
         expect(db.state.codes).toHaveLength(1);
         expect(stored).not.toContain(code);
         expect(stored).not.toContain('alice@example.com');
-        expect(stored).not.toContain('127.0.0.1');
+        expect(stored).not.toContain(clientIp);
     });
 
     it('answers the same whether or not an account exists', async () => {
@@ -325,6 +357,66 @@ describe('POST /api/auth/email/start', () => {
 
         const res = await post('/email/verify', { email: 'dave@example.com', code: first });
         expect(res.status).toBe(201);
+    });
+
+    it('leaves no usable code behind when the send fails', async () => {
+        mockedSend.mockRejectedValueOnce(new Error('Resend down'));
+        expect((await post('/email/start', { email: 'fay@example.com' })).status).toBe(503);
+        const code = lastCode();
+
+        const res = await post('/email/verify', { email: 'fay@example.com', code });
+        expect(res.status).toBe(400);
+        expect(res.body.reason).toBe('code_expired');
+    });
+
+    it('does not accept a code until its email has gone out', async () => {
+        let finishSending: () => void = () => {};
+        mockedSend.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSending = resolve; }));
+
+        const starting = post('/email/start', { email: 'gus@example.com' });
+        await vi.waitFor(() => expect(mockedSend).toHaveBeenCalledTimes(1));
+        const code = lastCode();
+
+        const early = await post('/email/verify', { email: 'gus@example.com', code });
+        expect(early.body.reason).toBe('code_expired');
+
+        finishSending();
+        expect((await starting).status).toBe(200);
+        expect((await post('/email/verify', { email: 'gus@example.com', code })).status).toBe(201);
+    });
+
+    it('holds the limits under parallel requests', async () => {
+        const sameAddress = await Promise.all(
+            Array.from({ length: 20 }, () => post('/email/start', { email: 'rush@example.com' })));
+        expect(sameAddress.filter((r) => r.status === 200)).toHaveLength(1);
+        expect(mockedSend).toHaveBeenCalledTimes(1);
+
+        // The one code that went out still works.
+        expect((await post('/email/verify', { email: 'rush@example.com', code: lastCode() })).status).toBe(201);
+
+        const saved = config.email.maxCodesPerDay;
+        config.email.maxCodesPerDay = 5;
+        try {
+            const many = await Promise.all(
+                Array.from({ length: 12 }, (_, i) => post('/email/start', { email: `crowd${i}@example.com` })));
+            // 1 code already sent today in this test, so 4 more fit.
+            expect(many.filter((r) => r.status === 200)).toHaveLength(4);
+        } finally {
+            config.email.maxCodesPerDay = saved;
+        }
+    });
+
+    it('rate limits sign-in requests per IP, whatever the path looks like', async () => {
+        const res = await fetch(`${base}/api/auth//email/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': clientIp },
+            body: JSON.stringify({ email: 'slash@example.com' }),
+        });
+        expect(res.headers.get('ratelimit-limit')).toBe('100');
+
+        const burst = await Promise.all(
+            Array.from({ length: 100 }, () => post('/email/verify', { email: 'slash@example.com', code: '123456' })));
+        expect(burst.some((r) => r.status === 429)).toBe(true);
     });
 });
 

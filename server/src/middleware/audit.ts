@@ -42,8 +42,11 @@ const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
 ];
 
 function resolveAction(method: string, path: string): string | null {
+    // Express routes ignore case and repeated slashes, so the patterns must too,
+    // or /API/AUTH//email/verify would reach the handler without an audit row.
+    const normalized = path.toLowerCase().replace(/\/{2,}/g, '/');
     for (const entry of ACTION_MAP) {
-        if (entry.method === method && entry.pattern.test(path)) {
+        if (entry.method === method && entry.pattern.test(normalized)) {
             return entry.action;
         }
     }
