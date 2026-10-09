@@ -130,7 +130,7 @@ const AdminVouchers = () => {
     };
 
     const isRevoked = (v) => v.status === 'REVOKED' || !!v.revokedAt;
-    const useCount = (v) => v.useCount ?? v._count?.redemptions ?? v.redemptionCount ?? 0;
+    const getUseCount = (v) => v.useCount ?? v._count?.redemptions ?? v.redemptionCount ?? 0;
     const truncate = (s, n = 16) => (s && s.length > n ? `${s.slice(0, n)}…` : s || '');
 
     const renderRevokeConfirm = () => (
@@ -284,7 +284,7 @@ const AdminVouchers = () => {
                                         </td>
                                         <td className="p-4 voucher-cell" data-label={t('admin.vouchers.uses')}>
                                             <span className="text-sm whitespace-nowrap">
-                                                {useCount(v)} / {!v.maxUses ? t('admin.vouchers.unlimited') : v.maxUses}
+                                                {getUseCount(v)} / {!v.maxUses ? t('admin.vouchers.unlimited') : v.maxUses}
                                             </span>
                                         </td>
                                         <td className="p-4 voucher-cell" data-label={t('admin.vouchers.status')}>

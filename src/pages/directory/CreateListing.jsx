@@ -115,7 +115,7 @@ const CreateListing = ({ editMode = false }) => {
             }
         })();
         return () => { cancelled = true; };
-    }, [editMode, id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [editMode, id]);  
 
     const handleChange = (e) => {
         const { name, value, type: inputType, checked } = e.target;

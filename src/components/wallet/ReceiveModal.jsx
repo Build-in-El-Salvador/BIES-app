@@ -123,7 +123,7 @@ const ReceiveModal = ({ open, onClose, onPaid }) => {
 
         const id = setInterval(tick, 5000);
         return () => clearInterval(id);
-    }, [open, step, hash, caps.canListTransactions]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [open, step, hash, caps.canListTransactions]);  
 
     if (!open) return null;
 

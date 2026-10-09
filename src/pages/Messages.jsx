@@ -156,7 +156,7 @@ const Messages = () => {
         if (typeof statePubkey === 'string' && /^[0-9a-f]{64}$/i.test(statePubkey)) {
             openChat(statePubkey);
         }
-    }, [statePubkey]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [statePubkey]);  
 
     const closeTab = (e, pubkey) => {
         e.stopPropagation();

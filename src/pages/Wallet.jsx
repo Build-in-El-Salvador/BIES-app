@@ -140,7 +140,7 @@ const Wallet = () => {
             return;
         }
         fetchTxs();
-    }, [connected, walletType]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [connected, walletType]);  
 
     const handleRefresh = () => {
         refreshBalance();

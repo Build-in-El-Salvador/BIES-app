@@ -116,7 +116,7 @@ const NostrConnectQR = ({ onSuccess, onError }) => {
             sessionIdRef.current++;
             controllerRef.current?.abort();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, []);
 
     const copyUri = () => {

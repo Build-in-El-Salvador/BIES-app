@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Build the React frontend
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS client-build
+FROM node:24-alpine AS client-build
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Build the Express server
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS server-build
+FROM node:24-alpine AS server-build
 
 RUN apk add --no-cache openssl
 
@@ -38,7 +38,7 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3: Production server runtime (non-root)
 # ─────────────────────────────────────────────────────────────────────────────
-FROM node:20-alpine AS server
+FROM node:24-alpine AS server
 
 RUN apk add --no-cache tini openssl sqlite python3 py3-pip \
     && pip3 install --no-cache-dir --break-system-packages gallery-dl
