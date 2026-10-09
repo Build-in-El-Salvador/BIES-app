@@ -242,10 +242,11 @@ async function subscribeLive(
         oneose: () => {
             console.log('[Points] Caught up with relay history');
         },
-        onclose: (reasons: string[]) => {
+        onclose: (reasons: { url: string; reason: string }[]) => {
             if (generation !== subGeneration) return; // superseded — ignore
             activeSub = null;
-            console.warn(`[Points] Subscription closed (${reasons.join(', ')}) — reconnecting`);
+            const why = reasons.map((r) => `${r.url}: ${r.reason}`).join(', ');
+            console.warn(`[Points] Subscription closed (${why}) — reconnecting`);
             scheduleRetry(new Error('subscription closed'));
         },
     });

@@ -376,7 +376,10 @@ class NwcClient {
                         }
                     },
                     onclose: (reasons) => {
-                        const reason = Array.isArray(reasons) ? reasons.join(', ') : String(reasons);
+                        // nostr-tools 2.24+ passes [{ url, reason }]; older versions passed strings.
+                        const reason = Array.isArray(reasons)
+                            ? reasons.map((r) => (typeof r === 'string' ? r : `${r.url}: ${r.reason}`)).join(', ')
+                            : String(reasons);
                         settle(reject, new Error('NWC relay connection closed: ' + reason));
                     },
                 }

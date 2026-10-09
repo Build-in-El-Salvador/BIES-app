@@ -1,4 +1,4 @@
-FROM dockurr/strfry:latest
+FROM dockurr/strfry:1.1.3@sha256:599ab3500dbfbe6cb78c668e1892cd9802c192d066df4660e8e3175034a8344d
 
 # Install jq for the write policy script
 RUN apk add --no-cache jq
