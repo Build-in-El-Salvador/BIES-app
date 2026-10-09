@@ -69,6 +69,7 @@ model User {
   voucherRedemptions    VoucherRedemption[]
   bountiesPosted        Bounty[]               @relation("BountiesPosted")
   bountySubmissions     BountySubmission[]
+  hostedSignatures      HostedSignature[]
 
   @@map("users")
 }
@@ -85,6 +86,24 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
+}
+
+// Every signature BIES makes with a key it holds, so members can see what was
+// signed in their name (services/hostedSigner.service.ts). Relay sign-in
+// challenges (kind 22242) aren't recorded: the app answers one on every
+// connection, and they only prove to the BIES relay who is connecting.
+model HostedSignature {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  kind      Int
+  eventId   String   @map("event_id")
+  source    String   // app: the member's device asked | server: BIES published for them
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("hosted_signatures")
 }
 
 // One-time 6-digit codes sent by email (sign-in today; confirming account

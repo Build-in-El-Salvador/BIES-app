@@ -16,6 +16,9 @@ if (isProduction) {
     }
 }
 
+// Public origin of the web app; see appPublicUrl below.
+const appPublicUrl = (process.env.APP_PUBLIC_URL || 'https://app.buildinelsalvador.com').replace(/\/+$/, '');
+
 // In development, generate a random secret per process instead of using a static default
 const devJwtSecret = crypto.randomBytes(32).toString('hex');
 const devEncryptionSecret = crypto.randomBytes(16).toString('hex') + crypto.randomBytes(16).toString('hex');
@@ -64,7 +67,19 @@ export const config = {
 
     // ─── Public app origin ────────────────────────────────────────────────────
     // Used to build absolute URLs embedded in Nostr events (badge artwork).
-    appPublicUrl: (process.env.APP_PUBLIC_URL || 'https://app.buildinelsalvador.com').replace(/\/+$/, ''),
+    appPublicUrl,
+
+    // ─── Hosted signer ────────────────────────────────────────────────────────
+    // Relays the app may have BIES sign NIP-42 sign-in challenges for, on
+    // behalf of an email account: BIES's own relay only. Comma-separated.
+    // Default: the relay behind the web app (wss://app.buildinelsalvador.com/relay).
+    // Development: SIGNER_AUTH_RELAYS=ws://localhost:5173/relay
+    signer: {
+        authRelays: (process.env.SIGNER_AUTH_RELAYS || `${appPublicUrl.replace(/^http/, 'ws')}/relay`)
+            .split(',')
+            .map((url) => url.trim())
+            .filter(Boolean),
+    },
 
     // ─── Twitter/X (gallery-dl + browser cookies) ──────────────────────────
     twitterCookiesPath: process.env.TWITTER_COOKIES_PATH || '',

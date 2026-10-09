@@ -57,6 +57,7 @@ import voucherRoutes from './routes/voucher.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import bountyRoutes from './routes/bounty.routes';
 import flagsRoutes from './routes/flags.routes';
+import signerRoutes from './routes/signer.routes';
 
 const app = express();
 
@@ -199,6 +200,7 @@ app.use(auditLog);
 // client-side Nostr) — it is gated in the UI only.
 app.use('/api/flags', flagsRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/signer', signerRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/projects', featureGate('projects'), projectRoutes);
 app.use('/api/upload', uploadRoutes);
