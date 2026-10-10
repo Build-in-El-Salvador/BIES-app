@@ -20,6 +20,8 @@ export function accountErrorMessage(t, err) {
             return t('account.errors.badSignature');
         case 'not_hosted':
             return t('account.errors.notHosted');
+        case 'review_account':
+            return t('account.errors.reviewAccount');
         default:
             return t('account.errors.generic');
     }

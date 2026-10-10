@@ -18,38 +18,39 @@ export function hexToBytes(hex) {
     return bytes;
 }
 
+function decodeNsec(value) {
+    try {
+        // Bech32 is case-insensitive, but must be all one case to decode.
+        const decoded = nip19.decode(value.toLowerCase());
+        return decoded.type === 'nsec' ? { secretKey: decoded.data } : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * What the member pasted or opened, read as a key:
- * - `{ secretKey }` for an nsec, a 64-character hex key, or an old
- *   plain-text key file;
+ * - `{ secretKey }` for an nsec (any case), a 64-character hex key, or an
+ *   old plain-text key file (BIES saved those before NIP-49 backups);
  * - `{ encrypted, npub }` for a password-protected backup (a .nostrkey file
  *   or an ncryptsec), which needs unlockBackup();
+ * - `{ tooNew: true }` for a key file from a newer version of the app;
  * - null if it isn't a key.
  */
 export function readKeyInput(text) {
     const value = String(text ?? '').trim();
     if (!value) return null;
-
-    if (value.startsWith('{') || value.startsWith('ncryptsec1')) {
-        let parsed = null;
-        try {
-            parsed = keyfileService.parseKeyfile(value);
-        } catch {
-            return null;
-        }
-        if (parsed?.ncryptsec) return { encrypted: parsed.ncryptsec, npub: parsed.npub ?? null };
-        if (parsed?.legacyNsec) return readKeyInput(parsed.legacyNsec);
-        return null;
-    }
-    if (value.startsWith('nsec1')) {
-        try {
-            const decoded = nip19.decode(value);
-            return decoded.type === 'nsec' ? { secretKey: decoded.data } : null;
-        } catch {
-            return null;
-        }
-    }
+    if (/^nsec1/i.test(value)) return decodeNsec(value);
     if (/^[0-9a-f]{64}$/i.test(value)) return { secretKey: hexToBytes(value.toLowerCase()) };
+
+    let parsed = null;
+    try {
+        parsed = keyfileService.parseKeyfile(value);
+    } catch (err) {
+        return /newer version/.test(err?.message) ? { tooNew: true } : null;
+    }
+    if (parsed?.ncryptsec) return { encrypted: parsed.ncryptsec, npub: parsed.npub ?? null };
+    if (parsed?.legacyNsec) return decodeNsec(parsed.legacyNsec);
     return null;
 }
 

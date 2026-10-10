@@ -559,7 +559,9 @@ export const adminApi = {
     deleteUser: (id) => del(`/admin/users/${id}`),
     trashedUsers: (params = {}) => get('/admin/users/trash', params),
     restoreUser: (id) => put(`/admin/users/${id}/restore`, {}),
-    purgeUser: (id) => del(`/admin/users/${id}/purge`),
+    // deletionRequest: the member asked to be deleted, so relays forget the account too.
+    purgeUser: (id, { deletionRequest = false } = {}) =>
+        del(`/admin/users/${id}/purge${deletionRequest ? '?deletionRequest=true' : ''}`),
     syncAccounts: (sourceUserId, targetUserId, deleteSource) =>
         post('/admin/users/sync', { sourceUserId, targetUserId, deleteSource }),
     auditLogs: (params = {}) => get('/admin/audit-logs', params),

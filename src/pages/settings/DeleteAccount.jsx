@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, HelpCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { accountApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
-import { endSession } from '../../services/session';
+import { endSession, getAccessToken } from '../../services/session';
 import { confirmationTemplate } from '../../services/accountKey';
 import CodeField, { isCompleteCode, useCountdown } from '../../components/account/CodeField';
 import { accountErrorMessage } from '../../components/account/accountErrors';
@@ -26,7 +26,7 @@ const DeleteAccount = () => {
     const navigate = useNavigate();
     const lang = i18n.language?.startsWith('es') ? 'es' : 'en';
 
-    const [step, setStep] = useState('intro'); // intro | confirm | deleting | done
+    const [step, setStep] = useState('intro'); // intro | confirm | deleting | done | unknown
     const [understood, setUnderstood] = useState(false);
     const [method, setMethod] = useState(null); // 'email' | 'nostr'
     const [email, setEmail] = useState('');
@@ -36,9 +36,14 @@ const DeleteAccount = () => {
     const [error, setError] = useState('');
     const [resendIn, setResendIn] = useCountdown();
     const [emailedTo, setEmailedTo] = useState(null);
+    const busyRef = useRef(false);
+    const stepRef = useRef(null);
+
+    // Each step starts where a screen reader or keyboard can find it.
+    useEffect(() => { stepRef.current?.focus(); }, [step]);
 
     if (loading) return <div className="p-10 text-center">{t('common.loading')}</div>;
-    if (!user && step !== 'deleting' && step !== 'done') {
+    if (!user && !['deleting', 'done', 'unknown'].includes(step)) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
@@ -51,6 +56,8 @@ const DeleteAccount = () => {
 
     // Ask for a code (email accounts) or a challenge (Nostr accounts).
     const start = async () => {
+        if (busyRef.current) return;
+        busyRef.current = true;
         setBusy(true);
         setError('');
         try {
@@ -67,45 +74,63 @@ const DeleteAccount = () => {
         } catch (err) {
             fail(err);
         } finally {
+            busyRef.current = false;
             setBusy(false);
         }
     };
 
     const confirm = async () => {
-        if (busy) return;
+        if (busyRef.current) return;
+        busyRef.current = true;
         setBusy(true);
         setError('');
+
         let proof;
         if (method === 'email') {
             proof = { code };
         } else {
+            let signedEvent = null;
             try {
-                proof = {
-                    signedEvent: await nostrSigner.signEvent(
-                        confirmationTemplate('delete_account', challenge, t('account.delete.signContent')),
-                    ),
-                };
+                signedEvent = await nostrSigner.signEvent(
+                    confirmationTemplate('delete_account', challenge, t('account.delete.signContent')),
+                );
             } catch {
                 setError(t('account.errors.signerFailed'));
+            }
+            // A signer holding another key (an extension, when this tab has
+            // no key in memory) would only be refused by the server.
+            if (signedEvent && signedEvent.pubkey !== user.nostrPubkey) {
+                setError(t('account.errors.wrongSigner'));
+                signedEvent = null;
+            }
+            if (!signedEvent) {
+                busyRef.current = false;
                 setBusy(false);
                 return;
             }
+            proof = { signedEvent };
         }
 
         const accountEmail = user?.email || null;
         setStep('deleting');
         try {
-            await accountApi.confirmDeletion(proof, lang);
-            setEmailedTo(accountEmail);
+            const res = await accountApi.confirmDeletion(proof, lang);
+            setEmailedTo(res.emailed ? accountEmail : null);
             setStep('done');
             // Signed out here too: forget the session and this device's secrets.
             endSession({ force: true });
         } catch (err) {
-            setStep('confirm');
-            setCode('');
-            if (err?.data?.reason === 'challenge_expired') setStep('intro');
-            fail(err);
+            if (!getAccessToken()) {
+                // The session is gone, but no answer came: the account may or
+                // may not be deleted. Say so rather than pretend either way.
+                setStep('unknown');
+            } else {
+                setStep(err?.data?.reason === 'challenge_expired' ? 'intro' : 'confirm');
+                setCode('');
+                fail(err);
+            }
         } finally {
+            busyRef.current = false;
             setBusy(false);
         }
     };
@@ -117,14 +142,15 @@ const DeleteAccount = () => {
         </div>
     );
 
-    if (step === 'done') {
+    if (step === 'done' || step === 'unknown') {
+        const done = step === 'done';
         return (
             <div className="acct-page">
-                <div className="acct-card acct-done">
-                    <CheckCircle size={40} />
-                    <h1 className="acct-title">{t('account.delete.doneTitle')}</h1>
-                    {emailedTo && <p className="acct-muted">{t('account.delete.doneEmailed', { email: emailedTo })}</p>}
-                    <p className="acct-muted">{t('account.delete.doneBody')}</p>
+                <div className="acct-card acct-done" ref={stepRef} tabIndex={-1}>
+                    {done ? <CheckCircle size={40} /> : <HelpCircle size={40} />}
+                    <h1 className="acct-title">{done ? t('account.delete.doneTitle') : t('account.delete.unknownTitle')}</h1>
+                    {done && emailedTo && <p className="acct-muted">{t('account.delete.doneEmailed', { email: emailedTo })}</p>}
+                    <p className="acct-muted">{done ? t('account.delete.doneBody') : t('account.delete.unknownBody')}</p>
                     <button type="button" className="acct-button secondary" onClick={() => navigate('/login', { replace: true })}>
                         {t('account.delete.doneButton')}
                     </button>
@@ -133,13 +159,15 @@ const DeleteAccount = () => {
         );
     }
 
+    const deleting = step === 'deleting';
+
     return (
         <div className="acct-page">
-            <Link to="/settings" className="acct-back"><ArrowLeft size={16} /> {t('nav.settings')}</Link>
+            {!deleting && <Link to="/settings" className="acct-back"><ArrowLeft size={16} /> {t('account.backToSettings')}</Link>}
             <h1 className="acct-title">{t('account.delete.title')}</h1>
 
             {step === 'intro' && (
-                <div className="acct-card">
+                <div className="acct-card" ref={stepRef} tabIndex={-1}>
                     <p className="acct-muted">{t('account.delete.intro')}</p>
                     <h2>{t('account.delete.whatGoes')}</h2>
                     <ul className="acct-list">
@@ -172,8 +200,8 @@ const DeleteAccount = () => {
                 </div>
             )}
 
-            {(step === 'confirm' || step === 'deleting') && (
-                <div className="acct-card">
+            {(step === 'confirm' || deleting) && (
+                <div className="acct-card" ref={stepRef} tabIndex={-1}>
                     {method === 'email' ? (
                         <>
                             <p className="acct-muted">{t('account.delete.emailStep')}</p>
@@ -198,11 +226,11 @@ const DeleteAccount = () => {
                         onClick={confirm}
                     >
                         {busy && <Loader2 size={18} className="acct-spin" />}
-                        {step === 'deleting'
+                        {deleting
                             ? t('account.delete.deleting')
                             : method === 'email' ? t('account.delete.confirmButton') : t('account.delete.signButton')}
                     </button>
-                    <Link to="/settings" className="acct-link">{t('account.delete.cancel')}</Link>
+                    {!deleting && <Link to="/settings" className="acct-link">{t('account.delete.cancel')}</Link>}
                 </div>
             )}
         </div>

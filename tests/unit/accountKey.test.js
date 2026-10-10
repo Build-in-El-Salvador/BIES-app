@@ -48,6 +48,23 @@ test('reads the key back from an nsec or from hex, however it was pasted', () =>
     }
 });
 
+test('reads an upper-case nsec, as written down or scanned', () => {
+    const read = readKeyInput(nip19.nsecEncode(secretKey).toUpperCase());
+    assert.equal(getPublicKey(read.secretKey), pubkey);
+});
+
+test("reads BIES's old plain-text key files, from before NIP-49 backups", () => {
+    // What Signup downloaded as a .txt then (git show 5c2e119:src/pages/Signup.jsx).
+    const legacy = `BIES Nostr Keys\n===============\n\nPublic Key (npub) — safe to share:\n${nip19.npubEncode(pubkey)}\n\nSecret Key (nsec) — KEEP THIS PRIVATE:\n${nip19.nsecEncode(secretKey)}\n`;
+    const read = readKeyInput(legacy);
+    assert.equal(getPublicKey(read.secretKey), pubkey);
+});
+
+test('says when a key file comes from a newer version of the app', () => {
+    const newer = JSON.stringify({ format: 'nostrkey', version: 2, ncryptsec: 'ncryptsec1qqqq', npub: nip19.npubEncode(pubkey) });
+    assert.deepEqual(readKeyInput(newer), { tooNew: true });
+});
+
 test('says when it is not a key', () => {
     for (const input of ['', '   ', 'hello', nip19.npubEncode(pubkey), nip19.nsecEncode(secretKey).slice(0, 40), hex.slice(2), '{"format":"nostrkey"}']) {
         assert.equal(readKeyInput(input), null, input);

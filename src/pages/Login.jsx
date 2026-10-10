@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
@@ -29,6 +29,7 @@ const Login = () => {
     const [keyFileText, setKeyFileText] = useState('');
     const [keyFileName, setKeyFileName] = useState('');
     const [keyFilePassword, setKeyFilePassword] = useState('');
+    const keyFileInput = useRef(null);
     const [bunkerInput, setBunkerInput] = useState('');
     // Remote-signer sub-view: QR pairing (default on mobile — tap opens the
     // signer app) vs bunker:// paste (default on desktop).
@@ -170,16 +171,23 @@ const Login = () => {
             setError(t('login.keyFileInvalid'));
             return;
         }
+        if (read.tooNew) {
+            setError(t('account.key.tooNew'));
+            return;
+        }
+        setLoading(true);
+        // Let "Unlocking…" show before scrypt (NIP-49) blocks for a moment.
+        await new Promise((resolve) => setTimeout(resolve, 0));
         let secretKey = read.secretKey;
         if (read.encrypted) {
             try {
                 secretKey = unlockBackup(read.encrypted, keyFilePassword);
             } catch {
                 setError(t('login.keyFileWrongPassword'));
+                setLoading(false);
                 return;
             }
         }
-        setLoading(true);
         try {
             const result = await loginWithNsecAndCheckNew(nip19.nsecEncode(secretKey));
             handleResult(result);
@@ -405,15 +413,27 @@ const Login = () => {
                 {loginMode === 'file' && (
                     <form onSubmit={handleKeyFileLogin} className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         <p className="login-subtext" style={{ margin: 0 }}>{t('login.keyFileOrPaste')}</p>
-                        <label className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full" style={{ cursor: 'pointer' }}>
+                        <button
+                            type="button"
+                            onClick={() => keyFileInput.current?.click()}
+                            className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full"
+                        >
                             <FileKey size={18} />
-                            <span>{keyFileName || t('login.uploadKeyFile')}</span>
-                            <input type="file" accept=".nostrkey,.txt,.json" onChange={openKeyFile} hidden />
-                        </label>
+                            <span>{keyFileName || t('login.keyFileChoose')}</span>
+                        </button>
+                        {/* Android drops extensions it has no type for, so the types are listed too. */}
+                        <input
+                            ref={keyFileInput}
+                            type="file"
+                            accept=".nostrkey,.txt,.json,application/json,text/plain,application/octet-stream"
+                            onChange={openKeyFile}
+                            hidden
+                        />
                         <textarea
                             value={keyFileName ? '' : keyFileText}
                             onChange={(e) => { setKeyFileText(e.target.value); setKeyFileName(''); }}
                             placeholder="ncryptsec1…"
+                            aria-label={t('login.keyFileBackupLabel')}
                             className="key-input"
                             rows={3}
                             autoComplete="off"
@@ -426,7 +446,8 @@ const Login = () => {
                             <Key size={16} className="key-input-icon" />
                             <input
                                 type="password"
-                                placeholder={t('login.enterKeyFilePassword')}
+                                placeholder={t('login.keyFilePasswordLabel')}
+                                aria-label={t('login.keyFilePasswordLabel')}
                                 value={keyFilePassword}
                                 onChange={(e) => setKeyFilePassword(e.target.value)}
                                 className="key-input"
@@ -439,7 +460,7 @@ const Login = () => {
                             className="w-full btn-login flex items-center justify-center gap-3 py-3 rounded-full"
                         >
                             {loading ? <Loader2 size={20} className="spin" /> : <NostrIcon size={20} color="#8b5cf6" />}
-                            <span>{loading ? t('login.decrypting') : t('login.unlockAndLogIn')}</span>
+                            <span>{loading ? t('login.keyFileUnlocking') : t('login.keyFileSignIn')}</span>
                         </button>
                     </form>
                 )}

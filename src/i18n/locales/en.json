@@ -206,7 +206,12 @@
     "downloadToContiue": "Download to Continue",
     "keyFileOrPaste": "Choose your .nostrkey backup file, or paste your encrypted backup (it starts with ncryptsec1).",
     "keyFileInvalid": "That isn't a key file or an encrypted backup.",
-    "keyFileWrongPassword": "Wrong password, or the file is damaged."
+    "keyFileWrongPassword": "Wrong password, or the file is damaged.",
+    "keyFileChoose": "Choose a .nostrkey file",
+    "keyFileBackupLabel": "Encrypted backup",
+    "keyFilePasswordLabel": "Password of the key file",
+    "keyFileSignIn": "Unlock and sign in",
+    "keyFileUnlocking": "Unlocking…"
   },
   "emailSignIn": {
     "emailLabel": "Email",
@@ -2098,7 +2103,9 @@
       "badSignature": "That signature didn't confirm it. Try again.",
       "signerFailed": "Your signer didn't sign. Try again, or sign in again first.",
       "notHosted": "BIES holds no key for this account: you already hold your own.",
-      "generic": "Something went wrong. Try again."
+      "generic": "Something went wrong. Try again.",
+      "wrongSigner": "Your signer is using a different Nostr key from this account's. Sign in again with this account's key, then try again.",
+      "reviewAccount": "Taking the key isn't available on the App Review demo account."
     },
     "delete": {
       "title": "Delete your account",
@@ -2124,7 +2131,9 @@
       "doneEmailed": "We sent a confirmation to {{email}}.",
       "doneBody": "Thank you for being part of Build in El Salvador.",
       "doneButton": "Close",
-      "signContent": "Delete my BIES account"
+      "signContent": "Delete my BIES account",
+      "unknownTitle": "We couldn't confirm the deletion",
+      "unknownBody": "The connection dropped before BIES answered, and this device is signed out. If you can sign in again, your account still exists: try again from Settings."
     },
     "key": {
       "title": "Take your Nostr key",
@@ -2173,7 +2182,16 @@
       "doneButton": "Back to Settings",
       "notHosted": "BIES holds no key for this account: you already hold your own.",
       "back": "Back",
-      "signContent": "I have saved my Nostr key. BIES can delete its copy."
-    }
+      "signContent": "I have saved my Nostr key. BIES can delete its copy.",
+      "copiedBackup": "Copied",
+      "copyFailed": "Couldn't copy. Select the text below and copy it yourself.",
+      "verifyIntroNative": "Paste your key, or your encrypted backup. It's checked on this device; only a signature is sent.",
+      "verifyLabel": "Your key or backup",
+      "doneHowNative": "On this phone, the app keeps your key only until it closes. Next time, choose \"Sign in with Nostr\" and paste your key or your encrypted backup.",
+      "tooNew": "This key file was made by a newer version of the app. Update the app and try again.",
+      "saving": "Encrypting…"
+    },
+    "backToSettings": "Settings",
+    "hostedBanner": "You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device."
   }
 }

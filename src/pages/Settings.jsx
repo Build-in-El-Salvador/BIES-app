@@ -553,7 +553,7 @@ const Settings = () => {
                         <div className="key-info-banner">
                             <AlertTriangle size={16} />
                             <span>
-                                You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device.{' '}
+                                {t('account.hostedBanner')}{' '}
                                 <Link to="/settings/your-key">{t('account.takeKeyButton')}</Link>
                             </span>
                         </div>

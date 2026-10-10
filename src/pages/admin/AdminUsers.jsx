@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Ban, ExternalLink, Loader2, Search, Shield, Trash2, RefreshCw, X, RotateCcw, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Ban, ExternalLink, Loader2, Search, Shield, Trash2, RefreshCw, X, RotateCcw, AlertTriangle, UserX } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -479,12 +479,19 @@ const AdminUsers = () => {
         }
     };
 
-    const handlePurge = async (id, name) => {
-        if (!window.confirm(`Permanently delete "${name || 'this user'}"?\n\nThis will remove ALL their data (profile, projects, messages, etc.) and cannot be undone.`)) return;
+    // deletionRequest: the member asked to be deleted (e.g. by email). Relays
+    // then forget the account too: BIES's relay deletes their posts, and for
+    // an email account other relays are asked to. Leave it off for spam and
+    // merged accounts (a merged account's posts now belong to the other one).
+    const handlePurge = async (id, name, { deletionRequest = false } = {}) => {
+        const what = deletionRequest
+            ? `Delete "${name || 'this user'}" at their request?\n\nThis removes ALL their data, and their posts from the BIES relay; for an email account, other Nostr relays are asked to delete them too. It cannot be undone.`
+            : `Permanently delete "${name || 'this user'}"?\n\nThis will remove ALL their data (profile, projects, messages, etc.) and cannot be undone. Their posts stay on the relays.`;
+        if (!window.confirm(what)) return;
         if (!window.confirm(`FINAL WARNING: Permanently delete "${name || id}"? This cannot be undone.`)) return;
         setActionLoading(id);
         try {
-            await adminApi.purgeUser(id);
+            await adminApi.purgeUser(id, { deletionRequest });
             fetchTrash(trashPagination.page);
         } catch (err) {
             alert(err?.response?.data?.error || 'Failed to purge user');
@@ -745,10 +752,18 @@ const AdminUsers = () => {
                                                     <button
                                                         className="icon-btn delete"
                                                         onClick={() => handlePurge(u.id, u.profile?.name)}
-                                                        title="Permanently delete"
+                                                        title="Permanently delete (posts stay on the relays)"
                                                         disabled={actionLoading === u.id}
                                                     >
                                                         <Trash2 size={16} />
+                                                    </button>
+                                                    <button
+                                                        className="icon-btn delete"
+                                                        onClick={() => handlePurge(u.id, u.profile?.name, { deletionRequest: true })}
+                                                        title="Delete at the member's request (also removes their posts from the relays)"
+                                                        disabled={actionLoading === u.id}
+                                                    >
+                                                        <UserX size={16} />
                                                     </button>
                                                 </div>
                                             </td>

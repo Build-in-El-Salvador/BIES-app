@@ -206,7 +206,12 @@
     "downloadToContiue": "Descargar para Continuar",
     "keyFileOrPaste": "Elija su archivo de respaldo .nostrkey, o pegue su respaldo cifrado (empieza con ncryptsec1).",
     "keyFileInvalid": "Eso no es un archivo de clave ni un respaldo cifrado.",
-    "keyFileWrongPassword": "Contraseña incorrecta, o el archivo está dañado."
+    "keyFileWrongPassword": "Contraseña incorrecta, o el archivo está dañado.",
+    "keyFileChoose": "Elegir un archivo .nostrkey",
+    "keyFileBackupLabel": "Respaldo cifrado",
+    "keyFilePasswordLabel": "Contraseña del archivo de clave",
+    "keyFileSignIn": "Desbloquear e iniciar sesión",
+    "keyFileUnlocking": "Desbloqueando…"
   },
   "emailSignIn": {
     "emailLabel": "Correo electrónico",
@@ -2099,7 +2104,9 @@
       "badSignature": "Esa firma no lo confirmó. Intente de nuevo.",
       "signerFailed": "Su firmador no firmó. Intente de nuevo, o primero vuelva a iniciar sesión.",
       "notHosted": "BIES no guarda ninguna clave para esta cuenta: usted ya tiene la suya.",
-      "generic": "Algo salió mal. Intente de nuevo."
+      "generic": "Algo salió mal. Intente de nuevo.",
+      "wrongSigner": "Su firmador usa una clave de Nostr distinta a la de esta cuenta. Vuelva a iniciar sesión con la clave de esta cuenta e intente de nuevo.",
+      "reviewAccount": "Llevarse la clave no está disponible en la cuenta de demostración de App Review."
     },
     "delete": {
       "title": "Eliminar su cuenta",
@@ -2125,7 +2132,9 @@
       "doneEmailed": "Le enviamos una confirmación a {{email}}.",
       "doneBody": "Gracias por ser parte de Build in El Salvador.",
       "doneButton": "Cerrar",
-      "signContent": "Eliminar mi cuenta de BIES"
+      "signContent": "Eliminar mi cuenta de BIES",
+      "unknownTitle": "No pudimos confirmar la eliminación",
+      "unknownBody": "La conexión se cortó antes de que BIES respondiera, y este dispositivo cerró la sesión. Si puede volver a iniciar sesión, su cuenta sigue existiendo: intente de nuevo desde Configuración."
     },
     "key": {
       "title": "Llevarse su clave de Nostr",
@@ -2174,7 +2183,16 @@
       "doneButton": "Volver a Configuración",
       "notHosted": "BIES no guarda ninguna clave para esta cuenta: usted ya tiene la suya.",
       "back": "Volver",
-      "signContent": "Guardé mi clave de Nostr. BIES puede borrar su copia."
-    }
+      "signContent": "Guardé mi clave de Nostr. BIES puede borrar su copia.",
+      "copiedBackup": "Copiado",
+      "copyFailed": "No se pudo copiar. Seleccione el texto de abajo y cópielo usted.",
+      "verifyIntroNative": "Pegue su clave o su respaldo cifrado. Se revisa en este dispositivo; solo se envía una firma.",
+      "verifyLabel": "Su clave o su respaldo",
+      "doneHowNative": "En este teléfono, la app guarda su clave solo hasta que se cierra. La próxima vez, elija \"Iniciar sesión con Nostr\" y pegue su clave o su respaldo cifrado.",
+      "tooNew": "Este archivo de clave lo creó una versión más nueva de la app. Actualice la app e intente de nuevo.",
+      "saving": "Cifrando…"
+    },
+    "backToSettings": "Configuración",
+    "hostedBanner": "Se registró con su correo, así que BIES guarda su clave secreta en su servidor y firma por usted. La clave nunca llega a este dispositivo."
   }
 }
