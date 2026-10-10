@@ -132,14 +132,35 @@ export interface DeletionResult {
     emailed: boolean;
 }
 
+/** Audit metadata without the names it may carry (admin actions name the member). */
+function withoutNames(metadata: string): string {
+    try {
+        const data = JSON.parse(metadata) as Record<string, unknown>;
+        for (const key of Object.keys(data)) {
+            if (/name$/i.test(key)) delete data[key];
+        }
+        return JSON.stringify(data);
+    } catch {
+        return '{}';
+    }
+}
+
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<null>((resolve) => { timer = setTimeout(resolve, ms, null); });
     return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** Delete an account for good. The caller has confirmed it is the owner's wish. */
-export async function deleteAccount(userId: string, lang: EmailLang = 'en'): Promise<DeletionResult> {
+/**
+ * Delete an account for good. The caller has confirmed it is the owner's
+ * wish, or an admin is purging it (`notify: false`: the admin answers the
+ * person themselves, if at all).
+ */
+export async function deleteAccount(
+    userId: string,
+    lang: EmailLang = 'en',
+    { notify = true }: { notify?: boolean } = {},
+): Promise<DeletionResult> {
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { email: true, nostrPubkey: true, encryptedPrivkey: true },
@@ -167,9 +188,16 @@ export async function deleteAccount(userId: string, lang: EmailLang = 'en'): Pro
     // 3. Erase. The cascade takes the profile, listings, messages, sessions,
     // and the hosted key with the user row. Rows that stay for other members
     // (audit trail, project views, voucher redemptions) lose the account's
-    // addresses; the cascade unlinks them from it.
+    // addresses; the cascade unlinks them from it. Admin actions about the
+    // account keep their record, but not the member's name.
+    const aboutIt = await prisma.auditLog.findMany({
+        where: { resource: `user:${userId}` },
+        select: { id: true, metadata: true },
+    });
     await prisma.$transaction([
         prisma.auditLog.updateMany({ where: { userId }, data: { ipAddress: null, userAgent: null } }),
+        ...aboutIt.map(({ id, metadata }) =>
+            prisma.auditLog.update({ where: { id }, data: { metadata: withoutNames(metadata) } })),
         prisma.projectView.updateMany({ where: { userId }, data: { ipAddress: null } }),
         prisma.voucherRedemption.updateMany({
             where: { OR: [{ userId }, { pubkey: user.nostrPubkey }] },
@@ -195,7 +223,7 @@ export async function deleteAccount(userId: string, lang: EmailLang = 'en'): Pro
 
     // 4. Confirm.
     let emailed = false;
-    if (user.email) {
+    if (notify && user.email) {
         try {
             await sendEmail(renderAccountDeletedEmail(user.email, lang, hosted));
             emailed = true;

@@ -66,7 +66,7 @@ import { auditLog } from '../middleware/audit';
 import { attachWebSocketServer, WS_PROTOCOL } from '../services/websocket.service';
 import { PURGE_DIR, WHITELIST_PATH } from '../services/relayWhitelist.service';
 import { renderCodeEmail } from '../services/emailCode.service';
-import { checkSignedChallenge, issueChallenge } from '../services/account.service';
+import { checkSignedChallenge, deleteAccount, issueChallenge } from '../services/account.service';
 import { exportHostedKey } from '../services/hostedSigner.service';
 import { createSession, signAccessToken } from '../services/session.service';
 
@@ -321,6 +321,35 @@ describe('deleting an email account', () => {
         const reviewer = await signInByEmail(email);
         const start = await call('POST', '/api/account/delete/start', { token: reviewer.token });
         expect(start.status).toBe(200);
+    });
+});
+
+// ─── An admin purging an account ─────────────────────────────────────────────
+
+describe('an admin purge', () => {
+    it('erases the same way, keeps no name in the audit trail, and sends no email', async () => {
+        const email = 'frank@example.test';
+        const frank = await signInByEmail(email);
+        const id = frank.user.id;
+        await prisma.profile.update({ where: { userId: id }, data: { name: 'Frank Example' } });
+        // What admin.controller writes when it moves a member to the trash.
+        await prisma.auditLog.create({
+            data: {
+                action: 'USER_TRASHED',
+                resource: `user:${id}`,
+                metadata: JSON.stringify({ deletedUserName: 'Frank Example', deletedUserPubkey: frank.user.nostrPubkey }),
+            },
+        });
+        const mailBefore = mail.sent.length;
+
+        const result = await deleteAccount(id, 'en', { notify: false });
+
+        expect(result).toMatchObject({ retracted: true, relayPurgeRequested: true, emailed: false });
+        expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+        expect(mail.sent.length).toBe(mailBefore);
+        const trashed = await prisma.auditLog.findFirstOrThrow({ where: { action: 'USER_TRASHED', resource: `user:${id}` } });
+        expect(trashed.metadata).not.toContain('Frank');
+        expect(JSON.parse(trashed.metadata)).toEqual({ deletedUserPubkey: frank.user.nostrPubkey });
     });
 });
 
