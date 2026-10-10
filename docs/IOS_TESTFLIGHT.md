@@ -241,9 +241,9 @@ It is **gated behind config**: unset `APNS_*` env vars → the server logs one l
 
 Cowork check-in (`src/components/cowork/CheckInModal.jsx`) uses `navigator.geolocation.getCurrentPosition`, which works in WKWebView now that `NSLocationWhenInUseUsageDescription` is set, but produces a double prompt (system + WebView). Plan: add `@capacitor/geolocation` and branch on `isNativePlatform()` for a single native permission flow.
 
-### 3. Keychain storage for the NWC secret and JWT
+### 3. Keychain storage for the NWC secret and the refresh token
 
-`src/services/nwcService.js` stores the Nostr Wallet Connect URI — which embeds the wallet's payment secret — in plain `localStorage`, and `src/services/authService.js` keeps the JWT there too. In WKWebView, `localStorage` is unencrypted on disk and can be evicted by the OS under storage pressure (random logouts / wallet disconnects). Plan: a thin platform-aware storage adapter — Keychain (e.g. `@aparajita/capacitor-secure-storage`) for the NWC URI, `@capacitor/preferences` for the JWT, `localStorage` unchanged on web.
+`src/services/nwcService.js` stores the Nostr Wallet Connect URI — which embeds the wallet's payment secret — in plain `localStorage`, and `src/services/session.js` keeps the native app's **refresh token** (`bies_refresh`, good for up to 90 days) there too; the web app's is an httpOnly cookie instead. In WKWebView, `localStorage` is unencrypted on disk and can be evicted by the OS under storage pressure (random logouts / wallet disconnects). Plan: a thin platform-aware storage adapter — Keychain/Keystore (e.g. `capacitor-secure-storage-plugin`) for the NWC URI, the refresh token and pasted Nostr keys, cleared on first launch after a reinstall (Keychain items survive uninstalls), `localStorage` unchanged on web. The 15-minute access token can stay in `localStorage`.
 
 ### 4. NIP-46 bunker pairing persistence
 

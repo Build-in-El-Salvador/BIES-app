@@ -4,41 +4,59 @@
  * Centralised HTTP client for all backend communication.
  *
  * Features:
- *  - Automatic JWT injection from localStorage
- *  - 401 auto-logout (token expired / invalid)
+ *  - The session's access token on every request, renewed before it expires
+ *    and once more if the server says it has (services/session.js)
+ *  - Signs out when the server says the session is over
  *  - Consistent error format
  *  - All API methods co-located here for easy maintenance
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+import {
+    API_BASE as BASE_URL,
+    endSession,
+    freshAccessToken,
+    isSessionOver,
+    refreshSession,
+} from './session.js';
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
-async function request(method, path, body = null, options = {}) {
-    const token = localStorage.getItem('bies_token');
+// Sign-in endpoints answer 401 for a wrong code or signature, which says
+// nothing about the session this device already has.
+const isSignInPath = (path) => /^\/auth\/(email\/|nostr-|refresh|logout)/.test(path);
 
-    const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-    };
+/**
+ * Fetch with the current access token. If the server says the token has
+ * expired, refresh once and resend: a 401 from `authenticate` means nothing
+ * was done. If it says the session is over, sign out.
+ */
+async function sendAuthorized(path, init) {
+    const send = (token) => fetch(`${BASE_URL}${path}`, {
+        ...init,
+        headers: { ...init.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
 
-    const config = {
-        method,
-        headers,
-        ...(body ? { body: JSON.stringify(body) } : {}),
-    };
-
-    const res = await fetch(`${BASE_URL}${path}`, config);
-
-    // If unauthorized on a non-auth endpoint, clear session.
-    // Auth endpoints (login, register, challenge) return 401 for invalid
-    // credentials — that should NOT nuke an existing session.
-    if (res.status === 401 && !path.startsWith('/auth/')) {
-        localStorage.removeItem('bies_token');
-        localStorage.removeItem('bies_user');
-        window.dispatchEvent(new CustomEvent('bies:unauthorized'));
+    let res = await send(await freshAccessToken());
+    if (res.status === 401 && !isSignInPath(path)) {
+        let { reason } = await res.clone().json().catch(() => ({}));
+        if (reason === 'token_expired') {
+            const token = await refreshSession().catch(() => null);
+            if (!token) return res;
+            res = await send(token);
+            if (res.status !== 401) return res;
+            ({ reason } = await res.clone().json().catch(() => ({})));
+        }
+        if (isSessionOver(reason)) endSession();
     }
+    return res;
+}
+
+async function request(method, path, body = null, options = {}) {
+    const res = await sendAuthorized(path, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...options.headers },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+    });
 
     const data = await res.json().catch(() => ({ error: 'Invalid response from server' }));
 
@@ -66,10 +84,9 @@ const del = (path) => request('DELETE', path);
 // ─── Form-data upload helper (for files) ─────────────────────────────────────
 
 async function uploadFile(path, formData) {
-    const token = localStorage.getItem('bies_token');
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await sendAuthorized(path, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: {},
         body: formData, // Let browser set Content-Type with boundary
     });
 
@@ -679,14 +696,15 @@ export class BiesWebSocket {
         this.shouldReconnect = true;
     }
 
-    connect() {
-        const token = localStorage.getItem('bies_token');
-        if (!token) return;
+    async connect() {
+        const token = await freshAccessToken();
+        if (!token || !this.shouldReconnect) return;
 
-        const wsUrl = BASE_URL.replace(/^http/, 'ws').replace('/api', '') + `/ws?token=${token}`;
+        // The token travels as a subprotocol, not in the URL, which proxies log.
+        const wsUrl = BASE_URL.replace(/^http/, 'ws').replace('/api', '') + '/ws';
 
         try {
-            this.ws = new WebSocket(wsUrl);
+            this.ws = new WebSocket(wsUrl, ['bies.v1', token]);
 
             this.ws.onopen = () => {
                 console.log('[WS] Connected');
@@ -701,12 +719,23 @@ export class BiesWebSocket {
                 } catch { /* ignore */ }
             };
 
-            this.ws.onclose = () => {
+            this.ws.onclose = (event) => {
                 if (this.onDisconnect) this.onDisconnect();
-                if (this.shouldReconnect) {
-                    setTimeout(() => this.connect(), this.reconnectDelay);
-                    this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+                // 4003: the session has ended (logout elsewhere, ban, deletion).
+                if (event.code === 4003) {
+                    this.shouldReconnect = false;
+                    endSession();
+                    return;
                 }
+                if (!this.shouldReconnect) return;
+                const reconnect = () => setTimeout(() => this.connect(), this.reconnectDelay);
+                // 4001: the token was refused; get a new one before retrying.
+                if (event.code === 4001) {
+                    refreshSession().then((fresh) => { if (fresh) reconnect(); }).catch(reconnect);
+                } else {
+                    reconnect();
+                }
+                this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
             };
 
             this.ws.onerror = () => {

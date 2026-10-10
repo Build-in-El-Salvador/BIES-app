@@ -180,7 +180,7 @@ Request → Route → Middleware → Controller → Service → Database/Externa
 1. **Helmet.js** — Security headers (CSP, HSTS, CORS)
 2. **Rate Limiting** — Per-endpoint limits (general: 300/15min, auth: 20/15min, upload: 30/15min)
 3. **Body Parser** — JSON with 50MB limit for media
-4. **Auth Middleware** — JWT verification, optional vs. required
+4. **Auth Middleware** — the access token is checked against its session on every request, so logging out, a ban or a deletion apply at once (see Sessions below); optional vs. required
 5. **Role Guards** — Admin, staff, investor role checks
 6. **Sanitization** — DOMPurify on all text inputs
 7. **Audit Logging** — Admin actions logged with actor, resource, IP
@@ -195,7 +195,17 @@ Attached to the Express HTTP server at `/ws`. Handles:
 - **Online presence** — Track who's active
 - **Heartbeat** — 30-second keepalive to prevent proxy timeouts
 
-Authentication: JWT passed as query parameter on connection.
+Authentication: the access token is sent as a WebSocket subprotocol (`new WebSocket(url, ['bies.v1', token])`), never in the URL, which proxies log. The session is checked on connect, and the socket closes with code 4003 when the session ends (4001 means: refresh the token and reconnect).
+
+### Sessions
+
+`services/session.service.ts` (server) and `src/services/session.js` (app):
+
+- **Sign-in starts a session** (a `Session` row per device) and returns a 15-minute **access token** (a JWT naming the user and the session) plus a **refresh token**.
+- **The refresh token** is `rt1.<session>.<mac>`, recomputed from a key derived from `JWT_SECRET`, the session's salt and a counter; the database alone can't produce one. The web app gets it as an `httpOnly`, `SameSite=Strict` cookie on `/api/auth`, which its scripts can't read; the native app and other clients get it in the response body.
+- **`POST /api/auth/refresh`** replaces both tokens. A replaced refresh token presented again ends the session (a stolen copy shows up this way), except within 60 seconds, which covers a lost response or two tabs refreshing at once.
+- **Sessions end** on logout (`POST /api/auth/logout`, this device), on a ban, deletion or merge (every device), after 30 days unused or 90 days after sign-in. Ended sessions are deleted after 30 days.
+- **The app** refreshes a minute before the access token expires, retries once on `token_expired`, and signs out on any other 401 reason (`session_ended`, `suspended`, `account_deleted`, `invalid_token`).
 
 ### Database Schema
 
@@ -216,7 +226,7 @@ Authentication: JWT passed as query parameter on connection.
 | `Follow` | Social graph (follower/following) |
 | `ZapReceipt` | NIP-57 Lightning payment tracking |
 | `AuditLog` | Admin action history |
-| `Session` | JWT session records |
+| `Session` | One per sign-in per device: refresh-token counter, idle and hard expiry, revocation |
 | `PushSubscription` | Web Push API subscriptions |
 | `BrowserFingerprint` | Ban evasion detection |
 
@@ -253,7 +263,7 @@ Authentication: JWT passed as query parameter on connection.
 - **HTTPS everywhere** — Nginx terminates TLS
 - **CORS enforcement** — Whitelist of allowed origins
 - **CSP headers** — No inline scripts, strict source policy
-- **WebSocket auth** — JWT required for `/ws`, NIP-42 for `/relay`
+- **WebSocket auth** — access token (as a subprotocol) required for `/ws`, NIP-42 for `/relay`
 
 ## Data Flow Examples
 
@@ -295,6 +305,6 @@ Authentication: JWT passed as query parameter on connection.
 5. PRF output or KiH handle key decrypts the nsec
 6. authService sends challenge request to backend
 7. nostrSigner signs kind:27235 challenge event
-8. Backend verifies signature, returns JWT + user object
-9. JWT stored in localStorage, nsec held in memory only
+8. Backend verifies signature and starts a session: a 15-minute access token + user object, and a refresh token (an httpOnly cookie on the web)
+9. Access token stored in localStorage, nsec held in memory only
 ```
