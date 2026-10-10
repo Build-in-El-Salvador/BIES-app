@@ -155,13 +155,6 @@ const generalLimiter = rateLimit({
     skip: (req) => req.method === 'OPTIONS',
 });
 
-// Strict auth: 20 attempts / 15 min per IP (brute force protection)
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    message: { error: 'Too many auth attempts, please try again later' },
-});
-
 // Upload: 30 per 15 min
 const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

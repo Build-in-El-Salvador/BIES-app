@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 const STORAGE_KEY = 'bies_bottom_nav';
@@ -7,13 +8,8 @@ const DEFAULT_TABS = ['feed', 'discover', 'events', 'media', 'dashboard'];
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
 async function registerBuilder(request) {
-    const email = `navtest-${Date.now()}-${Math.floor(Math.random() * 100000)}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: 'NavTest User' },
-    });
-    expect(res.ok(), `Register failed: ${res.status()}`).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user };
+    const { token, user } = await createTestUser(request, API, 'NavTest User');
+    return { token, user };
 }
 
 async function injectAuth(page, token, user) {

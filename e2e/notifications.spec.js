@@ -12,18 +12,14 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 
 // Helper: register a user and return { token, user }
 async function registerUser(request, suffix) {
-    const email = `testuser-${suffix}-${Date.now()}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: `Test User ${suffix}` },
-    });
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user };
+    const { token, user } = await createTestUser(request, API, `Test User ${suffix}`);
+    return { token, user };
 }
 
 // Helper: authed GET/POST/PUT/DELETE

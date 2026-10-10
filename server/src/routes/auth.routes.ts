@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { authLimiter } from '../middleware/rateLimit';
 import {
-    register,
-    registerSchema,
-    login,
-    loginSchema,
+    startEmailLogin,
+    emailStartSchema,
+    verifyEmailLogin,
+    emailVerifySchema,
     nostrLogin,
     getNostrChallenge,
     getMe,
@@ -15,10 +16,10 @@ import {
 const router = Router();
 
 // Public routes
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
-router.get('/nostr-challenge', getNostrChallenge);
-router.post('/nostr-login', nostrLogin);
+router.post('/email/start', authLimiter, validate(emailStartSchema), startEmailLogin);
+router.post('/email/verify', authLimiter, validate(emailVerifySchema), verifyEmailLogin);
+router.get('/nostr-challenge', authLimiter, getNostrChallenge);
+router.post('/nostr-login', authLimiter, nostrLogin);
 
 // Protected routes
 router.get('/me', authenticate, getMe);

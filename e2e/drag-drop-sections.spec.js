@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 
 async function registerBuilder(request) {
-    const email = `dragtest-${Date.now()}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: 'DragTest User' },
-    });
-    expect(res.ok(), `Register failed: ${res.status()}`).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user };
+    const { token, user } = await createTestUser(request, API, 'DragTest User');
+    return { token, user };
 }
 
 async function injectAuth(page, token, user) {

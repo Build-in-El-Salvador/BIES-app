@@ -13,8 +13,7 @@ import prisma from '../lib/prisma';
 
 // Map of route patterns → action names
 const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
-    { method: 'POST', pattern: /^\/api\/auth\/register/, action: 'AUTH_REGISTER' },
-    { method: 'POST', pattern: /^\/api\/auth\/login/, action: 'AUTH_LOGIN' },
+    { method: 'POST', pattern: /^\/api\/auth\/email\/verify/, action: 'AUTH_EMAIL_LOGIN' },
     { method: 'POST', pattern: /^\/api\/auth\/nostr-login/, action: 'AUTH_NOSTR_LOGIN' },
     { method: 'PUT',  pattern: /^\/api\/auth\/role/, action: 'AUTH_ROLE_CHANGED' },
     { method: 'PUT',  pattern: /^\/api\/profiles\/me/, action: 'PROFILE_UPDATE' },
@@ -43,8 +42,11 @@ const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
 ];
 
 function resolveAction(method: string, path: string): string | null {
+    // Express routes ignore case and repeated slashes, so the patterns must too,
+    // or /API/AUTH//email/verify would reach the handler without an audit row.
+    const normalized = path.toLowerCase().replace(/\/{2,}/g, '/');
     for (const entry of ACTION_MAP) {
-        if (entry.method === method && entry.pattern.test(path)) {
+        if (entry.method === method && entry.pattern.test(normalized)) {
             return entry.action;
         }
     }
@@ -61,7 +63,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
     // Run after response is sent (non-blocking)
     res.on('finish', () => {
-        const ipAddress = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+        const ipAddress = req.ip || req.socket.remoteAddress || '';
         const userAgent = req.headers['user-agent'] || '';
 
         // Only log successful or client-error responses (not 5xx internal errors)
@@ -82,7 +84,8 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
         prisma.auditLog.create({
             data: {
-                userId: req.user?.id || null,
+                // Sign-in routes have no req.user; they name the account in res.locals.
+                userId: req.user?.id || res.locals.auditUserId || null,
                 action,
                 resource: req.path,
                 ipAddress,

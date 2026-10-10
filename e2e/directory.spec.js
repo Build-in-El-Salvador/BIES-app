@@ -15,17 +15,13 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 
 async function registerUser(request) {
-    const email = `dirtest-${Date.now()}@test.local`;
-    const res = await request.post(`${API}/auth/register`, {
-        data: { email, password: 'TestPass123!', role: 'BUILDER', name: `DirTest ${Date.now()}` },
-    });
-    expect(res.ok(), `Register failed: ${res.status()}`).toBeTruthy();
-    const body = await res.json();
-    return { token: body.token, user: body.user, email };
+    const { token, user } = await createTestUser(request, API, `DirTest ${Date.now()}`);
+    return { token, user };
 }
 
 async function loginAs(page, token) {

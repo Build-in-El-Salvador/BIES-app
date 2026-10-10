@@ -81,13 +81,27 @@ export const config = {
     // ─── Blink (Galoy GraphQL Lightning wallet) ──────────────────────────────
     blinkApiUrl: process.env.BLINK_API_URL || 'https://api.blink.sv/graphql',
 
-    // ─── Email (optional, for notification emails) ───────────────────────────
-    smtp: {
-        host: process.env.SMTP_HOST || '',
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
-        from: process.env.SMTP_FROM || 'noreply@bies.io',
+    // ─── Email (Resend HTTPS API) ─────────────────────────────────────────────
+    // Sign-in codes go out through Resend's HTTPS API; the VPS blocks outbound
+    // SMTP. Without a key, development logs each email to the console and
+    // production refuses to send (sign-in by email is then unavailable).
+    email: {
+        resendApiKey: process.env.RESEND_API_KEY || '',
+        from: process.env.EMAIL_FROM || 'BIES <login@buildinelsalvador.com>',
+        // Ceiling on codes sent per 24 h across all addresses, so a flood of
+        // sign-in requests can't use up the Resend quota pretix tickets share.
+        // Resend's free plan allows 100 emails a day in total; raise this on
+        // a paid plan.
+        maxCodesPerDay: parseInt(process.env.EMAIL_CODES_MAX_PER_DAY || '60', 10),
+    },
+
+    // ─── App Review sign-in ───────────────────────────────────────────────────
+    // A fixed 6-digit code for one address, so Apple and Google reviewers can
+    // sign in without inbox access. Off unless both are set. The usual limits
+    // still apply: the code must be requested first, and 5 wrong tries burn it.
+    reviewLogin: {
+        email: (process.env.REVIEW_LOGIN_EMAIL || '').trim().toLowerCase(),
+        code: (process.env.REVIEW_LOGIN_CODE || '').trim(),
     },
 
     // ─── Web Push (VAPID) — optional, for offline push notifications ────────
