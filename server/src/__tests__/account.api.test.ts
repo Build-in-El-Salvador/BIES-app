@@ -80,9 +80,9 @@ import voucherRoutes from '../routes/voucher.routes';
 import { auditLog } from '../middleware/audit';
 import { sanitize } from '../middleware/sanitize';
 import { attachWebSocketServer, WS_PROTOCOL } from '../services/websocket.service';
-import { PURGE_DIR, WHITELIST_PATH } from '../services/relayWhitelist.service';
+import { PURGE_DIR, WHITELIST_PATH, addToRelayWhitelist, isVanished } from '../services/relayWhitelist.service';
 import { renderCodeEmail } from '../services/emailCode.service';
-import { checkSignedChallenge, deleteAccount, issueChallenge } from '../services/account.service';
+import { checkSignedChallenge, deleteAccount, issueChallenge, renderAccountDeletedEmail } from '../services/account.service';
 import { cache, cacheKey } from '../services/redis.service';
 import { exportHostedKey } from '../services/hostedSigner.service';
 import { createSession, signAccessToken } from '../services/session.service';
@@ -680,11 +680,17 @@ describe("a deleted account's key", () => {
         expect(redeem.body.reason).toBe('deleted_account');
         expect(whitelisted(pubkey)).toBe(false);
 
+        // Nor can anything else that grants access without proof of the key.
+        expect(isVanished(pubkey)).toBe(true);
+        expect(addToRelayWhitelist(pubkey)).toBe(false);
+        expect(whitelisted(pubkey)).toBe(false);
+
         // She comes back with her key: a new account, and relay access again.
         const back = await signInByNostr(ginaKey);
         expect(back.status).toBe(200);
         expect(back.body.user.id).not.toBe(gina.user.id);
         expect(whitelisted(pubkey)).toBe(true);
+        expect(isVanished(pubkey)).toBe(false);
     });
 });
 
@@ -723,6 +729,28 @@ describe('the App Review account', () => {
 });
 
 // ─── Code emails ──────────────────────────────────────────────────────────────
+
+describe('the deletion email, in both languages', () => {
+    it('mentions the relay purge, the key and the other relays only when each happened', () => {
+        const phrases = {
+            en: { relay: 'your posts on the BIES relay', key: 'destroyed the Nostr key', asked: 'asked other Nostr relays' },
+            es: { relay: 'sus publicaciones en el relay de BIES', key: 'destruimos la clave de Nostr', asked: 'pedimos a otros relays' },
+        } as const;
+        for (const lang of ['en', 'es'] as const) {
+            for (const relayPurgeRequested of [true, false]) {
+                for (const keyDestroyed of [true, false]) {
+                    for (const retracted of keyDestroyed ? [true, false] : [false]) {
+                        const { text } = renderAccountDeletedEmail('a@example.test', lang, { relayPurgeRequested, keyDestroyed, retracted });
+                        const say = phrases[lang];
+                        expect(text.includes(say.relay)).toBe(relayPurgeRequested);
+                        expect(text.includes(say.key)).toBe(keyDestroyed);
+                        expect(text.includes(say.asked)).toBe(retracted);
+                    }
+                }
+            }
+        }
+    });
+});
 
 describe('code emails', () => {
     it('say what the code is for', () => {
