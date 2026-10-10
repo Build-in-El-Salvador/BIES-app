@@ -1,8 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import prisma from '../lib/prisma';
-import { cache } from '../services/redis.service';
+import { SESSION_END_MESSAGES, checkSession, verifyAccessToken } from '../services/session.service';
 
 // Extend Express Request to include user info
 declare global {
@@ -15,103 +13,75 @@ declare global {
                 role: string;
                 isAdmin: boolean;
             };
+            /** The session the access token belongs to (services/session.service.ts). */
+            sessionId?: string;
         }
     }
 }
 
-interface JwtPayload {
-    userId: string;
-    role: string;
-    isAdmin: boolean;
-}
-
 /**
- * Verify JWT and attach user to request.
- * Returns 401 if token is missing or invalid.
+ * Require a signed-in user: a valid access token whose session is still live
+ * and whose account is neither suspended nor deleted. Checked on every
+ * request, so logging out, a ban or a deletion applies at once.
+ *
+ * 401 responses carry a `reason` the app acts on: `token_expired` means
+ * refresh and retry; every other reason means the session is over.
  */
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        res.status(401).json({ error: 'Missing or invalid authorization header' });
+        res.status(401).json({ error: 'Missing or invalid authorization header', reason: 'missing_token' });
         return;
     }
 
-    const token = authHeader.split(' ')[1];
-
-    // Check if token has been blacklisted (logout)
-    const isBlacklisted = await cache.get(`blacklist:${token}`);
-    if (isBlacklisted) {
-        res.status(401).json({ error: 'Token has been revoked' });
+    const token = verifyAccessToken(authHeader.slice(7));
+    if (!token.ok) {
+        res.status(401).json({
+            error: token.reason === 'token_expired' ? 'Your session needs refreshing' : 'Invalid token',
+            reason: token.reason,
+        });
         return;
     }
 
     try {
-        const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
-
-        const user = await prisma.user.findUnique({
-            where: { id: decoded.userId },
-            select: {
-                id: true,
-                email: true,
-                nostrPubkey: true,
-                role: true,
-                isAdmin: true,
-            },
-        });
-
-        if (!user) {
-            res.status(401).json({ error: 'User not found' });
+        const session = await checkSession(token.claims.sid, token.claims.userId);
+        if (!session.ok) {
+            res.status(401).json({ error: SESSION_END_MESSAGES[session.reason], reason: session.reason });
             return;
         }
-
-        req.user = user;
-        next();
+        req.user = session.user;
+        req.sessionId = token.claims.sid;
     } catch (error) {
-        res.status(401).json({ error: 'Invalid or expired token' });
+        // A database failure must not read as "signed out": the app would
+        // drop a session that is fine.
+        console.error('[Auth] Session check failed:', error);
+        res.status(503).json({ error: 'Please try again in a moment' });
+        return;
     }
+    next();
 }
 
 /**
- * Optional auth — attaches user if token is present, but doesn't fail if not.
+ * Optional auth: attaches the user when the request carries a live session,
+ * and otherwise carries on as signed out. The app refreshes tokens before
+ * they expire, so an expired one here is rare.
  */
 export async function optionalAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        next();
-        return;
-    }
-
-    try {
-        const token = authHeader.split(' ')[1];
-
-        const isBlacklisted = await cache.get(`blacklist:${token}`);
-        if (isBlacklisted) {
-            next();
-            return;
+    if (authHeader?.startsWith('Bearer ')) {
+        const token = verifyAccessToken(authHeader.slice(7));
+        if (token.ok) {
+            try {
+                const session = await checkSession(token.claims.sid, token.claims.userId);
+                if (session.ok) {
+                    req.user = session.user;
+                    req.sessionId = token.claims.sid;
+                }
+            } catch (error) {
+                console.error('[Auth] Session check failed:', error);
+            }
         }
-
-        const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
-
-        const user = await prisma.user.findUnique({
-            where: { id: decoded.userId },
-            select: {
-                id: true,
-                email: true,
-                nostrPubkey: true,
-                role: true,
-                isAdmin: true,
-            },
-        });
-
-        if (user) {
-            req.user = user;
-        }
-    } catch {
-        // Silently continue without user
     }
-
     next();
 }
 
@@ -147,14 +117,4 @@ export function requireRole(...roles: string[]) {
  */
 export function isAdminPubkey(nostrPubkey: string): boolean {
     return config.adminPubkeys.includes(nostrPubkey);
-}
-
-/**
- * Generate JWT for a user.
- */
-export function generateToken(userId: string, role: string, isAdmin: boolean = false): string {
-    return jwt.sign({ userId, role, isAdmin }, config.jwtSecret, {
-        algorithm: 'HS256',
-        expiresIn: config.jwtExpiresIn,
-    } as jwt.SignOptions);
 }

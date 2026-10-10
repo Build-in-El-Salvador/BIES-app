@@ -168,6 +168,11 @@ docker compose logs -f bies-server
 | `EMAIL_CODES_MAX_PER_DAY` | Most sign-in codes sent per 24 h, all addresses together. Resend's free plan allows 100 emails a day in total | `60` |
 | `REVIEW_LOGIN_EMAIL` | App Review address that signs in with a fixed code | Off |
 | `REVIEW_LOGIN_CODE` | That fixed code: 6 digits, kept out of the code | Off |
+| `ACCESS_TOKEN_SECONDS` | Lifetime of an access token; the app renews it before it runs out | `900` |
+| `SESSION_IDLE_DAYS` | A session unused this long ends | `30` |
+| `SESSION_MAX_DAYS` | Every session ends this long after sign-in | `90` |
+
+`JWT_EXPIRES_IN` is no longer read: access tokens last `ACCESS_TOKEN_SECONDS`, and sessions are renewed with refresh tokens.
 
 ## Docker Compose Details
 

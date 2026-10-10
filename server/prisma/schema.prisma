@@ -74,17 +74,27 @@ model User {
   @@map("users")
 }
 
+// One row per sign-in on one device (services/session.service.ts). The
+// refresh token is never stored: it is recomputed from the server's key, the
+// salt and the counter, which goes up by one on every refresh.
 model Session {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  userAgent String?  @map("user_agent")
-  ipAddress String?  @map("ip_address")
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  salt          String
+  counter       Int       @default(0)
+  rotatedAt     DateTime? @map("rotated_at")
+  client        String    @default("web") // web | native
+  createdAt     DateTime  @default(now()) @map("created_at")
+  lastUsedAt    DateTime  @default(now()) @map("last_used_at")
+  expiresAt     DateTime  @map("expires_at") // idle limit, pushed back on each refresh
+  maxExpiresAt  DateTime  @map("max_expires_at") // hard limit from sign-in
+  revokedAt     DateTime? @map("revoked_at")
+  revokedReason String?   @map("revoked_reason") // logout | reuse | suspended | deleted | merged
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expiresAt])
   @@map("sessions")
 }
 

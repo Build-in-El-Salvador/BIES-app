@@ -1,14 +1,24 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
 // nostr-tools is ESM-only (@noble/curves has no CJS build);
 // use dynamic import() so the compiled CJS output doesn't call require().
 import prisma from '../lib/prisma';
-import { generateToken, isAdminPubkey } from '../middleware/auth';
+import { isAdminPubkey } from '../middleware/auth';
 import { encryptPrivateKey } from '../services/crypto.service';
 import { publishRelayList } from '../services/nostr.service';
 import { HEX_PUBKEY_RE, addToRelayWhitelist } from '../services/relayWhitelist.service';
 import { recordOnboardingRedemption } from '../services/voucher.service';
-import { cache } from '../services/redis.service';
+import {
+    SESSION_END_MESSAGES,
+    clearRefreshCookie,
+    clientKind,
+    deliverSession,
+    refreshSession,
+    refreshTokenFromRequest,
+    revokeSession,
+    sessionIdFromRefreshToken,
+    startSession,
+    verifyAccessToken,
+} from '../services/session.service';
 import {
     CODE_TTL_SECONDS,
     RESEND_COOLDOWN_SECONDS,
@@ -287,8 +297,8 @@ export async function verifyEmailLogin(req: Request, res: Response): Promise<voi
         }
 
         res.locals.auditUserId = user.id;
-        const token = generateToken(user.id, user.role, user.isAdmin);
-        res.status(isNewUser ? 201 : 200).json({ user: publicUser(user), token, isNewUser });
+        const session = await startSession(req, res, user);
+        res.status(isNewUser ? 201 : 200).json({ user: publicUser(user), ...session, isNewUser });
     } catch (error) {
         console.error('Email sign-in verify error:', error);
         res.status(500).json({ error: 'Sign-in failed' });
@@ -470,19 +480,23 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         // Store fingerprint for existing users (builds fingerprint database)
         await storeFingerprint(user.id, fingerprint, req);
 
-        // Block banned users from logging in and re-whitelisting
+        // Block deleted and banned accounts from signing in and re-whitelisting
+        if (user.deletedAt) {
+            res.status(403).json({ error: 'This account has been deleted', reason: 'deleted' });
+            return;
+        }
         if (user.isBanned) {
-            res.status(403).json({ error: 'Your account has been suspended' });
+            res.status(403).json({ error: 'Your account has been suspended', reason: 'suspended' });
             return;
         }
 
-        const token = generateToken(user.id, user.role, user.isAdmin);
+        const session = await startSession(req, res, user);
 
         // Add pubkey to relay whitelist so user can publish to the BIES relay
         addToRelayWhitelist(pubkey);
 
         res.locals.auditUserId = user.id;
-        res.json({ user: publicUser(user), token });
+        res.json({ user: publicUser(user), ...session });
     } catch (error) {
         console.error('Nostr login error:', error);
         res.status(500).json({ error: 'Nostr login failed' });
@@ -515,28 +529,47 @@ export async function getMe(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * POST /auth/refresh
+ * Swap a refresh token for a new access token and the next refresh token.
+ * The web app's refresh token is its cookie; other clients send
+ * `{ refreshToken }`. No access token needed: it has usually just expired.
+ */
+export async function refresh(req: Request, res: Response): Promise<void> {
+    try {
+        const result = await refreshSession(refreshTokenFromRequest(req));
+        if (!result.ok) {
+            if (clientKind(req) === 'web') clearRefreshCookie(res);
+            res.status(401).json({ error: SESSION_END_MESSAGES[result.reason], reason: result.reason });
+            return;
+        }
+        res.json(deliverSession(req, res, result.user, result.session));
+    } catch (error) {
+        console.error('Session refresh error:', error);
+        res.status(503).json({ error: 'Please try again in a moment' });
+    }
+}
+
+/**
  * POST /auth/logout
- * Blacklist the current token in Redis so it cannot be reused.
+ * End this device's session, so neither its access token nor its refresh
+ * token works again, even before they expire. Works with an expired access
+ * token, or with the refresh token alone.
  */
 export async function logout(req: Request, res: Response): Promise<void> {
     try {
+        let sessionId: string | null = null;
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            res.status(400).json({ error: 'No token provided' });
-            return;
-        }
-
-        const token = authHeader.split(' ')[1];
-
-        // Decode without verifying to get the expiry time
-        const decoded = jwt.decode(token) as { exp?: number } | null;
-        if (decoded?.exp) {
-            const remainingSeconds = decoded.exp - Math.floor(Date.now() / 1000);
-            if (remainingSeconds > 0) {
-                await cache.set(`blacklist:${token}`, '1', remainingSeconds);
+        if (authHeader?.startsWith('Bearer ')) {
+            const token = verifyAccessToken(authHeader.slice(7), { ignoreExpiration: true });
+            if (token.ok) {
+                sessionId = token.claims.sid;
+                res.locals.auditUserId = token.claims.userId;
             }
         }
+        if (!sessionId) sessionId = await sessionIdFromRefreshToken(refreshTokenFromRequest(req));
 
+        if (sessionId) await revokeSession(sessionId, 'logout');
+        if (clientKind(req) === 'web') clearRefreshCookie(res);
         res.json({ message: 'Logged out successfully' });
     } catch (error) {
         console.error('Logout error:', error);

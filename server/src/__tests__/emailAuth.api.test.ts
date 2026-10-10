@@ -22,7 +22,7 @@ const db = vi.hoisted(() => {
     process.env.EMAIL_CODES_MAX_PER_DAY = '1000';
 
     type Row = Record<string, any>;
-    const state = { codes: [] as Row[], users: [] as Row[], seq: 0 };
+    const state = { codes: [] as Row[], users: [] as Row[], sessions: [] as Row[], seq: 0 };
 
     // Just enough of Prisma's `where` semantics for the queries under test.
     function matches(row: Row, where: Row): boolean {
@@ -141,16 +141,31 @@ const db = vi.hoisted(() => {
         }),
     };
 
+    // Sign-in starts a session, and /auth/me checks it.
+    const session = {
+        create: vi.fn(async ({ data }: Row) => {
+            const row = { id: `session-${++state.seq}`, counter: 0, revokedAt: null, ...data };
+            state.sessions.push(row);
+            return { ...row };
+        }),
+        findUnique: vi.fn(async ({ where }: Row) => {
+            const row = state.sessions.find((s) => s.id === where.id);
+            const owner = row && state.users.find((u) => u.id === row.userId);
+            return row && owner ? { ...row, user: { ...owner } } : null;
+        }),
+    };
+
     function reset() {
         state.codes = [];
         state.users = [];
+        state.sessions = [];
     }
 
-    return { state, emailCode, user, profile, reset };
+    return { state, emailCode, user, profile, session, reset };
 });
 
 vi.mock('../lib/prisma', () => ({
-    default: { emailCode: db.emailCode, user: db.user, profile: db.profile },
+    default: { emailCode: db.emailCode, user: db.user, profile: db.profile, session: db.session },
 }));
 vi.mock('../services/email.service', () => ({ sendEmail: vi.fn() }));
 vi.mock('../services/nostr.service', () => ({ publishRelayList: vi.fn().mockResolvedValue(null) }));
@@ -584,6 +599,31 @@ describe('after signing in', () => {
         expect(me).toMatchObject({ email: 'nina@example.com', hostedKey: true });
         expect(me.nostrNsec).toBeUndefined();
         expect(JSON.stringify(me)).not.toMatch(/nsec|encryptedPrivkey/i);
+    });
+
+    it('gives a browser its refresh token only as an httpOnly cookie', async () => {
+        await requestCode('olga@example.com');
+        const res = await fetch(`${base}/api/auth/email/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': clientIp, Origin: 'https://app.example.test' },
+            body: JSON.stringify({ email: 'olga@example.com', code: lastCode() }),
+        });
+        const body = (await res.json()) as any;
+
+        expect(res.status).toBe(201);
+        expect(body.token).toBeTruthy();
+        expect(body.refreshToken).toBeUndefined();
+        expect(res.headers.get('set-cookie')).toMatch(/^bies_rt=rt1\.[^;]+;.*HttpOnly/i);
+        expect(db.state.sessions).toHaveLength(1);
+    });
+
+    it('gives the native app and other clients the refresh token in the body', async () => {
+        await requestCode('pia@example.com');
+        const res = await post('/email/verify', { email: 'pia@example.com', code: lastCode() });
+
+        expect(res.status).toBe(201);
+        expect(res.body.refreshToken).toMatch(/^rt1\./);
+        expect(res.headers.get('set-cookie')).toBeNull();
     });
 
     it('the password endpoints are gone', async () => {

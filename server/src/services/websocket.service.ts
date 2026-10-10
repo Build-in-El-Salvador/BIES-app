@@ -2,7 +2,10 @@
  * WebSocket service — real-time notifications and presence.
  *
  * Supports:
- *   - Authenticated connections via JWT query param
+ *   - Authenticated connections: the access token travels as a WebSocket
+ *     subprotocol (`new WebSocket(url, ['bies.v1', token])`), not in the URL,
+ *     which proxies write to their logs. The session is checked on connect,
+ *     and its sockets close when it ends (logout, ban, deletion).
  *   - Per-user notification push
  *   - Typing indicators for DMs
  *   - Online presence tracking
@@ -15,14 +18,14 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
-import { URL } from 'url';
-import jwt from 'jsonwebtoken';
 import { config } from '../config';
+import { checkSession, onSessionsEnded, verifyAccessToken } from './session.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AuthenticatedWebSocket extends WebSocket {
     userId?: string;
+    sessionId?: string;
     isAlive?: boolean;
 }
 
@@ -36,24 +39,19 @@ interface WsMessage {
 // userId → Set of open WebSocket connections (one user can have multiple tabs)
 const connections = new Map<string, Set<AuthenticatedWebSocket>>();
 
-// ─── JWT validation helper ────────────────────────────────────────────────────
+// ─── Authentication ───────────────────────────────────────────────────────────
 
-function extractTokenFromRequest(req: IncomingMessage): string | null {
-    try {
-        const url = new URL(req.url || '', `http://localhost`);
-        return url.searchParams.get('token');
-    } catch {
-        return null;
-    }
-}
+/** The subprotocol the app asks for; the second one it offers is its token. */
+export const WS_PROTOCOL = 'bies.v1';
 
-function verifyToken(token: string): { userId: string; role: string } | null {
-    try {
-        const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as { userId: string; role: string };
-        return decoded;
-    } catch {
-        return null;
-    }
+// Close codes the app acts on: refresh the token and reconnect, or sign out.
+const CLOSE_REFRESH = 4001;
+const CLOSE_SESSION_ENDED = 4003;
+
+function tokenFromRequest(req: IncomingMessage): string | null {
+    const offered = (req.headers['sec-websocket-protocol'] || '').split(',').map((p) => p.trim());
+    if (offered[0] !== WS_PROTOCOL || !offered[1]) return null;
+    return offered[1];
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -65,24 +63,59 @@ let wss: WebSocketServer | null = null;
  * Call this once from index.ts after creating the http.Server.
  */
 export function attachWebSocketServer(httpServer: Server): void {
-    wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 64 * 1024 });
+    wss = new WebSocketServer({
+        server: httpServer,
+        path: '/ws',
+        maxPayload: 64 * 1024,
+        // Answer with our protocol name, never with the token.
+        handleProtocols: (protocols) => (protocols.has(WS_PROTOCOL) ? WS_PROTOCOL : false),
+    });
+
+    // A session that ends closes its sockets: logout on this device, or a
+    // ban, deletion or merge for every device.
+    onSessionsEnded(({ sessionId, userId }) => {
+        for (const sockets of connections.values()) {
+            for (const ws of sockets) {
+                if ((sessionId && ws.sessionId === sessionId) || (userId && ws.userId === userId)) {
+                    ws.close(CLOSE_SESSION_ENDED, 'session_ended');
+                }
+            }
+        }
+    });
 
     wss.on('connection', (ws: AuthenticatedWebSocket, req: IncomingMessage) => {
-        const token = extractTokenFromRequest(req);
-
+        // Not yet registered, but the heartbeat must not cut it off mid-check.
+        ws.isAlive = true;
+        const token = tokenFromRequest(req);
         if (!token) {
-            ws.close(4001, 'Authentication required');
+            ws.close(CLOSE_REFRESH, 'Authentication required');
             return;
         }
 
-        const payload = verifyToken(token);
-        if (!payload) {
-            ws.close(4001, 'Invalid token');
+        const checked = verifyAccessToken(token);
+        if (!checked.ok) {
+            ws.close(CLOSE_REFRESH, checked.reason);
             return;
         }
 
-        const { userId } = payload;
+        // Messages that arrive before the session check are dropped: the
+        // listeners below aren't attached yet.
+        checkSession(checked.claims.sid, checked.claims.userId).then((session) => {
+            if (!session.ok) {
+                ws.close(CLOSE_SESSION_ENDED, session.reason);
+                return;
+            }
+            if (ws.readyState !== WebSocket.OPEN) return;
+            register(ws, session.user.id, checked.claims.sid);
+        }).catch((err) => {
+            console.error('[WS] Session check failed:', err);
+            ws.close(1011, 'Try again');
+        });
+    });
+
+    function register(ws: AuthenticatedWebSocket, userId: string, sessionId: string): void {
         ws.userId = userId;
+        ws.sessionId = sessionId;
         ws.isAlive = true;
 
         // Track connection
@@ -116,7 +149,7 @@ export function attachWebSocketServer(httpServer: Server): void {
         ws.on('error', (err) => {
             console.error(`[WS] Error for user ${userId}:`, err.message);
         });
-    });
+    }
 
     // Heartbeat: ping all connections every 30s to detect dead sockets
     const heartbeat = setInterval(() => {
@@ -205,8 +238,10 @@ export function sendToUser(userId: string, data: unknown): number {
  * Use sparingly.
  */
 export function broadcast(data: unknown): void {
-    if (!wss) return;
-    wss.clients.forEach((ws) => sendToSocket(ws, data));
+    // Signed-in sockets only, not ones still waiting on their session check.
+    for (const sockets of connections.values()) {
+        for (const ws of sockets) sendToSocket(ws, data);
+    }
 }
 
 /**
