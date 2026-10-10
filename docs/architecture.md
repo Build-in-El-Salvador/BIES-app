@@ -86,6 +86,7 @@ A private Nostr relay running [strfry](https://github.com/hoytech/strfry). This 
 **Key paths:**
 - `relay/` — Dockerfile and strfry configuration
 - Write policy controls which pubkeys can publish
+- `relay/purge-loop.sh` runs beside strfry and deletes a deleted account's events: every event the pubkey published, and the gift wraps addressed to it. The server asks by dropping a file named after the pubkey in `purge/` on the shared whitelist volume. strfry doesn't implement NIP-62, so this does what a request to vanish would.
 
 ### 3. NIP-42 Auth Proxy (`bies-auth-proxy`)
 
@@ -207,6 +208,18 @@ Authentication: the access token is sent as a WebSocket subprotocol (`new WebSoc
 - **`POST /api/auth/refresh`** replaces both tokens. A genuine but replaced refresh token presented again ends the session (a stolen copy shows up this way), except within 60 seconds, which covers a lost response or two tabs refreshing at once.
 - **Sessions end** on logout (`POST /api/auth/logout`, this device, which also removes the phone's push registration), on a ban, deletion or merge (every device, and their push registrations), after 30 days unused or 90 days after sign-in. Ended sessions are deleted after 30 days.
 - **The app** refreshes a minute before the access token expires (by the server's clock, learned from each token), retries once on `token_expired`, and signs out on any other 401 reason (`session_ended`, `suspended`, `account_deleted`, `invalid_token`), in every tab. A refresh that can't reach the server leaves the session alone. A logout the server didn't confirm is retried at the next launch.
+
+### Deleting an account, and taking the key
+
+`services/account.service.ts` (server), Settings → Account (app). Both can't be undone, so both are confirmed afresh: email accounts with an emailed code (its own `purpose`, so a sign-in code can't be spent here), Nostr accounts with a kind-27235 event signed by their key over a one-time challenge (`challenge` and `purpose` tags).
+
+- **Delete account** (`POST /api/account/delete/start`, then `/api/account/delete`):
+  1. stops the account at once: `deletedAt`, every session and socket, push registrations, the relay whitelist;
+  2. retracts what it published: for an email account, BIES signs a NIP-62 request to vanish and NIP-09 deletion requests with the key it holds and sends them to the public relays it publishes to; for every account, BIES's relay deletes its events (`purge-loop.sh`);
+  3. deletes the user row; the cascade takes everything else, the hosted key included. Rows kept for other members' records (audit log, project views, voucher redemptions) lose the account's IP addresses first. An `ACCOUNT_DELETED` audit row records that it happened, with nothing that identifies the person;
+  4. emails a confirmation if the account has an address.
+- **Take your key** (email accounts; `POST /api/account/key/start`, `/key/export`, `/key/release`): the key is shown once, after an emailed code. The member saves it (the app offers a NIP-49 backup flagged as server-handled), proves it by signing the challenge with the key they saved, and BIES deletes its copy. The account keeps its identity; this device signs with the member's key from then on, and the account's other sessions end. Email sign-in then answers `nostr_account`.
+- **Backups** still hold deleted data until they expire, within 90 days; the app, the emails and the privacy notice say so.
 
 ### Database Schema
 

@@ -165,6 +165,7 @@ docker compose logs -f bies-server
 | `S3_PUBLIC_URL` | CDN URL for public files | — |
 | `COINOS_API_URL` | Coinos API base URL | `https://coinos.io/api` |
 | `EMAIL_FROM` | Sender of sign-in codes | `BIES <login@buildinelsalvador.com>` |
+| `EMAIL_SUPPORT_ADDRESS` | Reply-To on account emails (deletion, key taken), which tell people to reply if it wasn't them. Must be a mailbox someone reads | `info@buildinelsalvador.com` |
 | `EMAIL_CODES_MAX_PER_DAY` | Most sign-in codes sent per 24 h, all addresses together. Resend's free plan allows 100 emails a day in total | `60` |
 | `REVIEW_LOGIN_EMAIL` | App Review address that signs in with a fixed code | Off |
 | `REVIEW_LOGIN_CODE` | That fixed code: 6 digits, kept out of the code | Off |
@@ -183,7 +184,7 @@ docker compose logs -f bies-server
 | `bies-data` | `/app/data` on bies-server | SQLite database file (if using SQLite) |
 | `bies-uploads` | `/app/uploads` on server + nginx | User-uploaded files |
 | `relay-data` | `/app/strfry-db` on bies-relay | strfry relay database |
-| `relay-whitelist` | Shared between server + relay + proxy | Pubkey whitelist for relay access |
+| `relay-whitelist` | Shared between server + relay + proxy | Pubkey whitelist for relay access, and `purge/` requests for deleted accounts' events |
 | `bugs-data` | `/app/data` on bies-bugs | Bug tracker data |
 
 ### Networks
