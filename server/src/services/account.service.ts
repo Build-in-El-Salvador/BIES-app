@@ -7,15 +7,21 @@
  *   challenge (issueChallenge / checkSignedChallenge).
  *
  * Deleting an account:
- * 1. stops it at once: deletedAt is set, every session ends, push
- *    registrations and relay access go;
- * 2. retracts what it published. For an email account, BIES signs a NIP-62
- *    request to vanish and NIP-09 deletion requests and sends them to the
- *    public relays. For every account, BIES's own relay deletes its events;
- * 3. deletes the user row and everything that cascades from it, the hosted
- *    key included. Rows kept for other members' records lose the account's
- *    IP addresses first;
- * 4. emails a confirmation, if the account has an address.
+ * 1. prepares what can't be undone without doing it: for an email account,
+ *    a NIP-62 request to vanish and NIP-09 deletion requests are signed with
+ *    the key BIES holds, while it still exists;
+ * 2. erases, in one transaction: the user row and its cascade (sessions, push
+ *    registrations, the hosted key, ...), and what other rows keep about the
+ *    person (IP addresses, names, notifications to others, zap receipts).
+ *    Until this commits nothing has changed, so if it fails the member is
+ *    still signed in and can try again;
+ * 3. only then: sockets close, relay access goes, BIES's relay deletes the
+ *    events, the signed requests go to the public relays. Nothing here
+ *    throws: the account is already gone;
+ * 4. emails a confirmation that says what was done.
+ * An admin emptying the trash erases without step 3's relay work (a merged
+ * account's events now belong to the account it was merged into), unless
+ * carrying out a member's request.
  *
  * Taking the key (email accounts): BIES shows the key once, after an email
  * code. The member proves they saved it by signing a challenge with it, and
@@ -33,10 +39,9 @@ import { config } from '../config';
 import { sendEmail, type OutgoingEmail } from './email.service';
 import type { EmailLang } from './emailCode.service';
 import { exportHostedKey } from './hostedSigner.service';
-import { retractAllEvents } from './nostr.service';
-import { removePushTargets } from './notification.service';
-import { cache } from './redis.service';
-import { removeFromRelayWhitelist, requestRelayPurge } from './relayWhitelist.service';
+import { publishRetraction, signRetraction } from './nostr.service';
+import { cache, cacheKey } from './redis.service';
+import { markVanished, removeFromRelayWhitelist, requestRelayPurge } from './relayWhitelist.service';
 import { revokeOtherSessions, revokeUserSessions } from './session.service';
 
 // ─── Confirming with a signature ──────────────────────────────────────────────
@@ -98,11 +103,13 @@ export async function checkSignedChallenge(
         event.kind !== CONFIRMATION_KIND ||
         event.pubkey !== pubkey ||
         Math.abs(event.created_at - now) > MAX_CLOCK_SKEW_SECONDS ||
-        onlyTag(event.tags, 'challenge') !== stored.challenge ||
         onlyTag(event.tags, 'purpose') !== purpose
     ) {
         return 'bad_signature';
     }
+    // Signed over an older challenge (another tab or device started again
+    // since): the app starts over rather than retrying a dead end.
+    if (onlyTag(event.tags, 'challenge') !== stored.challenge) return 'challenge_expired';
 
     const { verifyEvent } = await import('nostr-tools/pure');
     let valid = false;
@@ -121,23 +128,40 @@ export async function checkSignedChallenge(
 
 // ─── Deleting an account ──────────────────────────────────────────────────────
 
-// Retraction talks to relays run by others; the deletion doesn't wait longer.
-const RETRACT_TIMEOUT_MS = 20_000;
+// How long the deletion waits for relays: to find the events to retract
+// (before the erase) and to take the requests (after it).
+const PREPARE_TIMEOUT_MS = 15_000;
+const PUBLISH_TIMEOUT_MS = 10_000;
+
+export interface DeletionOptions {
+    lang?: EmailLang;
+    /** Email the member a confirmation (their own request). */
+    notify?: boolean;
+    /**
+     * Have relays forget the account: BIES's relay deletes its events, and
+     * for an email account the public relays are asked to. On for a member's
+     * own request, or an admin carrying one out; off when an admin just
+     * empties the trash.
+     */
+    retract?: boolean;
+}
 
 export interface DeletionResult {
-    /** Deletion requests went out to the public relays (email accounts). */
-    retracted: boolean;
-    /** BIES's relay was asked to delete the account's events. */
+    keyDestroyed: boolean;
     relayPurgeRequested: boolean;
+    /** At least one public relay took a deletion request. */
+    retracted: boolean;
     emailed: boolean;
 }
 
-/** Audit metadata without the names it may carry (admin actions name the member). */
-function withoutNames(metadata: string): string {
+const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Audit metadata without what names the person: names and pubkeys. */
+function withoutPerson(metadata: string): string {
     try {
         const data = JSON.parse(metadata) as Record<string, unknown>;
         for (const key of Object.keys(data)) {
-            if (/name$/i.test(key)) delete data[key];
+            if (/(name|pubkey)$/i.test(key)) delete data[key];
         }
         return JSON.stringify(data);
     } catch {
@@ -153,85 +177,119 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
 
 /**
  * Delete an account for good. The caller has confirmed it is the owner's
- * wish, or an admin is purging it (`notify: false`: the admin answers the
- * person themselves, if at all).
+ * wish, or is an admin. Throws only if nothing was deleted.
  */
 export async function deleteAccount(
     userId: string,
-    lang: EmailLang = 'en',
-    { notify = true }: { notify?: boolean } = {},
+    { lang = 'en', notify = true, retract = true }: DeletionOptions = {},
 ): Promise<DeletionResult> {
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true, nostrPubkey: true, encryptedPrivkey: true },
+        select: { email: true, nostrPubkey: true, encryptedPrivkey: true, profile: { select: { id: true } } },
     });
     if (!user) throw new Error(`No account ${userId}`);
+    const pubkey = user.nostrPubkey;
     const hosted = !!user.encryptedPrivkey;
 
-    // 1. Stop it. From here nothing can sign in as the account or act for it.
-    await prisma.user.update({ where: { id: userId }, data: { deletedAt: new Date() } });
-    await revokeUserSessions(userId, 'deleted');
-    await removePushTargets(userId);
-    removeFromRelayWhitelist(user.nostrPubkey);
-
-    // 2. Retract what it published, while the hosted key still exists.
-    let retracted = false;
-    if (hosted) {
+    // 1. Prepare the retraction while the hosted key exists; send nothing yet.
+    let retraction: NostrEvent[] = [];
+    if (retract && hosted) {
         try {
-            retracted = !!(await withTimeout(retractAllEvents(userId, user.nostrPubkey), RETRACT_TIMEOUT_MS));
+            retraction = (await withTimeout(signRetraction(userId, pubkey), PREPARE_TIMEOUT_MS)) ?? [];
         } catch (err) {
-            console.error('[Account] Retraction failed:', err instanceof Error ? err.message : err);
+            console.error('[Account] Could not sign the retraction:', errorText(err));
         }
     }
-    const relayPurgeRequested = requestRelayPurge(user.nostrPubkey);
 
-    // 3. Erase. The cascade takes the profile, listings, messages, sessions,
-    // and the hosted key with the user row. Rows that stay for other members
-    // (audit trail, project views, voucher redemptions) lose the account's
-    // addresses; the cascade unlinks them from it. Admin actions about the
-    // account keep their record, but not the member's name.
-    const aboutIt = await prisma.auditLog.findMany({
-        where: { resource: `user:${userId}` },
+    // 2. Erase. Audit rows about the person keep what happened, but not their
+    // name or pubkey (admin actions recorded both); rows kept for others lose
+    // the account's IP addresses; other members' notifications about them
+    // ("followed you", a message preview) go.
+    const aboutThem = await prisma.auditLog.findMany({
+        where: {
+            OR: [
+                { resource: `user:${userId}` },
+                { metadata: { contains: userId } },
+                { metadata: { contains: pubkey } },
+            ],
+        },
         select: { id: true, metadata: true },
     });
-    await prisma.$transaction([
+    const erased = await prisma.$transaction([
         prisma.auditLog.updateMany({ where: { userId }, data: { ipAddress: null, userAgent: null } }),
-        ...aboutIt.map(({ id, metadata }) =>
-            prisma.auditLog.update({ where: { id }, data: { metadata: withoutNames(metadata) } })),
+        ...aboutThem.map(({ id, metadata }) =>
+            prisma.auditLog.update({ where: { id }, data: { metadata: withoutPerson(metadata) } })),
         prisma.projectView.updateMany({ where: { userId }, data: { ipAddress: null } }),
         prisma.voucherRedemption.updateMany({
-            where: { OR: [{ userId }, { pubkey: user.nostrPubkey }] },
+            where: { OR: [{ userId }, { pubkey }] },
             data: { ipAddress: null, pubkey: null },
         }),
+        prisma.zapReceipt.updateMany({ where: { senderPubkey: pubkey }, data: { senderPubkey: '', comment: '' } }),
+        prisma.zapReceipt.updateMany({ where: { recipientPubkey: pubkey }, data: { recipientPubkey: '' } }),
+        prisma.notification.deleteMany({
+            where: { OR: [{ data: { contains: userId } }, { data: { contains: pubkey } }] },
+        }),
         prisma.user.delete({ where: { id: userId } }),
-        // The record that the request was carried out, with nothing that
-        // identifies the person.
+        // The record that it was done, with nothing that identifies the person.
         prisma.auditLog.create({
             data: {
                 userId: null,
                 action: 'ACCOUNT_DELETED',
                 resource: `user:${userId}`,
-                metadata: JSON.stringify({ hostedKey: hosted, retracted, relayPurgeRequested }),
+                metadata: JSON.stringify({ hostedKey: hosted, retract }),
             },
         }),
     ]);
+    const record = erased[erased.length - 1] as { id: string };
+
+    // 3. The account is gone; nothing below may throw.
+    const result: DeletionResult = { keyDestroyed: hosted, relayPurgeRequested: false, retracted: false, emailed: false };
+
+    // Its sockets close (the cascade took its sessions and push registrations).
+    await revokeUserSessions(userId, 'deleted').catch((err) => console.error('[Account] Closing sockets:', errorText(err)));
+    removeFromRelayWhitelist(pubkey);
+
+    if (retract) {
+        markVanished(pubkey);
+        result.relayPurgeRequested = requestRelayPurge(pubkey);
+        if (!result.relayPurgeRequested) {
+            // Nothing else keeps the pubkey: this log line is how it gets done.
+            console.error(`[Account] Could not ask the relay to delete a deleted account's events. Do it by hand in bies-relay: /app/strfry --config=/etc/strfry.conf delete --filter '{"authors":["${pubkey}"]}'`);
+        }
+        if (retraction.length > 0) {
+            try {
+                result.retracted = ((await withTimeout(publishRetraction(retraction), PUBLISH_TIMEOUT_MS)) ?? 0) > 0;
+            } catch (err) {
+                console.error('[Account] Publishing the retraction failed:', errorText(err));
+            }
+        }
+    }
+
     await Promise.all([
+        cache.del(cacheKey.profileDetail(userId)),
+        cache.del(cacheKey.profileDetail(pubkey)),
+        user.profile ? cache.del(cacheKey.profileDetail(user.profile.id)) : Promise.resolve(),
         cache.delPattern('profiles:'),
+        cache.delPattern('followers:'),
         cache.delPattern('projects:'),
         cache.delPattern('events:'),
     ]).catch(() => {});
 
-    // 4. Confirm.
-    let emailed = false;
+    // 4. Confirm, saying only what was done.
     if (notify && user.email) {
         try {
-            await sendEmail(renderAccountDeletedEmail(user.email, lang, hosted));
-            emailed = true;
+            await sendEmail(renderAccountDeletedEmail(user.email, lang, result));
+            result.emailed = true;
         } catch (err) {
-            console.error('[Account] Deletion email failed:', err instanceof Error ? err.message : err);
+            console.error('[Account] Deletion email failed:', errorText(err));
         }
     }
-    return { retracted, relayPurgeRequested, emailed };
+
+    await prisma.auditLog.update({
+        where: { id: record.id },
+        data: { metadata: JSON.stringify({ hostedKey: hosted, retract, ...result }) },
+    }).catch(() => {});
+    return result;
 }
 
 // ─── Taking the key ───────────────────────────────────────────────────────────
@@ -299,25 +357,39 @@ ${paragraphs.map((p) => `<p style="margin:0 0 16px;font-size:15px;line-height:1.
     };
 }
 
-export function renderAccountDeletedEmail(to: string, lang: EmailLang, hadHostedKey: boolean): OutgoingEmail {
+export function renderAccountDeletedEmail(
+    to: string,
+    lang: EmailLang,
+    done: Pick<DeletionResult, 'keyDestroyed' | 'relayPurgeRequested' | 'retracted'>,
+): OutgoingEmail {
     const date = today(lang);
     if (lang === 'es') {
+        const deleted = done.relayPurgeRequested
+            ? 'Borramos su perfil, sus fichas del directorio y sus recomendaciones, sus mensajes y sus publicaciones en el relay de BIES.'
+            : 'Borramos su perfil, sus fichas del directorio y sus recomendaciones, y sus mensajes.';
+        const key = done.keyDestroyed
+            ? done.retracted
+                ? ' También destruimos la clave de Nostr que guardábamos para usted, y pedimos a otros relays de Nostr que borren lo que se publicó con ella. Cada relay de terceros decide por su cuenta.'
+                : ' También destruimos la clave de Nostr que guardábamos para usted.'
+            : '';
         return notice(to, lang, 'Su cuenta de BIES fue eliminada', [
             `Como usted lo pidió, eliminamos su cuenta de BIES el ${date}.`,
-            'Borramos su perfil, sus fichas del directorio y sus recomendaciones, sus mensajes y sus publicaciones en el relay de BIES.' +
-                (hadHostedKey
-                    ? ' También destruimos la clave de Nostr que guardábamos para usted, y pedimos a otros relays de Nostr que borren lo que se publicó con ella. Cada relay de terceros decide por su cuenta.'
-                    : ''),
+            deleted + key,
             'Las copias en nuestros respaldos se borran a medida que estos vencen, en un plazo de 90 días.',
             'Si usted no lo pidió, responda a este correo.',
         ]);
     }
+    const deleted = done.relayPurgeRequested
+        ? 'We deleted your profile, your directory listings and recommendations, your messages, and your posts on the BIES relay.'
+        : 'We deleted your profile, your directory listings and recommendations, and your messages.';
+    const key = done.keyDestroyed
+        ? done.retracted
+            ? ' We also destroyed the Nostr key we held for you, and asked other Nostr relays to delete what was published with it. Relays run by others decide for themselves.'
+            : ' We also destroyed the Nostr key we held for you.'
+        : '';
     return notice(to, lang, 'Your BIES account has been deleted', [
         `As you asked, we deleted your BIES account on ${date}.`,
-        'We deleted your profile, your directory listings and recommendations, your messages, and your posts on the BIES relay.' +
-            (hadHostedKey
-                ? ' We also destroyed the Nostr key we held for you, and asked other Nostr relays to delete what was published with it. Relays run by others decide for themselves.'
-                : ''),
+        deleted + key,
         'Copies in our backups are deleted as the backups expire, within 90 days.',
         "If you didn't ask for this, reply to this email.",
     ]);

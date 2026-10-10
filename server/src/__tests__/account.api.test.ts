@@ -16,16 +16,27 @@ const env = vi.hoisted(() => {
     process.env.NOSTR_PRIVATE_RELAY = 'ws://bies-relay.test:7777';
     process.env.NOSTR_RELAYS = 'wss://public-one.test,wss://public-two.test';
     process.env.EMAIL_SUPPORT_ADDRESS = 'help@example.test';
+    // App Review signs in with a fixed code (APP-DEPLOY-RUNBOOK.md).
+    process.env.REVIEW_LOGIN_EMAIL = 'appreview@example.test';
+    process.env.REVIEW_LOGIN_CODE = '424242';
+    // ADMIN_KEY_HEX's pubkey.
+    process.env.ADMIN_PUBKEYS = '545c276d06c4c1ef35376e89217fbe8411e5acf1e9a794a0e2ea28f66774eff6';
     return { dir };
 });
+
+const ADMIN_KEY_HEX = '7f3c1e2d4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0';
 
 // Relays: what each one holds, and everything published to any of them.
 const relays = vi.hoisted(() => {
     type Ev = { id: string; pubkey: string; kind: number; created_at: number; tags: string[][] };
     const stored = new Map<string, Ev[]>();
     const published: { relay: string; event: Ev }[] = [];
+    // Pubkeys whose events can't be looked up, or whose requests every relay refuses.
+    const failQueriesFor = new Set<string>();
+    const refusePublishFor = new Set<string>();
     class SimplePool {
         async querySync(urls: string[], filter: { authors?: string[]; until?: number; limit?: number }) {
+            if (filter.authors?.some((a) => failQueriesFor.has(a))) throw new Error('relays unreachable');
             const found = urls.flatMap((url) => stored.get(url) ?? [])
                 .filter((e) => !filter.authors || filter.authors.includes(e.pubkey))
                 .filter((e) => filter.until === undefined || e.created_at <= filter.until)
@@ -34,6 +45,7 @@ const relays = vi.hoisted(() => {
         }
         publish(urls: string[], event: Ev) {
             return urls.map((relay) => {
+                if (refusePublishFor.has(event.pubkey)) return Promise.reject(new Error('blocked: rate-limited'));
                 published.push({ relay, event });
                 return Promise.resolve('');
             });
@@ -42,7 +54,7 @@ const relays = vi.hoisted(() => {
             return null;
         }
     }
-    return { stored, published, SimplePool };
+    return { stored, published, failQueriesFor, refusePublishFor, SimplePool };
 });
 vi.mock('nostr-tools/pool', () => ({ SimplePool: relays.SimplePool }));
 
@@ -62,11 +74,16 @@ import prisma from '../lib/prisma';
 import authRoutes from '../routes/auth.routes';
 import accountRoutes from '../routes/account.routes';
 import signerRoutes from '../routes/signer.routes';
+import profileRoutes from '../routes/profile.routes';
+import adminRoutes from '../routes/admin.routes';
+import voucherRoutes from '../routes/voucher.routes';
 import { auditLog } from '../middleware/audit';
+import { sanitize } from '../middleware/sanitize';
 import { attachWebSocketServer, WS_PROTOCOL } from '../services/websocket.service';
 import { PURGE_DIR, WHITELIST_PATH } from '../services/relayWhitelist.service';
 import { renderCodeEmail } from '../services/emailCode.service';
 import { checkSignedChallenge, deleteAccount, issueChallenge } from '../services/account.service';
+import { cache, cacheKey } from '../services/redis.service';
 import { exportHostedKey } from '../services/hostedSigner.service';
 import { createSession, signAccessToken } from '../services/session.service';
 
@@ -83,11 +100,16 @@ beforeAll(async () => {
 
     const app = express();
     app.set('trust proxy', 1);
+    // index.ts's order: body parsing, sanitize, audit, routes.
     app.use(express.json());
+    app.use(sanitize);
     app.use(auditLog);
     app.use('/api/auth', authRoutes);
     app.use('/api/account', accountRoutes);
     app.use('/api/signer', signerRoutes);
+    app.use('/api/profiles', profileRoutes);
+    app.use('/api/admin', adminRoutes);
+    app.use('/api/vouchers', voucherRoutes);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -180,6 +202,10 @@ function publishedBy(secretKey: Uint8Array, relay: string, templates: { kind: nu
     return events;
 }
 
+/** Retraction requests (NIP-09 kind 5, NIP-62 kind 62) published for a pubkey since `since`. */
+const retractions = (since: number, pubkey: string) =>
+    relays.published.slice(since).filter((p) => p.event.pubkey === pubkey && (p.event.kind === 5 || p.event.kind === 62));
+
 const whitelisted = (pubkey: string) =>
     fs.existsSync(WHITELIST_PATH) && fs.readFileSync(WHITELIST_PATH, 'utf8').split('\n').includes(pubkey);
 
@@ -230,7 +256,7 @@ describe('deleting an email account', () => {
 
         const done = await call('POST', '/api/account/delete', { token: alice.token, body: { code: lastCode(email), lang: 'en' } });
         expect(done.status).toBe(200);
-        expect(done.body).toEqual({ deleted: true });
+        expect(done.body).toEqual({ deleted: true, emailed: true });
 
         // Gone, with everything that hangs off the account.
         const id = alice.user.id;
@@ -291,6 +317,8 @@ describe('deleting an email account', () => {
         const confirmationEmail = mail.sent.at(-1)!;
         expect(confirmationEmail).toMatchObject({ to: email, subject: 'Your BIES account has been deleted', replyTo: 'help@example.test' });
         expect(confirmationEmail.text).toContain('destroyed the Nostr key');
+        expect(confirmationEmail.text).toContain('asked other Nostr relays');
+        expect(confirmationEmail.text).toContain('your posts on the BIES relay');
         expect(confirmationEmail.text).toContain('within 90 days');
 
         // The address is free again: signing up makes a new account and key.
@@ -327,29 +355,43 @@ describe('deleting an email account', () => {
 // ─── An admin purging an account ─────────────────────────────────────────────
 
 describe('an admin purge', () => {
-    it('erases the same way, keeps no name in the audit trail, and sends no email', async () => {
-        const email = 'frank@example.test';
-        const frank = await signInByEmail(email);
-        const id = frank.user.id;
+    async function trashed(email: string) {
+        const member = await signInByEmail(email);
+        const id = member.user.id;
         await prisma.profile.update({ where: { userId: id }, data: { name: 'Frank Example' } });
-        // What admin.controller writes when it moves a member to the trash.
-        await prisma.auditLog.create({
-            data: {
-                action: 'USER_TRASHED',
-                resource: `user:${id}`,
-                metadata: JSON.stringify({ deletedUserName: 'Frank Example', deletedUserPubkey: frank.user.nostrPubkey }),
-            },
-        });
+        const admin = await signInByNostr(Uint8Array.from(Buffer.from(ADMIN_KEY_HEX, 'hex')));
+        expect((await call('DELETE', `/api/admin/users/${id}`, { token: admin.body.token })).status).toBe(200);
+        return { id, pubkey: member.user.nostrPubkey, adminToken: admin.body.token };
+    }
+
+    it('erases the account but leaves its events alone by default (a merged account’s events live on)', async () => {
+        const { id, pubkey, adminToken } = await trashed('frank@example.test');
+        const before = relays.published.length;
         const mailBefore = mail.sent.length;
 
-        const result = await deleteAccount(id, 'en', { notify: false });
+        expect((await call('DELETE', `/api/admin/users/${id}/purge`, { token: adminToken })).status).toBe(200);
 
-        expect(result).toMatchObject({ retracted: true, relayPurgeRequested: true, emailed: false });
         expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+        expect(retractions(before, pubkey)).toHaveLength(0);
+        expect(fs.existsSync(path.join(PURGE_DIR, pubkey))).toBe(false);
         expect(mail.sent.length).toBe(mailBefore);
-        const trashed = await prisma.auditLog.findFirstOrThrow({ where: { action: 'USER_TRASHED', resource: `user:${id}` } });
-        expect(trashed.metadata).not.toContain('Frank');
-        expect(JSON.parse(trashed.metadata)).toEqual({ deletedUserPubkey: frank.user.nostrPubkey });
+        // Trashing recorded the name; the purge keeps what happened, not who.
+        const trashedRow = await prisma.auditLog.findFirstOrThrow({ where: { action: 'USER_TRASHED', resource: `user:${id}` } });
+        expect(trashedRow.metadata).not.toContain('Frank');
+        expect(trashedRow.metadata).not.toContain(pubkey);
+    });
+
+    it('also has relays forget it when carrying out a member’s request', async () => {
+        const { id, pubkey, adminToken } = await trashed('grace@example.test');
+        const before = relays.published.length;
+        const mailBefore = mail.sent.length;
+
+        expect((await call('DELETE', `/api/admin/users/${id}/purge?deletionRequest=true`, { token: adminToken })).status).toBe(200);
+
+        expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+        expect(relays.published.slice(before).some((p) => p.event.pubkey === pubkey && p.event.kind === 62)).toBe(true);
+        expect(fs.existsSync(path.join(PURGE_DIR, pubkey))).toBe(true);
+        expect(mail.sent.length).toBe(mailBefore); // the admin answers the person
     });
 });
 
@@ -373,7 +415,6 @@ describe('deleting a Nostr account', () => {
             ['a sign-in event', finalizeEvent({ kind: 27235, created_at: now(), tags: [], content: challenge }, secretKey)],
             ['another key', confirmation(generateSecretKey(), 'delete_account', challenge)],
             ['another purpose', confirmation(secretKey, 'take_key', challenge)],
-            ['another challenge', confirmation(secretKey, 'delete_account', 'f'.repeat(64))],
             ['a tampered event', { ...confirmation(secretKey, 'delete_account', challenge), content: 'changed' }],
         ];
         for (const [, signedEvent] of attempts) {
@@ -381,6 +422,9 @@ describe('deleting a Nostr account', () => {
             expect(r.status).toBe(400);
             expect(r.body.reason).toBe('bad_signature');
         }
+        // Signed over another (older) challenge: the app is told to start again.
+        const stale = await call('POST', '/api/account/delete', { token, body: { signedEvent: confirmation(secretKey, 'delete_account', 'f'.repeat(64)) } });
+        expect(stale.body.reason).toBe('challenge_expired');
         expect(await prisma.user.findUnique({ where: { id: user.id } })).not.toBeNull();
 
         // No code for an account BIES holds no key for.
@@ -487,6 +531,194 @@ describe('taking the key', () => {
         // Deleting the account now takes a signature.
         const del = await call('POST', '/api/account/delete/start', { token: erin.token });
         expect(del.body.method).toBe('nostr');
+    });
+});
+
+// ─── Found in review ──────────────────────────────────────────────────────────
+
+describe('a deletion that fails', () => {
+    it('changes nothing, so the member is still signed in and can try again', async () => {
+        const email = 'retry@example.test';
+        const member = await signInByEmail(email);
+        const { id, nostrPubkey: pubkey } = member.user;
+        const before = relays.published.length;
+
+        await call('POST', '/api/account/delete/start', { token: member.token });
+        const spy = vi.spyOn(prisma, '$transaction').mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'));
+        const failed = await call('POST', '/api/account/delete', { token: member.token, body: { code: lastCode(email) } });
+        spy.mockRestore();
+        expect(failed.status).toBe(500);
+
+        // Nothing irreversible went out, and nothing was taken away.
+        expect(retractions(before, pubkey)).toHaveLength(0);
+        expect(fs.existsSync(path.join(PURGE_DIR, pubkey))).toBe(false);
+        expect(whitelisted(pubkey)).toBe(true);
+        expect((await prisma.user.findUniqueOrThrow({ where: { id } })).encryptedPrivkey).toBeTruthy();
+        expect((await call('GET', '/api/auth/me', { token: member.token })).status).toBe(200);
+
+        // A minute later, with a new code, it goes through.
+        await aMinuteLater();
+        await call('POST', '/api/account/delete/start', { token: member.token });
+        expect((await call('POST', '/api/account/delete', { token: member.token, body: { code: lastCode(email) } })).status).toBe(200);
+        expect(await prisma.user.findUnique({ where: { id } })).toBeNull();
+    });
+});
+
+describe('the deletion email', () => {
+    it('says BIES-relay posts were deleted only when the relay was asked to, and the log says how to do it', async () => {
+        const email = 'nopurge@example.test';
+        const member = await signInByEmail(email);
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+        // The purge folder can't be written (here, a file stands in its way).
+        const saved = fs.existsSync(PURGE_DIR) ? fs.readdirSync(PURGE_DIR) : [];
+        fs.rmSync(PURGE_DIR, { recursive: true, force: true });
+        fs.writeFileSync(PURGE_DIR, '');
+        let logged = '';
+        try {
+            await call('POST', '/api/account/delete/start', { token: member.token });
+            expect((await call('POST', '/api/account/delete', { token: member.token, body: { code: lastCode(email) } })).status).toBe(200);
+            logged = errors.mock.calls.flat().join(' ');
+        } finally {
+            errors.mockRestore();
+            fs.rmSync(PURGE_DIR, { force: true });
+            fs.mkdirSync(PURGE_DIR, { recursive: true });
+            for (const name of saved) fs.writeFileSync(path.join(PURGE_DIR, name), 'restored\n');
+        }
+        expect(mail.sent.filter((m) => m.to === email).at(-1)!.text).not.toContain('your posts on the BIES relay');
+        expect(logged).toContain(`"authors":["${member.user.nostrPubkey}"]`);
+    });
+
+    it('says other relays were asked only when one took the request', async () => {
+        const email = 'refused@example.test';
+        const member = await signInByEmail(email);
+        relays.refusePublishFor.add(member.user.nostrPubkey);
+        try {
+            await call('POST', '/api/account/delete/start', { token: member.token });
+            expect((await call('POST', '/api/account/delete', { token: member.token, body: { code: lastCode(email) } })).status).toBe(200);
+        } finally {
+            relays.refusePublishFor.delete(member.user.nostrPubkey);
+        }
+        const text = mail.sent.filter((m) => m.to === email).at(-1)!.text;
+        expect(text).toContain('destroyed the Nostr key');
+        expect(text).not.toContain('asked other Nostr relays');
+    });
+
+    it('follows a request to vanish that went out even when the events could not be looked up', async () => {
+        const email = 'unreachable@example.test';
+        const member = await signInByEmail(email);
+        const pubkey = member.user.nostrPubkey;
+        const before = relays.published.length;
+        relays.failQueriesFor.add(pubkey);
+        try {
+            await call('POST', '/api/account/delete/start', { token: member.token });
+            expect((await call('POST', '/api/account/delete', { token: member.token, body: { code: lastCode(email) } })).status).toBe(200);
+        } finally {
+            relays.failQueriesFor.delete(pubkey);
+        }
+        expect(relays.published.slice(before).some((p) => p.event.pubkey === pubkey && p.event.kind === 62)).toBe(true);
+        expect(mail.sent.filter((m) => m.to === email).at(-1)!.text).toContain('asked other Nostr relays');
+    });
+});
+
+describe('after a deletion', () => {
+    it('leaves nothing of the person in caches, the audit trail, others’ notifications or zap receipts', async () => {
+        const doraKey = generateSecretKey();
+        const dora = (await signInByNostr(doraKey)).body;
+        const { id: doraId, nostrPubkey: doraPk } = dora.user;
+        await prisma.profile.update({ where: { userId: doraId }, data: { name: 'Dora Example' } });
+        const bob = (await signInByNostr(generateSecretKey())).body;
+
+        // Her public profile, cached for five minutes once seen.
+        expect((await call('GET', `/api/profiles/${doraPk}`)).status).toBe(200);
+        expect(await cache.getJson(cacheKey.profileDetail(doraPk))).not.toBeNull();
+
+        // Admin work naming her, Bob's notifications about her, zaps both ways.
+        await prisma.auditLog.create({
+            data: {
+                action: 'PROJECT_OWNERSHIP_TRANSFERRED',
+                resource: 'project:p1',
+                metadata: JSON.stringify({ previousOwnerId: doraId, previousOwnerName: 'Dora Example', newOwnerName: 'Bob' }),
+            },
+        });
+        await prisma.notification.create({ data: { userId: bob.user.id, type: 'FOLLOW', title: 'Dora Example followed you', body: '', data: JSON.stringify({ followerId: doraId }) } });
+        await prisma.notification.create({ data: { userId: bob.user.id, type: 'NEW_MESSAGE', title: 'New message', body: 'Meet at 5? +503 7000 0000', data: JSON.stringify({ senderId: doraId }) } });
+        await prisma.notification.create({ data: { userId: bob.user.id, type: 'SYSTEM', title: 'Welcome', body: '', data: '{}' } });
+        await prisma.zapReceipt.create({ data: { eventId: 'a'.repeat(64), senderPubkey: doraPk, recipientPubkey: bob.user.nostrPubkey, amountMsats: BigInt(21000), amountSats: 21, comment: 'Great talk! Dora' } });
+        await prisma.zapReceipt.create({ data: { eventId: 'b'.repeat(64), senderPubkey: bob.user.nostrPubkey, recipientPubkey: doraPk, amountMsats: BigInt(1000), amountSats: 1, comment: 'thanks' } });
+
+        const start = await call('POST', '/api/account/delete/start', { token: dora.token });
+        const done = await call('POST', '/api/account/delete', { token: dora.token, body: { signedEvent: confirmation(doraKey, 'delete_account', start.body.challenge) } });
+        expect(done.status).toBe(200);
+
+        const profile = await call('GET', `/api/profiles/${doraPk}`);
+        expect(profile.status).toBe(404);
+        expect(profile.headers.get('x-cache')).toBeNull();
+        expect(JSON.stringify(await prisma.auditLog.findMany())).not.toContain('Dora Example');
+        const bobsNotes = await prisma.notification.findMany({ where: { userId: bob.user.id } });
+        expect(bobsNotes.filter((n) => n.data.includes(doraId) || n.title.includes('Dora'))).toHaveLength(0);
+        expect(bobsNotes.map((n) => n.title)).toContain('Welcome');
+        expect(await prisma.zapReceipt.count({ where: { OR: [{ senderPubkey: doraPk }, { recipientPubkey: doraPk }] } })).toBe(0);
+        expect((await prisma.zapReceipt.findUniqueOrThrow({ where: { eventId: 'a'.repeat(64) } })).comment).toBe('');
+    });
+});
+
+describe("a deleted account's key", () => {
+    it("can't get relay access back through a voucher, but its owner can rejoin by signing in", async () => {
+        const host = (await signInByNostr(generateSecretKey())).body;
+        await prisma.voucher.create({ data: { code: 'EVENT-QR-2026', type: 'RELAY_ACCESS', maxUses: 0, createdById: host.user.id } });
+
+        const ginaKey = generateSecretKey();
+        const gina = (await signInByNostr(ginaKey)).body;
+        const pubkey = gina.user.nostrPubkey;
+        const start = await call('POST', '/api/account/delete/start', { token: gina.token });
+        await call('POST', '/api/account/delete', { token: gina.token, body: { signedEvent: confirmation(ginaKey, 'delete_account', start.body.challenge) } });
+        expect(whitelisted(pubkey)).toBe(false);
+
+        // Anyone with the voucher code could otherwise put her key back.
+        const redeem = await call('POST', '/api/vouchers/code/EVENT-QR-2026/redeem', { body: { pubkey } });
+        expect(redeem.status).toBe(403);
+        expect(redeem.body.reason).toBe('deleted_account');
+        expect(whitelisted(pubkey)).toBe(false);
+
+        // She comes back with her key: a new account, and relay access again.
+        const back = await signInByNostr(ginaKey);
+        expect(back.status).toBe(200);
+        expect(back.body.user.id).not.toBe(gina.user.id);
+        expect(whitelisted(pubkey)).toBe(true);
+    });
+});
+
+describe('a signed confirmation', () => {
+    it('reaches the check exactly as signed (the input sanitizer leaves it alone)', async () => {
+        const key = generateSecretKey();
+        const ivan = (await signInByNostr(key)).body;
+        const start = await call('POST', '/api/account/delete/start', { token: ivan.token });
+        const signedEvent = finalizeEvent({
+            kind: 27235,
+            created_at: now(),
+            tags: [['challenge', start.body.challenge], ['purpose', 'delete_account']],
+            content: 'Delete my BIES account &#10003;\n',
+        }, key);
+        expect((await call('POST', '/api/account/delete', { token: ivan.token, body: { signedEvent } })).status).toBe(200);
+    });
+});
+
+describe('the App Review account', () => {
+    it('keeps its key, so the review sign-in keeps working', async () => {
+        const email = 'appreview@example.test';
+        expect((await call('POST', '/api/auth/email/start', { body: { email } })).status).toBe(200);
+        const first = await call('POST', '/api/auth/email/verify', { body: { email, code: '424242' } });
+        expect([200, 201]).toContain(first.status);
+        const { token } = first.body;
+
+        const start = await call('POST', '/api/account/key/start', { token });
+        expect(start.status).toBe(409);
+        expect(start.body.reason).toBe('review_account');
+        expect((await call('POST', '/api/account/key/export', { token, body: { code: '424242' } })).body.reason).toBe('review_account');
+
+        await aMinuteLater();
+        expect((await call('POST', '/api/auth/email/start', { body: { email } })).status).toBe(200);
+        expect((await call('POST', '/api/auth/email/verify', { body: { email, code: '424242' } })).status).toBe(200);
     });
 });
 

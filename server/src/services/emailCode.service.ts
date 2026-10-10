@@ -72,7 +72,7 @@ function hashCode(purpose: EmailCodePurpose, emailHash: string, code: string): s
     return hmac('code', `${purpose}:${emailHash}:${code}`);
 }
 
-function isReviewAddress(email: string): boolean {
+export function isReviewAddress(email: string): boolean {
     return (
         !!config.reviewLogin.email &&
         REVIEW_CODE_RE.test(config.reviewLogin.code) &&

@@ -282,7 +282,7 @@ export async function verifyEmailLogin(req: Request, res: Response): Promise<voi
         }
 
         // Relay access, re-granted on every sign-in as Nostr login does.
-        addToRelayWhitelist(user.nostrPubkey);
+        addToRelayWhitelist(user.nostrPubkey, { proven: true });
 
         if (isNewUser) {
             // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
@@ -503,8 +503,10 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
 
         const session = await startSession(req, res, user);
 
-        // Add pubkey to relay whitelist so user can publish to the BIES relay
-        addToRelayWhitelist(pubkey);
+        // Add pubkey to relay whitelist so user can publish to the BIES relay.
+        // Signing in proves the key, so a member rejoining after deleting
+        // their account gets access back.
+        addToRelayWhitelist(pubkey, { proven: true });
 
         res.locals.auditUserId = user.id;
         res.json({ user: publicUser(user), ...session });

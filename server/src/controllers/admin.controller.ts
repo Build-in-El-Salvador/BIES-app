@@ -557,11 +557,14 @@ export async function restoreUser(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * DELETE /admin/users/:id/purge
- * Permanently delete a trashed user and all their data, the same way a
- * member deleting their own account does (account.service.ts): events
- * retracted, the relay purged, IP addresses dropped. This is also how a
- * deletion requested by email is carried out. ADMIN only.
+ * DELETE /admin/users/:id/purge[?deletionRequest=true]
+ * Permanently delete a trashed user and all their data (account.service.ts):
+ * IP addresses, names in the audit log and notifications about them go too.
+ * With `deletionRequest=true`, as for a member who asked by email to be
+ * deleted, relays forget the account as well: BIES's relay deletes its
+ * events and, for an email account, public relays are asked to. Without it,
+ * the events stay: a merged account's events now belong to the account it
+ * was merged into. ADMIN only.
  */
 export async function purgeUser(req: Request, res: Response): Promise<void> {
     try {
@@ -577,7 +580,8 @@ export async function purgeUser(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Trashed user not found' }); return;
         }
 
-        await deleteAccount(req.params.id, 'en', { notify: false });
+        const deletionRequest = req.query.deletionRequest === 'true';
+        await deleteAccount(req.params.id, { notify: false, retract: deletionRequest });
 
         await Promise.all([
             cache.delPattern('profiles:'),
@@ -591,7 +595,7 @@ export async function purgeUser(req: Request, res: Response): Promise<void> {
                 action: 'USER_PURGED',
                 resource: `user:${req.params.id}`,
                 // The pubkey, as the record of what was purged; not the name.
-                metadata: JSON.stringify({ purgedUserPubkey: targetUser.nostrPubkey }),
+                metadata: JSON.stringify({ purgedUserPubkey: targetUser.nostrPubkey, deletionRequest }),
             },
         });
 

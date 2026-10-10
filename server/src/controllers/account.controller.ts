@@ -4,7 +4,9 @@ import prisma from '../lib/prisma';
 import {
     CODE_TTL_SECONDS,
     RESEND_COOLDOWN_SECONDS,
+    isReviewAddress,
     issueEmailCode,
+    normalizeEmail,
     verifyEmailCode,
     type EmailCodePurpose,
 } from '../services/emailCode.service';
@@ -62,6 +64,14 @@ const NOT_HOSTED = {
     error: 'BIES holds no key for this account: it signs in with Nostr.',
     reason: 'not_hosted',
 };
+
+// Taking the key ends email sign-in for the account, and App Review signs in
+// by email with the code from the review notes: the demo account keeps its key.
+const REVIEW_ACCOUNT = {
+    error: "Taking the key isn't available on the App Review demo account: it would end email sign-in for it.",
+    reason: 'review_account',
+};
+const isReviewAccount = (email: string | null) => !!email && isReviewAddress(normalizeEmail(email));
 
 /** Email a confirmation code, answering the way email sign-in does. */
 async function sendCode(req: Request, res: Response, email: string, purpose: EmailCodePurpose): Promise<boolean> {
@@ -167,9 +177,9 @@ export async function confirmDeletion(req: Request, res: Response): Promise<void
             }
         }
 
-        await deleteAccount(user.id, body.lang);
+        const result = await deleteAccount(user.id, { lang: body.lang });
         if (clientKind(req) === 'web') clearRefreshCookie(res);
-        res.json({ deleted: true });
+        res.json({ deleted: true, emailed: result.emailed });
     } catch (error) {
         console.error('Account deletion error:', error);
         res.status(500).json({ error: 'Could not delete the account. Please try again.' });
@@ -186,6 +196,7 @@ export async function startKeyExport(req: Request, res: Response): Promise<void>
     try {
         const user = await account(req.user!.id);
         if (!user?.encryptedPrivkey) { res.status(409).json(NOT_HOSTED); return; }
+        if (isReviewAccount(user.email)) { res.status(409).json(REVIEW_ACCOUNT); return; }
         if (!user.email) {
             res.status(409).json({ error: 'This account has no email address to confirm with.', reason: 'no_email' });
             return;
@@ -209,6 +220,7 @@ export async function exportKeyHandler(req: Request, res: Response): Promise<voi
         const { code: value } = req.body as z.infer<typeof keyExportSchema>;
         const user = await account(req.user!.id);
         if (!user?.encryptedPrivkey) { res.status(409).json(NOT_HOSTED); return; }
+        if (isReviewAccount(user.email)) { res.status(409).json(REVIEW_ACCOUNT); return; }
         if (!user.email) {
             res.status(409).json({ error: 'This account has no email address to confirm with.', reason: 'no_email' });
             return;
@@ -234,6 +246,7 @@ export async function releaseKeyHandler(req: Request, res: Response): Promise<vo
         const body = req.body as z.infer<typeof keyReleaseSchema>;
         const user = await account(req.user!.id);
         if (!user?.encryptedPrivkey) { res.status(409).json(NOT_HOSTED); return; }
+        if (isReviewAccount(user.email)) { res.status(409).json(REVIEW_ACCOUNT); return; }
 
         const check = await checkSignedChallenge(user.id, user.nostrPubkey, 'take_key', body.signedEvent);
         if (check !== 'ok') {

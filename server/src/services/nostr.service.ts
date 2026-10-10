@@ -512,19 +512,14 @@ function deletionTags(events: NostrEvent[], pubkey: string): string[][] {
 }
 
 /**
- * For an email account being deleted: ask every public relay BIES publishes
- * to to forget it, signed with the key BIES holds, before that key goes. A
- * NIP-62 request to vanish covers relays that support it; NIP-09 deletion
- * requests for each event found cover the rest. Relays run by others decide
- * for themselves. BIES's own relay deletes the events directly
- * (requestRelayPurge), so nothing is sent there.
- *
- * Returns null when BIES holds no key for the account (nothing to sign with).
+ * For an email account about to be deleted: a NIP-62 request to vanish, and
+ * NIP-09 deletion requests for each event found, signed with the key BIES
+ * holds while it still exists. Nothing is sent: publishRetraction does that
+ * once the account is gone, so a deletion that fails changes nothing. The
+ * request to vanish is signed first and kept even if looking for the events
+ * fails. Empty when BIES holds no key for the account.
  */
-export async function retractAllEvents(
-    userId: string,
-    pubkey: string,
-): Promise<{ events: number; requests: number; accepted: number } | null> {
+export async function signRetraction(userId: string, pubkey: string): Promise<NostrEvent[]> {
     const now = Math.floor(Date.now() / 1000);
     const vanish = await signAsHostedUser(userId, {
         kind: 62,
@@ -532,26 +527,40 @@ export async function retractAllEvents(
         tags: [['relay', 'ALL_RELAYS']],
         content: 'This account was deleted at its owner\'s request.',
     }, 'server');
-    if (!vanish) return null;
+    if (!vanish) return [];
 
-    const events = await findEventsBy(pubkey);
-    const requests: NostrEvent[] = [vanish];
-    for (let i = 0; i < events.length; i += EVENTS_PER_DELETION) {
-        const signed = await signAsHostedUser(userId, {
-            kind: 5,
-            created_at: now,
-            tags: deletionTags(events.slice(i, i + EVENTS_PER_DELETION), pubkey),
-            content: 'Account deleted',
-        }, 'server');
-        if (signed) requests.push(signed);
+    const signed: NostrEvent[] = [vanish];
+    try {
+        const events = await findEventsBy(pubkey);
+        for (let i = 0; i < events.length; i += EVENTS_PER_DELETION) {
+            const deletion = await signAsHostedUser(userId, {
+                kind: 5,
+                created_at: now,
+                tags: deletionTags(events.slice(i, i + EVENTS_PER_DELETION), pubkey),
+                content: 'Account deleted',
+            }, 'server');
+            if (deletion) signed.push(deletion);
+        }
+    } catch (error) {
+        console.error('[Nostr] Could not list the events to retract:', error instanceof Error ? error.message : error);
     }
+    return signed;
+}
 
+/**
+ * Send signed retraction requests (signRetraction) to every public relay BIES
+ * publishes to. BIES's own relay deletes the events directly
+ * (requestRelayPurge), so nothing goes there. Relays run by others decide for
+ * themselves. Returns how many relay answers accepted a request.
+ */
+export async function publishRetraction(requests: NostrEvent[]): Promise<number> {
+    if (requests.length === 0) return 0;
     const pool = await getPool();
     const relays = publicPublishRelays();
     const results = await Promise.allSettled(requests.flatMap((request) => pool.publish(relays, request)));
     const accepted = results.filter((r) => r.status === 'fulfilled').length;
-    console.log(`[Nostr] Retraction: ${events.length} events, ${requests.length} requests, ${accepted}/${results.length} accepted by relays`);
-    return { events: events.length, requests: requests.length, accepted };
+    console.log(`[Nostr] Retraction: ${requests.length} requests, ${accepted}/${results.length} accepted by relays`);
+    return accepted;
 }
 
 /**

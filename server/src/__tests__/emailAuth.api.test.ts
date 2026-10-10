@@ -459,7 +459,7 @@ describe('POST /api/auth/email/verify', () => {
         expect(created.profile.nip05Name).toBe(`nostr-${created.nostrPubkey.slice(0, 8)}`);
         expect(created.profile.name).toBe('');
 
-        expect(addToRelayWhitelist).toHaveBeenCalledWith(created.nostrPubkey);
+        expect(addToRelayWhitelist).toHaveBeenCalledWith(created.nostrPubkey, { proven: true });
         expect(publishRelayList).toHaveBeenCalledWith(created.id);
         expect(recordOnboardingRedemption).toHaveBeenCalledWith('LAUNCH', created.id, expect.any(String));
     });
@@ -476,7 +476,7 @@ describe('POST /api/auth/email/verify', () => {
         expect(res.body.user).toMatchObject({ role: 'BUILDER', hostedKey: true });
         expect(db.user.create).not.toHaveBeenCalled();
         expect(publishRelayList).not.toHaveBeenCalled();
-        expect(addToRelayWhitelist).toHaveBeenCalledWith('b'.repeat(64));
+        expect(addToRelayWhitelist).toHaveBeenCalledWith('b'.repeat(64), { proven: true });
     });
 
     it('allows 5 tries per code', async () => {
