@@ -45,7 +45,7 @@ function sanitizeProfile(profile: any): any {
  * `hostedKey` says whether BIES holds this account's Nostr key. The key
  * itself never leaves the server.
  */
-function publicUser(user: any) {
+export function publicUser(user: any) {
     return {
         id: user.id,
         email: user.email,
@@ -269,6 +269,15 @@ export async function verifyEmailLogin(req: Request, res: Response): Promise<voi
         }
         if (user.isBanned) {
             res.status(403).json({ error: 'Your account has been suspended', reason: 'suspended' });
+            return;
+        }
+        // The member took their key: BIES can't sign for this account any
+        // more, so a session from an email code would be one that can't act.
+        if (!user.encryptedPrivkey) {
+            res.status(403).json({
+                error: 'This account signs in with Nostr now. Use "Sign in with Nostr" with your key.',
+                reason: 'nostr_account',
+            });
             return;
         }
 

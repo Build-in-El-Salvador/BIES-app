@@ -324,7 +324,10 @@ export async function sessionFromRefreshToken(token: unknown): Promise<{ session
  */
 const ended = new EventEmitter();
 
-export function onSessionsEnded(listener: (ev: { sessionId?: string; userId?: string }) => void): void {
+/** One session, or every session of a user except `exceptSessionId`. */
+export type SessionsEndedEvent = { sessionId?: string; userId?: string; exceptSessionId?: string };
+
+export function onSessionsEnded(listener: (ev: SessionsEndedEvent) => void): void {
     ended.on('ended', listener);
 }
 
@@ -343,6 +346,20 @@ export async function revokeUserSessions(userId: string, reason: string): Promis
         data: { revokedAt: new Date(), revokedReason: reason },
     });
     ended.emit('ended', { userId });
+    return count;
+}
+
+/**
+ * End every session of a user but the one making the request: when an email
+ * account takes its key, this device carries on with the key, and the
+ * others, which signed through BIES, must sign in again.
+ */
+export async function revokeOtherSessions(userId: string, keepSessionId: string, reason: string): Promise<number> {
+    const { count } = await prisma.session.updateMany({
+        where: { userId, revokedAt: null, id: { not: keepSessionId } },
+        data: { revokedAt: new Date(), revokedReason: reason },
+    });
+    ended.emit('ended', { userId, exceptSessionId: keepSessionId });
     return count;
 }
 

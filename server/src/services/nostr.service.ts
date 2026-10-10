@@ -443,6 +443,117 @@ export async function deleteMarketplaceListing(
     }
 }
 
+// ─── Retracting a deleted account's events ───────────────────────────────────
+
+// The public relays BIES and its app publish members' events to: the
+// server's (config.nostrRelays), Shopstr's for listings, and the app's
+// PUBLIC_RELAYS (src/services/nostrService.js).
+const APP_PUBLIC_RELAYS = [
+    'wss://relay.damus.io',
+    'wss://relay.primal.net',
+    'wss://relay.nostr.band',
+    'wss://nos.lol',
+    'wss://purplepag.es',
+];
+
+function publicPublishRelays(): string[] {
+    return [...new Set([...config.nostrRelays, ...SHOPSTR_RELAYS, ...APP_PUBLIC_RELAYS])];
+}
+
+const RELAY_PAGE = 500; // strfry's maxFilterLimit
+const MAX_EVENTS_TO_RETRACT = 5000;
+const EVENTS_PER_DELETION = 300;
+const QUERY_WAIT_MS = 4000;
+
+/** The events a pubkey published, from BIES's relay and the public ones. */
+async function findEventsBy(pubkey: string): Promise<NostrEvent[]> {
+    const pool = await getPool();
+    const found = new Map<string, NostrEvent>();
+    const keep = (events: NostrEvent[]) => {
+        let fresh = 0;
+        for (const e of events) {
+            if (e.pubkey !== pubkey || found.has(e.id) || found.size >= MAX_EVENTS_TO_RETRACT) continue;
+            found.set(e.id, e);
+            fresh++;
+        }
+        return fresh;
+    };
+
+    if (config.nostrPrivateRelay) {
+        let until: number | undefined;
+        while (found.size < MAX_EVENTS_TO_RETRACT) {
+            const page = await pool.querySync(
+                [config.nostrPrivateRelay],
+                { authors: [pubkey], limit: RELAY_PAGE, ...(until !== undefined ? { until } : {}) },
+                { maxWait: QUERY_WAIT_MS },
+            );
+            if (keep(page) === 0 || page.length < RELAY_PAGE) break;
+            until = Math.min(...page.map((e) => e.created_at));
+        }
+    }
+    keep(await pool.querySync(publicPublishRelays(), { authors: [pubkey], limit: RELAY_PAGE }, { maxWait: QUERY_WAIT_MS }));
+    return [...found.values()];
+}
+
+/** NIP-09 tags for a batch of events: each id, plus the address of replaceable ones. */
+function deletionTags(events: NostrEvent[], pubkey: string): string[][] {
+    const tags: string[][] = [];
+    const kinds = new Set<number>();
+    for (const e of events) {
+        tags.push(['e', e.id]);
+        kinds.add(e.kind);
+        const replaceable = e.kind === 0 || e.kind === 3 || (e.kind >= 10000 && e.kind < 20000);
+        const addressable = e.kind >= 30000 && e.kind < 40000;
+        if (replaceable) tags.push(['a', `${e.kind}:${pubkey}:`]);
+        if (addressable) tags.push(['a', `${e.kind}:${pubkey}:${e.tags.find((t) => t[0] === 'd')?.[1] ?? ''}`]);
+    }
+    for (const kind of kinds) tags.push(['k', String(kind)]);
+    return tags;
+}
+
+/**
+ * For an email account being deleted: ask every public relay BIES publishes
+ * to to forget it, signed with the key BIES holds, before that key goes. A
+ * NIP-62 request to vanish covers relays that support it; NIP-09 deletion
+ * requests for each event found cover the rest. Relays run by others decide
+ * for themselves. BIES's own relay deletes the events directly
+ * (requestRelayPurge), so nothing is sent there.
+ *
+ * Returns null when BIES holds no key for the account (nothing to sign with).
+ */
+export async function retractAllEvents(
+    userId: string,
+    pubkey: string,
+): Promise<{ events: number; requests: number; accepted: number } | null> {
+    const now = Math.floor(Date.now() / 1000);
+    const vanish = await signAsHostedUser(userId, {
+        kind: 62,
+        created_at: now,
+        tags: [['relay', 'ALL_RELAYS']],
+        content: 'This account was deleted at its owner\'s request.',
+    }, 'server');
+    if (!vanish) return null;
+
+    const events = await findEventsBy(pubkey);
+    const requests: NostrEvent[] = [vanish];
+    for (let i = 0; i < events.length; i += EVENTS_PER_DELETION) {
+        const signed = await signAsHostedUser(userId, {
+            kind: 5,
+            created_at: now,
+            tags: deletionTags(events.slice(i, i + EVENTS_PER_DELETION), pubkey),
+            content: 'Account deleted',
+        }, 'server');
+        if (signed) requests.push(signed);
+    }
+
+    const pool = await getPool();
+    const relays = publicPublishRelays();
+    const results = await Promise.allSettled(requests.flatMap((request) => pool.publish(relays, request)));
+    const accepted = results.filter((r) => r.status === 'fulfilled').length;
+    console.log(`[Nostr] Retraction: ${events.length} events, ${requests.length} requests, ${accepted}/${results.length} accepted by relays`);
+    return { events: events.length, requests: requests.length, accepted };
+}
+
 /**
  * Publish a NIP-65 relay list metadata event (Kind 10002).
  * Tags BIES relay as write, public relays as read.

@@ -3,10 +3,11 @@ FROM dockurr/strfry:1.1.3@sha256:599ab3500dbfbe6cb78c668e1892cd9802c192d066df466
 # Install jq for the write policy script
 RUN apk add --no-cache jq
 
-# Copy config and write policy
+# Copy config, write policy, and the loop that deletes deleted accounts' events
 COPY strfry.conf /etc/strfry.conf
 COPY write-policy.sh /app/write-policy.sh
-RUN chmod +x /app/write-policy.sh
+COPY purge-loop.sh start.sh /app/
+RUN chmod +x /app/write-policy.sh /app/purge-loop.sh /app/start.sh
 
 # Create data directories and non-root user
 RUN mkdir -p /app/strfry-db /app/data && \
@@ -17,4 +18,4 @@ USER relay
 
 EXPOSE 7777
 
-CMD ["/app/strfry", "relay", "--config=/etc/strfry.conf"]
+CMD ["/app/start.sh"]

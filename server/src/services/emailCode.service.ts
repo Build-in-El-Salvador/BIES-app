@@ -1,18 +1,20 @@
 /**
  * One-time email codes: issue, send and verify.
  *
- * Used for sign-in today; confirming account deletion and key export will use
- * the same codes with a different `purpose`, so a code sent for one can never
- * be spent on another.
+ * Used for sign-in, and for confirming two things an email account can't
+ * undo: deleting it and taking its Nostr key. Each has its own `purpose`, so a
+ * code sent for one can never be spent on another.
  *
  * Rules:
  * - 6 digits, valid for 10 minutes from when the email goes out (not
  *   before), 5 tries per code. A new code replaces the previous one once it
  *   has been sent.
- * - Per address: one code a minute, 5 an hour, 10 a day. This also caps
- *   guessing: at most 50 tries a day against any one account. The flip side:
- *   someone who requests 10 codes for an address blocks new email sign-ins
- *   for it for a day. Sessions already signed in are unaffected.
+ * - Per address: one code a minute for each purpose, and 5 an hour and 10 a
+ *   day in all. This also caps guessing: at most 50 tries a day against any
+ *   one account. The flip side: someone who requests 10 codes for an address
+ *   blocks new email sign-ins for it for a day. Sessions already signed in
+ *   are unaffected. (Per purpose, so a member who has just signed in can ask
+ *   to delete their account straight away.)
  * - Per IP: 50 an hour. Kept generous on purpose: event Wi-Fi and mobile
  *   carriers put many people behind one address.
  * - In total: config.email.maxCodesPerDay, so a flood can't use up the Resend
@@ -28,7 +30,7 @@ import prisma from '../lib/prisma';
 import { config } from '../config';
 import { sendEmail, type OutgoingEmail } from './email.service';
 
-export type EmailCodePurpose = 'login';
+export type EmailCodePurpose = 'login' | 'delete_account' | 'export_key';
 export type EmailLang = 'en' | 'es';
 
 export const CODE_TTL_SECONDS = 10 * 60;
@@ -40,9 +42,9 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 const PER_EMAIL_LIMITS = [
-    { windowMs: RESEND_COOLDOWN_SECONDS * 1000, max: 1 },
-    { windowMs: HOUR, max: 5 },
-    { windowMs: DAY, max: 10 },
+    { windowMs: RESEND_COOLDOWN_SECONDS * 1000, max: 1, samePurposeOnly: true },
+    { windowMs: HOUR, max: 5, samePurposeOnly: false },
+    { windowMs: DAY, max: 10, samePurposeOnly: false },
 ];
 const MAX_PER_IP_PER_HOUR = 50;
 const RETENTION_MS = DAY;
@@ -79,13 +81,19 @@ function isReviewAddress(email: string): boolean {
 }
 
 /**
- * Milliseconds until another code may go to this address (0 = now), given the
- * send times (ms, ascending) of its codes from the last day.
+ * Milliseconds until another code for `purpose` may go to this address (0 =
+ * now), given its codes from the last day, oldest first.
  */
-function waitForAddressLimits(sentAt: number[], now: number): number {
+function waitForAddressLimits(
+    sent: { at: number; purpose: string }[],
+    purpose: EmailCodePurpose,
+    now: number,
+): number {
     let wait = 0;
-    for (const { windowMs, max } of PER_EMAIL_LIMITS) {
-        const inWindow = sentAt.filter((t) => t > now - windowMs);
+    for (const { windowMs, max, samePurposeOnly } of PER_EMAIL_LIMITS) {
+        const inWindow = sent
+            .filter((s) => s.at > now - windowMs && (!samePurposeOnly || s.purpose === purpose))
+            .map((s) => s.at);
         if (inWindow.length >= max) {
             // A slot frees up when the oldest send that still counts ages out.
             wait = Math.max(wait, inWindow[inWindow.length - max] + windowMs - now);
@@ -98,21 +106,55 @@ function waitForAddressLimits(sentAt: number[], now: number): number {
 
 // Only the code goes into the email, never anything the requester typed, so
 // the sign-in form can't be used to send other text from the BIES address.
-const COPY: Record<EmailLang, { subject: string; intro: string; body: string }> = {
-    en: {
-        subject: 'Your BIES sign-in code',
-        intro: 'Your code to sign in to BIES:',
-        body: "It expires in 10 minutes. BIES will never ask you for this code. If you didn't request it, ignore this email: nobody can sign in without it.",
+type CodeCopy = { subject: string; intro: string; body: string };
+
+const COPY: Record<EmailCodePurpose, Record<EmailLang, CodeCopy>> = {
+    login: {
+        en: {
+            subject: 'Your BIES sign-in code',
+            intro: 'Your code to sign in to BIES:',
+            body: "It expires in 10 minutes. BIES will never ask you for this code. If you didn't request it, ignore this email: nobody can sign in without it.",
+        },
+        es: {
+            subject: 'Su código para iniciar sesión en BIES',
+            intro: 'Su código para iniciar sesión en BIES:',
+            body: 'Vence en 10 minutos. BIES nunca le pedirá este código. Si usted no lo solicitó, ignore este correo: nadie puede entrar sin el código.',
+        },
     },
-    es: {
-        subject: 'Su código para iniciar sesión en BIES',
-        intro: 'Su código para iniciar sesión en BIES:',
-        body: 'Vence en 10 minutos. BIES nunca le pedirá este código. Si usted no lo solicitó, ignore este correo: nadie puede entrar sin el código.',
+    delete_account: {
+        en: {
+            subject: 'Your code to delete your BIES account',
+            intro: 'Your code to delete your BIES account:',
+            body: "It expires in 10 minutes. Entering it deletes your account for good. BIES will never ask you for this code. If you didn't ask to delete your account, ignore this email: nothing happens without the code.",
+        },
+        es: {
+            subject: 'Su código para eliminar su cuenta de BIES',
+            intro: 'Su código para eliminar su cuenta de BIES:',
+            body: 'Vence en 10 minutos. Al ingresarlo, su cuenta se elimina para siempre. BIES nunca le pedirá este código. Si usted no pidió eliminar su cuenta, ignore este correo: no pasa nada sin el código.',
+        },
+    },
+    export_key: {
+        en: {
+            subject: 'Your code to take your Nostr key',
+            intro: 'Your code to take your Nostr key from BIES:',
+            body: "It expires in 10 minutes. Entering it shows your secret key. BIES will never ask you for this code. If you didn't ask for your key, ignore this email: nothing happens without the code.",
+        },
+        es: {
+            subject: 'Su código para llevarse su clave de Nostr',
+            intro: 'Su código para llevarse su clave de Nostr de BIES:',
+            body: 'Vence en 10 minutos. Al ingresarlo, se muestra su clave secreta. BIES nunca le pedirá este código. Si usted no pidió su clave, ignore este correo: no pasa nada sin el código.',
+        },
     },
 };
 
-export function renderCodeEmail(to: string, code: string, lang: EmailLang = 'en'): OutgoingEmail {
-    const t = COPY[lang] ?? COPY.en;
+export function renderCodeEmail(
+    to: string,
+    code: string,
+    lang: EmailLang = 'en',
+    purpose: EmailCodePurpose = 'login',
+): OutgoingEmail {
+    const copy = COPY[purpose] ?? COPY.login;
+    const t = copy[lang] ?? copy.en;
     return {
         to,
         subject: `${t.subject}: ${code}`,
@@ -164,13 +206,18 @@ async function reserveCode(
     const now = Date.now();
     await prisma.emailCode.deleteMany({ where: { createdAt: { lt: new Date(now - RETENTION_MS) } } });
 
-    // Per-address limits count every purpose: they protect the inbox.
+    // Per-address limits protect the inbox: the hourly and daily ones count
+    // every purpose.
     const recent = await prisma.emailCode.findMany({
         where: { emailHash, createdAt: { gte: new Date(now - DAY) } },
         orderBy: { createdAt: 'asc' },
-        select: { createdAt: true },
+        select: { createdAt: true, purpose: true },
     });
-    const wait = waitForAddressLimits(recent.map((r) => r.createdAt.getTime()), now);
+    const wait = waitForAddressLimits(
+        recent.map((r) => ({ at: r.createdAt.getTime(), purpose: r.purpose })),
+        purpose,
+        now,
+    );
     if (wait > 0) {
         return { ok: false, reason: 'rate_limited', retryAfterSeconds: Math.ceil(wait / 1000) };
     }
@@ -227,7 +274,7 @@ export async function issueEmailCode(
         console.log('[EmailCode] App Review address: fixed code issued, no email sent');
     } else {
         try {
-            await sendEmail(renderCodeEmail(address, code, opts.lang));
+            await sendEmail(renderCodeEmail(address, code, opts.lang, purpose));
         } catch (err) {
             console.error('[EmailCode] Send failed:', err instanceof Error ? err.message : err);
             // A failed send doesn't count against the limits, and the code

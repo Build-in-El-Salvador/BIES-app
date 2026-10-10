@@ -10,6 +10,9 @@
  * - the server, publishing on a member's behalf (nostr.service.ts), and
  * - the member's own app, through POST /api/signer/sign. The app may only ask
  *   for what checkAppSignRequest() allows.
+ *
+ * The key itself leaves the server once, when its owner takes it
+ * (exportHostedKey, after an email code; see account.service.ts).
  */
 
 import type { Event as NostrEvent, EventTemplate } from 'nostr-tools/pure';
@@ -21,11 +24,17 @@ export type SignatureSource = 'app' | 'server';
 
 const RELAY_AUTH_KIND = 22242;
 
+// What the server may still sign for a banned or deleted account: retracting
+// its events. Kind 5 is a NIP-09 deletion request, kind 62 a NIP-62 request
+// to vanish.
+const RETRACTION_KINDS = new Set([5, 62]);
+
 /**
  * Sign an event with the member's hosted key. Returns null when BIES holds
  * no key for them (Nostr sign-in: they sign on their own device), and for
  * banned or deleted accounts, except that the server can still retract their
- * events. Pass a function to build the template from the member's pubkey.
+ * events (RETRACTION_KINDS). Pass a function to build the template from the
+ * member's pubkey.
  */
 export async function signAsHostedUser(
     userId: string,
@@ -41,10 +50,10 @@ export async function signAsHostedUser(
     const unsigned = typeof template === 'function' ? template(user.nostrPubkey) : template;
 
     // Suspended accounts can't sign, with one exception: the server
-    // retracting their events (kind 5). When an admin deletes a banned
-    // member's event or course, it must still disappear from relays, and only
-    // this key can retract it.
-    if ((user.isBanned || user.deletedAt) && !(source === 'server' && unsigned.kind === 5)) {
+    // retracting their events. When an admin deletes a banned member's event
+    // or course, or a member deletes their account, the events must still
+    // disappear from relays, and only this key can retract them.
+    if ((user.isBanned || user.deletedAt) && !(source === 'server' && RETRACTION_KINDS.has(unsigned.kind))) {
         console.warn(`[Signer] Refused to sign kind ${unsigned.kind} for banned or deleted user ${userId}`);
         return null;
     }
@@ -69,6 +78,32 @@ export async function signAsHostedUser(
         });
     }
     return signed;
+}
+
+/**
+ * The member's secret key, for them to take (account.service.ts): hex, or
+ * null when BIES holds no key for the account. Throws if the key doesn't
+ * match the account's pubkey. The caller sends it to the member's device
+ * once and keeps no copy.
+ */
+export async function exportHostedKey(userId: string): Promise<string | null> {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { encryptedPrivkey: true, nostrPubkey: true },
+    });
+    if (!user?.encryptedPrivkey) return null;
+
+    const secretKeyHex = await decryptPrivateKeyAsync(user.encryptedPrivkey);
+    const { getPublicKey } = await import('nostr-tools/pure');
+    const secretKey = hexToBytes(secretKeyHex);
+    try {
+        if (getPublicKey(secretKey) !== user.nostrPubkey) {
+            throw new Error(`Hosted key of user ${userId} does not match their pubkey`);
+        }
+    } finally {
+        secretKey.fill(0);
+    }
+    return secretKeyHex;
 }
 
 // ─── What the app may ask for ─────────────────────────────────────────────────
