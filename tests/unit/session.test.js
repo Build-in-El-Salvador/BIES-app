@@ -174,23 +174,45 @@ test('logout tells the server with the access token, and the native refresh toke
 
 test('an offline logout finishes on the next launch', async () => {
     native = true;
-    store.set('bies_token', tokenExpiringIn(600));
-    store.set('bies_refresh', 'rt1.s.one');
+    const token = tokenExpiringIn(600);
+    store.set('bies_token', token);
+    store.set('bies_refresh', 'rt1.s.0.one');
     answers.push(new TypeError('Failed to fetch'));
 
-    await session.logoutSession();
+    await session.logoutSession({ pushToken: 'apns-1' });
     assert.equal(store.has('bies_token'), false, 'signed out locally at once');
-    assert.equal(store.get('bies_logout_pending'), '1');
+    assert.equal(store.has('bies_refresh'), false);
+    assert.equal(JSON.parse(store.get('bies_logout_pending')).length, 1);
 
     answers.push({ body: {} });
     await session.retryPendingLogout();
-    assert.deepEqual(calls[1].body, { refreshToken: 'rt1.s.one' });
-    assert.equal(store.size, 0);
+    assert.equal(calls[1].init.headers.Authorization, `Bearer ${token}`);
+    assert.deepEqual(calls[1].body, { refreshToken: 'rt1.s.0.one', pushToken: 'apns-1' });
+    assert.equal(store.has('bies_logout_pending'), false);
 });
 
-test('signing in again drops an unfinished logout', () => {
-    store.set('bies_logout_pending', '1');
-    session.saveSession({ token: tokenExpiringIn(900) });
+test('a logout the server refuses is retried too, not dropped', async () => {
+    store.set('bies_token', tokenExpiringIn(600));
+    answers.push({ status: 500, body: { error: 'Logout failed' } });
+    await session.logoutSession();
+    assert.equal(JSON.parse(store.get('bies_logout_pending')).length, 1);
+});
+
+test('a retried logout after a new sign-in ends only the old session', async () => {
+    native = true;
+    const old = tokenExpiringIn(600, 'old');
+    store.set('bies_token', old);
+    store.set('bies_refresh', 'rt1.old.0.mac');
+    answers.push(new TypeError('Failed to fetch'));
+    await session.logoutSession();
+
+    // Signed in again before the retry.
+    session.saveSession({ token: tokenExpiringIn(900, 'new'), refreshToken: 'rt1.new.0.mac' });
+    answers.push({ body: {} });
+    await session.retryPendingLogout();
+    assert.equal(calls[1].init.headers.Authorization, `Bearer ${old}`);
+    assert.deepEqual(calls[1].body, { refreshToken: 'rt1.old.0.mac' });
+    assert.equal(store.get('bies_refresh'), 'rt1.new.0.mac', 'the new session is untouched');
     assert.equal(store.has('bies_logout_pending'), false);
 });
 

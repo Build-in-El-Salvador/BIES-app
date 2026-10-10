@@ -68,14 +68,12 @@ export const authService = {
                 nostrSigner.setHostedMode(user.nostrPubkey);
             }
             return user;
-        } catch (err) {
-            // The API client already signed out if the session is over.
-            // Anything else (offline, server restarting) keeps the session:
-            // carry on as the cached user and let the next request decide.
-            if (err?.status === 401 || !authService.getToken()) {
-                authService.clearToken();
-                return null;
-            }
+        } catch {
+            // The API client has already signed out if the server said the
+            // session is over. Anything else (offline, a server hiccup) keeps
+            // the session: carry on as the cached user and let the next
+            // request decide.
+            if (!authService.getToken()) return null;
             const cached = authService.getCachedUser();
             if (cached?.hostedKey && (!nostrSigner.storedMethod || nostrSigner.storedMethod === 'hosted')) {
                 nostrSigner.setHostedMode(cached.nostrPubkey);
@@ -353,10 +351,21 @@ export const authService = {
 
     /**
      * Sign out: local state at once, then the server ends the session so
-     * neither token works again. Returns when the server has been told.
+     * neither token works again. `pushToken` is this phone's push
+     * registration, removed with it. Returns when the server has been told.
      */
-    logout: () => {
-        const told = logoutSession();
+    logout: ({ pushToken = null } = {}) => {
+        const told = logoutSession({ pushToken });
+        authService.clearLocalSecrets();
+        return told;
+    },
+
+    /**
+     * Forget the secrets this device holds for the account: the signer's key
+     * and the wallet connection. On every sign-out, including one the server
+     * forced (ban, expiry, logout in another tab).
+     */
+    clearLocalSecrets: () => {
         nostrSigner.clear();
         // Clear the NWC wallet connection — the spend-capable secret in
         // localStorage must never survive logout (or leak to the next user
@@ -364,7 +373,6 @@ export const authService = {
         try {
             nwcClient.disconnect();
         } catch { /* best-effort */ }
-        return told;
     },
 
     // ─── Role management ────────────────────────────────────────────────────

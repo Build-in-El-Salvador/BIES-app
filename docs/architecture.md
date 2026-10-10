@@ -202,10 +202,11 @@ Authentication: the access token is sent as a WebSocket subprotocol (`new WebSoc
 `services/session.service.ts` (server) and `src/services/session.js` (app):
 
 - **Sign-in starts a session** (a `Session` row per device) and returns a 15-minute **access token** (a JWT naming the user and the session) plus a **refresh token**.
-- **The refresh token** is `rt1.<session>.<mac>`, recomputed from a key derived from `JWT_SECRET`, the session's salt and a counter; the database alone can't produce one. The web app gets it as an `httpOnly`, `SameSite=Strict` cookie on `/api/auth`, which its scripts can't read; the native app and other clients get it in the response body.
-- **`POST /api/auth/refresh`** replaces both tokens. A replaced refresh token presented again ends the session (a stolen copy shows up this way), except within 60 seconds, which covers a lost response or two tabs refreshing at once.
-- **Sessions end** on logout (`POST /api/auth/logout`, this device), on a ban, deletion or merge (every device), after 30 days unused or 90 days after sign-in. Ended sessions are deleted after 30 days.
-- **The app** refreshes a minute before the access token expires, retries once on `token_expired`, and signs out on any other 401 reason (`session_ended`, `suspended`, `account_deleted`, `invalid_token`).
+- **The refresh token** is `rt1.<session>.<counter>.<mac>`, where the MAC comes from a key derived from `JWT_SECRET`, the session's salt and the counter; the database alone can't produce one, and a token with a bad MAC changes nothing (session ids aren't secret). The web app gets it as an `httpOnly`, `SameSite=Strict` cookie (`__Host-bies_rt` on `Path=/` in production, so sibling subdomains can't set it), which its scripts can't read; the native app and other clients get it in the response body.
+- **Only known origins** may sign in, refresh or log out: `CORS_ORIGIN` (the web app, cookie), `CORS_NATIVE_ORIGIN` (the native app, body) or no `Origin` at all (not a browser page). Any other site gets 403 before any session or cookie work, so it can't sign a visitor into another account or clear their cookie.
+- **`POST /api/auth/refresh`** replaces both tokens. A genuine but replaced refresh token presented again ends the session (a stolen copy shows up this way), except within 60 seconds, which covers a lost response or two tabs refreshing at once.
+- **Sessions end** on logout (`POST /api/auth/logout`, this device, which also removes the phone's push registration), on a ban, deletion or merge (every device, and their push registrations), after 30 days unused or 90 days after sign-in. Ended sessions are deleted after 30 days.
+- **The app** refreshes a minute before the access token expires (by the server's clock, learned from each token), retries once on `token_expired`, and signs out on any other 401 reason (`session_ended`, `suspended`, `account_deleted`, `invalid_token`), in every tab. A refresh that can't reach the server leaves the session alone. A logout the server didn't confirm is retried at the next launch.
 
 ### Database Schema
 

@@ -17,6 +17,7 @@ import {
     freshAccessToken,
     isSessionOver,
     refreshSession,
+    waitForLogout,
 } from './session.js';
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
@@ -24,6 +25,13 @@ import {
 // Sign-in endpoints answer 401 for a wrong code or signature, which says
 // nothing about the session this device already has.
 const isSignInPath = (path) => /^\/auth\/(email\/|nostr-|refresh|logout)/.test(path);
+
+// What a caller sees when a refresh couldn't reach the server: try again
+// later, not "signed out".
+const unreachable = () => new Response(
+    JSON.stringify({ error: 'Could not reach the server. Please try again.' }),
+    { status: 503, headers: { 'Content-Type': 'application/json' } },
+);
 
 /**
  * Fetch with the current access token. If the server says the token has
@@ -36,17 +44,31 @@ async function sendAuthorized(path, init) {
         headers: { ...init.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
 
+    // Signing in needs no token, and must wait for a logout still being sent.
+    if (isSignInPath(path)) {
+        await waitForLogout();
+        return send(null);
+    }
+
     let res = await send(await freshAccessToken());
-    if (res.status === 401 && !isSignInPath(path)) {
+    if (res.status === 401) {
         let { reason } = await res.clone().json().catch(() => ({}));
         if (reason === 'token_expired') {
-            const token = await refreshSession().catch(() => null);
-            if (!token) return res;
+            let token;
+            try {
+                token = await refreshSession();
+            } catch {
+                return unreachable();
+            }
+            if (!token) return res; // the session is over; refreshSession signed out
             res = await send(token);
             if (res.status !== 401) return res;
             ({ reason } = await res.clone().json().catch(() => ({})));
         }
-        if (isSessionOver(reason)) endSession();
+        // The server has just said this session is over: sign out even if
+        // another tab already cleared the shared storage. A missing token
+        // only means this request went out signed out.
+        if (isSessionOver(reason)) endSession({ force: reason !== 'missing_token' });
     }
     return res;
 }
@@ -708,13 +730,16 @@ export class BiesWebSocket {
 
             this.ws.onopen = () => {
                 console.log('[WS] Connected');
-                this.reconnectDelay = 1000;
                 if (this.onConnect) this.onConnect();
             };
 
             this.ws.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    // The server sends this once the session check passed.
+                    // Only then is it safe to reconnect quickly again: it can
+                    // accept the connection and still close it right after.
+                    if (data.type === 'connected') this.reconnectDelay = 1000;
                     if (this.onMessage) this.onMessage(data);
                 } catch { /* ignore */ }
             };
@@ -724,7 +749,7 @@ export class BiesWebSocket {
                 // 4003: the session has ended (logout elsewhere, ban, deletion).
                 if (event.code === 4003) {
                     this.shouldReconnect = false;
-                    endSession();
+                    endSession({ force: true });
                     return;
                 }
                 if (!this.shouldReconnect) return;
