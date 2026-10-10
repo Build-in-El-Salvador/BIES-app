@@ -85,15 +85,9 @@ export async function initNativePush() {
 }
 
 /**
- * Best-effort removal of the last captured device token from the backend.
- * Called on logout. Never throws.
+ * This device's push token, or null on the web. Logout sends it with the
+ * logout request, so the server removes it while ending the session.
  */
-export async function unregisterNativePush() {
-    if (!isNativePlatform()) return;
-    if (!lastToken) return;
-    try {
-        await notificationsApi.deviceTokenUnregister(lastToken);
-    } catch {
-        // Best-effort — the server also prunes dead tokens on APNs 410.
-    }
+export function nativePushToken() {
+    return isNativePlatform() ? lastToken : null;
 }

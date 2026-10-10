@@ -1,11 +1,12 @@
 /**
  * authService — bridges the frontend auth flow with the BIES backend.
  *
- * JWT is stored in localStorage under 'bies_token'.
- * User object (without secrets) is cached under 'bies_user'.
+ * Sign-in starts a session: a 15-minute access token, renewed by a refresh
+ * token (services/session.js). User object (without secrets) is cached under
+ * 'bies_user'.
  *
  * The service:
- *  - Stores/retrieves JWT
+ *  - Stores the session each sign-in method returns
  *  - Calls backend to validate/restore sessions
  *  - Never stores private keys — keys belong in the Nostr extension
  */
@@ -16,21 +17,19 @@ import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
 import { fingerprintService } from './fingerprintService.js';
 import { nwcClient } from './nwcService.js';
+import { clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
 
-const TOKEN_KEY = 'bies_token';
 const USER_KEY = 'bies_user';
 
 export const authService = {
     // ─── Token management ───────────────────────────────────────────────────
 
-    getToken: () => localStorage.getItem(TOKEN_KEY),
+    getToken: () => getAccessToken(),
 
-    setToken: (token) => localStorage.setItem(TOKEN_KEY, token),
+    /** Store a sign-in response: `{ token, refreshToken? }`. */
+    setSession: (session) => saveSession(session),
 
-    clearToken: () => {
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-    },
+    clearToken: () => clearSession(),
 
     // ─── User cache (lightweight, not authoritative — always re-verify with /me) ─
 
@@ -55,7 +54,10 @@ export const authService = {
      */
     restoreSession: async () => {
         const token = authService.getToken();
-        if (!token) return null;
+        if (!token) {
+            retryPendingLogout();
+            return null;
+        }
 
         try {
             const user = await authApi.me();
@@ -67,9 +69,16 @@ export const authService = {
             }
             return user;
         } catch {
-            // Token expired or invalid
-            authService.clearToken();
-            return null;
+            // The API client has already signed out if the server said the
+            // session is over. Anything else (offline, a server hiccup) keeps
+            // the session: carry on as the cached user and let the next
+            // request decide.
+            if (!authService.getToken()) return null;
+            const cached = authService.getCachedUser();
+            if (cached?.hostedKey && (!nostrSigner.storedMethod || nostrSigner.storedMethod === 'hosted')) {
+                nostrSigner.setHostedMode(cached.nostrPubkey);
+            }
+            return cached;
         }
     },
 
@@ -97,9 +106,10 @@ export const authService = {
         });
 
         const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const { user } = session;
 
-        authService.setToken(token);
+        authService.setSession(session);
         authService.setCachedUser(user);
         nostrSigner.setExtensionMode();
         return user;
@@ -132,9 +142,10 @@ export const authService = {
         }, sk);
 
         const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const { user } = session;
 
-        authService.setToken(token);
+        authService.setSession(session);
         authService.setCachedUser(user);
         nostrSigner.setNsec(nsecString);
         return user;
@@ -166,9 +177,10 @@ export const authService = {
         }, sk);
 
         const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const { user } = session;
 
-        authService.setToken(token);
+        authService.setSession(session);
         authService.setCachedUser(user);
         nostrSigner.setNsec(sk);
         return user;
@@ -207,9 +219,10 @@ export const authService = {
         });
 
         const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const { user } = session;
 
-        authService.setToken(token);
+        authService.setSession(session);
         authService.setCachedUser(user);
         return { user, pubkey };
     },
@@ -307,9 +320,10 @@ export const authService = {
         amberSignerService.clearLoginState();
 
         const fingerprint = await fingerprintService.getFingerprint();
-        const { user, token } = await authApi.nostrLogin(state.pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(state.pubkey, signedEvent, fingerprint);
+        const { user } = session;
 
-        authService.setToken(token);
+        authService.setSession(session);
         authService.setCachedUser(user);
         nostrSigner.setAmberMode(state.pubkey);
         return user;
@@ -325,8 +339,9 @@ export const authService = {
      * BIES holds its key and signs on the server, so the app never gets it.
      */
     loginWithEmailCode: async (email, code) => {
-        const { user, token, isNewUser } = await authApi.emailVerify(email, code);
-        authService.setToken(token);
+        const session = await authApi.emailVerify(email, code);
+        const { user, isNewUser } = session;
+        authService.setSession(session);
         authService.setCachedUser(user);
         nostrSigner.setHostedMode(user.nostrPubkey);
         return { user, isNewUser };
@@ -334,8 +349,23 @@ export const authService = {
 
     // ─── Logout ─────────────────────────────────────────────────────────────
 
-    logout: () => {
-        authService.clearToken();
+    /**
+     * Sign out: local state at once, then the server ends the session so
+     * neither token works again. `pushToken` is this phone's push
+     * registration, removed with it. Returns when the server has been told.
+     */
+    logout: ({ pushToken = null } = {}) => {
+        const told = logoutSession({ pushToken });
+        authService.clearLocalSecrets();
+        return told;
+    },
+
+    /**
+     * Forget the secrets this device holds for the account: the signer's key
+     * and the wallet connection. On every sign-out, including one the server
+     * forced (ban, expiry, logout in another tab).
+     */
+    clearLocalSecrets: () => {
         nostrSigner.clear();
         // Clear the NWC wallet connection — the spend-capable secret in
         // localStorage must never survive logout (or leak to the next user

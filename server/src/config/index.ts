@@ -36,8 +36,21 @@ export const config = {
 
     // ─── Auth ───────────────────────────────────────────────────────────────
     jwtSecret: process.env.JWT_SECRET || devJwtSecret,
-    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
     encryptionSecret: process.env.ENCRYPTION_SECRET || devEncryptionSecret,
+
+    // ─── Sessions (services/session.service.ts) ─────────────────────────────
+    // A sign-in gets a short-lived access token and a refresh token that
+    // renews it. The session ends after `idleDays` without a refresh, or
+    // `maxDays` after sign-in, whichever comes first. JWT_EXPIRES_IN is no
+    // longer read: access tokens always last `accessTokenSeconds`.
+    session: {
+        accessTokenSeconds: parseInt(process.env.ACCESS_TOKEN_SECONDS || '900', 10),
+        idleDays: parseInt(process.env.SESSION_IDLE_DAYS || '30', 10),
+        maxDays: parseInt(process.env.SESSION_MAX_DAYS || '90', 10),
+        // How long a just-replaced refresh token still works, for a retry
+        // whose answer was lost or two tabs refreshing at once.
+        refreshGraceSeconds: 60,
+    },
 
     // ─── Redis (optional — falls back to in-memory) ─────────────────────────
     redisUrl: process.env.REDIS_URL || '',

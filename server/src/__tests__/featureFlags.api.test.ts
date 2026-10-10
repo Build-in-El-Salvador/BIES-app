@@ -17,12 +17,14 @@ import type { Server } from 'http';
 vi.mock('../lib/prisma', () => ({
     default: {
         user: { findUnique: vi.fn() },
+        session: { findUnique: vi.fn() },
         siteSettings: { findUnique: vi.fn(), upsert: vi.fn() },
     },
 }));
 
 import prisma from '../lib/prisma';
-import { authenticate, requireRole, generateToken } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
+import { liveSessionLookup, testToken } from './helpers/session';
 import { validate } from '../middleware/validate';
 import { featureGate } from '../middleware/featureGate';
 import { cache, cacheKey } from '../services/redis.service';
@@ -30,6 +32,7 @@ import flagsRoutes from '../routes/flags.routes';
 import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFlags.controller';
 
 const mockedUserFind = prisma.user.findUnique as ReturnType<typeof vi.fn>;
+const mockedSessionFind = prisma.session.findUnique as ReturnType<typeof vi.fn>;
 const mockedSettingsFind = prisma.siteSettings.findUnique as ReturnType<typeof vi.fn>;
 const mockedSettingsUpsert = prisma.siteSettings.upsert as ReturnType<typeof vi.fn>;
 
@@ -42,8 +45,7 @@ const USERS: Record<string, { id: string; email: string | null; nostrPubkey: str
 };
 
 function tokenFor(key: keyof typeof USERS): string {
-    const u = USERS[key];
-    return generateToken(u.id, u.role, u.isAdmin);
+    return testToken(USERS[key]);
 }
 
 // ─── Ephemeral app (mirrors the real mounts) ─────────────────────────────────
@@ -94,6 +96,7 @@ beforeEach(async () => {
         const user = Object.values(USERS).find((u) => u.id === where.id) || null;
         return Promise.resolve(user);
     });
+    mockedSessionFind.mockImplementation(liveSessionLookup((id) => Object.values(USERS).find((u) => u.id === id)));
     mockedSettingsFind.mockResolvedValue({ featureFlags: '{}' });
     mockedSettingsUpsert.mockResolvedValue({});
 });

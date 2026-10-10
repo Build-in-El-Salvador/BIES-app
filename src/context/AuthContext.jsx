@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
 import { BiesWebSocket, notificationsApi, profilesApi } from '../services/api';
 import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
 import { notifyIncomingMessage, subscribeToPush } from '../utils/notificationManager';
 import { isNativePlatform } from '../utils/platform';
-import { initNativePush, unregisterNativePush } from '../services/pushService';
+import { initNativePush, nativePushToken } from '../services/pushService';
 import { nostrSigner } from '../services/nostrSigner';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
@@ -18,6 +18,9 @@ export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
+    // For handlers registered once, which would otherwise see the first `user`.
+    const userRef = useRef(null);
+    useEffect(() => { userRef.current = user; }, [user]);
     const [loading, setLoading] = useState(true);
     const [wsClient, setWsClient] = useState(null);
     const [notifications, setNotifications] = useState([]);
@@ -110,16 +113,29 @@ export const AuthProvider = ({ children }) => {
                 if (mounted) setLoading(false);
             });
 
-        // Listen for 401 events from the API client
+        // The session ended without a logout here: the server said so (ban,
+        // expiry, logout elsewhere) or another tab signed out. Forget this
+        // device's secrets too, as logout does.
         const handleUnauthorized = () => {
+            if (userRef.current) authService.clearLocalSecrets();
             setUser(null);
             setWsClient((prev) => { prev?.disconnect(); return null; });
         };
         window.addEventListener('bies:unauthorized', handleUnauthorized);
 
+        // Tabs share localStorage: when another tab signs out (or site data is
+        // cleared), sign out here as well.
+        const handleStorage = (e) => {
+            if ((e.key === 'bies_token' || e.key === null) && !localStorage.getItem('bies_token')) {
+                handleUnauthorized();
+            }
+        };
+        window.addEventListener('storage', handleStorage);
+
         return () => {
             mounted = false;
             window.removeEventListener('bies:unauthorized', handleUnauthorized);
+            window.removeEventListener('storage', handleStorage);
         };
     }, []);
 
@@ -436,12 +452,10 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
-        // Best-effort native token removal BEFORE the JWT is cleared, so the
-        // authenticated DELETE still carries its Authorization header.
-        unregisterNativePush();
         wsClient?.disconnect();
         setWsClient(null);
-        authService.logout();
+        // The logout request also removes this phone's push registration.
+        authService.logout({ pushToken: nativePushToken() });
         setUser(null);
         setNotifications([]);
         setUnreadCount(0);

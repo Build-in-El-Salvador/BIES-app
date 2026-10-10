@@ -9,6 +9,8 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, invalidateLeaderboardCache } from '../services/redis.service';
 import { broadcast } from '../services/websocket.service';
 import { removeFromRelayWhitelist, addToRelayWhitelist } from '../services/relayWhitelist.service';
+import { revokeUserSessions } from '../services/session.service';
+import { removePushTargets } from '../services/notification.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { isAdminPubkey } from '../middleware/auth';
 import { recomputeListingScore, recomputeAllScores as recomputeAllDirectoryScores } from '../services/directoryReputation.service';
@@ -92,9 +94,12 @@ export async function banUser(req: Request, res: Response): Promise<void> {
             select: { id: true, email: true, nostrPubkey: true, isBanned: true },
         });
 
-        // Update relay whitelist: remove on ban, restore on unban
+        // Update relay whitelist: remove on ban, restore on unban. A ban also
+        // signs the member out everywhere; unbanning doesn't sign them back in.
         if (banned) {
             removeFromRelayWhitelist(user.nostrPubkey);
+            await revokeUserSessions(user.id, 'suspended');
+            await removePushTargets(user.id);
         } else {
             addToRelayWhitelist(user.nostrPubkey);
         }
@@ -420,9 +425,10 @@ export async function deleteUser(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'User not found' }); return;
         }
 
-        // Remove from relay whitelist and invalidate sessions
+        // Remove from relay whitelist and end every session
         removeFromRelayWhitelist(targetUser.nostrPubkey);
-        await prisma.session.deleteMany({ where: { userId: req.params.id } });
+        await revokeUserSessions(targetUser.id, 'deleted');
+        await removePushTargets(targetUser.id);
 
         // Soft-delete: move to trash
         await prisma.user.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } });
@@ -788,7 +794,8 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
         // 9. Optionally soft-delete source account (moves to trash)
         if (deleteSource) {
             removeFromRelayWhitelist(sourceUser.nostrPubkey);
-            await prisma.session.deleteMany({ where: { userId: sourceUserId } });
+            await revokeUserSessions(sourceUserId, 'merged');
+            await removePushTargets(sourceUserId);
             await prisma.user.update({ where: { id: sourceUserId }, data: { deletedAt: new Date() } });
             syncResults.push('Source account moved to trash');
         }

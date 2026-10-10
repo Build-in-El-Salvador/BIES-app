@@ -141,7 +141,7 @@ docker compose logs -f bies-server
 | `JWT_SECRET` | 64-char base64 string for JWT signing | `openssl rand -base64 64` |
 | `ENCRYPTION_SECRET` | 32-char string for AES-256-GCM | `openssl rand -hex 16` |
 | `DATABASE_URL` | Database connection string | `postgresql://...` or `file:../data/bies.db` |
-| `CORS_ORIGIN` | Allowed origins (comma-separated) | `https://app.buildinelsalvador.com` |
+| `CORS_ORIGIN` | Allowed origins (comma-separated). Must match the web app's origin exactly: sign-in, session refresh and logout refuse any other site | `https://app.buildinelsalvador.com` |
 
 ### Recommended
 
@@ -168,6 +168,11 @@ docker compose logs -f bies-server
 | `EMAIL_CODES_MAX_PER_DAY` | Most sign-in codes sent per 24 h, all addresses together. Resend's free plan allows 100 emails a day in total | `60` |
 | `REVIEW_LOGIN_EMAIL` | App Review address that signs in with a fixed code | Off |
 | `REVIEW_LOGIN_CODE` | That fixed code: 6 digits, kept out of the code | Off |
+| `ACCESS_TOKEN_SECONDS` | Lifetime of an access token; the app renews it before it runs out | `900` |
+| `SESSION_IDLE_DAYS` | A session unused this long ends | `30` |
+| `SESSION_MAX_DAYS` | Every session ends this long after sign-in | `90` |
+
+`JWT_EXPIRES_IN` is no longer read: access tokens last `ACCESS_TOKEN_SECONDS`, and sessions are renewed with refresh tokens.
 
 ## Docker Compose Details
 

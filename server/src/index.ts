@@ -13,6 +13,7 @@ import { auditLog } from './middleware/audit';
 import { featureGate } from './middleware/featureGate';
 import { rateLimitKey } from './utils/rateLimitKey';
 import { attachWebSocketServer } from './services/websocket.service';
+import { deleteOldSessions } from './services/session.service';
 import { startTwitterRefreshLoop } from './services/twitter.service';
 import { initWebPush, cleanupStaleSubscriptions } from './services/webpush.service';
 import { initApns } from './services/apns.service';
@@ -271,6 +272,13 @@ server.listen(config.port, () => {
 
     // Initialize native push (APNs) — no-ops when unconfigured
     initApns();
+
+    // Delete sessions that ended over 30 days ago, now and twice a day.
+    const pruneSessions = () => deleteOldSessions()
+        .then((count) => { if (count) console.log(`[Sessions] Deleted ${count} old sessions`); })
+        .catch((err) => console.error('[Sessions] Cleanup failed:', err));
+    pruneSessions();
+    setInterval(pruneSessions, 12 * 60 * 60 * 1000).unref();
 
     // Points scorer (relay indexer) + monthly rollover loop — a scorer
     // failure must never take down the API.

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { revokeUserSessions } from '../services/session.service';
 import { z } from 'zod';
 
 export const updateNotificationSettingsSchema = z.object({
@@ -344,6 +345,9 @@ export async function deleteAccount(req: Request, res: Response): Promise<void> 
     try {
         const userId = req.user!.id;
 
+        // End sessions first so open connections close; the delete cascades
+        // to the rows themselves.
+        await revokeUserSessions(userId, 'deleted');
         await prisma.user.delete({
             where: { id: userId },
         });

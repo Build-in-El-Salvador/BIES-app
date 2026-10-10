@@ -22,19 +22,21 @@ vi.hoisted(() => {
 vi.mock('../lib/prisma', () => ({
     default: {
         user: { findUnique: vi.fn() },
+        session: { findUnique: vi.fn() },
         hostedSignature: { create: vi.fn(), findMany: vi.fn() },
     },
 }));
 
 import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import prisma from '../lib/prisma';
-import { generateToken } from '../middleware/auth';
+import { liveSessionLookup, testToken } from './helpers/session';
 import { sanitize } from '../middleware/sanitize';
 import { encryptPrivateKey } from '../services/crypto.service';
 import { signAsHostedUser } from '../services/hostedSigner.service';
 import signerRoutes from '../routes/signer.routes';
 
 const mockedUserFind = prisma.user.findUnique as ReturnType<typeof vi.fn>;
+const mockedSessionFind = prisma.session.findUnique as ReturnType<typeof vi.fn>;
 const mockedLogCreate = prisma.hostedSignature.create as ReturnType<typeof vi.fn>;
 const mockedLogFind = prisma.hostedSignature.findMany as ReturnType<typeof vi.fn>;
 
@@ -63,7 +65,7 @@ const USERS: Record<string, Record<string, unknown>> = {
     },
 };
 
-const tokenFor = (key: string) => generateToken(USERS[key].id as string, 'MEMBER', false);
+const tokenFor = (key: string) => testToken(USERS[key] as { id: string });
 const now = () => Math.floor(Date.now() / 1000);
 
 // ─── Ephemeral app (same chain as index.ts) ──────────────────────────────────
@@ -92,6 +94,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     mockedUserFind.mockImplementation(({ where }: { where: { id: string } }) =>
         Promise.resolve(Object.values(USERS).find((u) => u.id === where.id) ?? null));
+    mockedSessionFind.mockImplementation(liveSessionLookup((id) =>
+        Object.values(USERS).find((u) => u.id === id) as { id: string } | undefined));
     mockedLogCreate.mockResolvedValue({});
 });
 
@@ -148,8 +152,10 @@ describe('POST /api/signer/sign', () => {
     });
 
     it('refuses banned accounts', async () => {
+        // Turned away at sign-in check, before the signer sees the request.
         const res = await sign(note(), 'banned');
-        expect(res.status).toBe(403);
+        expect(res.status).toBe(401);
+        expect(res.body.reason).toBe('suspended');
         expect(mockedLogCreate).not.toHaveBeenCalled();
     });
 

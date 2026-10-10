@@ -1,6 +1,5 @@
 import type { Request } from 'express';
-import jwt from 'jsonwebtoken';
-import { config } from '../config';
+import { verifyAccessToken } from '../services/session.service';
 
 /**
  * Rate-limit key: the account for signed-in requests, the IP otherwise.
@@ -10,18 +9,21 @@ import { config } from '../config';
  * Limiting signed-in requests per IP would lock the room out together.
  *
  * Only a token this server signed counts (checked with the JWT secret), so a
- * made-up token falls back to the IP. Revoked tokens still get their own
- * bucket here; `authenticate` rejects them on the route itself.
+ * made-up token falls back to the IP. A token that expired in the last hour
+ * still counts: the app sends its expired access token when it refreshes, so
+ * a room renewing its sessions at once is limited per person. Older tokens
+ * fall back to the IP, so one leaked long ago can't use up its owner's
+ * limit. Revoked tokens get their own bucket too; `authenticate` rejects
+ * them on the route itself.
  */
+const RECENTLY_EXPIRED_SECONDS = 60 * 60;
+
 export function rateLimitKey(req: Request): string {
     const header = req.headers.authorization;
     if (header?.startsWith('Bearer ')) {
-        try {
-            const payload = jwt.verify(header.slice(7), config.jwtSecret, { algorithms: ['HS256'] }) as { userId?: unknown };
-            if (typeof payload.userId === 'string' && payload.userId) return `user:${payload.userId}`;
-        } catch {
-            // Invalid or expired: fall back to the IP.
-        }
+        const token = verifyAccessToken(header.slice(7), { ignoreExpiration: true });
+        const recent = token.ok && (token.claims.exp ?? 0) > Date.now() / 1000 - RECENTLY_EXPIRED_SECONDS;
+        if (token.ok && recent && token.claims.userId) return `user:${token.claims.userId}`;
     }
     return `ip:${req.ip}`;
 }
