@@ -11,6 +11,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { sanitize } from './middleware/sanitize';
 import { auditLog } from './middleware/audit';
 import { featureGate } from './middleware/featureGate';
+import { rateLimitKey } from './utils/rateLimitKey';
 import { attachWebSocketServer } from './services/websocket.service';
 import { startTwitterRefreshLoop } from './services/twitter.service';
 import { initWebPush, cleanupStaleSubscriptions } from './services/webpush.service';
@@ -144,9 +145,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitize);
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
-// General: 300 req / 15 min per IP
-// At 500 concurrent users each making ~1 req/3s = ~167 req/s sustained
-// 300 per 15 min = 20/min per IP which is generous but safe
+// General: 300 req / 15 min per account when signed in, per IP otherwise
+// (utils/rateLimitKey.ts): a room on one Wi-Fi shares an IP.
+// 300 per 15 min = 20/min, which is generous but safe
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 300,
@@ -154,6 +155,7 @@ const generalLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' },
     skip: (req) => req.method === 'OPTIONS',
+    keyGenerator: rateLimitKey,
 });
 
 // Upload: 30 per 15 min
