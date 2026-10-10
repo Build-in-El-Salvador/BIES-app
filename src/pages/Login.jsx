@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { AlertCircle, Loader2, Key, Globe, FileText, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { AlertCircle, Loader2, Key, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
 import { PASSKEY_ENABLED, NIP46_ENABLED, AMBER_NIP55_ENABLED } from '../config/featureFlags';
 import { isLikelyExtensionInterference, keytrService } from '../services/keytrService';
 import { isNativePlatform } from '../utils/platform';
@@ -12,6 +13,7 @@ import logoIcon from '../assets/logo-icon.svg';
 import NostrIcon from '../components/NostrIcon';
 import NostrConnectQR from '../components/NostrConnectQR';
 import EmailSignIn from '../components/EmailSignIn';
+import { readKeyInput, unlockBackup } from '../services/accountKey';
 
 const Login = () => {
     const { t } = useTranslation();
@@ -21,7 +23,12 @@ const Login = () => {
     const [loading, setLoading] = useState(false);
     const [nsecInput, setNsecInput] = useState('');
     const [seedInput, setSeedInput] = useState('');
-    const [loginMode, setLoginMode] = useState('nsec'); // 'nsec', 'seed', or 'bunker'
+    const [loginMode, setLoginMode] = useState('nsec'); // 'nsec', 'seed', 'file' or 'bunker'
+    // A password-protected key backup (.nostrkey or ncryptsec), such as the
+    // one "Take your key" makes.
+    const [keyFileText, setKeyFileText] = useState('');
+    const [keyFileName, setKeyFileName] = useState('');
+    const [keyFilePassword, setKeyFilePassword] = useState('');
     const [bunkerInput, setBunkerInput] = useState('');
     // Remote-signer sub-view: QR pairing (default on mobile — tap opens the
     // signer app) vs bunker:// paste (default on desktop).
@@ -153,6 +160,44 @@ const Login = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleKeyFileLogin = async (e) => {
+        e.preventDefault();
+        setError('');
+        const read = readKeyInput(keyFileText);
+        if (!read) {
+            setError(t('login.keyFileInvalid'));
+            return;
+        }
+        let secretKey = read.secretKey;
+        if (read.encrypted) {
+            try {
+                secretKey = unlockBackup(read.encrypted, keyFilePassword);
+            } catch {
+                setError(t('login.keyFileWrongPassword'));
+                return;
+            }
+        }
+        setLoading(true);
+        try {
+            const result = await loginWithNsecAndCheckNew(nip19.nsecEncode(secretKey));
+            handleResult(result);
+        } catch (err) {
+            setError(err?.message || String(err));
+        } finally {
+            secretKey.fill(0);
+            setLoading(false);
+        }
+    };
+
+    const openKeyFile = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setKeyFileText((await file.text()).trim());
+        setKeyFileName(file.name);
+        setError('');
     };
 
     const handleNsecLogin = async (e) => {
@@ -340,6 +385,12 @@ const Login = () => {
                     >
                         <FileText size={14} /> {t('login.seedPhrase')}
                     </button>
+                    <button
+                        className={`mode-tab ${loginMode === 'file' ? 'active' : ''}`}
+                        onClick={() => { setLoginMode('file'); setError(''); }}
+                    >
+                        <FileKey size={14} /> {t('login.keyFile')}
+                    </button>
                     {NIP46_ENABLED && (
                         <button
                             className={`mode-tab ${loginMode === 'bunker' ? 'active' : ''}`}
@@ -349,6 +400,49 @@ const Login = () => {
                         </button>
                     )}
                 </div>
+
+                {/* Login with a password-protected key backup */}
+                {loginMode === 'file' && (
+                    <form onSubmit={handleKeyFileLogin} className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <p className="login-subtext" style={{ margin: 0 }}>{t('login.keyFileOrPaste')}</p>
+                        <label className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full" style={{ cursor: 'pointer' }}>
+                            <FileKey size={18} />
+                            <span>{keyFileName || t('login.uploadKeyFile')}</span>
+                            <input type="file" accept=".nostrkey,.txt,.json" onChange={openKeyFile} hidden />
+                        </label>
+                        <textarea
+                            value={keyFileName ? '' : keyFileText}
+                            onChange={(e) => { setKeyFileText(e.target.value); setKeyFileName(''); }}
+                            placeholder="ncryptsec1…"
+                            className="key-input"
+                            rows={3}
+                            autoComplete="off"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            style={{ fontFamily: 'Menlo, Consolas, monospace', fontSize: '0.8rem', padding: '0.75rem 1rem', borderRadius: '1rem', resize: 'vertical' }}
+                        />
+                        <div className="key-input-wrapper">
+                            <Key size={16} className="key-input-icon" />
+                            <input
+                                type="password"
+                                placeholder={t('login.enterKeyFilePassword')}
+                                value={keyFilePassword}
+                                onChange={(e) => setKeyFilePassword(e.target.value)}
+                                className="key-input"
+                                autoComplete="current-password"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={loading || !keyFileText.trim()}
+                            className="w-full btn-login flex items-center justify-center gap-3 py-3 rounded-full"
+                        >
+                            {loading ? <Loader2 size={20} className="spin" /> : <NostrIcon size={20} color="#8b5cf6" />}
+                            <span>{loading ? t('login.decrypting') : t('login.unlockAndLogIn')}</span>
+                        </button>
+                    </form>
+                )}
 
                 {/* Login with nsec */}
                 {loginMode === 'nsec' && (

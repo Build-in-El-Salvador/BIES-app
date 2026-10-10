@@ -343,7 +343,9 @@ export const authService = {
         const { user, isNewUser } = session;
         authService.setSession(session);
         authService.setCachedUser(user);
-        nostrSigner.setHostedMode(user.nostrPubkey);
+        // The server only signs in email accounts it holds a key for, but
+        // never point the signer at a key that isn't there.
+        if (user.hostedKey) nostrSigner.setHostedMode(user.nostrPubkey);
         return { user, isNewUser };
     },
 

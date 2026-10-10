@@ -161,6 +161,22 @@ export const authApi = {
 // ─── Hosted signer (email accounts) ──────────────────────────────────────────
 // BIES holds the key: the server signs and returns the event.
 
+// ─── Account: delete it, or take its key ─────────────────────────────────────
+
+export const accountApi = {
+    // Email accounts get a code ({ method: 'email', email }), Nostr accounts
+    // a challenge to sign ({ method: 'nostr', challenge }).
+    startDeletion: (lang) => post('/account/delete/start', { lang }),
+    // { code } or { signedEvent }; the account is gone when this resolves.
+    confirmDeletion: (proof, lang) => post('/account/delete', { ...proof, lang }),
+
+    // Take your key (email accounts): a code, then the key and a challenge,
+    // then the challenge signed with the saved key.
+    startKeyExport: (lang) => post('/account/key/start', { lang }),
+    exportKey: (code) => post('/account/key/export', { code }),
+    releaseKey: (signedEvent, lang) => post('/account/key/release', { signedEvent, lang }),
+};
+
 export const signerApi = {
     sign: (event) => post('/signer/sign', { event }).then((data) => data.event),
     log: (limit) => get('/signer/log', { limit }),

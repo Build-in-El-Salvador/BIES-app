@@ -119,6 +119,7 @@ export const AuthProvider = ({ children }) => {
         const handleUnauthorized = () => {
             if (userRef.current) authService.clearLocalSecrets();
             setUser(null);
+            setShowPushPrompt(false);
             setWsClient((prev) => { prev?.disconnect(); return null; });
         };
         window.addEventListener('bies:unauthorized', handleUnauthorized);
@@ -457,6 +458,7 @@ export const AuthProvider = ({ children }) => {
         // The logout request also removes this phone's push registration.
         authService.logout({ pushToken: nativePushToken() });
         setUser(null);
+        setShowPushPrompt(false);
         setNotifications([]);
         setUnreadCount(0);
     };

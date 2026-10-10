@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Moon, Bell, Lock, Globe, Eye, Zap, LayoutGrid, Play, Key, Copy, CheckCircle, EyeOff, AlertTriangle, Fingerprint, Smartphone, Wallet } from 'lucide-react';
+import { Moon, Bell, Lock, Globe, Eye, Zap, LayoutGrid, Play, Key, Copy, CheckCircle, EyeOff, AlertTriangle, Fingerprint, Smartphone, Wallet, Trash2, UserCog } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import WalletConnect from '../components/WalletConnect';
@@ -552,7 +552,10 @@ const Settings = () => {
                     ) : loginMethod === 'hosted' ? (
                         <div className="key-info-banner">
                             <AlertTriangle size={16} />
-                            <span>You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device.</span>
+                            <span>
+                                You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device.{' '}
+                                <Link to="/settings/your-key">{t('account.takeKeyButton')}</Link>
+                            </span>
                         </div>
                     ) : nsecRevealed && nsecValue ? (
                         <>
@@ -679,6 +682,36 @@ const Settings = () => {
                 )}
             </div>
             )}
+
+            <div className="settings-section">
+                <h2><UserCog size={16} /> {t('account.sectionTitle')}</h2>
+                {user?.hostedKey && (
+                    <div className="setting-item">
+                        <div className="setting-info">
+                            <div className="icon-box"><Key size={20} /></div>
+                            <div>
+                                <p className="setting-label">{t('account.takeKeyLabel')}</p>
+                                <p className="setting-desc">{t('account.takeKeyDesc')}</p>
+                            </div>
+                        </div>
+                        <Link to="/settings/your-key" className="btn btn-outline btn-sm" data-testid="settings-take-key" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            {t('account.takeKeyButton')}
+                        </Link>
+                    </div>
+                )}
+                <div className="setting-item">
+                    <div className="setting-info">
+                        <div className="icon-box" style={{ background: 'var(--color-danger-light, #fef2f2)', color: 'var(--color-danger, #dc2626)' }}><Trash2 size={20} /></div>
+                        <div>
+                            <p className="setting-label">{t('account.deleteLabel')}</p>
+                            <p className="setting-desc">{t('account.deleteDesc')}</p>
+                        </div>
+                    </div>
+                    <Link to="/settings/delete-account" className="btn btn-outline btn-sm btn-danger-outline" data-testid="settings-delete-account" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        {t('account.deleteButton')}
+                    </Link>
+                </div>
+            </div>
 
             <div className="version-footer">
                 BIES v{__APP_VERSION__}
