@@ -6,19 +6,23 @@
  *   minutes by default) naming the user and the session. `authenticate`
  *   checks the session on every request, so logging out, a ban or a deletion
  *   takes effect at once, not when the token runs out.
- * - Refresh token: `rt1.<sessionId>.<mac>`, where the MAC covers the session
- *   id, its salt and its counter under a key derived from JWT_SECRET. The
- *   database alone can't produce one, so a leaked backup signs nobody in.
- *   Every refresh moves the counter on, so the token changes each time.
- * - Reuse: any other token for a live session is either a stolen copy or the
- *   owner's copy after a thief refreshed first, so it ends the session for
- *   both. The exception is the token replaced in the last
+ * - Refresh token: `rt1.<sessionId>.<counter>.<mac>`, where the MAC covers
+ *   the session id, its salt and the counter under a key derived from
+ *   JWT_SECRET. The database alone can't produce one, so a leaked backup
+ *   signs nobody in. Every refresh moves the counter on, so the token
+ *   changes each time. A token whose MAC doesn't check out changes nothing:
+ *   session ids are not secret (every access token carries one).
+ * - Reuse: a genuine token from an earlier counter is either a stolen copy
+ *   or the owner's copy after a thief refreshed first, so it ends the
+ *   session for both. The exception is the token replaced in the last
  *   `refreshGraceSeconds` (a retry whose answer was lost, or two tabs
  *   refreshing at once), which gets the current token back.
  *
  * The web app's refresh token lives in an httpOnly cookie its scripts can't
  * read. The native app and other non-browser clients get it in the response
- * body and keep it themselves.
+ * body and keep it themselves. Sign-in, refresh and logout only answer the
+ * web app's own origin, the native app's, or a request with no Origin (not a
+ * browser page), so another site can't plant or clear the cookie.
  */
 
 import crypto from 'crypto';
@@ -30,8 +34,12 @@ import { config } from '../config';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const REFRESH_COOKIE = 'bies_rt';
-const REFRESH_COOKIE_PATH = '/api/auth';
+// In production the cookie is `__Host-` prefixed: browsers then refuse it
+// unless it is Secure, host-only and on Path=/, so a sibling subdomain can't
+// set or overwrite it. Plain HTTP in development can't use the prefix.
+const secureCookie = config.nodeEnv === 'production';
+export const REFRESH_COOKIE = secureCookie ? '__Host-bies_rt' : 'bies_rt';
+const REFRESH_COOKIE_PATH = secureCookie ? '/' : '/api/auth';
 
 /** Revoked and expired sessions are kept this long, then deleted. */
 const KEEP_ENDED_SESSIONS_DAYS = 30;
@@ -44,6 +52,8 @@ export interface AccessClaims {
     role: string;
     isAdmin: boolean;
     typ: 'access';
+    iat?: number;
+    exp?: number;
 }
 
 export type AccessCheck =
@@ -133,14 +143,25 @@ function refreshMac(sessionId: string, salt: string, counter: number): string {
 }
 
 function refreshTokenFor(session: { id: string; salt: string; counter: number }): string {
-    return `rt1.${session.id}.${refreshMac(session.id, session.salt, session.counter)}`;
+    return `rt1.${session.id}.${session.counter}.${refreshMac(session.id, session.salt, session.counter)}`;
 }
 
-function parseRefreshToken(token: unknown): { sessionId: string; mac: string } | null {
+function parseRefreshToken(token: unknown): { sessionId: string; counter: number; mac: string } | null {
     if (typeof token !== 'string' || token.length > 200) return null;
-    const [version, sessionId, mac, ...rest] = token.split('.');
-    if (version !== 'rt1' || !sessionId || !mac || rest.length) return null;
-    return { sessionId, mac };
+    const [version, sessionId, counter, mac, ...rest] = token.split('.');
+    if (version !== 'rt1' || !sessionId || !/^\d{1,9}$/.test(counter ?? '') || !mac || rest.length) return null;
+    return { sessionId, counter: Number(counter), mac };
+}
+
+/** The session a refresh token names, unverified: only for comparing two tokens. */
+export function claimedSessionId(token: unknown): string | null {
+    return parseRefreshToken(token)?.sessionId ?? null;
+}
+
+/** Did this server issue the token, for this session, at some counter up to now? */
+function isGenuine(parsed: { counter: number; mac: string }, session: { id: string; salt: string; counter: number }): boolean {
+    return parsed.counter <= session.counter
+        && sameMac(parsed.mac, refreshMac(session.id, session.salt, parsed.counter));
 }
 
 function sameMac(a: string, b: string): boolean {
@@ -149,21 +170,40 @@ function sameMac(a: string, b: string): boolean {
     return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-/** Where a client keeps its refresh token, from the request's Origin. */
-export type ClientKind = 'web' | 'native' | 'api';
+/** Who is asking, from the request's Origin; 'unknown' is refused. */
+export type ClientKind = 'web' | 'native' | 'api' | 'unknown';
 
-const nativeOrigins = config.corsNativeOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+const originList = (value: string) => value.split(',').map((o) => o.trim()).filter(Boolean);
+const webOrigins = originList(config.corsOrigin);
+const nativeOrigins = originList(config.corsNativeOrigin);
 
 /**
  * Browsers send Origin on every POST, so a POST without one is not from a
- * browser page (curl, tests, server-to-server). The web app is any other
- * origin and gets the cookie; it never receives a refresh token it could
- * read.
+ * browser page (curl, tests, server-to-server). The web app (CORS_ORIGIN)
+ * gets the cookie and never a refresh token it could read; the native app
+ * (CORS_NATIVE_ORIGIN) and non-browser clients get it in the body. Any other
+ * origin, sibling subdomains included, is 'unknown'.
  */
 export function clientKind(req: Request): ClientKind {
     const origin = req.headers.origin;
     if (!origin) return 'api';
-    return nativeOrigins.includes(origin) ? 'native' : 'web';
+    if (webOrigins.includes(origin)) return 'web';
+    if (nativeOrigins.includes(origin)) return 'native';
+    return 'unknown';
+}
+
+/**
+ * For sign-in, refresh and logout: refuse other sites before any session or
+ * cookie work. Otherwise a page elsewhere could submit a form that signs the
+ * visitor into the attacker's account (its cookie would replace theirs), or
+ * clear their cookie.
+ */
+export function requireKnownOrigin(req: Request, res: Response, next: () => void): void {
+    if (clientKind(req) === 'unknown') {
+        res.status(403).json({ error: 'Requests from this site are not accepted', reason: 'bad_origin' });
+        return;
+    }
+    next();
 }
 
 export interface IssuedSession {
@@ -173,7 +213,7 @@ export interface IssuedSession {
 }
 
 /** Start a session for a user who has just proved who they are. */
-export async function createSession(userId: string, client: ClientKind): Promise<IssuedSession> {
+export async function createSession(userId: string, client: Exclude<ClientKind, 'unknown'>): Promise<IssuedSession> {
     const now = Date.now();
     const session = await prisma.session.create({
         data: {
@@ -214,10 +254,11 @@ export async function refreshSession(token: unknown): Promise<RefreshResult> {
         });
         if (!session || !isLive(session)) return { ok: false, reason: 'session_ended' };
 
-        const isCurrent = sameMac(parsed.mac, refreshMac(session.id, session.salt, session.counter));
-        const isPrevious = !isCurrent && session.counter > 0
-            && sameMac(parsed.mac, refreshMac(session.id, session.salt, session.counter - 1));
-        const inGrace = isPrevious && !!session.rotatedAt
+        // A token this server never issued changes nothing.
+        if (!isGenuine(parsed, session)) return { ok: false, reason: 'session_ended' };
+
+        const isCurrent = parsed.counter === session.counter;
+        const inGrace = parsed.counter === session.counter - 1 && !!session.rotatedAt
             && Date.now() - session.rotatedAt.getTime() <= config.session.refreshGraceSeconds * 1000;
 
         if (!isCurrent && !inGrace) {
@@ -261,21 +302,18 @@ export async function refreshSession(token: unknown): Promise<RefreshResult> {
 }
 
 /**
- * The session a refresh token belongs to, if the token is its current or
- * just-replaced one. For logout, which must not let a made-up token end
- * someone else's session.
+ * The session a refresh token belongs to, if this server issued it. For
+ * logout, which must not let a made-up token end someone else's session.
  */
-export async function sessionIdFromRefreshToken(token: unknown): Promise<string | null> {
+export async function sessionFromRefreshToken(token: unknown): Promise<{ sessionId: string; userId: string } | null> {
     const parsed = parseRefreshToken(token);
     if (!parsed) return null;
     const session = await prisma.session.findUnique({
         where: { id: parsed.sessionId },
-        select: { id: true, salt: true, counter: true },
+        select: { id: true, salt: true, counter: true, userId: true },
     });
-    if (!session) return null;
-    const matches = sameMac(parsed.mac, refreshMac(session.id, session.salt, session.counter))
-        || (session.counter > 0 && sameMac(parsed.mac, refreshMac(session.id, session.salt, session.counter - 1)));
-    return matches ? session.id : null;
+    if (!session || !isGenuine(parsed, session)) return null;
+    return { sessionId: session.id, userId: session.userId };
 }
 
 // ─── Ending sessions ─────────────────────────────────────────────────────────
@@ -334,18 +372,20 @@ function cookieOptions() {
     };
 }
 
+/** The refresh cookie, or nothing if it is missing, mangled or sent twice. */
 export function readRefreshCookie(req: Request): string | undefined {
+    const values: string[] = [];
     for (const part of (req.headers.cookie || '').split(';')) {
         const eq = part.indexOf('=');
-        if (eq > 0 && part.slice(0, eq).trim() === REFRESH_COOKIE) {
-            try {
-                return decodeURIComponent(part.slice(eq + 1).trim());
-            } catch {
-                return undefined;
-            }
-        }
+        if (eq > 0 && part.slice(0, eq).trim() === REFRESH_COOKIE) values.push(part.slice(eq + 1).trim());
     }
-    return undefined;
+    // Two cookies of one name means one was planted; trust neither.
+    if (values.length !== 1) return undefined;
+    try {
+        return decodeURIComponent(values[0]);
+    } catch {
+        return undefined;
+    }
 }
 
 export function clearRefreshCookie(res: Response): void {
@@ -367,9 +407,11 @@ export function deliverSession(
     user: { id: string; role: string; isAdmin: boolean },
     session: IssuedSession,
 ): { token: string; refreshToken?: string; expiresIn: number } {
+    const kind = clientKind(req);
+    if (kind === 'unknown') throw new Error('deliverSession: request from an unknown origin');
     const token = signAccessToken(user, session.sessionId);
     const expiresIn = config.session.accessTokenSeconds;
-    if (clientKind(req) === 'web') {
+    if (kind === 'web') {
         res.cookie(REFRESH_COOKIE, session.refreshToken, {
             ...cookieOptions(),
             maxAge: Math.max(0, session.expiresAt.getTime() - Date.now()),
@@ -385,6 +427,8 @@ export async function startSession(
     res: Response,
     user: { id: string; role: string; isAdmin: boolean },
 ): Promise<{ token: string; refreshToken?: string; expiresIn: number }> {
-    const session = await createSession(user.id, clientKind(req));
+    const kind = clientKind(req);
+    if (kind === 'unknown') throw new Error('startSession: request from an unknown origin');
+    const session = await createSession(user.id, kind);
     return deliverSession(req, res, user, session);
 }

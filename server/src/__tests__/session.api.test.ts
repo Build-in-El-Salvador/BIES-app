@@ -13,13 +13,14 @@ import jwt from 'jsonwebtoken';
 import WebSocket from 'ws';
 
 vi.hoisted(() => {
+    process.env.CORS_ORIGIN = 'https://app.example.test';
     process.env.CORS_NATIVE_ORIGIN = 'capacitor://localhost,https://localhost';
 });
 
 type Row = Record<string, any>;
 
 const db = vi.hoisted(() => {
-    const state = { sessions: [] as Row[], users: [] as Row[], seq: 0, failNextRead: false };
+    const state = { sessions: [] as Row[], users: [] as Row[], deviceTokens: [] as Row[], seq: 0, failNextRead: false };
     // Yield like a real database call, so concurrent requests interleave.
     const io = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -74,10 +75,18 @@ const db = vi.hoisted(() => {
         }),
     };
 
-    return { state, session };
+    const deviceToken = {
+        deleteMany: vi.fn(async ({ where }: Row) => {
+            const before = state.deviceTokens.length;
+            state.deviceTokens = state.deviceTokens.filter((t) => !(t.userId === where.userId && t.token === where.token));
+            return { count: before - state.deviceTokens.length };
+        }),
+    };
+
+    return { state, session, deviceToken };
 });
 
-vi.mock('../lib/prisma', () => ({ default: { session: db.session } }));
+vi.mock('../lib/prisma', () => ({ default: { session: db.session, deviceToken: db.deviceToken } }));
 
 import authRoutes from '../routes/auth.routes';
 import { authenticate } from '../middleware/auth';
@@ -128,6 +137,7 @@ afterAll(() => {
 beforeEach(() => {
     db.state.sessions = [];
     db.state.users = [{ ...ALICE }, { ...BOB }];
+    db.state.deviceTokens = [];
     db.state.failNextRead = false;
 });
 
@@ -303,16 +313,21 @@ describe('refresh', () => {
         expect(sessionRow(first.sessionId).revokedReason).toBe('reuse');
     });
 
-    it('treats a made-up token for a real session as reuse', async () => {
+    it('ignores a made-up token for a real session: session ids are not secret', async () => {
         const first = await signIn();
-        const res = await refresh({ refreshToken: `rt1.${first.sessionId}.${'A'.repeat(43)}` });
-        expect(res.status).toBe(401);
-        expect(sessionRow(first.sessionId).revokedReason).toBe('reuse');
+        // Every access token carries its session id, readable without the key.
+        const { sid } = jwt.decode(first.token) as { sid: string };
+        for (const refreshToken of [`rt1.${sid}.0.${'A'.repeat(43)}`, `rt1.${sid}.5.${'A'.repeat(43)}`]) {
+            const res = await refresh({ refreshToken });
+            expect(res.status).toBe(401);
+        }
+        expect(sessionRow(first.sessionId).revokedAt).toBeNull();
+        expect((await refresh({ refreshToken: first.refreshToken })).status).toBe(200);
     });
 
     it('rejects malformed tokens without touching any session', async () => {
         const first = await signIn();
-        for (const refreshToken of ['', 'nope', `rt2.${first.sessionId}.x`, `rt1.${first.sessionId}`, 'rt1.unknown.abc', 42]) {
+        for (const refreshToken of ['', 'nope', `rt2.${first.sessionId}.0.x`, `rt1.${first.sessionId}.0`, `rt1.${first.sessionId}.x.y`, 'rt1.unknown.0.abc', 42]) {
             const res = await refresh({ refreshToken });
             expect(res.status).toBe(401);
             expect(res.body.reason).toBe('session_ended');
@@ -379,6 +394,30 @@ describe('web app cookie', () => {
         expect(res.setCookie).toMatch(new RegExp(`${REFRESH_COOKIE}=;`));
     });
 
+    it('refuses other sites before touching a session or the cookie', async () => {
+        const first = await signIn();
+        for (const origin of ['https://evil.example', 'https://git.example.test', 'null']) {
+            const r = await refresh({}, { Origin: origin, Cookie: `${REFRESH_COOKIE}=${encodeURIComponent(first.refreshToken)}` });
+            expect(r.status).toBe(403);
+            expect(r.body.reason).toBe('bad_origin');
+            expect(r.setCookie).toBeNull();
+            const out = await logout({ Origin: origin, Cookie: `${REFRESH_COOKIE}=${encodeURIComponent(first.refreshToken)}` });
+            expect(out.status).toBe(403);
+            expect(out.setCookie).toBeNull();
+        }
+        expect(sessionRow(first.sessionId).counter).toBe(0);
+        expect(sessionRow(first.sessionId).revokedAt).toBeNull();
+    });
+
+    it('trusts neither cookie when two arrive (one was planted)', async () => {
+        const alice = await signIn();
+        const mallory = await signIn(BOB);
+        const res = await refresh({}, { Origin: WEB, Cookie: `${REFRESH_COOKIE}=${mallory.refreshToken}; ${REFRESH_COOKIE}=${alice.refreshToken}` });
+        expect(res.status).toBe(401);
+        expect(sessionRow(alice.sessionId).counter).toBe(0);
+        expect(sessionRow(mallory.sessionId).counter).toBe(0);
+    });
+
     it('treats the native app like other clients: token in the body', async () => {
         const first = await signIn();
         const res = await refresh({ refreshToken: first.refreshToken }, { Origin: 'capacitor://localhost' });
@@ -408,7 +447,7 @@ describe('logout', () => {
     it('works with the refresh token alone, but not a made-up one', async () => {
         const first = await signIn();
         const other = await signIn(BOB);
-        await logout({}, { refreshToken: `rt1.${other.sessionId}.${'A'.repeat(43)}` });
+        await logout({}, { refreshToken: `rt1.${other.sessionId}.0.${'A'.repeat(43)}` });
         expect(sessionRow(other.sessionId).revokedAt).toBeNull();
 
         await logout({}, { refreshToken: first.refreshToken });
@@ -420,6 +459,31 @@ describe('logout', () => {
         const res = await logout({ Origin: WEB, Cookie: `${REFRESH_COOKIE}=${encodeURIComponent(first.refreshToken)}` });
         expect(res.setCookie).toMatch(new RegExp(`${REFRESH_COOKIE}=;`));
         expect(sessionRow(first.sessionId).revokedReason).toBe('logout');
+    });
+
+    it('removes this phone’s push registration with the session, and only its own', async () => {
+        const first = await signIn();
+        db.state.deviceTokens = [
+            { userId: ALICE.id, token: 'apns-phone' },
+            { userId: ALICE.id, token: 'apns-tablet' },
+            { userId: BOB.id, token: 'apns-bob' },
+        ];
+        await logout({ Authorization: `Bearer ${first.token}` }, { pushToken: 'apns-phone' });
+        expect(db.state.deviceTokens.map((t) => t.token)).toEqual(['apns-tablet', 'apns-bob']);
+        // Someone else's token can't be removed this way.
+        const bob = await signIn(BOB);
+        await logout({ Authorization: `Bearer ${bob.token}` }, { pushToken: 'apns-tablet' });
+        expect(db.state.deviceTokens.map((t) => t.token)).toEqual(['apns-tablet', 'apns-bob']);
+    });
+
+    it('keeps the cookie of a newer session when an older logout is retried', async () => {
+        const old = await signIn();
+        const now = await signIn();
+        const res = await logout({ Origin: WEB, Authorization: `Bearer ${old.token}`, Cookie: `${REFRESH_COOKIE}=${encodeURIComponent(now.refreshToken)}` });
+        expect(res.status).toBe(200);
+        expect(sessionRow(old.sessionId).revokedReason).toBe('logout');
+        expect(res.setCookie).toBeNull();
+        expect(sessionRow(now.sessionId).revokedAt).toBeNull();
     });
 
     it('only ends this device’s session', async () => {

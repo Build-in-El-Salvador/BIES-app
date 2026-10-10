@@ -39,6 +39,10 @@ interface WsMessage {
 // userId → Set of open WebSocket connections (one user can have multiple tabs)
 const connections = new Map<string, Set<AuthenticatedWebSocket>>();
 
+// Sockets whose session check is still running. A session that ends during
+// the check closes them too, so they can't register afterwards.
+const pending = new Set<AuthenticatedWebSocket>();
+
 // ─── Authentication ───────────────────────────────────────────────────────────
 
 /** The subprotocol the app asks for; the second one it offers is its token. */
@@ -74,12 +78,19 @@ export function attachWebSocketServer(httpServer: Server): void {
     // A session that ends closes its sockets: logout on this device, or a
     // ban, deletion or merge for every device.
     onSessionsEnded(({ sessionId, userId }) => {
-        for (const sockets of connections.values()) {
+        const ends = (ws: AuthenticatedWebSocket) =>
+            (sessionId && ws.sessionId === sessionId) || (userId && ws.userId === userId);
+        for (const ws of pending) {
+            if (ends(ws)) ws.close(CLOSE_SESSION_ENDED, 'session_ended');
+        }
+        for (const [id, sockets] of connections) {
             for (const ws of sockets) {
-                if ((sessionId && ws.sessionId === sessionId) || (userId && ws.userId === userId)) {
-                    ws.close(CLOSE_SESSION_ENDED, 'session_ended');
-                }
+                if (!ends(ws)) continue;
+                ws.close(CLOSE_SESSION_ENDED, 'session_ended');
+                // Out now, not when the closing handshake finishes.
+                sockets.delete(ws);
             }
+            if (sockets.size === 0) connections.delete(id);
         }
     });
 
@@ -100,14 +111,20 @@ export function attachWebSocketServer(httpServer: Server): void {
 
         // Messages that arrive before the session check are dropped: the
         // listeners below aren't attached yet.
+        ws.userId = checked.claims.userId;
+        ws.sessionId = checked.claims.sid;
+        pending.add(ws);
         checkSession(checked.claims.sid, checked.claims.userId).then((session) => {
+            pending.delete(ws);
             if (!session.ok) {
                 ws.close(CLOSE_SESSION_ENDED, session.reason);
                 return;
             }
+            // Closed meanwhile, by the client or because the session ended.
             if (ws.readyState !== WebSocket.OPEN) return;
             register(ws, session.user.id, checked.claims.sid);
         }).catch((err) => {
+            pending.delete(ws);
             console.error('[WS] Session check failed:', err);
             ws.close(1011, 'Try again');
         });
@@ -227,6 +244,7 @@ export function sendToUser(userId: string, data: unknown): number {
 
     let sent = 0;
     for (const ws of sockets) {
+        if (ws.readyState !== WebSocket.OPEN) continue;
         sendToSocket(ws, data);
         sent++;
     }

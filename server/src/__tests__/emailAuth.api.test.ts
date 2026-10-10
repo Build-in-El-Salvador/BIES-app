@@ -20,6 +20,7 @@ const db = vi.hoisted(() => {
     process.env.REVIEW_LOGIN_EMAIL = 'Review@BIES.test';
     process.env.REVIEW_LOGIN_CODE = '424242';
     process.env.EMAIL_CODES_MAX_PER_DAY = '1000';
+    process.env.CORS_ORIGIN = 'https://app.example.test';
 
     type Row = Record<string, any>;
     const state = { codes: [] as Row[], users: [] as Row[], sessions: [] as Row[], seq: 0 };

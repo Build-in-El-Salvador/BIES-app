@@ -48,6 +48,16 @@ interface CreateNotificationParams {
 /**
  * Create a notification and push it via WebSocket (if user is online).
  */
+/**
+ * Stop push notifications to every device a member registered: on a ban, a
+ * deletion or a merge. Their sessions are ended separately
+ * (services/session.service.ts).
+ */
+export async function removePushTargets(userId: string): Promise<void> {
+    await prisma.deviceToken.deleteMany({ where: { userId } });
+    await prisma.pushSubscription.deleteMany({ where: { userId } });
+}
+
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
     const { userId, type, title, body, data = {} } = params;
 

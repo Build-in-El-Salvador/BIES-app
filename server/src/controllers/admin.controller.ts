@@ -10,6 +10,7 @@ import { cache, cacheKey, invalidateLeaderboardCache } from '../services/redis.s
 import { broadcast } from '../services/websocket.service';
 import { removeFromRelayWhitelist, addToRelayWhitelist } from '../services/relayWhitelist.service';
 import { revokeUserSessions } from '../services/session.service';
+import { removePushTargets } from '../services/notification.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { isAdminPubkey } from '../middleware/auth';
 import { recomputeListingScore, recomputeAllScores as recomputeAllDirectoryScores } from '../services/directoryReputation.service';
@@ -98,6 +99,7 @@ export async function banUser(req: Request, res: Response): Promise<void> {
         if (banned) {
             removeFromRelayWhitelist(user.nostrPubkey);
             await revokeUserSessions(user.id, 'suspended');
+            await removePushTargets(user.id);
         } else {
             addToRelayWhitelist(user.nostrPubkey);
         }
@@ -426,6 +428,7 @@ export async function deleteUser(req: Request, res: Response): Promise<void> {
         // Remove from relay whitelist and end every session
         removeFromRelayWhitelist(targetUser.nostrPubkey);
         await revokeUserSessions(targetUser.id, 'deleted');
+        await removePushTargets(targetUser.id);
 
         // Soft-delete: move to trash
         await prisma.user.update({ where: { id: req.params.id }, data: { deletedAt: new Date() } });
@@ -792,6 +795,7 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
         if (deleteSource) {
             removeFromRelayWhitelist(sourceUser.nostrPubkey);
             await revokeUserSessions(sourceUserId, 'merged');
+            await removePushTargets(sourceUserId);
             await prisma.user.update({ where: { id: sourceUserId }, data: { deletedAt: new Date() } });
             syncResults.push('Source account moved to trash');
         }

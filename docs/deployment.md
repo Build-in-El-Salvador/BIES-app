@@ -141,7 +141,7 @@ docker compose logs -f bies-server
 | `JWT_SECRET` | 64-char base64 string for JWT signing | `openssl rand -base64 64` |
 | `ENCRYPTION_SECRET` | 32-char string for AES-256-GCM | `openssl rand -hex 16` |
 | `DATABASE_URL` | Database connection string | `postgresql://...` or `file:../data/bies.db` |
-| `CORS_ORIGIN` | Allowed origins (comma-separated) | `https://app.buildinelsalvador.com` |
+| `CORS_ORIGIN` | Allowed origins (comma-separated). Must match the web app's origin exactly: sign-in, session refresh and logout refuse any other site | `https://app.buildinelsalvador.com` |
 
 ### Recommended
 

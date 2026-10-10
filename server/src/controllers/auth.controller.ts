@@ -9,13 +9,15 @@ import { HEX_PUBKEY_RE, addToRelayWhitelist } from '../services/relayWhitelist.s
 import { recordOnboardingRedemption } from '../services/voucher.service';
 import {
     SESSION_END_MESSAGES,
+    claimedSessionId,
     clearRefreshCookie,
     clientKind,
+    readRefreshCookie,
     deliverSession,
     refreshSession,
     refreshTokenFromRequest,
     revokeSession,
-    sessionIdFromRefreshToken,
+    sessionFromRefreshToken,
     startSession,
     verifyAccessToken,
 } from '../services/session.service';
@@ -553,23 +555,38 @@ export async function refresh(req: Request, res: Response): Promise<void> {
  * POST /auth/logout
  * End this device's session, so neither its access token nor its refresh
  * token works again, even before they expire. Works with an expired access
- * token, or with the refresh token alone.
+ * token, or with the refresh token alone. `pushToken`, if sent, is this
+ * phone's push registration, removed so it stops getting the account's
+ * notifications.
  */
 export async function logout(req: Request, res: Response): Promise<void> {
+    let ended: { sessionId: string; userId: string } | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        const token = verifyAccessToken(authHeader.slice(7), { ignoreExpiration: true });
+        if (token.ok) ended = { sessionId: token.claims.sid, userId: token.claims.userId };
+    }
+
+    // Clear the web cookie first, so the browser drops it even if the rest
+    // fails (the app then retries with its access token). Not when it belongs
+    // to another session: a retried logout of an older session must not sign
+    // out the one this browser holds now.
+    if (clientKind(req) === 'web') {
+        const cookieSession = claimedSessionId(readRefreshCookie(req));
+        if (!ended || !cookieSession || cookieSession === ended.sessionId) clearRefreshCookie(res);
+    }
+
     try {
-        let sessionId: string | null = null;
-        const authHeader = req.headers.authorization;
-        if (authHeader?.startsWith('Bearer ')) {
-            const token = verifyAccessToken(authHeader.slice(7), { ignoreExpiration: true });
-            if (token.ok) {
-                sessionId = token.claims.sid;
-                res.locals.auditUserId = token.claims.userId;
+        if (!ended) ended = await sessionFromRefreshToken(refreshTokenFromRequest(req));
+
+        if (ended) {
+            res.locals.auditUserId = ended.userId;
+            await revokeSession(ended.sessionId, 'logout');
+            const pushToken = req.body?.pushToken;
+            if (typeof pushToken === 'string' && pushToken.length <= 512) {
+                await prisma.deviceToken.deleteMany({ where: { userId: ended.userId, token: pushToken } });
             }
         }
-        if (!sessionId) sessionId = await sessionIdFromRefreshToken(refreshTokenFromRequest(req));
-
-        if (sessionId) await revokeSession(sessionId, 'logout');
-        if (clientKind(req) === 'web') clearRefreshCookie(res);
         res.json({ message: 'Logged out successfully' });
     } catch (error) {
         console.error('Logout error:', error);

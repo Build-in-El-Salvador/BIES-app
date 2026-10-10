@@ -57,6 +57,21 @@ describe('rateLimitKey', () => {
         expect(await ping('203.0.113.4', dave)).toBe(200);
     });
 
+    it('falls back to the IP for a token that expired over an hour ago', async () => {
+        // An old leaked token must not be able to use up its owner's limit.
+        const ancient = jwt.sign(
+            { userId: 'u-erin', sid: 's-erin', role: 'MEMBER', isAdmin: false, typ: 'access' },
+            config.jwtSecret,
+            { algorithm: 'HS256', expiresIn: -2 * 60 * 60 },
+        );
+        const erin = signAccessToken({ id: 'u-erin', role: 'MEMBER', isAdmin: false }, 's-erin2');
+        expect(await ping('203.0.113.5', ancient)).toBe(200);
+        expect(await ping('203.0.113.5', ancient)).toBe(200);
+        expect(await ping('203.0.113.5', ancient)).toBe(429);
+        // The owner, signed in elsewhere, is unaffected.
+        expect(await ping('203.0.113.6', erin)).toBe(200);
+    });
+
     it('limits requests without a valid token by IP', async () => {
         const forged = jwt.sign({ userId: 'u-alice' }, 'not-the-secret', { algorithm: 'HS256' });
         expect(await ping('203.0.113.2')).toBe(200);
