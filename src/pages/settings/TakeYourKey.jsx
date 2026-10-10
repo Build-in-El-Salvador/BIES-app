@@ -78,10 +78,14 @@ const TakeYourKey = () => {
     const fileRef = useRef(null);
 
     useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
-    useEffect(() => () => {
-        aliveRef.current = false;
-        secretRef.current?.fill(0);
-        secretRef.current = null;
+    useEffect(() => {
+        // Set on every mount: StrictMode mounts twice in development.
+        aliveRef.current = true;
+        return () => {
+            aliveRef.current = false;
+            secretRef.current?.fill(0);
+            secretRef.current = null;
+        };
     }, []);
     // Each step starts where a screen reader or keyboard can find it.
     useEffect(() => { stepRef.current?.focus(); }, [step]);
