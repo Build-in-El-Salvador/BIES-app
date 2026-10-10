@@ -133,7 +133,7 @@ const MarketListingDetail = () => {
                 publishedAt: listing.publishedAt,
                 status: isSold ? 'active' : 'sold',
             };
-            if (nostrSigner.mode) {
+            if (nostrSigner.signsOnDevice) {
                 await nostrService.publishMarketplaceListing(payload);
             } else {
                 await marketplaceApi.publish(payload);
@@ -151,7 +151,7 @@ const MarketListingDetail = () => {
         setBusy(true);
         setActionError('');
         try {
-            if (nostrSigner.mode) {
+            if (nostrSigner.signsOnDevice) {
                 await nostrService.deleteMarketplaceListing(listing.id, listing.dTag);
             } else {
                 await marketplaceApi.remove({ eventId: listing.id, dTag: listing.dTag });

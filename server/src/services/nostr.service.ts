@@ -4,7 +4,7 @@ import type { Event as NostrEvent, EventTemplate } from 'nostr-tools/pure';
 import { randomUUID } from 'crypto';
 import { config } from '../config';
 import prisma from '../lib/prisma';
-import { decryptPrivateKey } from './crypto.service';
+import { signAsHostedUser } from './hostedSigner.service';
 
 let _pool: InstanceType<Awaited<typeof import('nostr-tools/pool')>['SimplePool']> | null = null;
 async function getPool() {
@@ -24,24 +24,12 @@ export async function publishEvent(
     eventTemplate: EventTemplate
 ): Promise<string | null> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
+        const signedEvent = await signAsHostedUser(userId, eventTemplate, 'server');
+        if (!signedEvent) {
             // Nostr-native user — they sign on the client side
             console.log(`[Nostr] User ${userId} has no custodial key, skipping server-side publish`);
             return null;
         }
-
-        // Decrypt the private key
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
-        // Finalize (sign) the event
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signedEvent = finalizeEvent(eventTemplate, privateKeyBytes);
 
         // Publish to private relay only
         const pool = await getPool();
@@ -106,6 +94,7 @@ export async function publishProfileUpdate(
 ): Promise<string | null> {
     const content: Record<string, string> = {
         name: profile.name,
+        display_name: profile.name,
         about: profile.about || '',
         picture: profile.picture || '',
         website: profile.website || '',
@@ -373,20 +362,6 @@ export async function publishMarketplaceListing(
     listing: MarketplaceListingInput
 ): Promise<{ eventId: string; dTag: string; naddr: string } | null> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
-            // Nostr-native user — signed client-side
-            console.log(`[Nostr] User ${userId} has no custodial key, skipping server-side NIP-99 publish`);
-            return null;
-        }
-
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
         const { tags, content, dTag } = buildMarketplaceListingTags(listing, {
             dTag: listing.dTag,
             publishedAt: listing.publishedAt,
@@ -399,8 +374,12 @@ export async function publishMarketplaceListing(
             content,
         };
 
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signedEvent = finalizeEvent(event, privateKeyBytes);
+        const signedEvent = await signAsHostedUser(userId, event, 'server');
+        if (!signedEvent) {
+            // Nostr-native user — signed client-side
+            console.log(`[Nostr] User ${userId} has no custodial key, skipping server-side NIP-99 publish`);
+            return null;
+        }
 
         const pool = await getPool();
         const relays = marketplaceRelays();
@@ -438,31 +417,19 @@ export async function deleteMarketplaceListing(
     dTag: string
 ): Promise<boolean> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
-            // Nostr-native user — deletion happens client-side
-            return false;
-        }
-
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
-        const deletionEvent: EventTemplate = {
+        const signed = await signAsHostedUser(userId, (pubkey) => ({
             kind: 5,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
                 ['e', nostrEventId],
-                ['a', `30402:${user.nostrPubkey}:${dTag}`],
+                ['a', `30402:${pubkey}:${dTag}`],
             ],
             content: 'Listing deleted from BIES',
-        };
-
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signed = finalizeEvent(deletionEvent, privateKeyBytes);
+        }), 'server');
+        if (!signed) {
+            // Nostr-native user — deletion happens client-side
+            return false;
+        }
 
         const pool = await getPool();
         const relays = marketplaceRelays();
@@ -545,20 +512,6 @@ export async function publishCalendarEvent(
     target: 'bies' | 'public' | 'both' = 'bies'
 ): Promise<string | null> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
-            // Nostr-native user — signed client-side
-            console.log(`[Nostr] User ${userId} has no custodial key, skipping server-side NIP-52 publish`);
-            return null;
-        }
-
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
         const startUnix = Math.floor(event.startDate.getTime() / 1000);
         const nip52Tags: string[][] = [
             ['d', event.id],
@@ -609,8 +562,12 @@ export async function publishCalendarEvent(
             content: event.description,
         };
 
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signedEvent = finalizeEvent(nostrEvent, privateKeyBytes);
+        const signedEvent = await signAsHostedUser(userId, nostrEvent, 'server');
+        if (!signedEvent) {
+            // Nostr-native user — signed client-side
+            console.log(`[Nostr] User ${userId} has no custodial key, skipping server-side NIP-52 publish`);
+            return null;
+        }
 
         const pool = await getPool();
 
@@ -649,31 +606,19 @@ export async function deleteCalendarEvent(
     target: 'bies' | 'public' | 'both' = 'bies'
 ): Promise<boolean> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
-            // Nostr-native user — deletion happens client-side
-            return false;
-        }
-
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
-        const deletionEvent: EventTemplate = {
+        const signed = await signAsHostedUser(userId, (pubkey) => ({
             kind: 5,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
                 ['e', nostrEventId],
-                ['a', `31923:${user.nostrPubkey}:${dTag}`],
+                ['a', `31923:${pubkey}:${dTag}`],
             ],
             content: 'Event deleted from BIES',
-        };
-
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signed = finalizeEvent(deletionEvent, privateKeyBytes);
+        }), 'server');
+        if (!signed) {
+            // Nostr-native user — deletion happens client-side
+            return false;
+        }
 
         const pool = await getPool();
         const relays: string[] = [];
@@ -711,18 +656,6 @@ export async function publishRSVPEvent(
     target: 'bies' | 'public' | 'both' = 'bies'
 ): Promise<string | null> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-
-        if (!user || !user.encryptedPrivkey) {
-            return null;
-        }
-
-        const privateKeyHex = decryptPrivateKey(user.encryptedPrivkey);
-        const privateKeyBytes = hexToBytes(privateKeyHex);
-
         const rsvpTags: string[][] = [
             ['d', `${eventData.eventDTag}-rsvp`],
             ['a', `31923:${eventData.hostPubkey}:${eventData.eventDTag}`],
@@ -738,8 +671,10 @@ export async function publishRSVPEvent(
             content: '',
         };
 
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signed = finalizeEvent(rsvpEvent, privateKeyBytes);
+        const signed = await signAsHostedUser(userId, rsvpEvent, 'server');
+        if (!signed) {
+            return null;
+        }
 
         const pool = await getPool();
         const relays: string[] = [];
@@ -796,17 +731,10 @@ async function publishEventAs(
     target: 'bies' | 'public' | 'both'
 ): Promise<string | null> {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { encryptedPrivkey: true, nostrPubkey: true },
-        });
-        if (!user || !user.encryptedPrivkey) {
+        const signed = await signAsHostedUser(userId, template, 'server');
+        if (!signed) {
             return null; // Nostr-native — client-side twin publishes instead
         }
-
-        const privateKeyBytes = hexToBytes(decryptPrivateKey(user.encryptedPrivkey));
-        const { finalizeEvent } = await import('nostr-tools/pure');
-        const signed = finalizeEvent(template, privateKeyBytes);
 
         const relays: string[] = [];
         if ((target === 'bies' || target === 'both') && config.nostrPrivateRelay) {
@@ -1006,12 +934,4 @@ export async function deleteCourseFromNostr(
         content: 'Course deleted from BIES',
     }, target);
     return Boolean(eventId);
-}
-
-function hexToBytes(hex: string): Uint8Array {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-        bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
-    return bytes;
 }

@@ -153,7 +153,7 @@ const CreateMarketListing = ({ editMode = false }) => {
             };
             // Nostr-native sessions sign client-side; custodial accounts let
             // the server sign with their managed key.
-            const result = nostrSigner.mode
+            const result = nostrSigner.signsOnDevice
                 ? await nostrService.publishMarketplaceListing(payload)
                 : await marketplaceApi.publish(payload);
             const published = result?.data || result;

@@ -5,6 +5,7 @@ import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi, uploadApi, projectsApi } from '../services/api';
+import { nostrSigner } from '../services/nostrSigner';
 import { blossomService } from '../services/blossomService';
 import { nostrService } from '../services/nostrService';
 import { Link, useNavigate } from 'react-router-dom';
@@ -310,33 +311,37 @@ const ProfileEdit = () => {
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
             await profilesApi.update(payload);
 
-            // Always sync kind:0 metadata to the private BIES relay;
-            // optionally also broadcast to public relays
-            try {
-                const nostrData = {};
-                if (form.name) nostrData.display_name = form.name;
-                if (form.nostrName) nostrData.name = form.nostrName;
-                else if (form.name) nostrData.name = form.name;
-                if (form.bio) nostrData.about = form.bio;
-                if (form.avatar) nostrData.picture = form.avatar;
-                if (form.banner) nostrData.banner = form.banner;
-                if (form.website) nostrData.website = form.website;
-                if (form.lightningAddress) {
-                    if (form.lightningAddress.toLowerCase().startsWith('lnurl1')) {
-                        nostrData.lud06 = form.lightningAddress;
-                    } else {
-                        nostrData.lud16 = form.lightningAddress;
+            // Email accounts skip this: the server publishes their kind:0 when the
+            // profile is saved, and a second, different kind:0 would race it.
+            if (nostrSigner.signsOnDevice) {
+                // Always sync kind:0 metadata to the private BIES relay;
+                // optionally also broadcast to public relays
+                try {
+                    const nostrData = {};
+                    if (form.name) nostrData.display_name = form.name;
+                    if (form.nostrName) nostrData.name = form.nostrName;
+                    else if (form.name) nostrData.name = form.name;
+                    if (form.bio) nostrData.about = form.bio;
+                    if (form.avatar) nostrData.picture = form.avatar;
+                    if (form.banner) nostrData.banner = form.banner;
+                    if (form.website) nostrData.website = form.website;
+                    if (form.lightningAddress) {
+                        if (form.lightningAddress.toLowerCase().startsWith('lnurl1')) {
+                            nostrData.lud06 = form.lightningAddress;
+                        } else {
+                            nostrData.lud16 = form.lightningAddress;
+                        }
                     }
+                    if (form.bolt12Offer) nostrData.bolt12 = form.bolt12Offer;
+                    if (form.nip05Name) nostrData.nip05 = `${form.nip05Name.toLowerCase()}@buildinelsalvador.com`;
+                    if (publishPublic) {
+                        await nostrService.updateProfile(nostrData);
+                    } else {
+                        await nostrService.updateProfileToBiesRelay(nostrData);
+                    }
+                } catch (nostrErr) {
+                    console.error('Relay profile sync failed (non-blocking):', nostrErr);
                 }
-                if (form.bolt12Offer) nostrData.bolt12 = form.bolt12Offer;
-                if (form.nip05Name) nostrData.nip05 = `${form.nip05Name.toLowerCase()}@buildinelsalvador.com`;
-                if (publishPublic) {
-                    await nostrService.updateProfile(nostrData);
-                } else {
-                    await nostrService.updateProfileToBiesRelay(nostrData);
-                }
-            } catch (nostrErr) {
-                console.error('Relay profile sync failed (non-blocking):', nostrErr);
             }
 
             await refreshUser();

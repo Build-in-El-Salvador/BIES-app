@@ -218,6 +218,35 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    /**
+     * Email sign-in, step 1: send a 6-digit code. Errors carry the server's
+     * `reason` and `retryAfterSeconds` so the screen can explain a wait.
+     */
+    const requestEmailCode = async (email, lang) => {
+        try {
+            const result = await authService.requestEmailCode(email, lang);
+            return { success: true, ...result };
+        } catch (error) {
+            return { success: false, ...(error.data || {}), error: error.message };
+        }
+    };
+
+    /**
+     * Email sign-in, step 2: the code. Creates the account the first time.
+     * Errors carry `reason` ('invalid_code' | 'code_expired' | …) and
+     * `attemptsLeft`.
+     */
+    const loginWithEmailCode = async (email, code) => {
+        try {
+            const { user, isNewUser } = await authService.loginWithEmailCode(email, code);
+            setUser(user);
+            initWebSocket(user);
+            return { success: true, user, isNewUser, needsProfileSetup: isNewUser || !user.profile?.name };
+        } catch (error) {
+            return { success: false, ...(error.data || {}), error: error.message };
+        }
+    };
+
     const loginWithNsec = async (nsec) => {
         try {
             const user = await authService.loginWithNsec(nsec);
@@ -464,6 +493,8 @@ export const AuthProvider = ({ children }) => {
             completeExternalLogin,
             loginWithPasskey,
             loginWithPasskeyAndCheckNew,
+            requestEmailCode,
+            loginWithEmailCode,
             logout,
             updateRole,
             refreshUser,

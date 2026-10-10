@@ -91,10 +91,22 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
     return sanitized;
 }
 
+// Routes whose bodies must reach the handler unchanged. The hosted signer
+// signs exactly what the member's app sent (stripping or trimming would sign
+// different text) and stores none of it; Nostr content is escaped by whatever
+// displays it.
+const UNSANITIZED_PREFIXES = ['/api/signer/'];
+
 /**
  * Sanitize req.body, req.query, and req.params.
  */
 export function sanitize(req: Request, _res: Response, next: NextFunction): void {
+    // Match paths the way Express routes them: any case, repeated slashes collapsed.
+    const path = req.path.toLowerCase().replace(/\/{2,}/g, '/');
+    if (UNSANITIZED_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+        next();
+        return;
+    }
     if (req.body && typeof req.body === 'object') {
         req.body = sanitizeObject(req.body);
     }

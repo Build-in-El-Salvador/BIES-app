@@ -378,7 +378,7 @@ const EditEvent = () => {
             // below would be the stale value captured at render time
             let publishOutcome = null;
 
-            if (payload.nostrPublish !== 'none' && nostrSigner._mode && !eventData.nostrPublished) {
+            if (payload.nostrPublish !== 'none' && nostrSigner.signsOnDevice && !eventData.nostrPublished) {
                 setNostrStatus('publishing');
                 try {
                     await nostrService.publishCalendarEvent({

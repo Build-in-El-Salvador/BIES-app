@@ -11,6 +11,7 @@ import { isMobileUA, isAndroid } from '../utils/device';
 import logoIcon from '../assets/logo-icon.svg';
 import NostrIcon from '../components/NostrIcon';
 import NostrConnectQR from '../components/NostrConnectQR';
+import EmailSignIn from '../components/EmailSignIn';
 
 const Login = () => {
     const { t } = useTranslation();
@@ -28,6 +29,12 @@ const Login = () => {
     const [hasNostrExtension, setHasNostrExtension] = useState(
         typeof window !== 'undefined' && !!window.nostr
     );
+    // Email sign-in comes first; the Nostr methods sit behind one button,
+    // opened from the start when a Nostr browser extension is present.
+    const [showNostr, setShowNostr] = useState(hasNostrExtension);
+    useEffect(() => {
+        if (hasNostrExtension) setShowNostr(true);
+    }, [hasNostrExtension]);
 
     // Passkey — shown when the feature flag is on AND WebAuthn actually exists.
     // WKWebView (Capacitor native shell) has no PublicKeyCredential, so the
@@ -229,6 +236,26 @@ const Login = () => {
                 <h2 className="login-heading" style={{ fontSize: '1.5rem' }}>{t('login.welcomeBack')}</h2>
                 <p className="login-subtext" style={{ marginBottom: '2rem', textAlign: 'center' }}>
                     {t('login.accessEcosystem')}
+                </p>
+
+                <EmailSignIn onSuccess={handleResult} />
+
+                <div className="divider"><span>{t('common.or')}</span></div>
+
+                {!showNostr && (
+                    <button
+                        type="button"
+                        onClick={() => { setShowNostr(true); setError(''); }}
+                        className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full"
+                    >
+                        <NostrIcon size={20} color="#8b5cf6" />
+                        <span>{t('emailSignIn.useNostr')}</span>
+                    </button>
+                )}
+
+                {showNostr && (<>
+                <p className="login-subtext" style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
+                    {t('emailSignIn.nostrIntro')}
                 </p>
 
                 {error && (
@@ -437,11 +464,11 @@ const Login = () => {
                     </div>
                 )}
 
-                {/* Create Account */}
+                {/* Create a Nostr key */}
                 <div className="login-footer">
-                    <p className="login-subtext" style={{ marginBottom: '0.5rem' }}>New to Nostr?</p>
+                    <p className="login-subtext" style={{ marginBottom: '0.5rem' }}>{t('emailSignIn.ownKeyPrompt')}</p>
                     <Link to="/signup" className="btn-create-account">
-                        Create New Account
+                        {t('emailSignIn.createKey')}
                     </Link>
                 </div>
 
@@ -474,6 +501,7 @@ const Login = () => {
                         </div>
                     </>
                 )}
+                </>)}
             </div>
 
             <style jsx>{`
@@ -544,6 +572,17 @@ const Login = () => {
                 }
                 .btn-login:hover { opacity: 0.9; }
                 .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+                .btn-nostr {
+                    background: transparent;
+                    color: var(--color-text, inherit);
+                    font-weight: 600;
+                    border: 1px solid var(--color-gray-200);
+                    cursor: pointer;
+                    border-radius: 9999px;
+                    padding: clamp(0.75rem, 2vh, 1rem) 1.5rem;
+                    transition: border-color 0.2s;
+                }
+                .btn-nostr:hover { border-color: var(--color-primary); }
                 .btn-passkey {
                     background: #1e1b4b;
                     color: white;

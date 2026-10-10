@@ -11,19 +11,25 @@
  * On session restore (page refresh), if a passkey credential exists the
  * signer can re-acquire the nsec via WebAuthn on the first operation that
  * needs it.
+ *
+ * Email accounts use 'hosted' mode: BIES holds the key, and every signature
+ * is made by the server (POST /api/signer/sign). The key never reaches the
+ * device, so there's nothing here to lose or steal.
  */
 
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import * as nip44 from 'nostr-tools/nip44';
 
-const LOGIN_METHOD_KEY = 'bies_login_method'; // 'extension' | 'nsec' | 'bunker' | 'amber'
+const LOGIN_METHOD_KEY = 'bies_login_method'; // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted'
+const HOSTED_PUBKEY_KEY = 'bies_hosted_pubkey';
 const SESSION_SK_KEY = 'bies_sk_session'; // sessionStorage — survives refresh, cleared on tab close
+const HOSTED_NIP44_ERROR = 'Encrypted messages are not available for email accounts yet.';
 
 class NostrSigner {
     constructor() {
         this._sk = null;      // Uint8Array secret key (in-memory only)
         this._pubkey = null;   // hex public key
-        this._mode = null;     // 'extension' | 'nsec' | 'bunker' | 'amber' | null
+        this._mode = null;     // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted' | null
         this._reacquirePromise = null; // dedup concurrent _tryReacquire calls
 
         // Restore key from sessionStorage so page refreshes don't lose it.
@@ -42,6 +48,14 @@ class NostrSigner {
                     if (amberPubkey) {
                         this._pubkey = amberPubkey;
                         this._mode = 'amber';
+                    }
+                }
+                // Hosted (email) sessions keep only the pubkey too.
+                if (this.storedMethod === 'hosted') {
+                    const hostedPubkey = localStorage.getItem(HOSTED_PUBKEY_KEY);
+                    if (hostedPubkey) {
+                        this._pubkey = hostedPubkey;
+                        this._mode = 'hosted';
                     }
                 }
                 return;
@@ -108,6 +122,16 @@ class NostrSigner {
         localStorage.setItem('bies_amber_pubkey', pubkey);
     }
 
+    /** Configure signer for an email account: BIES holds the key and signs on the server. */
+    setHostedMode(pubkey) {
+        this._sk = null;
+        this._pubkey = pubkey;
+        this._mode = 'hosted';
+        localStorage.setItem(LOGIN_METHOD_KEY, 'hosted');
+        localStorage.setItem(HOSTED_PUBKEY_KEY, pubkey);
+        try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
+    }
+
     /** Clear stored key (logout). Zeros secret key bytes as defense-in-depth. */
     clear() {
         if (this._sk instanceof Uint8Array) {
@@ -117,6 +141,7 @@ class NostrSigner {
         this._pubkey = null;
         this._mode = null;
         localStorage.removeItem(LOGIN_METHOD_KEY);
+        localStorage.removeItem(HOSTED_PUBKEY_KEY);
         try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
         // Disconnect bunker if active
         import('./nostrConnectService.js').then(({ nostrConnectService }) => {
@@ -128,8 +153,16 @@ class NostrSigner {
         }).catch(() => {});
     }
 
-    /** Current mode: 'extension' | 'nsec' | 'bunker' | 'amber' | null */
+    /** Current mode: 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted' | null */
     get mode() { return this._mode; }
+
+    /**
+     * Whether this device (or a signer the user controls) signs. False for
+     * email accounts, whose events the server signs and publishes: pages that
+     * offer "publish from the app, or let the server do it" use the server
+     * path for them.
+     */
+    get signsOnDevice() { return !!this._mode && this._mode !== 'hosted'; }
 
     /** Whether we have the nsec in memory */
     get hasKey() { return !!this._sk; }
@@ -158,6 +191,7 @@ class NostrSigner {
      */
     get canSignSilently() {
         if (this._sk) return true;
+        if (this._mode === 'hosted') return true;
         // Amber (NIP-55): every signature is a full app-switch navigation —
         // never allowed from a background context.
         if (this._mode === 'amber' || this.storedMethod === 'amber') return false;
@@ -172,6 +206,8 @@ class NostrSigner {
     async getPublicKey() {
         // Prefer in-memory key
         if (this._sk) return this._pubkey;
+
+        if (this._mode === 'hosted') return this._pubkey;
 
         // Amber mode — pubkey is stored locally, no round trip needed
         if (this._mode === 'amber' || this.storedMethod === 'amber') {
@@ -203,6 +239,12 @@ class NostrSigner {
     async signEvent(event) {
         // Prefer in-memory key
         if (this._sk) return finalizeEvent(event, this._sk);
+
+        // Hosted (email) account — the server signs with the key it holds.
+        if (this._mode === 'hosted') {
+            const { signerApi } = await import('./api.js');
+            return signerApi.sign(event);
+        }
 
         // Amber mode — NIP-55 app-switch round trip. Callers must be inside
         // a user gesture (background flows are gated by canSignSilently).
@@ -244,6 +286,8 @@ class NostrSigner {
     /** Whether NIP-44 operations are available */
     get hasNip44() {
         if (this._sk) return true;
+        // Hosted accounts: encrypted messages need server-side NIP-44 (not built yet).
+        if (this._mode === 'hosted') return false;
         // Amber: available but expensive (one app switch per operation)
         if (this._mode === 'amber' || this.storedMethod === 'amber') return true;
         if (this._mode === 'bunker' || this.storedMethod === 'bunker') return true;
@@ -259,6 +303,8 @@ class NostrSigner {
             const ck = nip44.v2.utils.getConversationKey(this._sk, pubkey);
             return nip44.v2.encrypt(plaintext, ck);
         }
+
+        if (this._mode === 'hosted') throw new Error(HOSTED_NIP44_ERROR);
 
         if (this._mode === 'amber' || this.storedMethod === 'amber') {
             const { amberSignerService } = await import('./amberSignerService.js');
@@ -291,6 +337,8 @@ class NostrSigner {
             const ck = nip44.v2.utils.getConversationKey(this._sk, pubkey);
             return nip44.v2.decrypt(ciphertext, ck);
         }
+
+        if (this._mode === 'hosted') throw new Error(HOSTED_NIP44_ERROR);
 
         if (this._mode === 'amber' || this.storedMethod === 'amber') {
             const { amberSignerService } = await import('./amberSignerService.js');
@@ -360,6 +408,7 @@ class NostrSigner {
      */
     async tryRestore() {
         if (this._sk) return true;
+        if (this._mode === 'hosted') return !!this._pubkey;
         if (this._mode === 'extension' && window.nostr) return true;
         if (this._mode === 'amber' || this.storedMethod === 'amber') {
             return !!localStorage.getItem('bies_amber_pubkey');

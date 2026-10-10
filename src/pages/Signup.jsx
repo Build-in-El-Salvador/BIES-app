@@ -10,6 +10,7 @@ import { nostrSigner } from '../services/nostrSigner';
 import { PASSKEY_ENABLED, COINOS_SIGNUP_WALLET } from '../config/featureFlags';
 import { walletApi, profilesApi } from '../services/api';
 import { isNativePlatform } from '../utils/platform';
+import EmailSignIn from '../components/EmailSignIn';
 
 const Signup = () => {
     const { t } = useTranslation();
@@ -164,25 +165,29 @@ const Signup = () => {
     return (
         <div className="signup-container">
             <div className="signup-card">
-                <div className="progress-bar mb-8">
-                    <div className={`step ${step >= 0 ? 'active' : ''}`}>1</div>
-                    <div className="line"></div>
-                    <div className={`step ${step >= 1 ? 'active' : ''}`}>2</div>
-                    <div className="line"></div>
-                    <div className={`step ${step >= 2 ? 'active' : ''}`}>3</div>
-                </div>
+                {/* Progress through the create-your-own-key steps */}
+                {step > 0 && (
+                    <div className="progress-bar mb-8">
+                        <div className={`step ${step >= 0 ? 'active' : ''}`}>1</div>
+                        <div className="line"></div>
+                        <div className={`step ${step >= 1 ? 'active' : ''}`}>2</div>
+                        <div className="line"></div>
+                        <div className={`step ${step >= 2 ? 'active' : ''}`}>3</div>
+                    </div>
+                )}
 
                 {step === 0 && (
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold mb-4">Create Your Identity</h2>
-                        <p className="text-gray-500 mb-8">
-                            BIES uses Nostr-native authentication. No passwords. No emails. Just cryptographic keys you truly own.
-                        </p>
-                        <button onClick={generateKeys} className="btn-primary w-full py-3 rounded-full">
-                            Generate My Keys
+                    <div className="text-center w-full">
+                        <h2 className="text-2xl font-bold mb-2">{t('emailSignIn.joinHeading')}</h2>
+                        <p className="text-gray-500 mb-6">{t('emailSignIn.joinSubtext')}</p>
+                        <EmailSignIn onSuccess={(result) => navigate(result.needsProfileSetup ? '/profile-setup' : '/feed')} />
+                        <div className="signup-divider"><span>{t('common.or')}</span></div>
+                        <p className="text-gray-500 text-sm mb-4">{t('emailSignIn.ownKeyIntro')}</p>
+                        <button onClick={generateKeys} className="btn-outline w-full py-3 rounded-full">
+                            {t('signup.generateKeys')}
                         </button>
                         <div className="mt-4 text-sm text-gray-400">
-                            Already have keys? <Link to="/login" className="text-blue-500">Log in</Link>
+                            {t('signup.alreadyHaveKeys')} <Link to="/login" className="text-blue-500">{t('common.logIn')}</Link>
                         </div>
                     </div>
                 )}
@@ -435,6 +440,22 @@ const Signup = () => {
                     flex-direction: column;
                     align-items: center;
                     border: 1px solid var(--color-gray-200);
+                }
+                .signup-divider {
+                    width: 100%;
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    margin: 1.25rem 0 1rem;
+                    color: var(--color-gray-500);
+                    font-size: 0.875rem;
+                }
+                .signup-divider::before,
+                .signup-divider::after {
+                    content: '';
+                    flex: 1;
+                    height: 1px;
+                    background: var(--color-gray-200);
                 }
                 .progress-bar {
                     display: flex;

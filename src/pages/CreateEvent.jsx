@@ -358,7 +358,7 @@ const CreateEvent = () => {
 
             // Only publish client-side if server didn't already (nostrPublished flag)
             // Server publishes for custodial users; client publishes for Nostr-native users
-            if (payload.nostrPublish !== 'none' && nostrSigner._mode && !eventData.nostrPublished) {
+            if (payload.nostrPublish !== 'none' && nostrSigner.signsOnDevice && !eventData.nostrPublished) {
                 setNostrStatus('publishing');
                 try {
                     await nostrService.publishCalendarEvent({
