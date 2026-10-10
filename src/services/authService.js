@@ -15,6 +15,7 @@ import { authApi } from './api.js';
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
+import { isNativePlatform } from '../utils/platform.js';
 import { fingerprintService } from './fingerprintService.js';
 import { nwcClient } from './nwcService.js';
 import { clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
@@ -66,6 +67,17 @@ export const authService = {
             const method = nostrSigner.storedMethod;
             if (user.hostedKey && (!method || method === 'hosted')) {
                 nostrSigner.setHostedMode(user.nostrPubkey);
+            }
+            // A device that can't sign for the account any more signs in
+            // again, rather than failing at every signature: it signed
+            // through BIES, which no longer holds the key (the member took it
+            // and the answer never arrived), or with a pasted key that the
+            // native app forgets when it closes.
+            const cantSign = (method === 'hosted' && !user.hostedKey)
+                || (method === 'nsec' && !nostrSigner.hasKey && isNativePlatform());
+            if (cantSign) {
+                await authService.logout();
+                return null;
             }
             return user;
         } catch {
@@ -343,7 +355,9 @@ export const authService = {
         const { user, isNewUser } = session;
         authService.setSession(session);
         authService.setCachedUser(user);
-        nostrSigner.setHostedMode(user.nostrPubkey);
+        // The server only signs in email accounts it holds a key for, but
+        // never point the signer at a key that isn't there.
+        if (user.hostedKey) nostrSigner.setHostedMode(user.nostrPubkey);
         return { user, isNewUser };
     },
 

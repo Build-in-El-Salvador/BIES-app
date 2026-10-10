@@ -23,10 +23,12 @@ export const keyfileService = {
      * @param {Uint8Array} secretKeyBytes - 32-byte secret key
      * @param {string} password - user-chosen encryption password
      * @param {number} [logn=16] - scrypt cost parameter (16, 18, or 20)
+     * @param {0|1|2} [ksb=2] - NIP-49 key security byte: 0 = the key has been
+     *   handled insecurely (e.g. a server held it), 1 = it hasn't, 2 = unknown
      * @returns {object} { json: string, filename: string, npub: string }
      */
-    buildKeyfile(secretKeyBytes, password, logn = 16) {
-        const ncryptsec = nip49Encrypt(secretKeyBytes, password, logn);
+    buildKeyfile(secretKeyBytes, password, logn = 16, ksb = 0x02) {
+        const ncryptsec = nip49Encrypt(secretKeyBytes, password, logn, ksb);
         const pubkeyHex = getPublicKey(secretKeyBytes);
         const npub = nip19.npubEncode(pubkeyHex);
 

@@ -75,11 +75,12 @@ export function attachWebSocketServer(httpServer: Server): void {
         handleProtocols: (protocols) => (protocols.has(WS_PROTOCOL) ? WS_PROTOCOL : false),
     });
 
-    // A session that ends closes its sockets: logout on this device, or a
-    // ban, deletion or merge for every device.
-    onSessionsEnded(({ sessionId, userId }) => {
+    // A session that ends closes its sockets: logout on this device; a ban,
+    // deletion or merge on every device; taking the key on every other one.
+    onSessionsEnded(({ sessionId, userId, exceptSessionId }) => {
         const ends = (ws: AuthenticatedWebSocket) =>
-            (sessionId && ws.sessionId === sessionId) || (userId && ws.userId === userId);
+            (sessionId && ws.sessionId === sessionId) ||
+            (userId && ws.userId === userId && ws.sessionId !== exceptSessionId);
         for (const ws of pending) {
             if (ends(ws)) ws.close(CLOSE_SESSION_ENDED, 'session_ended');
         }

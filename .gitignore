@@ -23,3 +23,4 @@ test-results/
 # Native (Capacitor) build env: holds the absolute production URLs baked into
 # the app bundle. Copy .env.native.example to create it.
 .env.native
+relay/dev-whitelist/purge/

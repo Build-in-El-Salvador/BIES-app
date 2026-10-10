@@ -116,6 +116,9 @@ export const config = {
     email: {
         resendApiKey: process.env.RESEND_API_KEY || '',
         from: process.env.EMAIL_FROM || 'BIES <login@buildinelsalvador.com>',
+        // Where members can write back, for emails that ask "wasn't you?".
+        // The sending address takes no mail.
+        supportAddress: process.env.EMAIL_SUPPORT_ADDRESS || 'info@buildinelsalvador.com',
         // Ceiling on codes sent per 24 h across all addresses, so a flood of
         // sign-in requests can't use up the Resend quota pretix tickets share.
         // Resend's free plan allows 100 emails a day in total; raise this on

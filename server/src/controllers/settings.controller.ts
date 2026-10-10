@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { revokeUserSessions } from '../services/session.service';
 import { z } from 'zod';
 
 export const updateNotificationSettingsSchema = z.object({
@@ -334,27 +333,5 @@ export async function updatePreferences(req: Request, res: Response): Promise<vo
     } catch (error) {
         console.error('Update preferences error:', error);
         res.status(500).json({ error: 'Failed to update preferences' });
-    }
-}
-
-/**
- * DELETE /settings/account
- * Delete user account. Prisma cascade handles all related records.
- */
-export async function deleteAccount(req: Request, res: Response): Promise<void> {
-    try {
-        const userId = req.user!.id;
-
-        // End sessions first so open connections close; the delete cascades
-        // to the rows themselves.
-        await revokeUserSessions(userId, 'deleted');
-        await prisma.user.delete({
-            where: { id: userId },
-        });
-
-        res.json({ message: 'Account deleted successfully' });
-    } catch (error) {
-        console.error('Delete account error:', error);
-        res.status(500).json({ error: 'Failed to delete account' });
     }
 }

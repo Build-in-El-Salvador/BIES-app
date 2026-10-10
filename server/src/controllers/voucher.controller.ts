@@ -11,6 +11,7 @@ import { config } from '../config';
 import * as voucherService from '../services/voucher.service';
 import * as coinosService from '../services/coinos.service';
 import { isUniqueViolation } from '../services/points.service';
+import { isVanished } from '../services/relayWhitelist.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -262,6 +263,12 @@ export async function redeemVoucher(req: Request, res: Response): Promise<void> 
         const pubkey = await voucherService.normalizePubkey(req.body.pubkey);
         if (!pubkey) {
             res.status(400).json({ error: 'Invalid pubkey — provide a 64-character hex key or npub' });
+            return;
+        }
+        // A deleted account's key: only its holder can bring it back, by
+        // signing in. A voucher proves nothing about who holds the key.
+        if (isVanished(pubkey)) {
+            res.status(403).json({ error: 'This key belonged to a deleted account. Sign in with it to rejoin.', reason: 'deleted_account' });
             return;
         }
 

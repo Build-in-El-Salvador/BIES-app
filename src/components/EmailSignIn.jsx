@@ -53,6 +53,8 @@ const EmailSignIn = ({ onSuccess }) => {
                 return t('emailSignIn.errors.suspended');
             case 'deleted':
                 return t('emailSignIn.errors.deleted');
+            case 'nostr_account':
+                return t('emailSignIn.errors.nostrAccount');
             default:
                 return result.error || t('emailSignIn.errors.generic');
         }

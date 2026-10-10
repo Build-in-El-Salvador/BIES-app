@@ -86,6 +86,7 @@ A private Nostr relay running [strfry](https://github.com/hoytech/strfry). This 
 **Key paths:**
 - `relay/` — Dockerfile and strfry configuration
 - Write policy controls which pubkeys can publish
+- `relay/purge-loop.sh` runs beside strfry and deletes a deleted account's events: every event the pubkey published, and the gift wraps addressed to it. The server asks by dropping a file named after the pubkey in `purge/` on the shared whitelist volume. strfry doesn't implement NIP-62, so this does what a request to vanish would.
 
 ### 3. NIP-42 Auth Proxy (`bies-auth-proxy`)
 
@@ -207,6 +208,21 @@ Authentication: the access token is sent as a WebSocket subprotocol (`new WebSoc
 - **`POST /api/auth/refresh`** replaces both tokens. A genuine but replaced refresh token presented again ends the session (a stolen copy shows up this way), except within 60 seconds, which covers a lost response or two tabs refreshing at once.
 - **Sessions end** on logout (`POST /api/auth/logout`, this device, which also removes the phone's push registration), on a ban, deletion or merge (every device, and their push registrations), after 30 days unused or 90 days after sign-in. Ended sessions are deleted after 30 days.
 - **The app** refreshes a minute before the access token expires (by the server's clock, learned from each token), retries once on `token_expired`, and signs out on any other 401 reason (`session_ended`, `suspended`, `account_deleted`, `invalid_token`), in every tab. A refresh that can't reach the server leaves the session alone. A logout the server didn't confirm is retried at the next launch.
+
+### Deleting an account, and taking the key
+
+`services/account.service.ts` (server), Settings → Account (app). Both can't be undone, so both are confirmed afresh: email accounts with an emailed code (its own `purpose`, so a sign-in code can't be spent here), Nostr accounts with a kind-27235 event signed by their key over a one-time challenge (`challenge` and `purpose` tags).
+
+- **Delete account** (`POST /api/account/delete/start`, then `/api/account/delete`):
+  1. prepares what can't be undone without doing it: for an email account, BIES signs a NIP-62 request to vanish and NIP-09 deletion requests with the key it holds;
+  2. erases, in one transaction: the user row and its cascade (sessions, push registrations, the hosted key, …), and what other rows keep about the person: IP addresses, names and pubkeys in audit rows about them, other members' notifications about them, zap receipts. An `ACCOUNT_DELETED` audit row records that it happened, with nothing that identifies the person. If this fails nothing has changed, so the member is still signed in and can try again;
+  3. only then: sockets close, relay access goes, BIES's relay deletes the events (`purge-loop.sh`), the pubkey goes on the relay's vanished list, and the signed requests go to the public relays;
+  4. emails a confirmation that says only what was done.
+- **Admin purge** (Admin → Users → trash) erases the same way but leaves relays alone, because a merged account's events now belong to the account it was merged into. "Delete at the member's request" (`?deletionRequest=true`) also does step 3, for deletions requested by email.
+- **The vanished list** (`vanished.txt` beside the relay whitelist) keeps a deleted account's pubkey from being whitelisted again without proof, so a voucher can't bring its events back. Signing in with the key (the owner rejoining) lifts it.
+- **Take your key** (email accounts; `POST /api/account/key/start`, `/key/export`, `/key/release`): the key is shown once, after an emailed code. The member saves it (the app offers a NIP-49 backup flagged as server-handled), proves it by signing the challenge with the key they saved, and BIES deletes its copy. The account keeps its identity; this device signs with the member's key from then on, and the account's other sessions end. Email sign-in then answers `nostr_account`.
+- **App Review's demo account** (`REVIEW_LOGIN_EMAIL`) can't take its key: that would end the email sign-in the review notes give.
+- **Backups** still hold deleted data until they expire, within 90 days; the app, the emails and the privacy notice say so.
 
 ### Database Schema
 

@@ -94,8 +94,9 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
 // Routes whose bodies must reach the handler unchanged. The hosted signer
 // signs exactly what the member's app sent (stripping or trimming would sign
 // different text) and stores none of it; Nostr content is escaped by whatever
-// displays it.
-const UNSANITIZED_PREFIXES = ['/api/signer/'];
+// displays it. The account routes check signed events, whose id covers the
+// content: any change would break the signature. They store no text.
+const UNSANITIZED_PREFIXES = ['/api/signer/', '/api/account/'];
 
 /**
  * Sanitize req.body, req.query, and req.params.

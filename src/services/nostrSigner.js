@@ -39,7 +39,14 @@ class NostrSigner {
     /** Restore secret key from sessionStorage (page refresh recovery). */
     _restoreFromSession() {
         try {
-            const hex = sessionStorage.getItem(SESSION_SK_KEY);
+            let hex = sessionStorage.getItem(SESSION_SK_KEY);
+            // A key from an nsec sign-in only counts while that is still the
+            // method: after a sign-out, or another sign-in in this tab, it is
+            // someone else's leftover.
+            if (hex && this.storedMethod !== 'nsec') {
+                sessionStorage.removeItem(SESSION_SK_KEY);
+                hex = null;
+            }
             if (!hex) {
                 // Amber (NIP-55) sessions keep only the pubkey — every signing
                 // op round-trips through the Amber app. Restore synchronously.
@@ -97,9 +104,16 @@ class NostrSigner {
         this._persistToSession(this._sk);
     }
 
+    /** Forget a key held here: a signer that holds it elsewhere takes over. */
+    _dropLocalKey() {
+        if (this._sk instanceof Uint8Array) this._sk.fill(0);
+        this._sk = null;
+        try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
+    }
+
     /** Configure signer to use browser extension */
     setExtensionMode() {
-        this._sk = null;
+        this._dropLocalKey();
         this._pubkey = null;
         this._mode = 'extension';
         localStorage.setItem(LOGIN_METHOD_KEY, 'extension');
@@ -107,7 +121,7 @@ class NostrSigner {
 
     /** Configure signer to use a NIP-46 remote signer (bunker) */
     setBunkerMode(pubkey) {
-        this._sk = null;
+        this._dropLocalKey();
         this._pubkey = pubkey;
         this._mode = 'bunker';
         localStorage.setItem(LOGIN_METHOD_KEY, 'bunker');
@@ -115,7 +129,7 @@ class NostrSigner {
 
     /** Configure signer to use Amber via NIP-55 Android intents */
     setAmberMode(pubkey) {
-        this._sk = null;
+        this._dropLocalKey();
         this._pubkey = pubkey;
         this._mode = 'amber';
         localStorage.setItem(LOGIN_METHOD_KEY, 'amber');
@@ -124,12 +138,11 @@ class NostrSigner {
 
     /** Configure signer for an email account: BIES holds the key and signs on the server. */
     setHostedMode(pubkey) {
-        this._sk = null;
+        this._dropLocalKey();
         this._pubkey = pubkey;
         this._mode = 'hosted';
         localStorage.setItem(LOGIN_METHOD_KEY, 'hosted');
         localStorage.setItem(HOSTED_PUBKEY_KEY, pubkey);
-        try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
     }
 
     /** Clear stored key (logout). Zeros secret key bytes as defense-in-depth. */

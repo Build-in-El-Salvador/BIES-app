@@ -17,7 +17,6 @@ import {
     getPreferences,
     updatePreferences,
     updatePreferencesSchema,
-    deleteAccount,
 } from '../controllers/settings.controller';
 
 const router = Router();
@@ -33,6 +32,5 @@ router.post('/media-read/toggle', validate(toggleMediaReadSchema), toggleMediaRe
 router.post('/media-read/bulk', validate(bulkMediaReadSchema), bulkMediaRead);
 router.get('/preferences', getPreferences);
 router.put('/preferences', validate(updatePreferencesSchema), updatePreferences);
-router.delete('/account', deleteAccount);
 
 export default router;

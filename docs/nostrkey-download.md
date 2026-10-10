@@ -18,6 +18,7 @@ All encryption and decryption happens **client-side only**. The server never see
 | `src/pages/Signup.jsx` | Key generation, password entry, encryption, download, confirmation |
 | `src/pages/Login.jsx` | File upload / ncryptsec paste, password entry, decryption, auth |
 | `src/pages/Settings.jsx` | Export encrypted key backup for logged-in users |
+| `src/pages/settings/TakeYourKey.jsx` | Backup of the key BIES held for an email account ("Take your key"), with NIP-49's key security byte set to `0x00`: handled insecurely, as the spec asks for keys a server has seen |
 | `src/services/nostrSigner.js` | Holds decrypted nsec in memory during active session |
 | `src/services/authService.js` | Challenge-response authentication after decryption |
 

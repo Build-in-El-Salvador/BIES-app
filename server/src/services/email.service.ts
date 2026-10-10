@@ -17,6 +17,8 @@ export interface OutgoingEmail {
     subject: string;
     text: string;
     html: string;
+    /** Where replies go. The sending address takes no mail. */
+    replyTo?: string;
 }
 
 export class EmailNotConfiguredError extends Error {
@@ -48,6 +50,7 @@ export async function sendEmail(message: OutgoingEmail): Promise<void> {
             subject: message.subject,
             text: message.text,
             html: message.html,
+            ...(message.replyTo ? { reply_to: message.replyTo } : {}),
         }),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });

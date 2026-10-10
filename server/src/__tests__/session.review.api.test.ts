@@ -88,14 +88,6 @@ const db = vi.hoisted(() => {
             const u = state.users.find((x) => (where.id ? x.id === where.id : x.email === where.email));
             return u ? { ...u, profile: { id: `p-${u.id}`, name: u.id } } : null;
         }),
-        // ON DELETE CASCADE, as SQLite does for sessions.user_id
-        delete: vi.fn(async ({ where }: Row) => {
-            await io();
-            const u = state.users.find((x) => x.id === where.id);
-            state.users = state.users.filter((x) => x.id !== where.id);
-            state.sessions = state.sessions.filter((s) => s.userId !== where.id);
-            return u;
-        }),
     };
 
     return { state, session, user };
@@ -116,7 +108,6 @@ vi.mock('../services/voucher.service', () => ({ recordOnboardingRedemption: vi.f
 vi.mock('../services/email.service', () => ({ sendEmail: vi.fn() }));
 
 import authRoutes from '../routes/auth.routes';
-import settingsRoutes from '../routes/settings.routes';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { config } from '../config';
 import { rateLimitKey } from '../utils/rateLimitKey';
@@ -147,7 +138,6 @@ beforeAll(async () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use('/api/auth', authRoutes);
-    app.use('/api/settings', settingsRoutes);
     app.get('/api/private', authenticate, (req, res) => res.json({ userId: req.user!.id }));
     app.get('/api/public', optionalAuth, (req, res) => res.json({ userId: req.user?.id ?? null }));
     [server, base] = await listen(app);
@@ -291,15 +281,8 @@ describe('a WebSocket', () => {
         expect(sendToUser(ALICE.id, { type: 'notification', n: 1 })).toBe(0);
     });
 
-    it('closes when the member deletes their account', async () => {
-        const alice = await signIn(ALICE);
-        const s = open(alice.token);
-        await s.connected;
-        const del = await fetch(`${base}/api/settings/account`, { method: 'DELETE', headers: { Authorization: `Bearer ${alice.token}` } });
-        expect(del.status).toBe(200);
-        expect(await s.closed).toBe(4003);
-        expect(sendToUser(ALICE.id, { type: 'notification' })).toBe(0);
-    });
+    // Closing when the member deletes their account: account.api.test.ts,
+    // against a real database.
 });
 
 // ─── A logout that fails halfway ─────────────────────────────────────────────

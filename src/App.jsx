@@ -37,6 +37,8 @@ import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import Messages from './pages/Messages';
 import Settings from './pages/Settings';
+import DeleteAccount from './pages/settings/DeleteAccount';
+import TakeYourKey from './pages/settings/TakeYourKey';
 import CustomizeNavbar from './pages/CustomizeNavbar';
 import Cowork from './pages/Cowork';
 import Wallet from './pages/Wallet';
@@ -337,6 +339,13 @@ const AppContent = () => {
                     <Route path="/settings" element={
                         <ProtectedRoute>
                             <Settings />
+                        </ProtectedRoute>
+                    } />
+                    {/* Guards itself: the session ends mid-way, and the page stays to say so. */}
+                    <Route path="/settings/delete-account" element={<DeleteAccount />} />
+                    <Route path="/settings/your-key" element={
+                        <ProtectedRoute>
+                            <TakeYourKey />
                         </ProtectedRoute>
                     } />
                     {CUSTOM_BOTTOM_NAV_ENABLED && (

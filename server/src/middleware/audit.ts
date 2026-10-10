@@ -33,7 +33,9 @@ const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
     { method: 'DELETE', pattern: /^\/api\/profiles\/.*\/follow/, action: 'FOLLOW_DELETE' },
     { method: 'POST', pattern: /^\/api\/contact/, action: 'CONTACT_SUBMIT' },
     { method: 'PUT',  pattern: /^\/api\/settings\//, action: 'SETTINGS_UPDATE' },
-    { method: 'DELETE', pattern: /^\/api\/settings\/account/, action: 'ACCOUNT_DELETE' },
+    // Account deletion writes its own record, without the address (account.service.ts).
+    { method: 'POST', pattern: /^\/api\/account\/key\/export/, action: 'ACCOUNT_KEY_SHOWN' },
+    { method: 'POST', pattern: /^\/api\/account\/key\/release/, action: 'ACCOUNT_KEY_TAKEN' },
     { method: 'POST', pattern: /^\/api\/content\//, action: 'CONTENT_CREATE' },
     { method: 'PUT',  pattern: /^\/api\/content\//, action: 'CONTENT_UPDATE' },
     { method: 'POST', pattern: /^\/api\/vouchers$/, action: 'VOUCHER_CREATE' },
