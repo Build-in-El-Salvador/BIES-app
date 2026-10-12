@@ -237,7 +237,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
         if (!request || !canReview) return;
         start(request.vote);
         sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, [request?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [request?.n]);
 
     const reasonShort = mode === -1 && text.trim().length < REASON_MIN;
 
