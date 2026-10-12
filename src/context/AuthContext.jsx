@@ -11,6 +11,7 @@ import { PASSKEY_ENABLED } from '../config/featureFlags';
 import PasskeySavePrompt from '../components/PasskeySavePrompt';
 import PasskeyMigratePrompt from '../components/PasskeyMigratePrompt';
 import PushPermissionPrompt from '../components/PushPermissionPrompt';
+import TermsGate from '../components/moderation/TermsGate';
 
 const AuthContext = createContext();
 
@@ -28,6 +29,24 @@ export const AuthProvider = ({ children }) => {
     const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
     const [showMigratePrompt, setShowMigratePrompt] = useState(false);
     const [showPushPrompt, setShowPushPrompt] = useState(false);
+
+    // The terms of use come before everything else, once per version.
+    const termsPending = !!user && user.termsAccepted === false;
+    useEffect(() => {
+        // A request refused for want of the current terms (api.js).
+        const onTermsRequired = (e) => setUser((prev) => (prev
+            ? { ...prev, termsAccepted: false, termsVersion: e.detail?.termsVersion || prev.termsVersion }
+            : prev));
+        window.addEventListener('bies:terms-required', onTermsRequired);
+        return () => window.removeEventListener('bies:terms-required', onTermsRequired);
+    }, []);
+    const handleTermsAccepted = useCallback((updated) => {
+        setUser((prev) => {
+            const next = prev ? { ...prev, ...updated } : updated;
+            authService.setCachedUser(next);
+            return next;
+        });
+    }, []);
 
     // ─── Passkey save prompt ─────────────────────────────────────────────────
 
@@ -522,19 +541,22 @@ export const AuthProvider = ({ children }) => {
             isStaff: !!user?.isAdmin || user?.role === 'MOD',
         }}>
             {children}
-            {showPasskeyPrompt && (
+            {termsPending && (
+                <TermsGate user={user} onAccepted={handleTermsAccepted} onSignOut={logout} />
+            )}
+            {showPasskeyPrompt && !termsPending && (
                 <PasskeySavePrompt
                     onClose={dismissPasskeyPrompt}
                     onSaved={handlePasskeySaved}
                 />
             )}
-            {showMigratePrompt && !showPasskeyPrompt && (
+            {showMigratePrompt && !showPasskeyPrompt && !termsPending && (
                 <PasskeyMigratePrompt
                     onClose={dismissMigratePrompt}
                     onMigrated={handleMigrated}
                 />
             )}
-            {showPushPrompt && !showPasskeyPrompt && !showMigratePrompt && (
+            {showPushPrompt && !showPasskeyPrompt && !showMigratePrompt && !termsPending && (
                 <PushPermissionPrompt onClose={dismissPushPrompt} />
             )}
         </AuthContext.Provider>

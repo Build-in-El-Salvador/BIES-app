@@ -3,12 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Mail, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { openExternal } from '../utils/openExternal';
+import { LEGAL_PAGES } from '../config/legal';
 
 const CODE_LENGTH = 6;
-const LEGAL_PAGES = {
-    en: { terms: 'https://buildinelsalvador.com/terms', privacy: 'https://buildinelsalvador.com/privacy' },
-    es: { terms: 'https://buildinelsalvador.com/terminos', privacy: 'https://buildinelsalvador.com/privacidad' },
-};
 
 /**
  * Email sign-in: a 6-digit code by email, then a session. The first sign-in

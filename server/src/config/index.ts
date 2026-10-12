@@ -81,6 +81,9 @@ export const config = {
     // ─── Public app origin ────────────────────────────────────────────────────
     // Used to build absolute URLs embedded in Nostr events (badge artwork).
     appPublicUrl,
+    // The version of the terms of use members must accept (the app's terms
+    // gate). Change it when the terms change, and everyone accepts again.
+    termsVersion: process.env.TERMS_VERSION || '2026-10',
 
     // ─── Hosted signer ────────────────────────────────────────────────────────
     // Relays the app may have BIES sign NIP-42 sign-in challenges for, on
@@ -117,6 +120,8 @@ export const config = {
         // Where members can write back, for emails that ask "wasn't you?".
         // The sending address takes no mail.
         supportAddress: process.env.EMAIL_SUPPORT_ADDRESS || 'info@buildinelsalvador.com',
+        // Where new reports go: the moderator answers within 24 hours.
+        moderationAddress: process.env.MODERATION_EMAIL || process.env.EMAIL_SUPPORT_ADDRESS || 'info@buildinelsalvador.com',
         // Ceiling on codes sent per 24 h across all addresses, so a flood of
         // sign-in requests can't use up the Resend quota pretix tickets share.
         // Resend's free plan allows 100 emails a day in total; raise this on

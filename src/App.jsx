@@ -39,6 +39,7 @@ import Messages from './pages/Messages';
 import Settings from './pages/Settings';
 import DeleteAccount from './pages/settings/DeleteAccount';
 import TakeYourKey from './pages/settings/TakeYourKey';
+import BlockedMembers from './pages/settings/BlockedMembers';
 import CustomizeNavbar from './pages/CustomizeNavbar';
 import Cowork from './pages/Cowork';
 import Wallet from './pages/Wallet';
@@ -92,6 +93,7 @@ import AdminNewsSettings from './pages/admin/AdminNewsSettings';
 import AdminInvestorVetting from './pages/admin/AdminInvestorVetting';
 import AdminVouchers from './pages/admin/AdminVouchers';
 import AdminFeedback from './pages/admin/AdminFeedback';
+import AdminReports from './pages/admin/AdminReports';
 import AdminCourses from './pages/admin/AdminCourses';
 import AdminBounties from './pages/admin/AdminBounties';
 import AdminFeatures from './pages/admin/AdminFeatures';
@@ -300,6 +302,7 @@ const AppContent = () => {
                         <Route path="news-settings" element={<AdminNewsSettings />} />
                         <Route path="investor-vetting" element={<AdminInvestorVetting />} />
                         <Route path="vouchers" element={<AdminVouchers />} />
+                        <Route path="reports" element={<AdminReports />} />
                         <Route path="feedback" element={<AdminFeedback />} />
                         <Route path="features" element={<AdminFeatures />} />
                         {COURSES_ENABLED && <Route path="courses" element={<AdminCourses />} />}
@@ -346,6 +349,11 @@ const AppContent = () => {
                     <Route path="/settings/your-key" element={
                         <ProtectedRoute>
                             <TakeYourKey />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/settings/blocked" element={
+                        <ProtectedRoute>
+                            <BlockedMembers />
                         </ProtectedRoute>
                     } />
                     {CUSTOM_BOTTOM_NAV_ENABLED && (

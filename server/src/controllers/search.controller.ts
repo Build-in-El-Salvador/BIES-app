@@ -5,6 +5,19 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
+import { blockedIds } from '../services/moderation.service';
+
+/** Leave out the members the viewer blocked: results are cached for all viewers. */
+async function withoutBlocked(req: Request, results: any): Promise<any> {
+    const hidden = new Set(await blockedIds(req.user?.id));
+    if (!hidden.size) return results;
+    const out = { ...results };
+    if (Array.isArray(out.profiles)) out.profiles = out.profiles.filter((p: any) => !hidden.has(p.userId));
+    if (Array.isArray(out.suggestions)) {
+        out.suggestions = out.suggestions.filter((s: any) => s.type !== 'profile' || !hidden.has(s.id));
+    }
+    return out;
+}
 
 /**
  * GET /search?q=...&type=all|projects|profiles|events&page=1&limit=10
@@ -25,7 +38,7 @@ export async function search(req: Request, res: Response): Promise<void> {
 
         const cKey = cacheKey.search(`${q}:${type}:${page}`);
         const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.json(cached); return; }
+        if (cached) { res.json(await withoutBlocked(req, cached)); return; }
 
         const results: any = { query: q };
 
@@ -144,7 +157,7 @@ export async function search(req: Request, res: Response): Promise<void> {
         }
 
         await cache.setJson(cKey, results, TTL.SEARCH_RESULTS);
-        res.json(results);
+        res.json(await withoutBlocked(req, results));
     } catch (error) {
         console.error('Search error:', error);
         res.status(500).json({ error: 'Search failed' });
@@ -162,7 +175,7 @@ export async function getSuggestions(req: Request, res: Response): Promise<void>
 
         const cKey = `suggestions:${q.toLowerCase()}`;
         const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.json(cached); return; }
+        if (cached) { res.json(await withoutBlocked(req, cached)); return; }
 
         const searchTerm = { contains: q };
 
@@ -186,7 +199,7 @@ export async function getSuggestions(req: Request, res: Response): Promise<void>
 
         const result = { suggestions };
         await cache.setJson(cKey, result, 60);
-        res.json(result);
+        res.json(await withoutBlocked(req, result));
     } catch (error) {
         console.error('Suggestions error:', error);
         res.status(500).json({ error: 'Failed to get suggestions' });
