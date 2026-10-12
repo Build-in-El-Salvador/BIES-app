@@ -127,7 +127,8 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     <Link
                         to={isFarm ? '/farms/new' : '/trusted/new'}
                         className="directory-add-btn"
-                        title={t('directory.addListing')}
+                        title={isFarm ? t('directory.createTitleFarm') : t('directory.createTitleProvider')}
+                        aria-label={isFarm ? t('directory.createTitleFarm') : t('directory.createTitleProvider')}
                         style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             width: 44, height: 44, minWidth: 44, borderRadius: '50%',

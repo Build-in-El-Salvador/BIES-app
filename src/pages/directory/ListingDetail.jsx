@@ -3,9 +3,10 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     ArrowLeft, MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
-    Loader2, Leaf, ShieldCheck, Edit3, AlertCircle,
+    Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
+    Building2, MessageCircle,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -134,9 +135,9 @@ const ListingDetail = () => {
     const canModerate = !!user?.id && listingMemberId !== user.id && !isOwner;
     const isPending = listing.status === 'pending-review';
 
-    // WhatsApp link — digits only per wa.me requirements
-    const contactNumber = listing.whatsapp || listing.phone || '';
-    const waDigits = contactNumber.replace(/\D/g, '');
+    // Phone calls; WhatsApp opens WhatsApp (wa.me wants digits only).
+    const telNumber = (listing.phone || '').replace(/[^\d+]/g, '');
+    const waDigits = (listing.whatsapp || '').replace(/\D/g, '');
 
     const products = Array.isArray(listing.products) ? listing.products.filter((p) => p?.label) : [];
     const practices = (Array.isArray(listing.practices) ? listing.practices : []).filter((p) => PRACTICE_META[p]);
@@ -201,7 +202,7 @@ const ListingDetail = () => {
                         <img src={getAssetUrl(listing.photo || photos[0])} alt={listing.name} className="dir-hero-img" />
                     ) : (
                         <div className="dir-hero-fallback">
-                            {isFarm ? <Leaf size={56} /> : <ShieldCheck size={56} />}
+                            {isFarm ? <Leaf size={56} /> : <Building2 size={56} />}
                         </div>
                     )}
                     <Link
@@ -317,15 +318,21 @@ const ListingDetail = () => {
                                 <span>{listing.location}</span>
                             </div>
                         )}
-                        {contactNumber && waDigits && (
+                        {telNumber && (
+                            <a className="dir-detail-meta dir-detail-wa" href={`tel:${telNumber}`}>
+                                <Phone size={17} />
+                                <span>{listing.phone}</span>
+                            </a>
+                        )}
+                        {waDigits && (
                             <a
                                 className="dir-detail-meta dir-detail-wa"
                                 href={`https://wa.me/${waDigits}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                <Phone size={17} />
-                                <span>{contactNumber}</span>
+                                <MessageCircle size={17} />
+                                <span>{t('directory.whatsappRow', { number: listing.whatsapp })}</span>
                             </a>
                         )}
                         {listing.hours && (

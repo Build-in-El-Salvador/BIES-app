@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { isNativePlatform } from '../utils/platform';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
@@ -58,6 +59,9 @@ const Feed = () => {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [feedMode, setFeedMode] = useState('private'); // 'private' | 'explore'
+    // The store app shows only the BIES private feed: Explore is the open
+    // Nostr network, which BIES doesn't moderate (App Review guideline 1.2).
+    const exploreAllowed = !isNativePlatform();
     const [exploreView, setExploreView] = useState('trending_24h');
     const [exploreDropdownOpen, setExploreDropdownOpen] = useState(false);
     const exploreDropdownRef = useRef(null);
@@ -1247,14 +1251,16 @@ const Feed = () => {
                             <Lock size={15} className="primal-feed-tab-icon" />
                             <span>{t('feed.privateRelay', 'Private Relay')}</span>
                         </button>
-                        <button
-                            className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
-                            onClick={() => setFeedMode('explore')}
-                            data-testid="tab-explore"
-                        >
-                            <Globe size={15} className="primal-feed-tab-icon" />
-                            <span>{t('feed.explore', 'Explore')}</span>
-                        </button>
+                        {exploreAllowed && (
+                            <button
+                                className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
+                                onClick={() => setFeedMode('explore')}
+                                data-testid="tab-explore"
+                            >
+                                <Globe size={15} className="primal-feed-tab-icon" />
+                                <span>{t('feed.explore', 'Explore')}</span>
+                            </button>
+                        )}
                         <button
                             className={`primal-feed-refresh${refreshing ? ' spinning' : ''}`}
                             onClick={handleRefreshFeed}
@@ -1461,7 +1467,7 @@ const Feed = () => {
                                 ? t('feed.noPostsPrivate', 'Be the first to post on the private relay!')
                                 : t('feed.noPostsExplore', 'Nothing to show right now.')}
                         </p>
-                        {feedMode === 'private' && (
+                        {feedMode === 'private' && exploreAllowed && (
                             <button className="primal-try-public-btn" onClick={() => setFeedMode('explore')}>
                                 <Globe size={14} /> {t('feed.exploreNostr', 'Explore Nostr')}
                             </button>

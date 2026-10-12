@@ -78,6 +78,10 @@ const AdminFeatures = () => {
                 <Info size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span>{t('features.propagationNote')}</span>
             </div>
+            <div className="propagation-note">
+                <Info size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                <span>{t('features.appNote')}</span>
+            </div>
 
             {!isAdmin && (
                 <div className="status-msg error">{t('features.adminOnly')}</div>

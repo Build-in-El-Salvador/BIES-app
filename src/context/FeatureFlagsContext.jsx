@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { flagsApi } from '../services/api';
 import { DEFAULT_FLAGS } from '../config/featureSlugs';
+import { scopeFlags } from '../config/appScope';
+import { isNativePlatform } from '../utils/platform';
 
 /**
  * Runtime feature flags — admin-toggled, fetched from the public
@@ -9,9 +11,14 @@ import { DEFAULT_FLAGS } from '../config/featureSlugs';
  * last known flags on fetch errors, so a flaky API never hides the app.
  * Unknown slugs default to enabled (`useFeature` treats only an explicit
  * `false` as disabled).
+ *
+ * `flags` are what this copy of the app runs with: in the store app,
+ * nothing outside its scope (config/appScope.js). `serverFlags` are the
+ * admin switches as stored, for the admin page that edits them.
  */
 const FeatureFlagsContext = createContext({
     flags: DEFAULT_FLAGS,
+    serverFlags: DEFAULT_FLAGS,
     loading: true,
     refresh: () => {},
 });
@@ -44,8 +51,10 @@ export const FeatureFlagsProvider = ({ children }) => {
         return () => window.removeEventListener('focus', onFocus);
     }, [refresh]);
 
+    const scoped = useMemo(() => scopeFlags(flags, isNativePlatform()), [flags]);
+
     return (
-        <FeatureFlagsContext.Provider value={{ flags, loading, refresh }}>
+        <FeatureFlagsContext.Provider value={{ flags: scoped, serverFlags: flags, loading, refresh }}>
             {children}
         </FeatureFlagsContext.Provider>
     );

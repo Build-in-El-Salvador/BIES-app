@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { useBottomNav } from '../context/BottomNavContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
-import { NAV_PAGES_BY_ID } from '../config/navPages';
+import { visibleTabs } from '../config/navPages';
 
 const itemStyle = (active) => ({
   display: 'flex',
@@ -40,11 +40,9 @@ const MobileBottomNav = () => {
   const { tabs: tabIds } = useBottomNav();
   const { flags } = useFeatureFlags();
   // Runtime feature toggles exclude disabled pages even from user-customized
-  // tab sets (the stored preference is untouched, so re-enabling restores them).
-  const enabledTabs = tabIds
-    .map((id) => NAV_PAGES_BY_ID[id])
-    .filter(Boolean)
-    .filter((tab) => !tab.flag || flags[tab.flag] !== false);
+  // tab sets (the stored preference is untouched, so re-enabling restores them);
+  // the default bar fills the gaps they leave.
+  const enabledTabs = visibleTabs(tabIds, (tab) => !tab.flag || flags[tab.flag] !== false);
   // When logged out, auth-gated tabs collapse into a single Login entry —
   // rendering one Login link per gated tab would duplicate it.
   const firstAuthIdx = enabledTabs.findIndex((tab) => tab.auth);
@@ -78,7 +76,7 @@ const MobileBottomNav = () => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
           return (
-            <Link key={tab.path} to={tab.path} style={itemStyle(active)} data-testid={'bottom-nav-' + tab.id}>
+            <Link key={tab.path} to={tab.path} style={itemStyle(active)} data-testid={'bottom-nav-' + tab.id} aria-current={active ? 'page' : undefined}>
               <div style={iconWrapStyle(active)}>
                 <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
               </div>

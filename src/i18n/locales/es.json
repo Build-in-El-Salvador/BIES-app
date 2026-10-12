@@ -81,7 +81,9 @@
     "adminView": "Vista Admin",
     "bounties": "Recompensas",
     "wallet": "Billetera",
-    "more": "Más"
+    "more": "Más",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -101,7 +103,9 @@
     "farmDirectory": "Directorio de Fincas Regenerativas",
     "certifiedDirectory": "Negocios de confianza",
     "bounties": "Tablero de recompensas",
-    "wallet": "Billetera"
+    "wallet": "Billetera",
+    "profile": "Perfil",
+    "notifications": "Notificaciones"
   },
   "settings": {
     "title": "Configuracion",
@@ -145,9 +149,9 @@
   },
   "login": {
     "welcome": "Bienvenido a BIES",
-    "welcomeBack": "Bienvenido de Nuevo",
+    "welcomeBack": "Bienvenido a BIES",
     "signIn": "Inicia sesion en tu cuenta",
-    "accessEcosystem": "Accede al ecosistema BIES",
+    "accessEcosystem": "Encuentra fincas locales, negocios de confianza y a la gente que construye en El Salvador.",
     "nostrExtension": "Extension Nostr",
     "nsecKey": "Clave nsec",
     "seedPhrase": "Frase Semilla",
@@ -406,7 +410,9 @@
       "seriesA": "Serie A",
       "earlyRevenue": "Ingresos Tempranos",
       "scaling": "Escalando"
-    }
+    },
+    "searchMembers": "Buscar miembros",
+    "noMembersSearch": "No se encontraron miembros para \"{{query}}\""
   },
   "members": {
     "title": "Directorio de Miembros",
@@ -1824,7 +1830,16 @@
       "cantReviewOwn_farm": "Es tu finca, así que no puedes reseñarla.",
       "notLive": "Las reseñas se abren cuando el equipo apruebe el listado.",
       "edited": "editada"
-    }
+    },
+    "productName": "Producto {{n}}",
+    "productIcon": "Ícono del producto {{n}}",
+    "removeProduct": "Quitar producto {{n}}",
+    "removeCover": "Quitar foto de portada",
+    "removeLogo": "Quitar logo",
+    "yourReviewPlaceholder": "¿Qué hicieron por ti, cómo te fue, volverías?",
+    "yourReviewPlaceholder_farm": "¿Qué compraste, cómo era, volverías a comprar?",
+    "reviewMinCount": "{{count}} de al menos {{min}} caracteres",
+    "whatsappRow": "WhatsApp {{number}}"
   },
   "marketplace": {
     "entryLabel": "Mercado",
@@ -1896,6 +1911,7 @@
   "mobileNav": {
     "home": "Feed",
     "discover": "Descubrir",
+    "members": "Miembros",
     "farms": "Fincas",
     "trusted": "Confianza",
     "events": "Eventos",
@@ -2115,6 +2131,7 @@
     "title": "Funciones de la App",
     "subtitle": "Activa o desactiva funciones para todos al instante, sin redesplegar",
     "propagationNote": "Los cambios se aplican de inmediato para ti. Los demas usuarios los reciben en unos 5 minutos (cache del servidor) o al volver a la app. Las funciones desactivadas desaparecen de la navegacion, sus paginas muestran No Encontrado y sus APIs quedan bloqueadas.",
+    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas y Confianza BIES de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
     "adminOnly": "Solo los administradores pueden cambiar las funciones. Los moderadores tienen acceso de solo lectura.",
     "enabled": "Activada",
     "disabled": "Desactivada",
@@ -2171,6 +2188,14 @@
       "bounties": {
         "name": "Recompensas",
         "description": "Tablon de recompensas con deposito en sats y puntos"
+      },
+      "dashboard": {
+        "name": "Panel",
+        "description": "Panel personal: analíticas, mis proyectos, eventos y cursos"
+      },
+      "courses": {
+        "name": "Cursos",
+        "description": "Catálogo de cursos, lecciones e inscripción"
       }
     }
   },

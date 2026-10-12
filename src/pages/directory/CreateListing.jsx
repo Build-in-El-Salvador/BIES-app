@@ -81,6 +81,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const [loadError, setLoadError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    // A field the member must fix: shown beside it, and it gets the focus.
+    const [fieldError, setFieldError] = useState(null); // { id, message }
     const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | 'gallery' | null
     const [cropImage, setCropImage] = useState(null); // { src, target }
     const [submitted, setSubmitted] = useState(false);
@@ -138,6 +140,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
     const handleChange = (e) => {
         const { name, value, type: inputType, checked } = e.target;
+        if (fieldError?.id === `dir-${name}`) setFieldError(null);
         setForm((prev) => ({ ...prev, [name]: inputType === 'checkbox' ? checked : value }));
     };
 
@@ -271,14 +274,16 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
     const handleSubmit = async () => {
         setSubmitError('');
-        const problem = !form.name.trim() ? t('directory.nameRequired')
-            : !isFarm && !form.category ? t('directory.categoryRequired')
+        const problem = !form.name.trim() ? { id: 'dir-name', message: t('directory.nameRequired') }
+            : !isFarm && !form.category ? { id: 'dir-category', message: t('directory.categoryRequired') }
                 : !editMode && !isOwnBusiness && form.review.trim().length < REVIEW_MIN
-                    ? t('directory.reviewRequired', { min: REVIEW_MIN })
-                    : '';
+                    ? { id: 'dir-review', message: t('directory.reviewRequired', { min: REVIEW_MIN }) }
+                    : null;
+        setFieldError(problem);
         if (problem) {
-            setSubmitError(problem);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const field = document.getElementById(problem.id);
+            field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            field?.focus({ preventScroll: true });
             return;
         }
         setSubmitting(true);
@@ -430,7 +435,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                         type="file"
                                         accept="image/*"
                                         onChange={(e) => handleImageSelect(e, 'photo')}
-                                        style={{ display: 'none' }}
+                                        className="dir-file-input"
                                         disabled={!!uploading}
                                     />
                                 </label>
@@ -439,6 +444,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                         type="button"
                                         className="dir-banner-btn danger"
                                         onClick={() => setForm((p) => ({ ...p, photo: '' }))}
+                                        aria-label={t('directory.removeCover')}
                                     >
                                         <X size={15} />
                                     </button>
@@ -458,7 +464,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     type="file"
                                     accept="image/*"
                                     onChange={(e) => handleImageSelect(e, 'logo')}
-                                    style={{ display: 'none' }}
+                                    aria-label={t('directory.logoLabel')}
+                                    className="dir-file-input"
                                     disabled={!!uploading}
                                 />
                             </label>
@@ -468,6 +475,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     type="button"
                                     className="dir-logo-remove"
                                     onClick={() => setForm((p) => ({ ...p, logo: '' }))}
+                                    aria-label={t('directory.removeLogo')}
                                 >
                                     <X size={14} />
                                 </button>
@@ -480,33 +488,43 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <h3 className="dir-card-heading">{t('directory.basicInfo')}</h3>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.nameLabel')} *</label>
+                            <label className="dir-label" htmlFor="dir-name">{t('directory.nameLabel')} *</label>
                             <input
+                                id="dir-name"
                                 type="text"
                                 name="name"
+                                aria-invalid={fieldError?.id === 'dir-name' || undefined}
+                                aria-describedby={fieldError?.id === 'dir-name' ? 'dir-name-error' : undefined}
                                 value={form.name}
                                 onChange={handleChange}
                                 className="dir-input"
                                 maxLength={120}
                                 required
                             />
+                            {fieldError?.id === 'dir-name' && <p className="dir-field-error" id="dir-name-error">{fieldError.message}</p>}
                         </div>
 
                         {!isFarm && (
                             <div className="dir-form-group">
                                 <label className="dir-label" htmlFor="dir-category">{t('directory.category')} *</label>
-                                <select id="dir-category" name="category" value={form.category} onChange={handleChange} className="dir-input" required>
+                                <select
+                                    id="dir-category" name="category" value={form.category} onChange={handleChange} className="dir-input" required
+                                    aria-invalid={fieldError?.id === 'dir-category' || undefined}
+                                    aria-describedby={fieldError?.id === 'dir-category' ? 'dir-category-error' : undefined}
+                                >
                                     <option value="">{t('directory.chooseCategory')}</option>
                                     {DIRECTORY_CATEGORIES.map((c) => (
                                         <option key={c} value={c}>{t(`directory.categories.${c}`)}</option>
                                     ))}
                                 </select>
+                                {fieldError?.id === 'dir-category' && <p className="dir-field-error" id="dir-category-error">{fieldError.message}</p>}
                             </div>
                         )}
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.aboutLabel')}</label>
+                            <label className="dir-label" htmlFor="dir-about">{t('directory.aboutLabel')}</label>
                             <textarea
+                                id="dir-about"
                                 name="about"
                                 value={form.about}
                                 onChange={handleChange}
@@ -517,8 +535,9 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         </div>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.locationLabel')}</label>
+                            <label className="dir-label" htmlFor="dir-location">{t('directory.locationLabel')}</label>
                             <input
+                                id="dir-location"
                                 type="text"
                                 name="location"
                                 value={form.location}
@@ -563,7 +582,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                         ? <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
                                         : <ImagePlus size={22} />}
                                     <span>{t('directory.addPhotos')}</span>
-                                    <input type="file" accept="image/*" multiple onChange={handleGallerySelect} style={{ display: 'none' }} disabled={!!uploading} />
+                                    <input type="file" accept="image/*" multiple onChange={handleGallerySelect} className="dir-file-input" disabled={!!uploading} />
                                 </label>
                             )}
                         </div>
@@ -575,33 +594,33 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                         <div className="dir-form-row">
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.phoneLabel')}</label>
-                                <input type="tel" name="phone" value={form.phone} onChange={handleChange} className="dir-input" maxLength={30} placeholder="+503 6123 4567" />
+                                <label className="dir-label" htmlFor="dir-phone">{t('directory.phoneLabel')}</label>
+                                <input type="tel" id="dir-phone" name="phone" value={form.phone} onChange={handleChange} className="dir-input" maxLength={30} placeholder="+503 6123 4567" />
                             </div>
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.whatsappLabel')}</label>
-                                <input type="tel" name="whatsapp" value={form.whatsapp} onChange={handleChange} className="dir-input" maxLength={30} placeholder="+503 6123 4567" />
+                                <label className="dir-label" htmlFor="dir-whatsapp">{t('directory.whatsappLabel')}</label>
+                                <input type="tel" id="dir-whatsapp" name="whatsapp" value={form.whatsapp} onChange={handleChange} className="dir-input" maxLength={30} placeholder="+503 6123 4567" />
                             </div>
                         </div>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.emailLabel')}</label>
-                            <input type="email" name="email" value={form.email} onChange={handleChange} className="dir-input" />
+                            <label className="dir-label" htmlFor="dir-email">{t('directory.emailLabel')}</label>
+                            <input type="email" id="dir-email" name="email" value={form.email} onChange={handleChange} className="dir-input" />
                         </div>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.websiteLabel')}</label>
-                            <input type="text" name="website" value={form.website} onChange={handleChange} className="dir-input" placeholder="https://…" />
+                            <label className="dir-label" htmlFor="dir-website">{t('directory.websiteLabel')}</label>
+                            <input type="text" id="dir-website" name="website" value={form.website} onChange={handleChange} className="dir-input" placeholder="https://…" />
                         </div>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.instagramLabel')}</label>
-                            <input type="text" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder="@yourfarm" />
+                            <label className="dir-label" htmlFor="dir-instagram">{t('directory.instagramLabel')}</label>
+                            <input type="text" id="dir-instagram" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder="@yourfarm" />
                         </div>
 
                         <div className="dir-form-group">
-                            <label className="dir-label">{t('directory.languages')}</label>
-                            <TagInput tags={languages} onChange={setLanguages} placeholder="Español, English…" />
+                            <label className="dir-label" htmlFor="dir-languages">{t('directory.languages')}</label>
+                            <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="Español, English…" />
                         </div>
 
                         <label className="dir-btc-toggle" style={{ marginBottom: 0 }}>
@@ -622,11 +641,11 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                             <h3 className="dir-card-heading">{t('directory.farmDetails')}</h3>
 
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.productsLabel')}</label>
+                                <span className="dir-label" id="dir-products-label">{t('directory.productsLabel')}</span>
                                 {products.map((product, idx) => {
                                     const RowIcon = getProduceIcon(product);
                                     return (
-                                        <div key={idx} className="dir-product-row">
+                                        <div key={idx} className="dir-product-row" role="group" aria-labelledby="dir-products-label">
                                             <span className="dir-product-icon"><RowIcon size={16} /></span>
                                             <input
                                                 type="text"
@@ -635,11 +654,13 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                                 className="dir-input"
                                                 maxLength={60}
                                                 placeholder={t('directory.productPlaceholder')}
+                                                aria-label={t('directory.productName', { n: idx + 1 })}
                                                 style={{ flex: 1, minWidth: 0 }}
                                             />
                                             <select
                                                 value={product.icon || ''}
                                                 onChange={(e) => updateProduct(idx, 'icon', e.target.value)}
+                                                aria-label={t('directory.productIcon', { n: idx + 1 })}
                                                 className="dir-input dir-icon-select"
                                             >
                                                 <option value="">{t('directory.iconAuto')}</option>
@@ -649,7 +670,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                                     </option>
                                                 ))}
                                             </select>
-                                            <button type="button" className="dir-row-remove" onClick={() => removeProduct(idx)}>
+                                            <button type="button" className="dir-row-remove" onClick={() => removeProduct(idx)} aria-label={t('directory.removeProduct', { n: idx + 1 })}>
                                                 <Trash2 size={15} />
                                             </button>
                                         </div>
@@ -663,8 +684,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                             </div>
 
                             <div className="dir-form-group" style={{ marginBottom: 0 }}>
-                                <label className="dir-label">{t('directory.practicesLabel')}</label>
-                                <div className="dir-practices-checks">
+                                <span className="dir-label" id="dir-practices-label">{t('directory.practicesLabel')}</span>
+                                <div className="dir-practices-checks" role="group" aria-labelledby="dir-practices-label">
                                     {FARM_PRACTICES.map((p) => (
                                         <label key={p.id} className="dir-check-label">
                                             <input
@@ -683,18 +704,18 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                             <h3 className="dir-card-heading">{t('directory.providerDetails')}</h3>
 
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.skillsLabel')}</label>
-                                <TagInput tags={skills} onChange={setSkills} placeholder="Solar, Permaculture…" />
+                                <label className="dir-label" htmlFor="dir-skills">{t('directory.skillsLabel')}</label>
+                                <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="Solar, Permaculture…" />
                             </div>
 
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.bestFor')}</label>
-                                <input type="text" name="bestFor" value={form.bestFor} onChange={handleChange} className="dir-input" maxLength={200} />
+                                <label className="dir-label" htmlFor="dir-best-for">{t('directory.bestFor')}</label>
+                                <input type="text" id="dir-best-for" name="bestFor" value={form.bestFor} onChange={handleChange} className="dir-input" maxLength={200} />
                             </div>
 
                             <div className="dir-form-group">
-                                <label className="dir-label">{t('directory.pricing')}</label>
-                                <input type="text" name="pricing" value={form.pricing} onChange={handleChange} className="dir-input" maxLength={200} />
+                                <label className="dir-label" htmlFor="dir-pricing">{t('directory.pricing')}</label>
+                                <input type="text" id="dir-pricing" name="pricing" value={form.pricing} onChange={handleChange} className="dir-input" maxLength={200} />
                             </div>
 
                             {/* Staff only: link the business's own BIES account (zaps) */}
@@ -716,20 +737,29 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     {!editMode && !isOwnBusiness && (
                         <div className="dir-form-card">
                             <h3 className="dir-card-heading">{t('directory.yourReview')} *</h3>
-                            <p className="dir-field-hint" style={{ marginTop: 0 }}>{t('directory.yourReviewHint', { context: isFarm ? 'farm' : undefined })}</p>
+                            <p className="dir-field-hint" id="dir-review-hint" style={{ marginTop: 0 }}>{t('directory.yourReviewHint', { context: isFarm ? 'farm' : undefined })}</p>
                             <div className="dir-form-group" style={{ marginBottom: '0.9rem' }}>
                                 <textarea
+                                    id="dir-review"
                                     name="review"
                                     aria-label={t('directory.yourReview')}
+                                    aria-required="true"
+                                    aria-invalid={fieldError?.id === 'dir-review' || undefined}
+                                    aria-describedby={`dir-review-hint dir-review-count${fieldError?.id === 'dir-review' ? ' dir-review-error' : ''}`}
                                     value={form.review}
                                     onChange={handleChange}
                                     className="dir-input"
                                     rows={4}
                                     maxLength={1000}
-                                    placeholder={t('directory.endorsePlaceholder')}
+                                    placeholder={t('directory.yourReviewPlaceholder', { context: isFarm ? 'farm' : undefined })}
                                 />
-                                <span className="dir-char-count">{form.review.trim().length}/1000</span>
+                                <span className="dir-char-count" id="dir-review-count">
+                                    {form.review.trim().length < REVIEW_MIN
+                                        ? t('directory.reviewMinCount', { count: form.review.trim().length, min: REVIEW_MIN })
+                                        : `${form.review.trim().length}/1000`}
+                                </span>
                             </div>
+                            {fieldError?.id === 'dir-review' && <p className="dir-field-error" id="dir-review-error">{fieldError.message}</p>}
                         </div>
                     )}
 
@@ -1053,6 +1083,28 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 textarea.dir-input { resize: vertical; }
                 select.dir-input { appearance: auto; cursor: pointer; }
 
+                /* File inputs stay focusable (keyboard, screen readers) but unseen;
+                   their label shows the focus instead. */
+                .dir-file-input {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    opacity: 0;
+                    overflow: hidden;
+                    clip: rect(0 0 0 0);
+                }
+                .dir-banner-btn:focus-within,
+                .dir-logo-circle:focus-within,
+                .dir-gallery-add:focus-within {
+                    outline: 3px solid var(--color-primary);
+                    outline-offset: 2px;
+                }
+                .dir-field-error {
+                    margin: 0.4rem 0 0;
+                    font-size: 0.82rem;
+                    font-weight: 600;
+                    color: #b91c1c;
+                }
                 .dir-char-count {
                     position: absolute;
                     right: 4px;

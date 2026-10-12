@@ -20,8 +20,9 @@ import {
   Wallet,
   Leaf,
   ShieldCheck,
+  Users,
 } from 'lucide-react';
-import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags';
+import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags.js';
 
 // `flag:` marks a page as belonging to a runtime feature toggle (see
 // FeatureFlagsContext). Consumers (MobileBottomNav, CustomizeNavbar) must
@@ -30,7 +31,9 @@ import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags';
 // the user's tab untouched.
 export const NAV_PAGES = [
   { id: 'feed', path: '/feed', icon: MessageSquare, labelKey: 'mobileNav.home' },
-  { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover' },
+  // Discover is projects + members; with projects off it's the same as Members.
+  { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover', flag: 'projects' },
+  { id: 'members', path: '/members', icon: Users, labelKey: 'mobileNav.members', auth: true },
   { id: 'farms', path: '/farms', icon: Leaf, labelKey: 'mobileNav.farms', auth: true, flag: 'directories' },
   { id: 'trusted', path: '/trusted', icon: ShieldCheck, labelKey: 'mobileNav.trusted', auth: true, flag: 'directories' },
   // Spread conditionally so the entry is absent (not just hidden) when the
@@ -40,8 +43,8 @@ export const NAV_PAGES = [
     : []),
   { id: 'events', path: '/events', icon: Calendar, labelKey: 'mobileNav.events', flag: 'events' },
   { id: 'media', path: '/media', icon: Play, labelKey: 'nav.media', flag: 'media' },
-  { id: 'courses', path: '/courses', icon: GraduationCap, labelKey: 'courses.catalogTitle', auth: true },
-  { id: 'dashboard', path: '/dashboard', icon: User, labelKey: 'mobileNav.dashboard', auth: true },
+  { id: 'courses', path: '/courses', icon: GraduationCap, labelKey: 'courses.catalogTitle', auth: true, flag: 'courses' },
+  { id: 'dashboard', path: '/dashboard', icon: User, labelKey: 'mobileNav.dashboard', auth: true, flag: 'dashboard' },
   { id: 'news', path: '/news', icon: Newspaper, labelKey: 'mobileNav.news', flag: 'news' },
   { id: 'messages', path: '/messages', icon: Mail, labelKey: 'nav.messages', auth: true, flag: 'messages' },
   { id: 'notifications', path: '/notifications', icon: Bell, labelKey: 'customNav.pages.notifications', auth: true },
@@ -58,7 +61,7 @@ export const NAV_PAGES = [
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));
 
-export const DEFAULT_BOTTOM_NAV = ['feed', 'discover', 'events', 'media', 'dashboard'];
+export const DEFAULT_BOTTOM_NAV = ['feed', 'members', 'farms', 'trusted', 'profile'];
 
 export const MAX_TABS = 5;
 export const MIN_TABS = 1;
@@ -81,4 +84,19 @@ export function sanitizeTabs(ids) {
   const sliced = result.slice(0, MAX_TABS);
   if (sliced.length < MIN_TABS) return [...DEFAULT_BOTTOM_NAV];
   return sliced;
+}
+
+/**
+ * The tabs the bar shows: the member's tabs whose feature is on, with any
+ * slots that switched-off features leave empty refilled from the default
+ * bar (so a bar never shrinks to one tab because features are off in this
+ * copy of the app). Pure: `isOn(page)` says whether a page's feature is on.
+ */
+export function visibleTabs(ids, isOn) {
+  const pages = ids.map((id) => NAV_PAGES_BY_ID[id]).filter(Boolean);
+  const shown = pages.filter(isOn);
+  const spare = DEFAULT_BOTTOM_NAV
+    .map((id) => NAV_PAGES_BY_ID[id])
+    .filter((p) => p && isOn(p) && !shown.includes(p));
+  return [...shown, ...spare.slice(0, pages.length - shown.length)];
 }

@@ -128,7 +128,7 @@ const AdminRoute = ({ children }) => {
 
     if (loading) return <div className="p-10 text-center">Loading...</div>;
     if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-    if (!isStaff) return <Navigate to="/dashboard" replace />;
+    if (!isStaff) return <Navigate to="/feed" replace />;
 
     return children;
 };
@@ -239,7 +239,7 @@ const AppContent = () => {
                     <Route path="/discover/market/*" element={<Moved to="/market" />} />
                     <Route path="/discover/directory/new" element={<LegacyNewListing />} />
                     <Route path="/discover/directory/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover" element={<ProtectedRoute><Discover /></ProtectedRoute>} />
+                    <Route path="/discover" element={<ProtectedRoute><Discover key="discover" /></ProtectedRoute>} />
                     <Route path="/events" element={<FeatureRoute flag="events"><ProtectedRoute><Events /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/events/create" element={
                         <FeatureRoute flag="events"><ProtectedRoute><CreateEvent /></ProtectedRoute></FeatureRoute>
@@ -251,7 +251,7 @@ const AppContent = () => {
                         <FeatureRoute flag="events"><ProtectedRoute><EditEvent /></ProtectedRoute></FeatureRoute>
                     } />
                     <Route path="/events/:id" element={<FeatureRoute flag="events"><ProtectedRoute><EventDetail /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/members" element={<Navigate to="/discover" replace />} />
+                    <Route path="/members" element={<ProtectedRoute><Discover key="members" membersOnly /></ProtectedRoute>} />
                     <Route path="/builders" element={<Navigate to="/discover" replace />} />
                     <Route path="/builder/:id" element={<ProtectedRoute><PublicProfile type="builder" /></ProtectedRoute>} />
                     <Route path="/investors" element={<Navigate to="/discover" replace />} />
@@ -271,9 +271,9 @@ const AppContent = () => {
                     <Route path="/wallet" element={<FeatureRoute flag="zaps"><ProtectedRoute><Wallet /></ProtectedRoute></FeatureRoute>} />
                     {COURSES_ENABLED && (
                         <>
-                            <Route path="/courses" element={<ProtectedRoute><CourseCatalog /></ProtectedRoute>} />
-                            <Route path="/courses/:id" element={<ProtectedRoute><CourseDetail /></ProtectedRoute>} />
-                            <Route path="/courses/:id/lesson/:lessonId" element={<ProtectedRoute><LessonPlayer /></ProtectedRoute>} />
+                            <Route path="/courses" element={<FeatureRoute flag="courses"><ProtectedRoute><CourseCatalog /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/courses/:id" element={<FeatureRoute flag="courses"><ProtectedRoute><CourseDetail /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/courses/:id/lesson/:lessonId" element={<FeatureRoute flag="courses"><ProtectedRoute><LessonPlayer /></ProtectedRoute></FeatureRoute>} />
                         </>
                     )}
                     {BOUNTIES_ENABLED && (
@@ -288,9 +288,11 @@ const AppContent = () => {
                     {/* Protected Routes */}
                     {/* Specific Dashboard Routes */}
                     <Route path="/dashboard" element={
-                        <ProtectedRoute>
-                            <Dashboard />
-                        </ProtectedRoute>
+                        <FeatureRoute flag="dashboard">
+                            <ProtectedRoute>
+                                <Dashboard />
+                            </ProtectedRoute>
+                        </FeatureRoute>
                     }>
                         <Route index element={<Overview />} />
                         <Route path="projects" element={<FeatureRoute flag="projects"><MyProjects /></FeatureRoute>} />
