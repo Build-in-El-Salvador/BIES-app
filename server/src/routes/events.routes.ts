@@ -64,9 +64,9 @@ router.get('/:id/tickets/mine', authenticate, listMyEventTickets); // before /:t
 router.get('/:id/tickets', authenticate, listEventTickets);
 router.get('/:id/tickets/:ticketId', authenticate, getTicket);
 router.post('/:id/tickets/:ticketId/claim', authenticate, validate(claimTicketSchema), claimTicket);
-// Server-side wallet payment (Coinos/Blink). Safe to re-call: providers are
-// idempotent per invoice (Galoy returns PENDING while settling, ALREADY_PAID
-// once settled) and the server never pays an already-PAID ticket.
+// Server-side wallet payment (Coinos). Requests are serialized per ticket, and
+// the server never pays an already-PAID ticket; the client must never
+// auto-retry it (see payTicketWithWallet).
 router.post('/:id/tickets/:ticketId/pay', moneyLimiter, authenticate, validate(payTicketSchema), payTicketWithWallet);
 router.post('/:id/tickets/:ticketId/checkin', authenticate, checkinTicket);
 

@@ -153,9 +153,7 @@ const ReceiveModal = ({ open, onClose, onPaid }) => {
                 setUnsupported(true);
                 setError('');
             } else if (err?.message === 'wallet_token_expired') {
-                setError(walletType === 'blink'
-                    ? t('wallet.sessionExpiredBlink', 'Your Blink API key no longer works — reconnect your Blink wallet in Settings')
-                    : t('wallet.sessionExpired', 'Wallet session expired — reconnect your Coinos wallet in Settings'));
+                setError(t('wallet.sessionExpired', 'Wallet session expired — reconnect your Coinos wallet in Settings'));
             } else {
                 setError(err?.message || t('wallet.receive.failed', 'Could not create the invoice — please try again'));
             }
@@ -343,11 +341,7 @@ const ReceiveModal = ({ open, onClose, onPaid }) => {
                                     {t('wallet.receive.addressHint', 'Anyone can send sats to this address at any time.')}
                                 </p>
                             )}
-                            {/* blink never clobbers a custom profile address, so a non-@blink.sv
-                                address under a blink connection is also "from the profile" */}
-                            {(walletType === 'nwc'
-                                || (walletType === 'blink'
-                                    && !/@blink\.sv$/i.test(caps.lightningAddress || ''))) && (
+                            {walletType === 'nwc' && (
                                 <p className="rm-address-hint">
                                     {t('wallet.receive.profileAddressHint', 'This address comes from your profile — it may point to a different wallet than the one connected here.')}
                                 </p>

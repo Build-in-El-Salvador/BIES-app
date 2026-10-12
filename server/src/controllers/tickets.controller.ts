@@ -5,7 +5,7 @@
  * invoice from the host's Lightning address (LNURL-pay) and only tracks
  * settlement — primary via LUD-21 verify polling, fallback via buyer
  * preimage submission checked against the invoice payment_hash, and for
- * connected server-mediated wallets (Coinos/Blink) via the server executing
+ * a connected server-mediated wallet (Coinos) via the server executing
  * the payment itself and observing provider-confirmed settlement.
  */
 
@@ -22,7 +22,6 @@ import {
     sha256Hex,
 } from '../services/lnurl.service';
 import * as coinosService from '../services/coinos.service';
-import * as blinkService from '../services/blink.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -30,11 +29,10 @@ export const claimTicketSchema = z.object({
     preimage: z.string().regex(/^[0-9a-fA-F]{64}$/, 'preimage must be a 64-char hex string'),
 });
 
-// See payTicketWithWallet for the retry contract: the client auto-retries
-// this endpoint on PENDING for Blink ONLY (Galoy is idempotent per invoice);
-// Coinos requests are serialized server-side and never auto-retried.
+// See payTicketWithWallet for the retry contract: requests are serialized
+// server-side and the client never auto-retries them.
 export const payTicketSchema = z.object({
-    walletType: z.enum(['coinos', 'blink']),
+    walletType: z.enum(['coinos']),
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -234,8 +232,8 @@ async function probeCoinosSettlement(
 
 /**
  * Per-ticket /pay serialization: two concurrent requests must never both
- * reach a payment provider. Blink is idempotent per invoice, but for Coinos
- * two concurrent POST /payments for the same bolt11 are both in flight
+ * reach a payment provider. For Coinos, two concurrent POST /payments for
+ * the same bolt11 are both in flight
  * before either settles — nothing guarantees the second is rejected, and a
  * host node that settles duplicate HTLCs would double-charge the buyer.
  * Single-process server — an in-memory set is sufficient.
@@ -467,7 +465,7 @@ export async function claimTicket(req: Request, res: Response): Promise<void> {
 /**
  * POST /events/:id/tickets/:ticketId/pay
  * Buyer pays the ticket invoice server-side from their connected BIES wallet
- * (Coinos or Blink).
+ * (Coinos).
  *
  * Trust model — evidence class (c): the server itself executes the payment
  * from the buyer's server-mediated wallet and observes provider-confirmed
@@ -476,11 +474,8 @@ export async function claimTicket(req: Request, res: Response): Promise<void> {
  *
  * Retry safety: requests are serialized per ticket (concurrent /pay → 409
  * payment_in_flight), so a provider is never executing two payments for the
- * same invoice at once. Galoy (Blink) is additionally idempotent per bolt11:
- * PENDING while an invoice is settling, ALREADY_PAID once settled — for BLINK
- * ONLY, re-calling this endpoint is the intended confirm mechanism and can
- * never double-charge. Coinos has no such contract, so the client must never
- * auto-retry a Coinos /pay. We also never call a provider at all when the
+ * same invoice at once. Coinos is not idempotent per invoice, so the client
+ * must never auto-retry a /pay. We also never call a provider at all when the
  * ticket row is already PAID.
  *
  * Indeterminate outcomes: a transport failure (timeout / reset — err.status
@@ -492,14 +487,7 @@ export async function claimTicket(req: Request, res: Response): Promise<void> {
  * Ordering invariant: pay first, then mark. PAID is never written before the
  * provider confirms; if the DB write fails AFTER provider settlement we return
  * 200 SETTLED_UNRECORDED (+preimage when Coinos supplied a valid one) and the
- * ticket self-heals via the getTicket LUD-21 poll, the preimage claim path,
- * or — Blink only — a /pay re-call (ALREADY_PAID retries the mark).
- *
- * Known gap (accepted): a Blink PENDING that settles only after the ticket
- * flips EXPIRED gets 409 here; recovery is the getTicket poll, which requires
- * the host's invoice to support LUD-21 verify — non-verify hosts need manual
- * resolution. expiresAt is capped at 15 min and Galoy PENDING normally
- * resolves in seconds, so the window is tiny.
+ * ticket self-heals via the getTicket LUD-21 poll or the preimage claim path.
  */
 export async function payTicketWithWallet(req: Request, res: Response): Promise<void> {
     // In-flight guard BEFORE any read: without it two concurrent requests both
@@ -514,8 +502,6 @@ export async function payTicketWithWallet(req: Request, res: Response): Promise<
     }
     payTicketInFlight.add(ticketIdParam);
     try {
-        const { walletType } = req.body as { walletType: 'coinos' | 'blink' };
-
         let ticket: TicketRow | null = await prisma.ticket.findUnique({
             where: { id: ticketIdParam },
         });
@@ -564,14 +550,10 @@ export async function payTicketWithWallet(req: Request, res: Response): Promise<
         // disagree with a username-without-token state).
         const profile = await prisma.profile.findUnique({
             where: { userId: req.user!.id },
-            select: { coinosToken: true, blinkApiKey: true, blinkWalletId: true },
+            select: { coinosToken: true },
         });
-        if (walletType === 'coinos' && !profile?.coinosToken) {
+        if (!profile?.coinosToken) {
             res.status(400).json({ error: 'No Coinos wallet connected', code: 'wallet_not_connected' });
-            return;
-        }
-        if (walletType === 'blink' && (!profile?.blinkApiKey || !profile?.blinkWalletId)) {
-            res.status(400).json({ error: 'No Blink wallet connected', code: 'wallet_not_connected' });
             return;
         }
 
@@ -579,26 +561,15 @@ export async function payTicketWithWallet(req: Request, res: Response): Promise<
         // provider-confirmed settlement (evidence class (c)).
         let evidencePreimage = '';
         try {
-            if (walletType === 'coinos') {
-                const result = await coinosService.payInvoice(req.user!.id, ticket.bolt11);
-                // A 2xx from Coinos is the settlement evidence; the preimage is a
-                // bonus — accept it only when it matches the invoice payment hash
-                if (result.preimage) {
-                    if (sha256Hex(Buffer.from(result.preimage, 'hex')) === ticket.paymentHash) {
-                        evidencePreimage = result.preimage;
-                    } else {
-                        console.warn(`[Tickets] Coinos preimage mismatch for ticket ${ticket.id}`);
-                    }
+            const result = await coinosService.payInvoice(req.user!.id, ticket.bolt11);
+            // A 2xx from Coinos is the settlement evidence; the preimage is a
+            // bonus — accept it only when it matches the invoice payment hash
+            if (result.preimage) {
+                if (sha256Hex(Buffer.from(result.preimage, 'hex')) === ticket.paymentHash) {
+                    evidencePreimage = result.preimage;
+                } else {
+                    console.warn(`[Tickets] Coinos preimage mismatch for ticket ${ticket.id}`);
                 }
-            } else {
-                const { status } = await blinkService.payInvoice(req.user!.id, ticket.bolt11);
-                if (status === 'PENDING') {
-                    // In-flight at Galoy — no DB write; the client re-calls this
-                    // endpoint (idempotent: ALREADY_PAID once settled)
-                    res.json({ ticket: serializeTicket(ticket), paymentStatus: 'PENDING' });
-                    return;
-                }
-                // SUCCESS | ALREADY_PAID — provider-confirmed settlement
             }
         } catch (err: any) {
             // NEVER emit HTTP 401 here — the client nukes the session on any
@@ -611,11 +582,9 @@ export async function payTicketWithWallet(req: Request, res: Response): Promise<
                 // INDETERMINATE: transport failure (timeout / reset) — the
                 // provider gave no verdict and may still settle the payment.
                 // Reporting payment_failed here invites a second payment.
-                // For Coinos, probe settlement first: the payment may already
-                // have executed even though we never saw the response.
-                const probe = walletType === 'coinos'
-                    ? await probeCoinosSettlement(req.user!.id, ticket)
-                    : { settled: false, preimage: '' };
+                // Probe settlement first: the payment may already have
+                // executed even though we never saw the response.
+                const probe = await probeCoinosSettlement(req.user!.id, ticket);
                 if (!probe.settled) {
                     res.json({
                         ticket: serializeTicket(ticket),
@@ -639,10 +608,9 @@ export async function payTicketWithWallet(req: Request, res: Response): Promise<
 
         // MARK — provider already settled, so a DB failure must NOT surface as
         // an error (an error invites a re-pay). Recovery: LUD-21 poll via
-        // getTicket, client claim with the returned preimage, or — Blink
-        // only — a /pay re-call (Coinos re-calls would re-execute a payment,
-        // so the client must never auto-retry them; SETTLED_UNRECORDED below
-        // is deliberately distinct from the Blink in-flight PENDING).
+        // getTicket, or client claim with the returned preimage. A /pay
+        // re-call would re-execute the payment, so the client must never
+        // auto-retry one.
         try {
             const paid = await markTicketPaidWithRetry(ticket, evidencePreimage);
             res.json({ ticket: serializeTicket(paid), paymentStatus: 'PAID' });
