@@ -4,13 +4,14 @@ import { getPublicKey, nip19 } from 'nostr-tools';
 import { generateSeedWords, privateKeyFromSeedWords } from 'nostr-tools/nip06';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Copy, CheckCircle, ShieldAlert, ArrowRight, AlertCircle, Fingerprint, Loader2, ChevronUp, ChevronDown, AtSign, X } from 'lucide-react';
+import { Copy, CheckCircle, ShieldAlert, ArrowRight, AlertCircle, Fingerprint, KeyRound, Loader2, ChevronUp, ChevronDown, AtSign, X } from 'lucide-react';
 import { keytrService, isPrfUnsupportedError } from '../services/keytrService';
 import { nostrSigner } from '../services/nostrSigner';
 import { PASSKEY_ENABLED, COINOS_SIGNUP_WALLET } from '../config/featureFlags';
 import { walletApi, profilesApi } from '../services/api';
 import { isNativePlatform } from '../utils/platform';
 import EmailSignIn from '../components/EmailSignIn';
+import { saveKey, savedKeyAvailable } from '../services/savedKey';
 
 const Signup = () => {
     const { t } = useTranslation();
@@ -84,6 +85,19 @@ const Signup = () => {
 
     const handleBackupConfirm = () => {
         setStep(2);
+    };
+
+    // In the app: the new key straight into the phone's password manager.
+    const [keySave, setKeySave] = useState(''); // '' | 'saving' | 'saved' | 'failed'
+    const handleSaveToPasswords = async () => {
+        if (!keys) return;
+        setKeySave('saving');
+        try {
+            const { saved, cancelled } = await saveKey(keys.nsec);
+            setKeySave(saved ? 'saved' : cancelled ? '' : 'failed');
+        } catch {
+            setKeySave('failed');
+        }
     };
 
     const handleSavePasskey = async () => {
@@ -286,6 +300,26 @@ const Signup = () => {
                                 <p className="text-xs" style={{ marginBottom: '0.75rem', color: 'var(--color-gray-400)' }}>
                                     Copy the nsec or seed phrase above to back up your keys.
                                 </p>
+                                {savedKeyAvailable() && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveToPasswords}
+                                            disabled={keySave === 'saving' || keySave === 'saved'}
+                                            className="btn-outline w-full py-3 rounded-full flex items-center justify-center gap-2"
+                                        >
+                                            {keySave === 'saved' ? <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                                                : keySave === 'saving' ? <Loader2 size={16} className="spin" />
+                                                : <KeyRound size={16} />}
+                                            {keySave === 'saved' ? t('savedKey.saved') : t('savedKey.saveButton')}
+                                        </button>
+                                        {keySave === 'failed' && (
+                                            <p className="text-xs" role="alert" style={{ marginTop: '0.5rem', color: 'var(--color-error)' }}>
+                                                {t('savedKey.saveFailed')}
+                                            </p>
+                                        )}
+                                    </>
+                                )}
                             </div>
 
                             {/* ── Quick Login section (separate from backup) ── */}
@@ -528,7 +562,8 @@ const Signup = () => {
                     width: 100%;
                 }
 
-                .spin {
+                /* :global() for the icon components: styled-jsx only scopes plain elements */
+                .signup-card :global(.spin) {
                     animation: spin 1s linear infinite;
                 }
                 @keyframes spin {

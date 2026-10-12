@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import { QRCodeSVG } from 'qrcode.react';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, Copy, Download, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, Copy, Download, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { accountApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
@@ -19,6 +19,7 @@ import {
     unlockBackup,
 } from '../../services/accountKey';
 import { isNativePlatform } from '../../utils/platform';
+import { getSavedKey, saveKey, savedKeyAvailable } from '../../services/savedKey';
 import CodeField, { isCompleteCode, useCountdown } from '../../components/account/CodeField';
 import { accountErrorMessage } from '../../components/account/accountErrors';
 import './AccountFlows.css';
@@ -64,6 +65,10 @@ const TakeYourKey = () => {
     const [saving, setSaving] = useState(false);
     const [backupNote, setBackupNote] = useState('');
     const [manualCopy, setManualCopy] = useState('');
+    // In the app: the key into the phone's password manager, and back again
+    // to confirm it was saved.
+    const canSaveKeys = savedKeyAvailable();
+    const [keySave, setKeySave] = useState(''); // '' | 'saving' | 'saved' | 'failed'
 
     const [proofText, setProofText] = useState('');
     const [proofPassword, setProofPassword] = useState('');
@@ -204,6 +209,28 @@ const TakeYourKey = () => {
         const file = e.target.files?.[0];
         e.target.value = '';
         if (file) setProofText((await file.text()).trim());
+    };
+
+    const saveToPasswords = async () => {
+        setKeySave('saving');
+        try {
+            const { saved, cancelled } = await saveKey(nsec);
+            setKeySave(saved ? 'saved' : cancelled ? '' : 'failed');
+        } catch {
+            setKeySave('failed');
+        }
+    };
+
+    const fillFromSaved = async () => {
+        setError('');
+        try {
+            const found = await getSavedKey();
+            if (found?.nsec) setProofText(found.nsec);
+            else if (found?.none) setError(t('savedKey.none'));
+            else if (found?.notAKey) setError(t('savedKey.notAKey'));
+        } catch {
+            setError(t('savedKey.unavailable'));
+        }
     };
 
     // Prove the key was saved: sign the challenge with the key brought back.
@@ -397,6 +424,20 @@ const TakeYourKey = () => {
                             {showQr ? t('account.key.hideQr') : t('account.key.showQr')}
                         </button>
                         {showQr && <div className="acct-qr"><QRCodeSVG value={nsec} size={200} /></div>}
+                        {canSaveKeys && (
+                            <button
+                                type="button"
+                                className="acct-button secondary"
+                                onClick={saveToPasswords}
+                                disabled={keySave === 'saving' || keySave === 'saved'}
+                            >
+                                {keySave === 'saving' ? <Loader2 size={16} className="acct-spin" />
+                                    : keySave === 'saved' ? <CheckCircle size={16} />
+                                    : <KeyRound size={16} />}
+                                {keySave === 'saved' ? t('savedKey.saved') : t('savedKey.saveButton')}
+                            </button>
+                        )}
+                        {keySave === 'failed' && <p className="acct-hint" role="alert">{t('savedKey.saveFailed')}</p>}
                     </div>
 
                     <div className="acct-card">
@@ -468,6 +509,11 @@ const TakeYourKey = () => {
                             </button>
                             <input ref={fileRef} type="file" accept={KEY_FILE_TYPES} onChange={openFile} hidden />
                         </>
+                    )}
+                    {canSaveKeys && (
+                        <button type="button" className="acct-link" disabled={busy} onClick={fillFromSaved}>
+                            {t('savedKey.useSaved')}
+                        </button>
                     )}
                     {proof?.encrypted && (
                         <input

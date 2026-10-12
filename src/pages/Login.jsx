@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Loader2, Key, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
-import { nip19 } from 'nostr-tools';
+import { AlertCircle, ArrowLeft, Loader2, Key, KeyRound, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { nip19, getPublicKey } from 'nostr-tools';
+import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { PASSKEY_ENABLED, NIP46_ENABLED, AMBER_NIP55_ENABLED } from '../config/featureFlags';
 import { isLikelyExtensionInterference, keytrService } from '../services/keytrService';
 import { isNativePlatform } from '../utils/platform';
@@ -14,6 +15,7 @@ import NostrIcon from '../components/NostrIcon';
 import NostrConnectQR from '../components/NostrConnectQR';
 import EmailSignIn from '../components/EmailSignIn';
 import { readKeyInput, unlockBackup } from '../services/accountKey';
+import { declineSave, getSavedKey, rememberSaved, saveKey, savedKeyAvailable, shouldOfferToSave } from '../services/savedKey';
 
 /**
  * Sign-in, on two screens: /login is email, and /login/nostr (`nostr`) holds
@@ -44,6 +46,15 @@ const Login = ({ nostr = false }) => {
     );
     // An error belongs to the screen it happened on.
     useEffect(() => setError(''), [nostr]);
+
+    // In the app, a key typed or pasted here can go to the phone's password
+    // manager once it has signed in (services/savedKey.js). `offering` holds
+    // the redirect below back while that offer is decided.
+    const canSaveKeys = savedKeyAvailable();
+    const offering = useRef(false);
+    const [offer, setOffer] = useState(null); // { nsec, pubkey, result }
+    const [offerBusy, setOfferBusy] = useState(false);
+    const [offerNote, setOfferNote] = useState('');
 
     const openNostr = () => navigate('/login/nostr', { state: { fromEmail: true } });
     // Back through history when the email screen is behind this one, so the
@@ -81,17 +92,84 @@ const Login = ({ nostr = false }) => {
 
     // Redirect to dashboard if already logged in
     useEffect(() => {
-        if (!authLoading && authedUser) {
+        if (!authLoading && authedUser && !offering.current) {
             navigate('/feed', { replace: true });
         }
     }, [authLoading, authedUser, navigate]);
 
     const handleResult = (result) => {
+        offering.current = false;
         if (result.success) {
             const target = result.needsProfileSetup ? '/profile-setup' : '/feed';
             navigate(target);
         } else {
             setError(result.error || 'Login failed. Please try again.');
+        }
+    };
+
+    /** Sign in with a key held here, then offer to save it (native, once per key). */
+    const signInWithKey = async (nsec) => {
+        offering.current = canSaveKeys;
+        try {
+            const result = await loginWithNsecAndCheckNew(nsec);
+            const pubkey = result.user?.nostrPubkey;
+            if (result.success && shouldOfferToSave(pubkey)) {
+                setOffer({ nsec, pubkey, result });
+                return;
+            }
+            handleResult(result);
+        } catch (err) {
+            offering.current = false;
+            throw err;
+        }
+    };
+
+    const saveOfferedKey = async () => {
+        setOfferBusy(true);
+        setOfferNote('');
+        try {
+            const { saved, cancelled } = await saveKey(offer.nsec);
+            if (!saved && !cancelled) {
+                setOfferNote(t('savedKey.saveFailed'));
+                return;
+            }
+        } catch {
+            setOfferNote(t('savedKey.saveFailed'));
+            return;
+        } finally {
+            setOfferBusy(false);
+        }
+        handleResult(offer.result);
+        setOffer(null);
+    };
+
+    const skipOffer = () => {
+        declineSave(offer.pubkey);
+        handleResult(offer.result);
+        setOffer(null);
+    };
+
+    const handleSavedKeyLogin = async () => {
+        setError('');
+        let found;
+        try {
+            found = await getSavedKey();
+        } catch {
+            setError(t('savedKey.unavailable'));
+            return;
+        }
+        if (!found) return; // closed the sheet
+        if (found.none) { setError(t('savedKey.none')); return; }
+        if (found.notAKey) { setError(t('savedKey.notAKey')); return; }
+        setLoading(true);
+        try {
+            const result = await loginWithNsecAndCheckNew(found.nsec);
+            if (result.success) rememberSaved(result.user?.nostrPubkey);
+            handleResult(result);
+        } catch (err) {
+            setError(err?.message || String(err));
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -198,8 +276,7 @@ const Login = ({ nostr = false }) => {
             }
         }
         try {
-            const result = await loginWithNsecAndCheckNew(nip19.nsecEncode(secretKey));
-            handleResult(result);
+            await signInWithKey(nip19.nsecEncode(secretKey));
         } catch (err) {
             setError(err?.message || String(err));
         } finally {
@@ -217,6 +294,16 @@ const Login = ({ nostr = false }) => {
         setError('');
     };
 
+    // The npub of a typed nsec: what a password manager files the key under.
+    const nsecNpub = useMemo(() => {
+        try {
+            const decoded = nip19.decode(nsecInput.trim());
+            return decoded.type === 'nsec' ? nip19.npubEncode(getPublicKey(decoded.data)) : '';
+        } catch {
+            return '';
+        }
+    }, [nsecInput]);
+
     const handleNsecLogin = async (e) => {
         e.preventDefault();
         if (!nsecInput.trim()) return;
@@ -224,8 +311,7 @@ const Login = ({ nostr = false }) => {
         setError('');
         setLoading(true);
         try {
-            const result = await loginWithNsecAndCheckNew(nsecInput);
-            handleResult(result);
+            await signInWithKey(nsecInput.trim());
         } catch (err) {
             console.error('nsec login error:', err);
             setError(err?.message || String(err) || 'Invalid nsec key or login failed.');
@@ -241,8 +327,13 @@ const Login = ({ nostr = false }) => {
         setError('');
         setLoading(true);
         try {
-            const result = await loginWithSeedPhraseAndCheckNew(seedInput);
-            handleResult(result);
+            // In the app, the key the phrase stands for is what gets saved.
+            const words = seedInput.trim().toLowerCase();
+            if (canSaveKeys && validateWords(words)) {
+                await signInWithKey(nip19.nsecEncode(privateKeyFromSeedWords(words)));
+            } else {
+                handleResult(await loginWithSeedPhraseAndCheckNew(seedInput));
+            }
         } catch (err) {
             setError(err.message || 'Invalid seed phrase or login failed.');
         } finally {
@@ -291,7 +382,7 @@ const Login = ({ nostr = false }) => {
     return (
         <div className="login-container">
             <div className="login-card">
-                {nostr && (
+                {nostr && !offer && (
                     <button type="button" className="login-back" onClick={backToEmail} aria-label={t('login.backToEmail')}>
                         <ArrowLeft size={16} /> {t('common.back')}
                     </button>
@@ -301,12 +392,35 @@ const Login = ({ nostr = false }) => {
                     <img src={logoIcon} alt="BIES" style={{ height: '64px', width: 'auto' }} />
                 </div>
 
-                <h2 className="login-heading" style={{ fontSize: '1.5rem' }}>
-                    {nostr ? t('emailSignIn.useNostr') : t('login.welcomeBack')}
+                <h2 className="login-heading" style={{ fontSize: '1.5rem', textAlign: 'center' }}>
+                    {offer ? t('savedKey.offerTitle') : nostr ? t('emailSignIn.useNostr') : t('login.welcomeBack')}
                 </h2>
                 <p className="login-subtext" style={{ marginBottom: nostr ? '1.5rem' : '2rem', textAlign: 'center' }}>
-                    {nostr ? t('emailSignIn.nostrIntro') : t('login.accessEcosystem')}
+                    {offer ? t('savedKey.offerBody') : nostr ? t('emailSignIn.nostrIntro') : t('login.accessEcosystem')}
                 </p>
+
+                {offer && (<>
+                {offerNote && (
+                    <div className="error-banner" role="alert">
+                        <AlertCircle size={16} />
+                        <span>{offerNote}</span>
+                    </div>
+                )}
+                <div className="quick-login-buttons">
+                    <button
+                        type="button"
+                        onClick={saveOfferedKey}
+                        disabled={offerBusy}
+                        className="w-full btn-login flex items-center justify-center gap-3 py-3 rounded-full"
+                    >
+                        {offerBusy ? <Loader2 size={20} className="spin" /> : <KeyRound size={20} />}
+                        <span>{t('savedKey.save')}</span>
+                    </button>
+                    <button type="button" onClick={skipOffer} disabled={offerBusy} className="login-link-btn" style={{ padding: '0.5rem' }}>
+                        {t('savedKey.notNow')}
+                    </button>
+                </div>
+                </>)}
 
                 {!nostr && (<>
                 <EmailSignIn onSuccess={handleResult} />
@@ -323,13 +437,27 @@ const Login = ({ nostr = false }) => {
                 </button>
                 </>)}
 
-                {nostr && (<>
+                {nostr && !offer && (<>
                 {error && (
                     <div className="error-banner">
                         <AlertCircle size={16} />
                         <span>{error}</span>
                     </div>
                 )}
+
+                {/* In the app: a key kept in the phone's password manager */}
+                {canSaveKeys && (<>
+                    <button
+                        type="button"
+                        onClick={handleSavedKeyLogin}
+                        disabled={loading}
+                        className="w-full btn-login flex items-center justify-center gap-3 py-3 rounded-full"
+                    >
+                        <KeyRound size={20} />
+                        <span>{t('savedKey.useSaved')}</span>
+                    </button>
+                    <div className="divider"><span>{t('common.or')}</span></div>
+                </>)}
 
                 {/* Quick login methods — passkey shown when WebAuthn is available */}
                 {(hasNostrExtension || passkeyAvailable) && (
@@ -481,15 +609,30 @@ const Login = ({ nostr = false }) => {
                 {/* Login with nsec */}
                 {loginMode === 'nsec' && (
                     <form onSubmit={handleNsecLogin} className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {/* For password managers: the key is the password, its npub the username. */}
+                        <input
+                            type="text"
+                            name="username"
+                            autoComplete="username"
+                            value={nsecNpub}
+                            onChange={() => {}}
+                            tabIndex={-1}
+                            aria-hidden="true"
+                            className="pm-username"
+                        />
                         <div className="key-input-wrapper">
                             <Key size={16} className="key-input-icon" />
                             <input
                                 type="password"
+                                name="password"
                                 placeholder="Paste your nsec key..."
                                 value={nsecInput}
                                 onChange={(e) => setNsecInput(e.target.value)}
                                 className="key-input"
-                                autoComplete="off"
+                                autoComplete="current-password"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                             />
                         </div>
                         <button
@@ -705,6 +848,7 @@ const Login = ({ nostr = false }) => {
                 .btn-login {
                     background: var(--color-primary);
                     color: white;
+                    font-size: 1rem;
                     font-weight: 600;
                     transition: all 0.2s;
                     border: none;
@@ -810,6 +954,13 @@ const Login = ({ nostr = false }) => {
                     color: var(--color-primary);
                     background: var(--color-blue-tint);
                     font-weight: 600;
+                }
+                .pm-username {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    opacity: 0;
+                    pointer-events: none;
                 }
                 .key-input-wrapper {
                     width: 100%;
