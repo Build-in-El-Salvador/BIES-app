@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { recomputeListingScore } from '../services/directoryReputation.service';
+import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { blockedEitherWay, blockedIds } from '../services/moderation.service';
 import { z } from 'zod';
@@ -9,9 +9,24 @@ import { z } from 'zod';
 
 const phoneRegex = /^[+0-9\s()-]*$/;
 
+/** Kinds of business in BIES Trusted (labels: directory.categories.* in the app). */
+export const DIRECTORY_CATEGORIES = [
+    'food', 'home', 'construction', 'legal', 'finance', 'real-estate', 'health', 'beauty',
+    'auto', 'tech', 'education', 'travel', 'transport', 'shopping', 'professional', 'other',
+] as const;
+
+/** A downvote must say why, in at least this many characters. */
+export const DOWNVOTE_REASON_MIN = 20;
+
 export const createDirectoryListingSchema = z.object({
     type: z.enum(['FARM', 'PROVIDER']),
     name: z.string().min(1).max(120),
+    category: z.enum(DIRECTORY_CATEGORIES).optional().or(z.literal('')),
+    hours: z.string().max(200).optional(),
+    // The member adding it runs the business or works there.
+    isOwnBusiness: z.boolean().optional(),
+    // Create only: the member's own review, their vouch. Not a listing column.
+    review: z.string().max(1000).optional(),
     about: z.string().max(5000).optional(),
     photo: z.string().max(500).optional().or(z.literal('')),
     logo: z.string().max(500).optional().or(z.literal('')),
@@ -37,22 +52,29 @@ export const createDirectoryListingSchema = z.object({
     memberUserId: z.string().optional().or(z.literal('')),
 });
 
-export const updateDirectoryListingSchema = createDirectoryListingSchema.partial();
+export const updateDirectoryListingSchema = createDirectoryListingSchema.omit({ review: true }).partial();
 
+/** A member's review: a vouch (1) or a downvote (-1), which needs a reason. */
 export const endorseSchema = z.object({
-    comment: z.string().max(500).optional(),
+    vote: z.union([z.literal(1), z.literal(-1)]).default(1),
+    comment: z.string().max(1000).optional(),
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // Fields writable by owners — never status/isFeatured/baseScore/reputationScore/
-// isCertified/nostrListingEventId (admin- or system-controlled).
+// the vote counts/isCertified/nostrListingEventId (admin- or system-controlled).
+// memberUserId only by staff: a linked member's key signs the listing's Nostr
+// event, so members can't link someone else (STAFF_FIELDS).
 const ALLOWED_FIELDS = [
-    'type', 'name', 'about', 'photo', 'logo', 'photos', 'location',
+    'type', 'name', 'category', 'hours', 'isOwnBusiness', 'about', 'photo', 'logo', 'photos', 'location',
     'phone', 'whatsapp', 'email', 'website', 'instagram', 'languages',
     'btcAccepted', 'products', 'practices', 'skills', 'bestFor',
-    'pricing', 'comment', 'memberUserId',
+    'pricing', 'comment',
 ];
+const STAFF_FIELDS = ['memberUserId'];
+
+const isStaff = (req: Request) => !!req.user && (req.user.isAdmin || req.user.role === 'MOD');
 
 const JSON_ARRAY_FIELDS = ['photos', 'languages', 'products', 'practices', 'skills'] as const;
 
@@ -91,9 +113,9 @@ function parseListing(listing: any): any {
     };
 }
 
-function pickAllowedFields(body: any): any {
+function pickAllowedFields(body: any, staff: boolean): any {
     const data: any = {};
-    for (const field of ALLOWED_FIELDS) {
+    for (const field of staff ? [...ALLOWED_FIELDS, ...STAFF_FIELDS] : ALLOWED_FIELDS) {
         if (body[field] !== undefined) data[field] = body[field];
     }
     for (const field of JSON_ARRAY_FIELDS) {
@@ -112,7 +134,7 @@ function pickAllowedFields(body: any): any {
 export async function listListings(req: Request, res: Response): Promise<void> {
     try {
         const {
-            type, search, certified, btc, language, ownerId,
+            type, search, certified, btc, language, ownerId, category,
             page = '1', limit = '20',
             sort = 'newest',
         } = req.query;
@@ -132,6 +154,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             }
         }
         if (certified === 'true') where.isCertified = true;
+        if (category && typeof category === 'string') where.category = category;
         if (btc === 'true') where.btcAccepted = true;
         if (language && typeof language === 'string') {
             where.languages = { contains: language };
@@ -148,7 +171,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 
         let orderBy: any = { createdAt: 'desc' };
         if (sort === 'name') orderBy = { name: 'asc' };
-        if (sort === 'score') orderBy = { reputationScore: 'desc' };
+        if (sort === 'score') orderBy = [{ reputationScore: 'desc' }, { vouchCount: 'desc' }, { createdAt: 'desc' }];
 
         const [listings, total] = await Promise.all([
             prisma.directoryListing.findMany({
@@ -171,6 +194,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 
         res.json({
             data: visible.map(parseListing),
+            trustedThreshold: TRUSTED_THRESHOLD,
             pagination: {
                 page: parseInt(page as string, 10),
                 limit: take,
@@ -226,9 +250,9 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'You blocked the member who runs this listing', reason: 'blocked' });
             return;
         }
-        const shown = hidden.size
-            ? { ...listing, endorsements: listing.endorsements.filter((e) => !hidden.has(e.userId)) }
-            : listing;
+        // Reviews are for members: signed out, only the counts.
+        const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
+        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({
@@ -250,7 +274,7 @@ export async function getListing(req: Request, res: Response): Promise<void> {
  */
 export async function createListing(req: Request, res: Response): Promise<void> {
     try {
-        const data = pickAllowedFields(req.body);
+        const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') delete data.memberUserId;
 
         if (data.memberUserId) {
@@ -264,17 +288,24 @@ export async function createListing(req: Request, res: Response): Promise<void> 
             }
         }
 
-        const status = (req.user!.isAdmin || req.user!.role === 'MOD') ? 'active' : 'pending-review';
+        const status = isStaff(req) ? 'active' : 'pending-review';
 
+        // A member recommending a business vouches for it with their review;
+        // one adding their own business doesn't.
         const listing = await prisma.directoryListing.create({
-            data: { ...data, ownerId: req.user!.id, status },
+            data: {
+                ...data, ownerId: req.user!.id, status,
+                ...(data.isOwnBusiness ? {} : {
+                    endorsements: { create: { userId: req.user!.id, vote: 1, comment: (req.body.review || '').trim() } },
+                }),
+            },
             include: {
                 owner: ownerSelect,
                 memberUser: ownerSelect,
             },
         });
 
-        recomputeListingScore(listing.id).catch((err) =>
+        await recomputeListingScore(listing.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
 
@@ -301,7 +332,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
             res.status(403).json({ error: 'Not authorized to update this listing' }); return;
         }
 
-        const data = pickAllowedFields(req.body);
+        const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') data.memberUserId = null;
 
         if (data.memberUserId) {
@@ -324,7 +355,12 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
             },
         });
 
-        recomputeListingScore(listing.id).catch((err) =>
+        // Now marked as their own business: their vouch goes.
+        if (data.isOwnBusiness === true) {
+            await prisma.directoryEndorsement.deleteMany({ where: { listingId: listing.id, userId: listing.ownerId } });
+        }
+
+        await recomputeListingScore(listing.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
 
@@ -376,42 +412,62 @@ export async function deleteListing(req: Request, res: Response): Promise<void> 
     }
 }
 
+/** The new counts and status of a listing, for the review endpoints' answers. */
+async function trustOf(listingId: string) {
+    return prisma.directoryListing.findUnique({
+        where: { id: listingId },
+        select: { reputationScore: true, vouchCount: true, downvoteCount: true, isCertified: true },
+    });
+}
+
 /**
  * POST /directory/:id/endorse
- * Endorse a listing (one endorsement per user per listing; upsert updates
- * the comment).
+ * Review a listing: { vote: 1 | -1, comment }. One review per member per
+ * listing; posting again changes it. A downvote needs a reason. Whoever runs
+ * the business can't review it, and only live listings can be reviewed.
  */
 export async function endorseListing(req: Request, res: Response): Promise<void> {
     try {
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, ownerId: true, memberUserId: true },
+            select: { id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, status: true },
         });
 
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
-        if (await blockedEitherWay(req.user!.id, listingMember(listing))) {
+        if (listing.status !== 'active') {
+            res.status(409).json({ error: 'This listing is not live yet', reason: 'not_live' });
+            return;
+        }
+        const userId = req.user!.id;
+        if (listing.memberUserId === userId || (listing.isOwnBusiness && listing.ownerId === userId)) {
+            res.status(403).json({ error: "You can't review your own business", reason: 'own_business' });
+            return;
+        }
+        if (await blockedEitherWay(userId, listingMember(listing))) {
             res.status(403).json({ error: "You can't recommend this listing", reason: 'blocked' });
             return;
         }
 
-        const comment = req.body.comment || '';
+        const vote: number = req.body.vote;
+        const comment = (req.body.comment || '').trim();
+        if (vote < 0 && comment.length < DOWNVOTE_REASON_MIN) {
+            res.status(400).json({
+                error: `Say why you don't recommend them (at least ${DOWNVOTE_REASON_MIN} characters)`,
+                reason: 'reason_required',
+                min: DOWNVOTE_REASON_MIN,
+            });
+            return;
+        }
 
         const endorsement = await prisma.directoryEndorsement.upsert({
-            where: {
-                listingId_userId: {
-                    listingId: req.params.id,
-                    userId: req.user!.id,
-                },
-            },
-            create: { listingId: req.params.id, userId: req.user!.id, comment },
-            update: { comment },
+            where: { listingId_userId: { listingId: listing.id, userId } },
+            create: { listingId: listing.id, userId, vote, comment },
+            update: { vote, comment },
         });
 
-        recomputeListingScore(req.params.id).catch((err) =>
-            console.error('[Directory] Score recompute failed:', err)
-        );
+        await recomputeListingScore(listing.id);
 
-        res.status(201).json(endorsement);
+        res.status(201).json({ ...endorsement, listing: await trustOf(listing.id) });
     } catch (error) {
         console.error('Endorse listing error:', error);
         res.status(500).json({ error: 'Failed to endorse listing' });
@@ -433,11 +489,11 @@ export async function removeEndorsement(req: Request, res: Response): Promise<vo
             return;
         }
 
-        recomputeListingScore(req.params.id).catch((err) =>
+        await recomputeListingScore(req.params.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
 
-        res.json({ message: 'Endorsement removed' });
+        res.json({ message: 'Endorsement removed', listing: await trustOf(req.params.id) });
     } catch (error) {
         console.error('Remove endorsement error:', error);
         res.status(500).json({ error: 'Failed to remove endorsement' });

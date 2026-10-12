@@ -8,7 +8,7 @@ const SIZES = {
 };
 
 /**
- * "BIES Network Certified" pill — orange accent (secondary) on a subtle
+ * "BIES Trusted" pill, earned at 5 net vouches — orange accent (secondary) on a subtle
  * tinted background; both tokens are theme-aware so it reads in dark mode.
  *
  * Styles are inline: the styled-jsx babel plugin only scopes classes on

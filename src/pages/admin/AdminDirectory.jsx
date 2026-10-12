@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, XCircle, Star, ExternalLink, Trash2, Loader2, Search, RefreshCw, ShieldCheck, Save } from 'lucide-react';
+import { CheckCircle, XCircle, Star, ExternalLink, Trash2, Loader2, Search, RefreshCw, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../services/api';
 
 const STATUS_TABS = [
@@ -25,7 +25,6 @@ const AdminDirectory = () => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [recomputing, setRecomputing] = useState(false);
-    const [scoreDrafts, setScoreDrafts] = useState({});
 
     const fetchListings = useCallback(async (page = 1) => {
         setLoading(true);
@@ -37,7 +36,6 @@ const AdminDirectory = () => {
             const res = await adminApi.listDirectory(params);
             setListings(Array.isArray(res?.data) ? res.data : []);
             setPagination(res?.pagination || { page: 1, total: 0, totalPages: 1 });
-            setScoreDrafts({});
         } catch (err) {
             console.error('Failed to fetch directory listings:', err);
         } finally {
@@ -68,24 +66,6 @@ const AdminDirectory = () => {
             fetchListings(pagination.page);
         } catch (err) {
             alert('Failed to update featured status');
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    const handleSaveScore = async (id) => {
-        const raw = scoreDrafts[id];
-        const value = Number(raw);
-        if (raw === '' || raw === undefined || !Number.isInteger(value) || value < 0 || value > 60) {
-            alert('Base score must be a whole number between 0 and 60');
-            return;
-        }
-        setActionLoading(id);
-        try {
-            await adminApi.setDirectoryScore(id, value);
-            fetchListings(pagination.page);
-        } catch (err) {
-            alert('Failed to update base score');
         } finally {
             setActionLoading(null);
         }
@@ -122,14 +102,14 @@ const AdminDirectory = () => {
         return <span className={`status-badge ${cls}`}>{label}</span>;
     };
 
-    const viewPath = (l) => `/discover/${l.type === 'FARM' ? 'farms' : 'certified'}/${l.id}`;
+    const viewPath = (l) => `/discover/${l.type === 'FARM' ? 'farms' : 'trusted'}/${l.id}`;
 
     return (
         <>
             <div className="header">
                 <div>
                     <h1>Directory Management</h1>
-                    <p className="subtitle">Review and manage farm & certified provider listings</p>
+                    <p className="subtitle">Review and manage farm & BIES Trusted listings</p>
                 </div>
                 <button className="recompute-btn" onClick={handleRecompute} disabled={recomputing}>
                     {recomputing
@@ -190,8 +170,7 @@ const AdminDirectory = () => {
                                 <th>Type</th>
                                 <th>Owner</th>
                                 <th>Status</th>
-                                <th>Score</th>
-                                <th>Base Score</th>
+                                <th>Trust Score</th>
                                 <th>Featured</th>
                                 <th>Created</th>
                                 <th>Actions</th>
@@ -208,37 +187,14 @@ const AdminDirectory = () => {
                                     </td>
                                     <td data-label="Owner">{l.owner?.profile?.name || l.owner?.email || '—'}</td>
                                     <td data-label="Status">{statusBadge(l.status)}</td>
-                                    <td data-label="Score">
-                                        <span className="score-cell">
-                                            {l.reputationScore}%
+                                    <td data-label="Trust Score">
+                                        <span className="score-cell" title={`${l.vouchCount ?? 0} vouches, ${l.downvoteCount ?? 0} downvotes`}>
+                                            {l.reputationScore > 0 ? `+${l.reputationScore}` : l.reputationScore}
+                                            <span className="score-votes">↑{l.vouchCount ?? 0} ↓{l.downvoteCount ?? 0}</span>
                                             {l.isCertified && (
-                                                <ShieldCheck size={15} className="certified-icon" title="BIES Network Certified" />
+                                                <ShieldCheck size={15} className="certified-icon" title="BIES Trusted" />
                                             )}
                                         </span>
-                                    </td>
-                                    <td data-label="Base">
-                                        <div className="score-edit">
-                                            <input
-                                                type="number"
-                                                min={0}
-                                                max={60}
-                                                value={scoreDrafts[l.id] ?? l.baseScore}
-                                                onChange={(e) => setScoreDrafts(d => ({ ...d, [l.id]: e.target.value }))}
-                                                disabled={actionLoading === l.id}
-                                            />
-                                            <button
-                                                className="icon-btn save"
-                                                onClick={() => handleSaveScore(l.id)}
-                                                title="Save base score"
-                                                disabled={
-                                                    actionLoading === l.id ||
-                                                    scoreDrafts[l.id] === undefined ||
-                                                    String(scoreDrafts[l.id]) === String(l.baseScore)
-                                                }
-                                            >
-                                                <Save size={15} />
-                                            </button>
-                                        </div>
                                     </td>
                                     <td data-label="Featured">
                                         <button
@@ -442,19 +398,9 @@ const AdminDirectory = () => {
                     gap: 0.3rem;
                     font-weight: 600;
                 }
-                .certified-icon { color: #16a34a; flex-shrink: 0; }
-                .score-edit { display: flex; align-items: center; gap: 0.25rem; }
-                .score-edit input {
-                    width: 60px;
-                    padding: 0.35rem 0.5rem;
-                    border: 1px solid var(--color-gray-200);
-                    border-radius: var(--radius-md);
-                    font-size: 0.875rem;
-                    background: var(--color-surface);
-                    color: inherit;
-                    outline: none;
-                }
-                .score-edit input:focus { border-color: var(--color-primary); }
+                .score-votes { font-weight: 400; font-size: 0.8rem; color: var(--color-gray-500); }
+                /* :global() for the icon component: styled-jsx only scopes plain elements */
+                .score-cell :global(.certified-icon) { color: #16a34a; flex-shrink: 0; }
                 .action-group { display: flex; gap: 0.25rem; align-items: center; }
                 .icon-btn {
                     display: inline-flex;

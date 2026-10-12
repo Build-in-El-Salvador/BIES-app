@@ -38,8 +38,6 @@ import {
     reviewDirectoryListingSchema,
     featureDirectoryListing,
     featureDirectoryListingSchema,
-    setDirectoryScore,
-    setDirectoryScoreSchema,
     recomputeDirectoryScores,
     deleteDirectoryListing,
     listAdminCourses,
@@ -99,7 +97,6 @@ router.delete('/points/badges/:userId/:badgeId', revokeBadge);
 router.get('/directory', listAdminDirectory);
 router.put('/directory/:id/review', validate(reviewDirectoryListingSchema), reviewDirectoryListing);
 router.put('/directory/:id/feature', validate(featureDirectoryListingSchema), featureDirectoryListing);
-router.put('/directory/:id/score', validate(setDirectoryScoreSchema), setDirectoryScore);
 router.post('/directory/recompute', recomputeDirectoryScores);
 router.delete('/directory/:id', deleteDirectoryListing);
 

@@ -892,6 +892,8 @@ model DirectoryListing {
   id        String @id @default(cuid())
   type      String // FARM | PROVIDER
   name      String
+  category  String @default("")            // PROVIDER: DIRECTORY_CATEGORIES in directory.controller.ts
+  hours     String @default("")            // opening hours, free text
   about     String @default("")
   photo     String @default("")            // hero + card thumbnail
   logo      String @default("")            // circular overlay logo
@@ -910,8 +912,15 @@ model DirectoryListing {
   bestFor   String @default("") @map("best_for")
   pricing   String @default("")            // free text (decision)
   comment   String @default("")
-  baseScore       Int      @default(40) @map("base_score")        // admin-set 0–60
-  reputationScore Int      @default(0)  @map("reputation_score")  // computed 0–100
+  // The member who added it runs the business, or works there: their own
+  // vote doesn't count, and the listing says it was added by the business.
+  isOwnBusiness Boolean @default(false) @map("is_own_business")
+  baseScore       Int      @default(40) @map("base_score")        // unused since the BIES Trust Score (votes only)
+  // The BIES Trust Score: vouches minus downvotes from members
+  // (directoryReputation.service.ts). isCertified = "BIES Trusted".
+  reputationScore Int      @default(0)  @map("reputation_score")
+  vouchCount      Int      @default(0)  @map("vouch_count")
+  downvoteCount   Int      @default(0)  @map("downvote_count")
   isCertified     Boolean  @default(false) @map("is_certified")
   certifiedAt     DateTime? @map("certified_at")
   certificationEventId String? @map("certification_event_id")     // Phase 2
@@ -931,12 +940,16 @@ model DirectoryListing {
   @@map("directory_listings")
 }
 
+// A member's review of a listing: a vouch (+1) or a downvote (-1). A
+// downvote must say why (DOWNVOTE_REASON_MIN in directory.controller.ts).
 model DirectoryEndorsement {
   id        String   @id @default(cuid())
   listingId String   @map("listing_id")
   userId    String   @map("user_id")
+  vote      Int      @default(1)
   comment   String   @default("")
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   listing DirectoryListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([listingId, userId])

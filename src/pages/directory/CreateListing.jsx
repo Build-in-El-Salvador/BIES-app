@@ -4,9 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     ArrowLeft, Loader2, AlertCircle, Camera, X, Plus, Trash2,
-    CheckCircle, Bitcoin, Leaf, ShieldCheck,
+    CheckCircle, Bitcoin, Leaf, ShieldCheck, ImagePlus, ThumbsUp, Store,
 } from 'lucide-react';
 import { directoryApi, uploadApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
 import { nostrService } from '../../services/nostrService';
 import { nostrSigner } from '../../services/nostrSigner';
 import TagInput from '../../components/TagInput';
@@ -23,6 +25,9 @@ const FARM_PRACTICES = [
 ];
 
 const MAX_PRODUCTS = 20;
+const MAX_PHOTOS = 10;
+// The poster's review is their vouch (server: the listing's first endorsement).
+const REVIEW_MIN = 20;
 
 const emptyForm = {
     name: '',
@@ -38,7 +43,9 @@ const emptyForm = {
     logo: '',
     bestFor: '',
     pricing: '',
-    comment: '',
+    category: '',
+    hours: '',
+    review: '',
 };
 
 /**
@@ -51,11 +58,17 @@ const emptyForm = {
  */
 const CreateListing = ({ editMode = false }) => {
     const { t } = useTranslation();
+    const { isStaff } = useAuth();
     const navigate = useNavigate();
     const { id } = useParams();
     const [searchParams] = useSearchParams();
 
-    const [type, setType] = useState(searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM');
+    const initialType = searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM';
+    const [type, setType] = useState(initialType);
+    // Whose listing it is: a customer recommending it (their review is their
+    // vouch) or the business itself. Farms are usually added by the farm.
+    const [isOwnBusiness, setIsOwnBusiness] = useState(initialType === 'FARM');
+    const [photos, setPhotos] = useState([]); // gallery, up to MAX_PHOTOS
     const [form, setForm] = useState(emptyForm);
     const [languages, setLanguages] = useState([]);
     const [products, setProducts] = useState([]); // FARM: [{ label, icon }]
@@ -67,7 +80,7 @@ const CreateListing = ({ editMode = false }) => {
     const [loadError, setLoadError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
-    const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | null
+    const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | 'gallery' | null
     const [cropImage, setCropImage] = useState(null); // { src, target }
     const [submitted, setSubmitted] = useState(false);
 
@@ -98,8 +111,12 @@ const CreateListing = ({ editMode = false }) => {
                     logo: listing.logo || '',
                     bestFor: listing.bestFor || '',
                     pricing: listing.pricing || '',
-                    comment: listing.comment || '',
+                    category: listing.category || '',
+                    hours: listing.hours || '',
+                    review: '',
                 });
+                setIsOwnBusiness(!!listing.isOwnBusiness);
+                setPhotos(Array.isArray(listing.photos) ? listing.photos.filter(Boolean) : []);
                 setLanguages(Array.isArray(listing.languages) ? listing.languages : []);
                 setProducts(Array.isArray(listing.products) ? listing.products.filter((p) => p?.label != null) : []);
                 setPractices(Array.isArray(listing.practices) ? listing.practices : []);
@@ -152,6 +169,26 @@ const CreateListing = ({ editMode = false }) => {
         setCropImage(null);
     };
 
+    // Gallery photos upload as they are, several at a time.
+    const handleGallerySelect = async (e) => {
+        const files = Array.from(e.target.files || []).slice(0, MAX_PHOTOS - photos.length);
+        e.target.value = '';
+        if (!files.length) return;
+        setUploading('gallery');
+        setSubmitError('');
+        try {
+            for (const file of files) {
+                const result = await uploadApi.media(file);
+                setPhotos((prev) => (prev.length < MAX_PHOTOS ? [...prev, result.url] : prev));
+            }
+        } catch (err) {
+            setSubmitError(err.message || 'Failed to upload image.');
+        } finally {
+            setUploading(null);
+        }
+    };
+    const removePhoto = (url) => setPhotos((prev) => prev.filter((p) => p !== url));
+
     // ─── Products editor (FARM) ───────────────────────────────────────────────
     const addProduct = () => {
         if (products.length >= MAX_PRODUCTS) return;
@@ -184,6 +221,10 @@ const CreateListing = ({ editMode = false }) => {
             instagram: form.instagram.trim(),
             languages,
             btcAccepted: form.btcAccepted,
+            photos,
+            hours: form.hours.trim(),
+            isOwnBusiness,
+            ...(!editMode && !isOwnBusiness ? { review: form.review.trim() } : {}),
         };
         if (isFarm) {
             return {
@@ -196,21 +237,27 @@ const CreateListing = ({ editMode = false }) => {
         }
         return {
             ...shared,
+            category: form.category,
             skills,
             bestFor: form.bestFor.trim(),
             pricing: form.pricing.trim(),
-            comment: form.comment.trim(),
-            memberUserId: memberLink[0]?.userId || '', // '' clears the link on update
+            // Staff only: the server ignores it from anyone else.
+            ...(isStaff ? { memberUserId: memberLink[0]?.userId || '' } : {}), // '' clears the link on update
         };
     };
 
     const detailPath = (listing) =>
-        listing.type === 'PROVIDER' ? `/discover/certified/${listing.id}` : `/discover/farms/${listing.id}`;
+        listing.type === 'PROVIDER' ? `/discover/trusted/${listing.id}` : `/discover/farms/${listing.id}`;
 
     const handleSubmit = async () => {
         setSubmitError('');
-        if (!form.name.trim()) {
-            setSubmitError(t('directory.nameRequired'));
+        const problem = !form.name.trim() ? t('directory.nameRequired')
+            : !isFarm && !form.category ? t('directory.categoryRequired')
+                : !editMode && !isOwnBusiness && form.review.trim().length < REVIEW_MIN
+                    ? t('directory.reviewRequired', { min: REVIEW_MIN })
+                    : '';
+        if (problem) {
+            setSubmitError(problem);
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
@@ -276,7 +323,7 @@ const CreateListing = ({ editMode = false }) => {
                         <p style={{ color: 'var(--color-gray-600)', lineHeight: 1.6, marginBottom: '2rem' }}>
                             {t('directory.submittedForReview')}
                         </p>
-                        <Link to={isFarm ? '/discover/farms' : '/discover/certified'} className="btn btn-primary">
+                        <Link to={isFarm ? '/discover/farms' : '/discover/trusted'} className="btn btn-primary">
                             {t('directory.backToDirectory')}
                         </Link>
                     </div>
@@ -304,7 +351,7 @@ const CreateListing = ({ editMode = false }) => {
                     <h2>{t('directory.notFound')}</h2>
                     <p style={{ color: 'var(--color-gray-500)', margin: '0.5rem 0' }}>{loadError}</p>
                     <Link
-                        to={isFarm ? '/discover/farms' : '/discover/certified'}
+                        to={isFarm ? '/discover/farms' : '/discover/trusted'}
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
                         <ArrowLeft size={16} /> {t('directory.backToDirectory')}
@@ -340,6 +387,24 @@ const CreateListing = ({ editMode = false }) => {
                     {submitError && (
                         <div className="dir-error-banner"><AlertCircle size={16} /> {submitError}</div>
                     )}
+
+                    {/* Whose listing this is */}
+                    <div className="dir-form-card">
+                        <h3 className="dir-card-heading">{t('directory.connectionLabel')}</h3>
+                        <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel')}>
+                            <label className={`dir-connection-option${!isOwnBusiness ? ' active' : ''}`}>
+                                <input type="radio" name="connection" checked={!isOwnBusiness} onChange={() => setIsOwnBusiness(false)} />
+                                <ThumbsUp size={18} />
+                                <span>{t('directory.connectionCustomer')}</span>
+                            </label>
+                            <label className={`dir-connection-option${isOwnBusiness ? ' active' : ''}`}>
+                                <input type="radio" name="connection" checked={isOwnBusiness} onChange={() => setIsOwnBusiness(true)} />
+                                <Store size={18} />
+                                <span>{t('directory.connectionOwner')}</span>
+                            </label>
+                        </div>
+                        {isOwnBusiness && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionOwnerHint')}</p>}
+                    </div>
 
                     {/* Photo + logo — mirrors the detail page layout */}
                     <div className="dir-form-card" style={{ padding: 0, overflow: 'visible' }}>
@@ -422,6 +487,18 @@ const CreateListing = ({ editMode = false }) => {
                             />
                         </div>
 
+                        {!isFarm && (
+                            <div className="dir-form-group">
+                                <label className="dir-label" htmlFor="dir-category">{t('directory.category')} *</label>
+                                <select id="dir-category" name="category" value={form.category} onChange={handleChange} className="dir-input" required>
+                                    <option value="">{t('directory.chooseCategory')}</option>
+                                    {DIRECTORY_CATEGORIES.map((c) => (
+                                        <option key={c} value={c}>{t(`directory.categories.${c}`)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="dir-form-group">
                             <label className="dir-label">{t('directory.aboutLabel')}</label>
                             <textarea
@@ -434,7 +511,7 @@ const CreateListing = ({ editMode = false }) => {
                             />
                         </div>
 
-                        <div className="dir-form-group" style={{ marginBottom: 0 }}>
+                        <div className="dir-form-group">
                             <label className="dir-label">{t('directory.locationLabel')}</label>
                             <input
                                 type="text"
@@ -445,6 +522,45 @@ const CreateListing = ({ editMode = false }) => {
                                 maxLength={200}
                                 placeholder="El Zonte, La Libertad"
                             />
+                        </div>
+
+                        <div className="dir-form-group" style={{ marginBottom: 0 }}>
+                            <label className="dir-label" htmlFor="dir-hours">{t('directory.hoursLabel')}</label>
+                            <input
+                                id="dir-hours"
+                                type="text"
+                                name="hours"
+                                value={form.hours}
+                                onChange={handleChange}
+                                className="dir-input"
+                                maxLength={200}
+                                placeholder={t('directory.hoursPlaceholder')}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Gallery */}
+                    <div className="dir-form-card">
+                        <h3 className="dir-card-heading">{t('directory.photosLabel')}</h3>
+                        <p className="dir-field-hint" style={{ marginTop: 0 }}>{t('directory.photosHint', { max: MAX_PHOTOS })}</p>
+                        <div className="dir-gallery-grid">
+                            {photos.map((url) => (
+                                <div key={url} className="dir-gallery-thumb">
+                                    <img src={getAssetUrl(url)} alt="" />
+                                    <button type="button" className="dir-gallery-remove" onClick={() => removePhoto(url)} aria-label={t('directory.removePhoto')} disabled={isBusy}>
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            {photos.length < MAX_PHOTOS && (
+                                <label className="dir-gallery-add" style={{ cursor: uploading ? 'not-allowed' : 'pointer' }}>
+                                    {uploading === 'gallery'
+                                        ? <Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} />
+                                        : <ImagePlus size={22} />}
+                                    <span>{t('directory.addPhotos')}</span>
+                                    <input type="file" accept="image/*" multiple onChange={handleGallerySelect} style={{ display: 'none' }} disabled={!!uploading} />
+                                </label>
+                            )}
                         </div>
                     </div>
 
@@ -576,28 +692,38 @@ const CreateListing = ({ editMode = false }) => {
                                 <input type="text" name="pricing" value={form.pricing} onChange={handleChange} className="dir-input" maxLength={200} />
                             </div>
 
-                            <div className="dir-form-group" style={{ marginBottom: '1.6rem' }}>
-                                <label className="dir-label">{t('directory.commentLabel')}</label>
+                            {/* Staff only: link the business's own BIES account (zaps) */}
+                            {isStaff && (
+                                <div className="dir-form-group dir-member-link" style={{ marginBottom: 0 }}>
+                                    <label className="dir-label">{t('directory.linkMember')}</label>
+                                    <MemberSearchSelect
+                                        value={memberLink}
+                                        onChange={(list) => setMemberLink(list.slice(-1))}
+                                        placeholder={t('directory.linkMemberPlaceholder')}
+                                    />
+                                    <p className="dir-field-hint">{t('directory.linkMemberHint')}</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* The poster's review: their vouch */}
+                    {!editMode && !isOwnBusiness && (
+                        <div className="dir-form-card">
+                            <h3 className="dir-card-heading">{t('directory.yourReview')} *</h3>
+                            <p className="dir-field-hint" style={{ marginTop: 0 }}>{t('directory.yourReviewHint')}</p>
+                            <div className="dir-form-group" style={{ marginBottom: '0.9rem' }}>
                                 <textarea
-                                    name="comment"
-                                    value={form.comment}
+                                    name="review"
+                                    aria-label={t('directory.yourReview')}
+                                    value={form.review}
                                     onChange={handleChange}
                                     className="dir-input"
-                                    rows={3}
-                                    maxLength={500}
+                                    rows={4}
+                                    maxLength={1000}
+                                    placeholder={t('directory.endorsePlaceholder')}
                                 />
-                                <span className="dir-char-count">{form.comment.length}/500</span>
-                            </div>
-
-                            {/* Optional link to the provider's BIES account (zaps + reputation signals) */}
-                            <div className="dir-form-group dir-member-link" style={{ marginBottom: 0 }}>
-                                <label className="dir-label">{t('directory.linkMember')}</label>
-                                <MemberSearchSelect
-                                    value={memberLink}
-                                    onChange={(list) => setMemberLink(list.slice(-1))}
-                                    placeholder={t('directory.linkMemberPlaceholder')}
-                                />
-                                <p className="dir-field-hint">{t('directory.linkMemberHint')}</p>
+                                <span className="dir-char-count">{form.review.trim().length}/1000</span>
                             </div>
                         </div>
                     )}
@@ -682,6 +808,92 @@ const CreateListing = ({ editMode = false }) => {
                     font-size: 0.9rem;
                 }
 
+                .dir-connection {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 0.6rem;
+                }
+                .dir-connection-option {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    padding: 0.8rem 0.9rem;
+                    border: 1px solid var(--color-gray-200);
+                    border-radius: 12px;
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                    color: var(--color-gray-700);
+                }
+                .dir-connection-option.active {
+                    border-color: var(--color-primary);
+                    background: var(--color-blue-tint);
+                    color: var(--color-primary);
+                    font-weight: 600;
+                }
+                .dir-connection-option:focus-within {
+                    outline: 2px solid var(--color-primary);
+                    outline-offset: 2px;
+                }
+                .dir-connection-option input {
+                    position: absolute;
+                    opacity: 0;
+                    pointer-events: none;
+                }
+                @media (max-width: 480px) {
+                    .dir-connection { grid-template-columns: 1fr; }
+                }
+                .dir-gallery-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+                    gap: 0.6rem;
+                }
+                .dir-gallery-thumb {
+                    position: relative;
+                    aspect-ratio: 4 / 3;
+                    border-radius: 10px;
+                    overflow: hidden;
+                    background: var(--color-gray-100);
+                }
+                .dir-gallery-thumb img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    display: block;
+                }
+                .dir-gallery-remove {
+                    position: absolute;
+                    top: 4px;
+                    right: 4px;
+                    width: 26px;
+                    height: 26px;
+                    min-height: 0;
+                    padding: 0;
+                    border: none;
+                    border-radius: 50%;
+                    background: rgba(0, 0, 0, 0.6);
+                    color: white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                }
+                .dir-gallery-add {
+                    aspect-ratio: 4 / 3;
+                    border: 1.5px dashed var(--color-gray-300);
+                    border-radius: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 4px;
+                    color: var(--color-gray-500);
+                    font-size: 0.78rem;
+                    font-weight: 600;
+                    text-align: center;
+                    padding: 0.25rem;
+                }
+                .dir-gallery-add:hover { border-color: var(--color-primary); color: var(--color-primary); }
                 .dir-form-card {
                     background: var(--color-surface);
                     border: 1px solid var(--color-gray-200);

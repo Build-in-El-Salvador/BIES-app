@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Leaf, ShieldCheck, Loader2 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import DirectoryListingCard from '../../components/directory/DirectoryListingCard';
+import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
 
 const FARM_PRACTICES = [
     { id: 'regenerative', tKey: 'directory.practices.regenerative' },
@@ -14,7 +15,8 @@ const FARM_PRACTICES = [
 
 /**
  * Directory list page per the mockup: search row with filter toggle and
- * circular "+" button, tinted section header, listing cards.
+ * circular "+" button, tinted section header, listing cards. BIES Trusted
+ * (PROVIDER) adds category chips and lists the highest Trust Score first.
  *
  * @param {'FARM'|'PROVIDER'} type
  */
@@ -32,15 +34,16 @@ const DirectoryList = ({ type = 'FARM' }) => {
     // Shared / provider filters
     const [certifiedOnly, setCertifiedOnly] = useState(false);
     const [btcOnly, setBtcOnly] = useState(false);
-    const [minScore, setMinScore] = useState('');
+    const [category, setCategory] = useState('');
+    const [threshold, setThreshold] = useState(5);
 
-    // Reset state when switching between /discover/farms and /discover/certified
+    // Reset state when switching between /discover/farms and /discover/trusted
     useEffect(() => {
         setSearchQuery('');
         setSelectedPractices([]);
         setCertifiedOnly(false);
         setBtcOnly(false);
-        setMinScore('');
+        setCategory('');
         setFiltersOpen(false);
     }, [type]);
 
@@ -49,11 +52,14 @@ const DirectoryList = ({ type = 'FARM' }) => {
         const fetchListings = async () => {
             setLoading(true);
             try {
-                const params = { type };
+                const params = { type, limit: 50 };
                 if (searchQuery) params.search = searchQuery;
+                if (!isFarm) params.sort = 'score';
+                if (category) params.category = category;
                 const result = await directoryApi.list(params);
                 const list = result?.data || result || [];
                 setListings(Array.isArray(list) ? list : []);
+                if (result?.trustedThreshold) setThreshold(result.trustedThreshold);
             } catch {
                 setListings([]);
             } finally {
@@ -62,7 +68,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
         };
         const debounce = setTimeout(fetchListings, 300);
         return () => clearTimeout(debounce);
-    }, [searchQuery, type]);
+    }, [searchQuery, type, category, isFarm]);
 
     // Client-side filtering (minimal drawer for now)
     const filtered = listings.filter((l) => {
@@ -74,12 +80,11 @@ const DirectoryList = ({ type = 'FARM' }) => {
             }
         } else {
             if (btcOnly && !l.btcAccepted) return false;
-            if (minScore && (l.reputationScore || 0) < Number(minScore)) return false;
         }
         return true;
     });
 
-    const activeFilterCount = (isFarm ? selectedPractices.length : (btcOnly ? 1 : 0) + (minScore ? 1 : 0)) + (certifiedOnly ? 1 : 0);
+    const activeFilterCount = (isFarm ? selectedPractices.length : (btcOnly ? 1 : 0)) + (certifiedOnly ? 1 : 0);
 
     const togglePractice = (id) => {
         setSelectedPractices((prev) =>
@@ -180,21 +185,25 @@ const DirectoryList = ({ type = 'FARM' }) => {
                                         {t('directory.certifiedOnly')}
                                     </label>
                                 </div>
-                                <div className="dir-filter-group">
-                                    <span className="dir-filter-label">{t('directory.minScore')}</span>
-                                    <select
-                                        className="dir-score-select"
-                                        value={minScore}
-                                        onChange={(e) => setMinScore(e.target.value)}
-                                    >
-                                        <option value="">{t('directory.anyScore')}</option>
-                                        <option value="50">50%+</option>
-                                        <option value="70">70%+</option>
-                                        <option value="90">90%+</option>
-                                    </select>
-                                </div>
                             </>
                         )}
+                    </div>
+                )}
+
+                {/* BIES Trusted: by category */}
+                {!isFarm && (
+                    <div className="dir-category-row" role="group" aria-label={t('directory.category')}>
+                        {['', ...DIRECTORY_CATEGORIES].map((c) => (
+                            <button
+                                key={c || 'all'}
+                                type="button"
+                                className={`dir-chip${category === c ? ' active' : ''}`}
+                                aria-pressed={category === c}
+                                onClick={() => setCategory(c)}
+                            >
+                                {c ? t(`directory.categories.${c}`) : t('directory.allCategories')}
+                            </button>
+                        ))}
                     </div>
                 )}
 
@@ -208,6 +217,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         <p>{isFarm ? t('directory.sectionFarmsSub') : t('directory.sectionCertifiedSub')}</p>
                     </div>
                 </div>
+                {!isFarm && <p className="dir-trust-how">{t('directory.trust.how', { threshold })}</p>}
 
                 {/* Listing cards */}
                 {loading ? (
@@ -225,6 +235,11 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         {searchQuery
                             ? t('directory.noResultsSearch', { query: searchQuery })
                             : isFarm ? t('directory.noFarms') : t('directory.noProviders')}
+                        {!isFarm && !searchQuery && (
+                            <Link to="/discover/directory/new?type=provider" className="dir-empty-cta">
+                                <Plus size={16} /> {t('directory.createTitleProvider')}
+                            </Link>
+                        )}
                     </div>
                 )}
             </div>
@@ -312,6 +327,51 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     justify-content: center;
                 }
 
+                .dir-category-row {
+                    display: flex;
+                    gap: 8px;
+                    overflow-x: auto;
+                    margin: 0 0 1rem;
+                    padding-bottom: 4px;
+                    scrollbar-width: none;
+                }
+                .dir-category-row::-webkit-scrollbar { display: none; }
+                .dir-chip {
+                    flex-shrink: 0;
+                    padding: 6px 14px;
+                    border-radius: var(--radius-full);
+                    border: 1px solid var(--color-gray-200);
+                    background: var(--color-surface);
+                    color: var(--color-gray-700);
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                    white-space: nowrap;
+                }
+                .dir-chip.active {
+                    background: var(--color-primary);
+                    border-color: var(--color-primary);
+                    color: white;
+                }
+                .dir-trust-how {
+                    margin: -0.5rem 0 1rem;
+                    font-size: 0.8rem;
+                    color: var(--color-gray-500);
+                    line-height: 1.5;
+                }
+                .dir-empty :global(.dir-empty-cta) {
+                    display: flex;
+                    width: fit-content;
+                    align-items: center;
+                    gap: 6px;
+                    margin: 1rem auto 0;
+                    padding: 0.6rem 1.2rem;
+                    border-radius: var(--radius-full);
+                    background: var(--color-primary);
+                    color: white;
+                    font-weight: 600;
+                    text-decoration: none;
+                }
                 .dir-filters {
                     background: var(--color-surface);
                     border: 1px solid var(--color-gray-200);

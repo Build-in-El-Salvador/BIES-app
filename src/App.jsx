@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { UserModeProvider, useUserMode } from './context/UserModeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -145,6 +145,12 @@ const FeatureRoute = ({ flag, children }) => {
     return children;
 };
 
+/** A listing link from when BIES Trusted was "Certified". */
+const LegacyListingRedirect = () => {
+    const { id } = useParams();
+    return <Navigate to={`/discover/trusted/${id}`} replace />;
+};
+
 const AppContent = () => {
     const { user } = useAuth();
     const location = useLocation();
@@ -201,8 +207,11 @@ const AppContent = () => {
                     {/* Directories (declared before the generic /discover route) */}
                     <Route path="/discover/farms" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="FARM" /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/discover/farms/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/certified" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/certified/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/discover/trusted" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/discover/trusted/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    {/* BIES Trusted was "Certified": links to the old paths still work */}
+                    <Route path="/discover/certified" element={<Navigate to="/discover/trusted" replace />} />
+                    <Route path="/discover/certified/:id" element={<LegacyListingRedirect />} />
                     <Route path="/discover/directory/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/discover/directory/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* Marketplace (declared before the generic /discover route) */}

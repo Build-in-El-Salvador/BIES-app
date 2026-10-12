@@ -1424,10 +1424,6 @@ export const featureDirectoryListingSchema = z.object({
     featured: z.boolean(),
 });
 
-export const setDirectoryScoreSchema = z.object({
-    baseScore: z.number().int().min(0).max(60),
-});
-
 function parseDirectoryListing(listing: any): any {
     return {
         ...listing,
@@ -1585,43 +1581,6 @@ export async function featureDirectoryListing(req: Request, res: Response): Prom
     } catch (error) {
         console.error('Feature directory listing error:', error);
         res.status(500).json({ error: 'Failed to feature directory listing' });
-    }
-}
-
-/**
- * PUT /admin/directory/:id/score
- * Set the admin base score (0–60) and recompute the reputation score.
- * Body: { baseScore: number }
- */
-export async function setDirectoryScore(req: Request, res: Response): Promise<void> {
-    try {
-        const { baseScore } = req.body;
-
-        await prisma.directoryListing.update({
-            where: { id: req.params.id },
-            data: { baseScore },
-        });
-
-        await recomputeListingScore(req.params.id);
-
-        const listing = await prisma.directoryListing.findUnique({
-            where: { id: req.params.id },
-            select: { id: true, baseScore: true, reputationScore: true, isCertified: true, certifiedAt: true },
-        });
-
-        await prisma.auditLog.create({
-            data: {
-                userId: req.user!.id,
-                action: 'DIRECTORY_SCORE_SET',
-                resource: `directory:${req.params.id}`,
-                metadata: JSON.stringify({ baseScore }),
-            },
-        });
-
-        res.json(listing);
-    } catch (error) {
-        console.error('Set directory score error:', error);
-        res.status(500).json({ error: 'Failed to set directory score' });
     }
 }
 

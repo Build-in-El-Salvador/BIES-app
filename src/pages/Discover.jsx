@@ -711,7 +711,7 @@ const Discover = () => {
               <ChevronRight size={18} className="directory-entry-chevron" />
             </div>
           </Link>
-          <Link to="/discover/certified" style={{ textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0, display: 'block' }}>
+          <Link to="/discover/trusted" style={{ textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0, display: 'block' }}>
             <div className="directory-entry-card">
               <div className="directory-entry-icon"><ShieldCheck size={20} /></div>
               <span className="directory-entry-label">{t('directory.certifiedTitle')}</span>
