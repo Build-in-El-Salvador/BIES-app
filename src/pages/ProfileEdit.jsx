@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { objectionableMessage } from '../components/moderation/objectionable';
 import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckCircle, Save, Search, X, RefreshCw, AtSign, Zap, User, Link as LinkIcon, Trash2, GripVertical, Upload, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, Copy, Check } from 'lucide-react';
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
@@ -348,7 +349,7 @@ const ProfileEdit = () => {
             navigate('/profile');
         } catch (err) {
             console.error('Save profile error:', err);
-            setError(err.data?.details?.map(d => `${d.field}: ${d.message}`).join(', ') || err.message || 'Failed to save profile.');
+            setError(objectionableMessage(t, err) || err.data?.details?.map(d => `${d.field}: ${d.message}`).join(', ') || err.message || 'Failed to save profile.');
         } finally {
             setSaving(false);
         }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, optionalAuth } from '../middleware/auth';
+import { requireTerms, screenContent } from '../middleware/contentRules';
 import { validate } from '../middleware/validate';
 import { moneyLimiter } from '../middleware/rateLimit';
 import {
@@ -34,6 +35,8 @@ import {
 
 const router = Router();
 
+const EVENT_TEXT = ['title', 'description', 'location', 'locationName', 'locationAddress', 'tags', 'customSections'];
+
 // Public routes
 router.get('/', optionalAuth, listEvents);
 
@@ -48,8 +51,8 @@ router.get('/:id', optionalAuth, getEvent);
 
 // Protected routes
 router.post('/import-url', authenticate, importEventFromUrl);
-router.post('/', authenticate, validate(createEventSchema), createEvent);
-router.put('/:id', authenticate, validate(updateEventSchema), updateEvent);
+router.post('/', authenticate, requireTerms, validate(createEventSchema), screenContent(EVENT_TEXT), createEvent);
+router.put('/:id', authenticate, requireTerms, validate(updateEventSchema), screenContent(EVENT_TEXT), updateEvent);
 router.delete('/:id', authenticate, deleteEvent);
 router.put('/:id/endorse', authenticate, endorseEvent);
 router.post('/:id/rsvp', authenticate, rsvpEvent);

@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { notifyFollow } from '../services/notification.service';
 import { cache, TTL } from '../services/redis.service';
 import { publishAnnouncement } from '../services/nostr.service';
+import { blockedEitherWay } from '../services/moderation.service';
 
 /**
  * POST /profiles/:id/follow
@@ -24,6 +25,10 @@ export async function followUser(req: Request, res: Response): Promise<void> {
         });
         if (!targetUser) {
             res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        if (await blockedEitherWay(followerId, followingId)) {
+            res.status(403).json({ error: "You can't follow this member", reason: 'blocked' });
             return;
         }
 

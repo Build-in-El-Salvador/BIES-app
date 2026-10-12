@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MoreHorizontal, Share, Link as LinkIcon, Type, Hash, Code, Trash2, VolumeX, Flag } from 'lucide-react';
+import { MoreHorizontal, Share, Link as LinkIcon, Type, Hash, Code, Trash2, VolumeX, Flag, Ban } from 'lucide-react';
 import NostrIcon from '../NostrIcon';
 import NoteHeader from './NoteHeader';
 import NoteFooter from './NoteFooter';
@@ -33,6 +33,7 @@ const Note = ({
   onPostMenuToggle,
   onDeletePost,
   onMuteUser,
+  onBlockUser,
   onReport,
   onCopyLink,
   onCopyText,
@@ -87,6 +88,11 @@ const Note = ({
                 <button className="primal-note-menu-item danger" onClick={onMuteUser}>
                   <VolumeX size={14} /> {t('feed.muteUser', 'Mute User')}
                 </button>
+                {onBlockUser && (
+                  <button className="primal-note-menu-item danger" onClick={onBlockUser}>
+                    <Ban size={14} /> {t('moderation.menu.block')}
+                  </button>
+                )}
                 <button className="primal-note-menu-item danger" onClick={onReport}>
                   <Flag size={14} /> {t('feed.reportContent', 'Report')}
                 </button>

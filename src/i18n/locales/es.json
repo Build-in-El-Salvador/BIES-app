@@ -2194,5 +2194,116 @@
     },
     "backToSettings": "Configuración",
     "hostedBanner": "Se registró con su correo, así que BIES guarda su clave secreta en su servidor y firma por usted. La clave nunca llega a este dispositivo."
+  },
+  "moderation": {
+    "done": "Listo",
+    "unblock": "Desbloquear",
+    "objectionable": "Esto contiene palabras que van contra las normas de la comunidad. Por favor, cámbielo.",
+    "menu": {
+      "more": "Más opciones",
+      "report": "Reportar",
+      "reportProfile": "Reportar perfil",
+      "reportListing": "Reportar listado",
+      "reportEvent": "Reportar evento",
+      "block": "Bloquear",
+      "blockMember": "Bloquear miembro"
+    },
+    "reasons": {
+      "harassment": "Acoso, amenazas u odio",
+      "sexual": "Contenido sexual o desnudos",
+      "violence_illegal": "Violencia o algo ilegal",
+      "scam_spam": "Estafa, fraude o spam",
+      "impersonation": "Se hace pasar por otra persona",
+      "private_info": "Datos personales de alguien compartidos sin permiso",
+      "fake_recommendation": "Recomendación falsa, pagada o intercambiada",
+      "inaccurate_listing": "Datos incorrectos, o publicado sin permiso del dueño",
+      "other": "Otra cosa"
+    },
+    "report": {
+      "title": {
+        "user": "Reportar este perfil",
+        "listing": "Reportar este listado",
+        "endorsement": "Reportar esta recomendación",
+        "event": "Reportar este evento",
+        "note": "Reportar esta publicación"
+      },
+      "why": "¿Cuál es el problema?",
+      "detailsLabel": "¿Algo más que debamos saber? (opcional)",
+      "private": "Los reportes son privados: nunca decimos quién los envió. Revisamos cada reporte en menos de 24 horas.",
+      "send": "Enviar reporte",
+      "sending": "Enviando…",
+      "doneTitle": "Gracias por avisarnos",
+      "doneBody": "Revisamos cada reporte en menos de 24 horas y eliminamos lo que va contra las normas de la comunidad.",
+      "blockToo": "Bloquear también a {{name}}",
+      "blockTooUnnamed": "Bloquear también a este miembro",
+      "errors": {
+        "not_found": "No lo encontramos. Puede que ya se haya eliminado.",
+        "own_content": "Eso es suyo. Puede editarlo o eliminarlo.",
+        "too_many": "Ha enviado muchos reportes hoy. Por favor, escríbanos a info@buildinelsalvador.com.",
+        "generic": "No se pudo enviar el reporte. Intente de nuevo.",
+        "bad_event": "No pudimos verificar esa publicación. Intente de nuevo."
+      }
+    },
+    "block": {
+      "title": "¿Bloquear a {{name}}?",
+      "titleUnnamed": "¿Bloquear a este miembro?",
+      "hides": "No verá su perfil, sus listados, recomendaciones ni publicaciones, ni recibirá notificaciones suyas.",
+      "noContact": "Sus mensajes no le llegarán, y ninguno de los dos podrá seguir al otro. Si se seguían, eso se termina.",
+      "notTold": "No se le avisa.",
+      "undo": "Puede deshacerlo cuando quiera en Configuración → Miembros bloqueados.",
+      "confirm": "Bloquear",
+      "blocking": "Bloqueando…",
+      "doneTitle": "Bloqueado",
+      "doneBody": "Ya no verá a {{name}} en BIES.",
+      "doneBodyUnnamed": "Ya no verá a este miembro en BIES.",
+      "mutedTitle": "Oculto en este dispositivo",
+      "mutedBody": "Esta cuenta no es miembro de BIES, así que ocultamos sus publicaciones y mensajes en este dispositivo. Puede deshacerlo en Configuración → Miembros bloqueados.",
+      "errors": {
+        "self": "No puede bloquearse a sí mismo.",
+        "generic": "No funcionó. Intente de nuevo."
+      }
+    },
+    "blockedProfile": {
+      "title": "Usted bloqueó a {{name}}",
+      "body": "No ve su perfil, sus listados, publicaciones ni mensajes, y ninguno de los dos puede seguir al otro."
+    },
+    "blockedListing": {
+      "title": "Usted bloqueó al miembro que maneja este listado",
+      "body": "Desbloquéelo para volver a verlo.",
+      "manage": "Miembros bloqueados"
+    },
+    "terms": {
+      "title": "Antes de continuar",
+      "intro": "BIES es una comunidad de personas que construyen en El Salvador. Para usar la app, acepte nuestros Términos de uso:",
+      "ruleZeroTolerance": "No toleramos contenido inapropiado ni a miembros abusivos: nada de acoso, odio, contenido sexual, amenazas, estafas ni spam.",
+      "ruleRemoved": "Eliminamos el contenido que va contra estas normas, y suspendemos o cerramos las cuentas que lo publican.",
+      "ruleReport": "Use Reportar en lo que vaya contra ellas, o Bloquear para dejar de ver a alguien. Revisamos los reportes en menos de 24 horas.",
+      "readTerms": "Leer los Términos de uso",
+      "readPrivacy": "Aviso de privacidad",
+      "agree": "Acepto",
+      "signOut": "Cerrar sesión",
+      "changed": "Los términos se acaban de actualizar. Léalos de nuevo y luego acéptelos.",
+      "error": "No se pudo guardar. Intente de nuevo."
+    },
+    "settings": {
+      "blockedLabel": "Miembros bloqueados",
+      "blockedDesc": "Las personas que bloqueó. Desbloquéelas para volver a verlas.",
+      "blockedButton": "Gestionar",
+      "legalTitle": "Legal y ayuda",
+      "terms": "Términos de uso",
+      "privacy": "Aviso de privacidad",
+      "support": "Ayuda y soporte",
+      "email": "Escríbanos"
+    },
+    "blocked": {
+      "title": "Miembros bloqueados",
+      "intro": "No ve los perfiles, listados, publicaciones ni mensajes de estos miembros, y ellos no pueden seguirle. No se les avisa.",
+      "empty": "No ha bloqueado a nadie.",
+      "unblockFailed": "No funcionó. Intente de nuevo.",
+      "loadFailed": "No pudimos cargar la lista.",
+      "mutedTitle": "Silenciados en este dispositivo",
+      "mutedIntro": "Cuentas fuera de BIES cuyas publicaciones y mensajes están ocultos en este dispositivo."
+    },
+    "unmute": "Dejar de silenciar"
   }
 }

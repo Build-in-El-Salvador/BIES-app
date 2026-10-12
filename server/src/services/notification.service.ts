@@ -8,6 +8,7 @@ import { sendToUser } from './websocket.service';
 import { cache, cacheKey, TTL } from './redis.service';
 import { sendPushToUser, isWebPushEnabled } from './webpush.service';
 import { sendApnsToUser, isApnsEnabled } from './apns.service';
+import { hasBlocked } from './moderation.service';
 
 export type NotificationType =
     | 'NEW_MESSAGE'
@@ -58,10 +59,26 @@ export async function removePushTargets(userId: string): Promise<void> {
     await prisma.pushSubscription.deleteMany({ where: { userId } });
 }
 
+// Where the wrappers below name the member who caused a notification.
+const ACTOR_ID_KEYS = ['actorId', 'senderId', 'followerId', 'viewerId', 'attendeeId', 'inviterId', 'buyerId'] as const;
+const ACTOR_PUBKEY_KEYS = ['actorPubkey', 'senderPubkey'] as const;
+
+/** Whoever caused the notification, when the recipient blocked them. */
+async function fromBlockedMember(userId: string, data: Record<string, unknown>): Promise<boolean> {
+    const pick = (keys: readonly string[]) => keys.map((k) => data[k]).find((v): v is string => typeof v === 'string' && !!v);
+    const id = pick(ACTOR_ID_KEYS);
+    const pubkey = pick(ACTOR_PUBKEY_KEYS);
+    if (!id && !pubkey) return false;
+    return hasBlocked(userId, { id, pubkey });
+}
+
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
     const { userId, type, title, body, data = {} } = params;
 
     try {
+        // Nothing from a member this one blocked (terms of use §6).
+        if (await fromBlockedMember(userId, data)) return;
+
         const notification = await prisma.notification.create({
             data: {
                 userId,

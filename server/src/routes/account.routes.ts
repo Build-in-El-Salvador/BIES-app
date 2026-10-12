@@ -12,6 +12,7 @@ import {
     startDeletion,
     startKeyExport,
 } from '../controllers/account.controller';
+import { acceptTerms, termsSchema } from '../controllers/moderation.controller';
 
 const router = Router();
 
@@ -25,5 +26,8 @@ router.post('/delete', validate(deleteConfirmSchema), confirmDeletion);
 router.post('/key/start', validate(langSchema), startKeyExport);
 router.post('/key/export', validate(keyExportSchema), exportKeyHandler);
 router.post('/key/release', validate(keyReleaseSchema), releaseKeyHandler);
+
+// Accept the terms of use (shown on the first sign-in and when they change).
+router.post('/terms', validate(termsSchema), acceptTerms);
 
 export default router;

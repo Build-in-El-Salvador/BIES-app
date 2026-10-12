@@ -17,6 +17,9 @@ import { nip19 } from 'nostr-tools';
 import { Note, FeedSkeleton, Paginator } from '../components/feed';
 import { formatTime as formatTimeUtil, parseNoteContent as parseNoteContentUtil, getDisplayName as getDisplayNameUtil } from '../utils/noteUtils';
 import '../components/feed/Feed.css';
+import { useBlocks, useMuted } from '../hooks/useBlocks';
+import { mute } from '../services/muteStore';
+import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 
 const EXPLORE_ICONS = {
     trending_24h: TrendingUp,
@@ -45,6 +48,8 @@ function formatSats(n) {
 
 const Feed = () => {
     const { user } = useAuth();
+    // Members this member blocked: their posts and comments are hidden here.
+    const blocks = useBlocks();
     const { t } = useTranslation();
     const location = useLocation();
     const [posts, setPosts] = useState([]);
@@ -955,39 +960,32 @@ const Feed = () => {
         }
     };
 
-    // Mute a user — add to local mute set (stored in localStorage)
-    const [mutedUsers, setMutedUsers] = useState(() => {
-        try { return new Set(JSON.parse(localStorage.getItem('bies_muted_users') || '[]')); }
-        catch { return new Set(); }
+    // Mute a user on this device, for this account (services/muteStore.js;
+    // undone in Settings → Blocked members).
+    const mutedUsers = useMuted();
+    const handleMuteUser = (pubkey) => mute(user?.id, pubkey);
+
+    // Report and Block go to BIES (terms of use §6). Not a NIP-56 report
+    // event: that would publish who reported whom, for anyone to read. Someone
+    // who isn't a BIES member can't be blocked on the server, so they are
+    // muted on this device instead.
+    const { openReport, openBlock, dialogs: moderationDialogs } = useModerationDialogs({
+        onNotMember: (target) => handleMuteUser(target.pubkey),
     });
 
-    const handleMuteUser = (pubkey) => {
-        setMutedUsers(prev => {
-            const next = new Set(prev).add(pubkey);
-            localStorage.setItem('bies_muted_users', JSON.stringify([...next]));
-            return next;
-        });
+    // The signed note goes with the report: it proves who wrote it.
+    const handleReport = (note) => {
+        setPostMenu(null);
+        const { id, pubkey, created_at, kind, tags, content, sig } = note;
+        openReport(
+            { type: 'note', id, event: { id, pubkey, created_at, kind, tags, content, sig } },
+            { name: getDisplayName(pubkey), blockTarget: { pubkey } },
+        );
     };
 
-    // Report content — NIP-56 kind:1984 report event
-    const handleReport = async (post) => {
-        if (!nostrSigner.hasKey && nostrSigner.mode !== 'extension' && !nostrSigner.storedMethod && !window.nostr) return;
+    const handleBlockUser = (pubkey) => {
         setPostMenu(null);
-        try {
-            const event = {
-                kind: 1984,
-                created_at: Math.floor(Date.now() / 1000),
-                tags: [
-                    ['e', post.id, 'spam'],
-                    ['p', post.pubkey],
-                ],
-                content: '',
-            };
-            await nostrService.publishEvent(event);
-            try { await nostrService.publishToBiesRelay(event); } catch { /* best-effort */ }
-        } catch (err) {
-            console.error('[Feed] Report failed:', err);
-        }
+        openBlock({ pubkey }, { name: getDisplayName(pubkey) });
     };
 
     const formatTime = formatTimeUtil;
@@ -1074,12 +1072,16 @@ const Feed = () => {
 
     // Only show root posts — filter out replies (events with 'e' tags referencing other events)
     // Show root posts + reposts, filter out muted users
+    const isHidden = useCallback(
+        (pubkey) => mutedUsers.has(pubkey) || blocks.pubkeys.has(pubkey),
+        [mutedUsers, blocks.pubkeys],
+    );
     const rootPosts = useMemo(() => posts.filter(p => {
-        if (mutedUsers.has(p.pubkey)) return false;
+        if (isHidden(p.pubkey)) return false;
         // If note was surfaced only via repost and all reposters are muted, hide it
-        if (p._reposters?.length > 0 && p._reposters.every(r => mutedUsers.has(r.pubkey))) return false;
+        if (p._reposters?.length > 0 && p._reposters.every(r => isHidden(r.pubkey))) return false;
         return p._reposters?.length > 0 || !p.tags?.some(t => t[0] === 'e');
-    }), [posts, mutedUsers]);
+    }), [posts, isHidden]);
 
     const getStats = (noteId) => noteStats[noteId] || {};
 
@@ -1473,13 +1475,17 @@ const Feed = () => {
                             const isReposted = repostedNotes.has(post.id) || post._reposters?.some(r => r.pubkey === myPubkey);
                             const isReplying = replyTarget?.id === post.id;
                             const isCommentsOpen = openComments.has(post.id);
-                            const postComments = comments[post.id] || [];
+                            const postComments = (comments[post.id] || []).filter(c => !isHidden(c.pubkey));
                             const isOwnPost = myPubkey && post.pubkey === myPubkey;
+                            // Don't name blocked or muted reposters in the repost header.
+                            const shownPost = post._reposters?.some(r => isHidden(r.pubkey))
+                                ? { ...post, _reposters: post._reposters.filter(r => !isHidden(r.pubkey)) }
+                                : post;
 
                             return (
                                 <Note
                                     key={post.id}
-                                    post={post}
+                                    post={shownPost}
                                     profiles={profiles}
                                     stats={stats}
                                     isLiked={isLiked}
@@ -1509,6 +1515,7 @@ const Feed = () => {
                                     }}
                                     onDeletePost={() => handleDeletePost(post)}
                                     onMuteUser={() => { handleMuteUser(post.pubkey); setPostMenu(null); }}
+                                    onBlockUser={() => handleBlockUser(post.pubkey)}
                                     onReport={() => { handleReport(post); setPostMenu(null); }}
                                     onCopyLink={() => { navigator.clipboard.writeText(`https://njump.me/${nip19.noteEncode(post.id)}`); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); }}
                                     onCopyText={() => { navigator.clipboard.writeText(post.content || ''); setPostMenu(null); showToast(t('feed.textCopied', 'Text copied')); }}
@@ -1659,6 +1666,11 @@ const Feed = () => {
                                                                             <button className="primal-comment-action" onClick={() => handleCommentReply(post.id, comment)}>
                                                                                 Reply
                                                                             </button>
+                                                                            {comment.pubkey !== myPubkey && (
+                                                                                <button className="primal-comment-action" onClick={() => handleReport(comment)}>
+                                                                                    {t('moderation.menu.report')}
+                                                                                </button>
+                                                                            )}
                                                                             <button
                                                                                 className={`primal-comment-action ${likedComments.has(comment.id) ? 'liked' : ''}`}
                                                                                 onClick={() => handleCommentLike(comment)}
@@ -1719,6 +1731,8 @@ const Feed = () => {
                         )}
                     </div>
                 )}
+
+                {moderationDialogs}
 
                 {/* Zap Modal */}
                 {zapTarget && (

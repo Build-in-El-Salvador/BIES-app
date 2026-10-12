@@ -83,6 +83,10 @@ async function request(method, path, body = null, options = {}) {
     const data = await res.json().catch(() => ({ error: 'Invalid response from server' }));
 
     if (!res.ok) {
+        // Publishing needs the current terms accepted: AuthContext shows them.
+        if (res.status === 403 && data.reason === 'terms_required' && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('bies:terms-required', { detail: { termsVersion: data.termsVersion } }));
+        }
         const error = new Error(data.error || `Request failed (${res.status})`);
         error.status = res.status;
         error.data = data;
@@ -175,6 +179,19 @@ export const accountApi = {
     startKeyExport: (lang) => post('/account/key/start', { lang }),
     exportKey: (code) => post('/account/key/export', { code }),
     releaseKey: (signedEvent, lang) => post('/account/key/release', { signedEvent, lang }),
+
+    // Accept the terms of use; resolves to { user }.
+    acceptTerms: (version) => post('/account/terms', { version }),
+};
+
+// Report and Block (terms of use §6).
+export const moderationApi = {
+    // { targetType: user|listing|endorsement|event|note, targetId, targetPubkey?, reason, details? }
+    report: (data) => post('/reports', data),
+    blocks: () => get('/blocks'),
+    // { userId } or { pubkey }. A pubkey of someone who isn't a member: 404 not_member.
+    block: (target) => post('/blocks', target),
+    unblock: (userId) => del(`/blocks/${userId}`),
 };
 
 export const signerApi = {
@@ -569,6 +586,10 @@ export const adminApi = {
     clearCache: (pattern = '') => post('/admin/cache/clear', { pattern }),
     investorRequests: (params = {}) => get('/admin/investor-requests', params),
     updateInvestorRequest: (id, status) => put(`/admin/investor-requests/${id}`, { status }),
+    reports: (params = {}) => get('/admin/reports', params),
+    resolveReport: (id, data) => put(`/admin/reports/${id}`, data),
+    removeReportedNote: (id) => del(`/admin/reports/${id}/note`),
+    deleteEndorsement: (id) => del(`/admin/endorsements/${id}`),
     feedback: (params = {}) => get('/admin/feedback', params),
     updateFeedback: (id, data) => put(`/admin/feedback/${id}`, data),
     deleteFeedback: (id) => del(`/admin/feedback/${id}`),

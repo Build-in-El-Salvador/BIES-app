@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { notifyProfileView } from '../services/notification.service';
 import { publishProfileUpdate, publishAnnouncement } from '../services/nostr.service';
+import { blockedIds, hasBlocked } from '../services/moderation.service';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -69,9 +70,14 @@ export const updateProfileSchema = z.object({
 
 /**
  * GET /profiles
- * List profiles (cached), filterable by role, location, search.
+ * List profiles (cached), filterable by role, location, search. Members the
+ * viewer blocked are left out after the cache, which all viewers share.
  */
 export async function listProfiles(req: Request, res: Response): Promise<void> {
+    const respond = async (result: any) => {
+        const hidden = new Set(await blockedIds(req.user?.id));
+        res.json(hidden.size ? { ...result, data: result.data.filter((p: any) => !hidden.has(p.userId)) } : result);
+    };
     try {
         const { role, location, search, page = '1', limit = '20' } = req.query;
         const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
@@ -86,7 +92,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         });
 
         const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        if (cached) { res.setHeader('X-Cache', 'HIT'); await respond(cached); return; }
 
         const where: any = { isPublic: true };
 
@@ -159,7 +165,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         };
 
         await cache.setJson(cKey, result, TTL.PROFILE_LIST);
-        res.json(result);
+        await respond(result);
     } catch (error) {
         console.error('List profiles error:', error);
         res.status(500).json({ error: 'Failed to list profiles' });
@@ -168,13 +174,30 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /profiles/:id
- * Get a single profile (cached, by userId or profileId).
+ * Get a single profile (cached, by userId or profileId). A member the viewer
+ * blocked comes back as just a name, with `blocked: true`.
  */
 export async function getProfile(req: Request, res: Response): Promise<void> {
+    const viewerBlocked = (ownerId: string) =>
+        !!req.user && req.user.id !== ownerId ? hasBlocked(req.user.id, { id: ownerId }) : Promise.resolve(false);
+    const respond = async (result: any) => {
+        if (await viewerBlocked(result.userId)) {
+            res.json({
+                id: result.id,
+                userId: result.userId,
+                name: result.name,
+                avatar: result.avatar,
+                user: { id: result.user?.id, nostrPubkey: result.user?.nostrPubkey },
+                blocked: true,
+            });
+            return;
+        }
+        res.json(result);
+    };
     try {
         const cKey = cacheKey.profileDetail(req.params.id);
         const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        if (cached) { res.setHeader('X-Cache', 'HIT'); await respond(cached); return; }
 
         const profile = await prisma.profile.findFirst({
             where: {
@@ -230,7 +253,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         }).catch(() => { });
 
         // Notify profile owner of view (dedup: once per viewer per hour)
-        if (req.user && req.user.id !== profile.userId) {
+        if (req.user && req.user.id !== profile.userId && !(await viewerBlocked(profile.userId))) {
             const viewDedupKey = `profile_view:${profile.userId}:${req.user.id}`;
             const alreadyNotified = await cache.get(viewDedupKey);
             if (!alreadyNotified) {
@@ -262,7 +285,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         };
 
         await cache.setJson(cKey, result, TTL.PROFILE_DETAIL);
-        res.json(result);
+        await respond(result);
     } catch (error) {
         console.error('Get profile error:', error);
         res.status(500).json({ error: 'Failed to get profile' });

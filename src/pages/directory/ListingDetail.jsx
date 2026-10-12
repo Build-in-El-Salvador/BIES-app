@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     ArrowLeft, MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
     Loader2, Leaf, ShieldCheck, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
-    Languages, Target, Tag, Bitcoin, ThumbsUp, BadgeCheck,
+    Languages, Target, Tag, Bitcoin, ThumbsUp, BadgeCheck, Flag, Ban, MoreHorizontal,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +14,9 @@ import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
 import CertifiedBadge from '../../components/directory/CertifiedBadge';
 import { getProduceIcon } from './produceIcons';
+import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
+import { objectionableMessage } from '../../components/moderation/objectionable';
+import '../../components/moderation/Moderation.css';
 
 const PRACTICE_META = {
     'regenerative': { Icon: Sprout, tKey: 'directory.practices.regenerative' },
@@ -42,6 +45,11 @@ const ListingDetail = () => {
     const [listing, setListing] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    // The member who runs it is one this member blocked.
+    const [blockedOwner, setBlockedOwner] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    // Focus goes back to the menu button when a Report or Block sheet closes.
+    const menuButtonRef = useRef(null);
 
     // Endorse UI state
     const [showEndorseForm, setShowEndorseForm] = useState(false);
@@ -58,7 +66,12 @@ const ListingDetail = () => {
         try {
             const result = await directoryApi.get(id);
             setListing(result?.data || result);
+            setBlockedOwner(false);
         } catch (err) {
+            if (err?.data?.reason === 'blocked') {
+                setListing(null);
+                setBlockedOwner(true);
+            }
             if (!silent) setError(err.message || 'Failed to load listing');
         } finally {
             if (!silent) setLoading(false);
@@ -69,6 +82,9 @@ const ListingDetail = () => {
         fetchListing();
     }, [fetchListing]);
 
+    // After a block the server hides the member's listing or recommendation.
+    const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => fetchListing() });
+
     const handleEndorse = async () => {
         setEndorseBusy(true);
         setEndorseError('');
@@ -78,7 +94,7 @@ const ListingDetail = () => {
             setShowEndorseForm(false);
             await fetchListing({ silent: true });
         } catch (err) {
-            setEndorseError(err.message || 'Failed to endorse');
+            setEndorseError(objectionableMessage(t, err) || err.message || 'Failed to endorse');
         } finally {
             setEndorseBusy(false);
         }
@@ -114,12 +130,18 @@ const ListingDetail = () => {
     if (error || !listing) {
         return (
             <div className="listing-detail-page">
+                {dialogs}
                 <div className="container">
                     <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                        <h2>{t('directory.notFound')}</h2>
+                        <h2>{blockedOwner ? t('moderation.blockedListing.title') : t('directory.notFound')}</h2>
                         <p style={{ color: 'var(--color-gray-500)', margin: '0.5rem 0' }}>
-                            {t('directory.notFoundDesc')}
+                            {blockedOwner ? t('moderation.blockedListing.body') : t('directory.notFoundDesc')}
                         </p>
+                        {blockedOwner && (
+                            <Link to="/settings/blocked" style={{ display: 'block', marginTop: '1rem', fontWeight: 600, color: 'var(--color-primary)' }}>
+                                {t('moderation.blockedListing.manage')}
+                            </Link>
+                        )}
                         <Link
                             to={backPath}
                             style={{
@@ -137,6 +159,11 @@ const ListingDetail = () => {
 
     const isOwner = !!user?.id && listing.ownerId === user.id;
     const canEdit = isOwner || isStaff;
+    // Who answers for the listing: its linked member when staff entered it,
+    // otherwise its creator (server: directory.controller.ts listingMember).
+    const listingMemberId = listing.memberUserId || listing.ownerId;
+    const listingMemberName = listing.memberUser?.profile?.name || listing.owner?.profile?.name || listing.name;
+    const canModerate = !!user?.id && listingMemberId !== user.id && !isOwner;
     const isPending = listing.status === 'pending-review';
 
     // WhatsApp link — digits only per wa.me requirements
@@ -200,6 +227,7 @@ const ListingDetail = () => {
 
     return (
         <div className="listing-detail-page">
+            {dialogs}
             {/* Hero — full-bleed on mobile, 760px rounded column on desktop */}
             <div className="dir-hero-wrap">
                 <div className="dir-hero">
@@ -263,6 +291,50 @@ const ListingDetail = () => {
                                     >
                                         <Edit3 size={14} /> {t('directory.editListing')}
                                     </Link>
+                                )}
+                                {canModerate && (
+                                    <div style={{ position: 'relative' }}>
+                                        <button
+                                            ref={menuButtonRef}
+                                            type="button"
+                                            className="dir-more-btn"
+                                            aria-label={t('moderation.menu.more')}
+                                            aria-expanded={showMenu}
+                                            onClick={() => setShowMenu((v) => !v)}
+                                        >
+                                            <MoreHorizontal size={18} />
+                                        </button>
+                                        {showMenu && (
+                                            <>
+                                                <div className="dir-menu-backdrop" onClick={() => setShowMenu(false)} />
+                                                <div className="dir-menu" role="menu">
+                                                    <button
+                                                        type="button"
+                                                        role="menuitem"
+                                                        onClick={() => {
+                                                            setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
+                                                            openReport({ type: 'listing', id: listing.id }, { name: listingMemberName, blockTarget: { userId: listingMemberId } });
+                                                        }}
+                                                    >
+                                                        <Flag size={16} /> {t('moderation.menu.reportListing')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        role="menuitem"
+                                                        className="danger"
+                                                        onClick={() => {
+                                                            setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
+                                                            openBlock({ userId: listingMemberId }, { name: listingMemberName });
+                                                        }}
+                                                    >
+                                                        <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -511,6 +583,18 @@ const ListingDetail = () => {
                                                         {e.comment && (
                                                             <p className="dir-endorsement-comment">{e.comment}</p>
                                                         )}
+                                                        {user?.id && e.userId !== user.id && (
+                                                            <button
+                                                                type="button"
+                                                                className="mod-inline-report"
+                                                                onClick={() => openReport(
+                                                                    { type: 'endorsement', id: e.id },
+                                                                    { name: endorserName, blockTarget: { userId: e.userId } },
+                                                                )}
+                                                            >
+                                                                <Flag size={12} /> {t('moderation.menu.report')}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -630,6 +714,25 @@ const ListingDetail = () => {
                     gap: 0.75rem;
                     margin-bottom: 0.5rem;
                 }
+
+                .dir-more-btn {
+                    width: 34px; height: 34px; border-radius: 50%;
+                    display: inline-flex; align-items: center; justify-content: center;
+                    border: 1px solid var(--color-gray-300); background: var(--color-surface);
+                    color: var(--color-gray-700); cursor: pointer; padding: 0;
+                }
+                .dir-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+                .dir-menu {
+                    position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 13rem;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200);
+                    border-radius: var(--radius-lg, 0.75rem); box-shadow: 0 10px 28px rgba(0,0,0,0.14); padding: 0.25rem 0;
+                }
+                .dir-menu button {
+                    width: 100%; display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.9rem;
+                    background: none; border: none; cursor: pointer; text-align: left;
+                    font-size: 0.875rem; font-weight: 500; color: var(--color-gray-700);
+                }
+                .dir-menu button.danger { color: var(--color-danger, #dc2626); }
 
                 .dir-detail-name {
                     font-size: 1.75rem;

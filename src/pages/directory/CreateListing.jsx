@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     ArrowLeft, Loader2, AlertCircle, Camera, X, Plus, Trash2,
     CheckCircle, Bitcoin, Leaf, ShieldCheck,
@@ -249,7 +250,9 @@ const CreateListing = ({ editMode = false }) => {
                 }
             }
         } catch (err) {
-            if (err.data?.details) {
+            if (objectionableMessage(t, err)) {
+                setSubmitError(objectionableMessage(t, err));
+            } else if (err.data?.details) {
                 setSubmitError(`${err.message}: ${err.data.details.map((d) => `${d.field}: ${d.message}`).join(', ')}`);
             } else {
                 setSubmitError(err.message || 'Failed to save listing');

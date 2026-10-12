@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 // nostr-tools is ESM-only (@noble/curves has no CJS build);
 // use dynamic import() so the compiled CJS output doesn't call require().
 import prisma from '../lib/prisma';
+import { config } from '../config';
 import { isAdminPubkey } from '../middleware/auth';
 import { encryptPrivateKey } from '../services/crypto.service';
 import { publishRelayList } from '../services/nostr.service';
@@ -43,7 +44,9 @@ function sanitizeProfile(profile: any): any {
 /**
  * The user as sent to the client after sign-in and from /auth/me.
  * `hostedKey` says whether BIES holds this account's Nostr key. The key
- * itself never leaves the server.
+ * itself never leaves the server. `termsAccepted` is false until the member
+ * accepts the current terms of use, `termsVersion`, which is what
+ * POST /api/account/terms takes.
  */
 export function publicUser(user: any) {
     return {
@@ -53,6 +56,8 @@ export function publicUser(user: any) {
         role: user.role,
         isAdmin: user.isAdmin,
         hostedKey: !!user.encryptedPrivkey,
+        termsAccepted: user.termsVersion === config.termsVersion,
+        termsVersion: config.termsVersion,
         profile: sanitizeProfile(user.profile),
     };
 }

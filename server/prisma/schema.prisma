@@ -26,6 +26,10 @@ model User {
   isVerified       Boolean  @default(false) @map("is_verified")
   isBanned         Boolean  @default(false) @map("is_banned")
   deletedAt        DateTime? @map("deleted_at")
+  // The terms of use (with their zero-tolerance rule) the member accepted,
+  // and when. A missing or older version shows the app's terms gate.
+  termsVersion     String?   @map("terms_version")
+  termsAcceptedAt  DateTime? @map("terms_accepted_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
@@ -69,6 +73,10 @@ model User {
   bountiesPosted        Bounty[]               @relation("BountiesPosted")
   bountySubmissions     BountySubmission[]
   hostedSignatures      HostedSignature[]
+  reportsMade           Report[]               @relation("ReportsMade")
+  reportsHandled        Report[]               @relation("ReportsHandled")
+  blocksMade            Block[]                @relation("BlocksMade")
+  blocksReceived        Block[]                @relation("BlocksReceived")
 
   @@map("users")
 }
@@ -1174,4 +1182,58 @@ model BountySubmission {
   @@unique([bountyId, userId])
   @@index([userId])
   @@map("bounty_submissions")
+}
+
+// ─── Reports and blocks (App Store guideline 1.2) ─────────────────────────────
+
+// A member's report of a profile, listing, recommendation, event or note.
+// Moderators work the queue in Admin → Reports and answer within 24 hours
+// (terms of use §6). Closed reports are deleted after 12 months.
+model Report {
+  id           String    @id @default(cuid())
+  reporterId   String?   @map("reporter_id")
+  // user | listing | endorsement | event | note
+  targetType   String    @map("target_type")
+  // The thing reported: a user, listing, endorsement or event id, or a Nostr event id
+  targetId     String    @map("target_id")
+  // The member responsible for it, when known
+  targetUserId String?   @map("target_user_id")
+  // For a note: its author's Nostr pubkey (they may not be a BIES member)
+  targetPubkey String?   @map("target_pubkey")
+  // harassment | sexual | violence_illegal | scam_spam | impersonation |
+  // private_info | fake_recommendation | inaccurate_listing | other
+  reason       String
+  details      String    @default("")
+  // For a note: its text when reported, from the signed event (it may be deleted later)
+  snapshot     String    @default("")
+  // OPEN | ACTIONED | DISMISSED
+  status       String    @default("OPEN")
+  resolution   String    @default("")
+  handledById  String?   @map("handled_by_id")
+  handledAt    DateTime? @map("handled_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  reporter  User? @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: SetNull)
+  handledBy User? @relation("ReportsHandled", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId])
+  @@map("reports")
+}
+
+// One member blocking another: the blocker stops seeing the other's profile,
+// listings, recommendations and posts, and neither can follow or message the
+// other.
+model Block {
+  blockerId String   @map("blocker_id")
+  blockedId String   @map("blocked_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker User @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
 }

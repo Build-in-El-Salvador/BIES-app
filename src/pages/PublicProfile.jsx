@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy } from 'lucide-react';
+import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy, Flag, Ban } from 'lucide-react';
 import { getAssetUrl } from '../utils/assets';
 import { nip19 } from 'nostr-tools';
 import { profilesApi, eventsApi, pointsApi } from '../services/api';
@@ -16,6 +16,9 @@ import ZapButton from '../components/ZapButton';
 import ZappableTag from '../components/ZappableTag';
 import ProfileSection from '../components/ProfileSection';
 import TranslatableText from '../components/TranslatableText';
+import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { unblock } from '../services/blockStore';
+import '../components/moderation/Moderation.css';
 
 function isSafeUrl(url) {
     try {
@@ -53,6 +56,15 @@ const PublicProfile = ({ type }) => {
     const lightbox = useLightbox();
     const pointsEnabled = useFeature('points');
     const messagesEnabled = useFeature('messages');
+    // Bumped after a block or unblock: the server then answers differently.
+    const [reloadKey, setReloadKey] = useState(0);
+    const [unblocking, setUnblocking] = useState(false);
+    // Focus goes back to the menu button when a Report or Block sheet closes.
+    const menuButtonRef = useRef(null);
+    const { openReport, openBlock, dialogs } = useModerationDialogs({
+        // Blocking ends any follow between them.
+        onBlocked: () => { setIsFollowing(false); setReloadKey((k) => k + 1); },
+    });
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -93,7 +105,7 @@ const PublicProfile = ({ type }) => {
             }
         };
         fetchProfile();
-    }, [id, currentUser, type]);
+    }, [id, currentUser, type, reloadKey]);
 
     // The URL :id can be a profileId or userId — the follow API needs the userId
     const targetUserId = profile?.user?.id || profile?.userId;
@@ -184,6 +196,34 @@ const PublicProfile = ({ type }) => {
         return <div className="p-10 text-center text-gray-500">{error || t('publicProfile.profileNotFound', 'Profile not found')}</div>;
     }
 
+    // A member this member blocked: only their name, and the way back.
+    if (profile.blocked) {
+        const doUnblock = async () => {
+            setUnblocking(true);
+            try {
+                await unblock(currentUser?.id, profile.userId);
+                setReloadKey((k) => k + 1);
+            } catch {
+                // Still blocked; the button stays.
+            } finally {
+                setUnblocking(false);
+            }
+        };
+        return (
+            <div className="container py-8">
+                <div className="mod-blocked-card">
+                    {profile.avatar && <img src={profile.avatar} alt="" />}
+                    <h1 className="mod-title">{t('moderation.blockedProfile.title', { name: profile.name || t('common.unnamed') })}</h1>
+                    <p className="mod-muted">{t('moderation.blockedProfile.body')}</p>
+                    <button type="button" className="mod-button secondary" onClick={doUnblock} disabled={unblocking}>
+                        {unblocking ? <Loader2 size={18} className="mod-spin" /> : null}
+                        {t('moderation.unblock')}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const role = profile.user?.role || (type === 'investor' ? 'INVESTOR' : 'BUILDER');
     const projectsTitle = role === 'INVESTOR' ? t('publicProfile.investedIn', 'Invested In') : t('publicProfile.workingOn', 'Working On');
     const isEventHost = profile.user?.role === 'EVENT_HOST' || hostedTotal > 0 || hostedEvents.length > 0;
@@ -199,6 +239,7 @@ const PublicProfile = ({ type }) => {
 
     return (
         <div className="profile-page">
+            {dialogs}
             <div className="container py-8">
                 {/* Header Card */}
                 <div className="profile-card mb-8" style={{ padding: 0, overflow: 'hidden' }}>
@@ -298,7 +339,7 @@ const PublicProfile = ({ type }) => {
                             )}
 
                             <div style={{ position: 'relative' }}>
-                                <button onClick={() => setShowMenu(!showMenu)} style={{
+                                <button ref={menuButtonRef} onClick={() => setShowMenu(!showMenu)} aria-label={t('moderation.menu.more')} aria-expanded={showMenu} style={{
                                     borderRadius: 'var(--radius-md)', background: 'var(--color-surface-raised)', color: 'var(--color-gray-900)',
                                     border: '1px solid var(--color-gray-200)', height: '42px', width: '42px', padding: 0,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -329,6 +370,38 @@ const PublicProfile = ({ type }) => {
                                         }}>
                                             <Share size={16} /> {t('publicProfile.shareProfile', 'Share Profile')}
                                         </button>
+                                        {currentUser && targetUserId && currentUser.id !== targetUserId && (
+                                            <>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowMenu(false);
+                                                        menuButtonRef.current?.focus({ preventScroll: true });
+                                                        openReport({ type: 'user', id: targetUserId }, { name: profile.name, blockTarget: { userId: targetUserId } });
+                                                    }}
+                                                    style={{
+                                                        width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
+                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
+                                                        fontWeight: 500, color: 'var(--color-gray-700)', background: 'none', border: 'none', cursor: 'pointer',
+                                                    }}
+                                                >
+                                                    <Flag size={16} /> {t('moderation.menu.reportProfile')}
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowMenu(false);
+                                                        menuButtonRef.current?.focus({ preventScroll: true });
+                                                        openBlock({ userId: targetUserId }, { name: profile.name });
+                                                    }}
+                                                    style={{
+                                                        width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
+                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
+                                                        fontWeight: 500, color: 'var(--color-danger, #dc2626)', background: 'none', border: 'none', cursor: 'pointer',
+                                                    }}
+                                                >
+                                                    <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>

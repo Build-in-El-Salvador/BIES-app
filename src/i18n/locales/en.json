@@ -2193,5 +2193,116 @@
     },
     "backToSettings": "Settings",
     "hostedBanner": "You signed up with your email, so BIES keeps your secret key on its server and signs for you. It never comes to this device."
+  },
+  "moderation": {
+    "done": "Done",
+    "unblock": "Unblock",
+    "objectionable": "This contains words that break our community rules. Please change it.",
+    "menu": {
+      "more": "More options",
+      "report": "Report",
+      "reportProfile": "Report profile",
+      "reportListing": "Report listing",
+      "reportEvent": "Report event",
+      "block": "Block",
+      "blockMember": "Block member"
+    },
+    "reasons": {
+      "harassment": "Harassment, threats or hate",
+      "sexual": "Sexual content or nudity",
+      "violence_illegal": "Violence or something illegal",
+      "scam_spam": "Scam, fraud or spam",
+      "impersonation": "Pretending to be someone else",
+      "private_info": "Someone's personal details shared without permission",
+      "fake_recommendation": "Fake, paid or traded recommendation",
+      "inaccurate_listing": "Wrong details, or listed without the owner's permission",
+      "other": "Something else"
+    },
+    "report": {
+      "title": {
+        "user": "Report this profile",
+        "listing": "Report this listing",
+        "endorsement": "Report this recommendation",
+        "event": "Report this event",
+        "note": "Report this post"
+      },
+      "why": "What's wrong with it?",
+      "detailsLabel": "Anything else we should know? (optional)",
+      "private": "Reports are private: we never say who sent one. We review every report within 24 hours.",
+      "send": "Send report",
+      "sending": "Sending…",
+      "doneTitle": "Thanks for telling us",
+      "doneBody": "We review every report within 24 hours, and remove anything that breaks our community rules.",
+      "blockToo": "Block {{name}} too",
+      "blockTooUnnamed": "Block this member too",
+      "errors": {
+        "not_found": "We couldn't find it. It may have been removed already.",
+        "own_content": "That's yours. Edit or delete it instead.",
+        "too_many": "You've sent a lot of reports today. Please email info@buildinelsalvador.com instead.",
+        "generic": "The report didn't send. Please try again.",
+        "bad_event": "We couldn't check that post. Please try again."
+      }
+    },
+    "block": {
+      "title": "Block {{name}}?",
+      "titleUnnamed": "Block this member?",
+      "hides": "You won't see their profile, listings, recommendations or posts, or get notifications from them.",
+      "noContact": "Their messages won't reach you, and neither of you can follow the other. Any follow between you ends.",
+      "notTold": "They aren't told.",
+      "undo": "You can undo this any time in Settings → Blocked members.",
+      "confirm": "Block",
+      "blocking": "Blocking…",
+      "doneTitle": "Blocked",
+      "doneBody": "You won't see {{name}} on BIES any more.",
+      "doneBodyUnnamed": "You won't see this member on BIES any more.",
+      "mutedTitle": "Hidden on this device",
+      "mutedBody": "This account isn't a BIES member, so we've hidden their posts and messages on this device instead. You can undo this in Settings → Blocked members.",
+      "errors": {
+        "self": "You can't block yourself.",
+        "generic": "That didn't work. Please try again."
+      }
+    },
+    "blockedProfile": {
+      "title": "You blocked {{name}}",
+      "body": "You don't see their profile, listings, posts or messages, and neither of you can follow the other."
+    },
+    "blockedListing": {
+      "title": "You blocked the member who runs this listing",
+      "body": "Unblock them to see it again.",
+      "manage": "Blocked members"
+    },
+    "terms": {
+      "title": "Before you continue",
+      "intro": "BIES is a community of people building in El Salvador. To use the app, please agree to our Terms of Use:",
+      "ruleZeroTolerance": "We have zero tolerance for objectionable content and abusive members: no harassment, hate, sexual content, threats, scams or spam.",
+      "ruleRemoved": "We remove content that breaks these rules, and suspend or close the accounts that post it.",
+      "ruleReport": "Use Report on anything that breaks them, or Block to stop seeing someone. We review reports within 24 hours.",
+      "readTerms": "Read the Terms of Use",
+      "readPrivacy": "Privacy Notice",
+      "agree": "I agree",
+      "signOut": "Sign out",
+      "changed": "The terms were just updated. Please read them again, then agree.",
+      "error": "That didn't save. Please try again."
+    },
+    "settings": {
+      "blockedLabel": "Blocked members",
+      "blockedDesc": "People you blocked. Unblock them to see them again.",
+      "blockedButton": "Manage",
+      "legalTitle": "Legal and support",
+      "terms": "Terms of Use",
+      "privacy": "Privacy Notice",
+      "support": "Help and support",
+      "email": "Email us"
+    },
+    "blocked": {
+      "title": "Blocked members",
+      "intro": "You don't see these members' profiles, listings, posts or messages, and they can't follow you. They aren't told.",
+      "empty": "You haven't blocked anyone.",
+      "unblockFailed": "That didn't work. Please try again.",
+      "loadFailed": "We couldn't load the list.",
+      "mutedTitle": "Muted on this device",
+      "mutedIntro": "Accounts outside BIES whose posts and messages are hidden on this device."
+    },
+    "unmute": "Unmute"
   }
 }

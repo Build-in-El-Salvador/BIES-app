@@ -14,6 +14,7 @@ import { featureGate } from './middleware/featureGate';
 import { rateLimitKey } from './utils/rateLimitKey';
 import { attachWebSocketServer } from './services/websocket.service';
 import { deleteOldSessions } from './services/session.service';
+import { deleteOldReports } from './services/moderation.service';
 import { startTwitterRefreshLoop } from './services/twitter.service';
 import { initWebPush, cleanupStaleSubscriptions } from './services/webpush.service';
 import { initApns } from './services/apns.service';
@@ -61,6 +62,7 @@ import marketplaceRoutes from './routes/marketplace.routes';
 import bountyRoutes from './routes/bounty.routes';
 import flagsRoutes from './routes/flags.routes';
 import signerRoutes from './routes/signer.routes';
+import moderationRoutes from './routes/moderation.routes';
 
 const app = express();
 
@@ -234,6 +236,7 @@ app.use('/api/courses', coursesRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/marketplace', featureGate('marketplace'), marketplaceRoutes);
 app.use('/api/bounties', featureGate('bounties'), bountyRoutes);
+app.use('/api', moderationRoutes); // /api/reports, /api/blocks
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -275,12 +278,17 @@ server.listen(config.port, () => {
     // Initialize native push (APNs) — no-ops when unconfigured
     initApns();
 
-    // Delete sessions that ended over 30 days ago, now and twice a day.
+    // Delete sessions that ended over 30 days ago, and reports closed over
+    // 12 months ago (privacy notice), now and twice a day.
     const pruneSessions = () => deleteOldSessions()
         .then((count) => { if (count) console.log(`[Sessions] Deleted ${count} old sessions`); })
         .catch((err) => console.error('[Sessions] Cleanup failed:', err));
+    const pruneReports = () => deleteOldReports()
+        .then((count) => { if (count) console.log(`[Moderation] Deleted ${count} old reports`); })
+        .catch((err) => console.error('[Moderation] Cleanup failed:', err));
     pruneSessions();
-    setInterval(pruneSessions, 12 * 60 * 60 * 1000).unref();
+    pruneReports();
+    setInterval(() => { pruneSessions(); pruneReports(); }, 12 * 60 * 60 * 1000).unref();
 
     // Points scorer (relay indexer) + monthly rollover loop — a scorer
     // failure must never take down the API.

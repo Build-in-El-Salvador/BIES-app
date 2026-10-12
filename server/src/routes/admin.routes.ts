@@ -50,6 +50,13 @@ import {
     deleteAdminCourse,
 } from '../controllers/admin.controller';
 import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFlags.controller';
+import {
+    adminDeleteEndorsement,
+    adminListReports,
+    adminRemoveReportedNote,
+    adminResolveReport,
+    resolveReportSchema,
+} from '../controllers/moderation.controller';
 
 const router = Router();
 
@@ -95,6 +102,12 @@ router.put('/directory/:id/feature', validate(featureDirectoryListingSchema), fe
 router.put('/directory/:id/score', validate(setDirectoryScoreSchema), setDirectoryScore);
 router.post('/directory/recompute', recomputeDirectoryScores);
 router.delete('/directory/:id', deleteDirectoryListing);
+
+// Reports (terms of use §6: reviewed within 24 hours)
+router.get('/reports', adminListReports);
+router.put('/reports/:id', validate(resolveReportSchema), adminResolveReport);
+router.delete('/reports/:id/note', adminRemoveReportedNote);
+router.delete('/endorsements/:id', adminDeleteEndorsement);
 
 // Courses
 router.get('/courses', listAdminCourses);

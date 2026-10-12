@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { recomputeListingScore } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
+import { blockedEitherWay, blockedIds } from '../services/moderation.service';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -70,6 +71,14 @@ const memberUserSelect = {
         profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true } },
     },
 };
+
+/**
+ * The member a listing belongs to: its linked member when staff entered it
+ * for them, otherwise whoever created it. Blocks and reports go by this.
+ */
+export function listingMember(listing: { ownerId: string; memberUserId: string | null }): string {
+    return listing.memberUserId ?? listing.ownerId;
+}
 
 function parseListing(listing: any): any {
     return {
@@ -156,8 +165,12 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             prisma.directoryListing.count({ where }),
         ]);
 
+        // Listings run by a member the viewer blocked are left out.
+        const hidden = new Set(await blockedIds(req.user?.id));
+        const visible = hidden.size ? listings.filter((l) => !hidden.has(listingMember(l))) : listings;
+
         res.json({
-            data: listings.map(parseListing),
+            data: visible.map(parseListing),
             pagination: {
                 page: parseInt(page as string, 10),
                 limit: take,
@@ -206,13 +219,24 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             }
         }
 
+        // A member the viewer blocked: their listing is gone for the viewer,
+        // and so are their recommendations on other listings.
+        const hidden = new Set(await blockedIds(req.user?.id));
+        if (hidden.has(listingMember(listing))) {
+            res.status(404).json({ error: 'You blocked the member who runs this listing', reason: 'blocked' });
+            return;
+        }
+        const shown = hidden.size
+            ? { ...listing, endorsements: listing.endorsements.filter((e) => !hidden.has(e.userId)) }
+            : listing;
+
         // Fire-and-forget view count increment
         prisma.directoryListing.update({
             where: { id: listing.id },
             data: { viewCount: { increment: 1 } },
         }).catch(() => {});
 
-        res.json(parseListing(listing));
+        res.json(parseListing(shown));
     } catch (error) {
         console.error('Get directory listing error:', error);
         res.status(500).json({ error: 'Failed to get directory listing' });
@@ -361,10 +385,14 @@ export async function endorseListing(req: Request, res: Response): Promise<void>
     try {
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true },
+            select: { id: true, ownerId: true, memberUserId: true },
         });
 
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+        if (await blockedEitherWay(req.user!.id, listingMember(listing))) {
+            res.status(403).json({ error: "You can't recommend this listing", reason: 'blocked' });
+            return;
+        }
 
         const comment = req.body.comment || '';
 

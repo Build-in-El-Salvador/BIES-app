@@ -136,3 +136,22 @@ export function requestRelayPurge(pubkey: string): boolean {
         return false;
     }
 }
+
+/**
+ * Ask the relay to delete one event: a post a moderator removed after a
+ * report. Same queue as requestRelayPurge, under `event-<id>`.
+ */
+export function requestEventRemoval(eventId: string): boolean {
+    if (!HEX_PUBKEY_RE.test(eventId)) return false; // event ids are 64 hex characters too
+    try {
+        fs.mkdirSync(PURGE_DIR, { recursive: true });
+        const tmp = path.join(PURGE_DIR, `.event-${eventId}.tmp`);
+        fs.writeFileSync(tmp, `${new Date().toISOString()}\n`);
+        fs.renameSync(tmp, path.join(PURGE_DIR, `event-${eventId}`));
+        console.log(`[Relay] Removal requested for event ${eventId.substring(0, 8)}...`);
+        return true;
+    } catch (err) {
+        console.error('[Relay] Failed to request event removal:', err);
+        return false;
+    }
+}

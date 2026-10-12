@@ -16,6 +16,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { useLightbox } from '../context/LightboxContext';
 import { nostrService } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
+import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 
 const EventDetail = () => {
     const { id } = useParams();
@@ -33,6 +34,7 @@ const EventDetail = () => {
     const [showShareMenu, setShowShareMenu] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
+    const { openReport, dialogs: moderationDialogs } = useModerationDialogs();
     const [inviteSearch, setInviteSearch] = useState('');
     const [inviteResults, setInviteResults] = useState([]);
     const [inviteSearching, setInviteSearching] = useState(false);
@@ -230,10 +232,15 @@ const EventDetail = () => {
     };
 
     // ─── Report event ─────────────────────────────────────────────────────
+    // To BIES's moderators (terms of use §6). Official BIES events don't offer
+    // to block their host, who is BIES staff.
     const handleReport = () => {
-        const url = `${window.location.origin}/feedback`;
-        window.open(url, '_blank');
         setShowActionMenu(false);
+        const hostName = event.host?.profile?.name;
+        openReport(
+            { type: 'event', id: event.id },
+            event.isOfficial || !event.hostId ? {} : { name: hostName, blockTarget: { userId: event.hostId } },
+        );
     };
 
     // ─── Invite: Search members ───────────────────────────────────────────
@@ -414,6 +421,7 @@ const EventDetail = () => {
                             </div>
 
                             {/* Action menu (...) */}
+                            {moderationDialogs}
                             <div style={{ position: 'relative' }}>
                                 <button className="cover-btn" onClick={() => { const next = !showActionMenu; closeAllDropdowns(); setShowActionMenu(next); }} title="More options">
                                     <MoreHorizontal size={18} />
@@ -435,9 +443,11 @@ const EventDetail = () => {
                                                     <Edit3 size={14} /> Edit Event
                                                 </button>
                                             )}
-                                            <button className="cover-dropdown-item" style={{ color: 'var(--color-error)' }} onClick={handleReport}>
-                                                <Flag size={14} /> Report Event
-                                            </button>
+                                            {user?.id && user.id !== event.hostId && (
+                                                <button className="cover-dropdown-item" style={{ color: 'var(--color-error)' }} onClick={handleReport}>
+                                                    <Flag size={14} /> {t('moderation.menu.reportEvent')}
+                                                </button>
+                                            )}
                                         </div>
                                     </>
                                 )}

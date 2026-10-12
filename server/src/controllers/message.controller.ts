@@ -10,6 +10,7 @@
 
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { blockedEitherWay } from '../services/moderation.service';
 import { z } from 'zod';
 import { notifyNewMessage } from '../services/notification.service';
 import { sendToUser } from '../services/websocket.service';
@@ -171,6 +172,10 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
 
         if (!recipient) {
             res.status(404).json({ error: 'Recipient not found' });
+            return;
+        }
+        if (await blockedEitherWay(senderId, recipientId)) {
+            res.status(403).json({ error: "You can't message this member", reason: 'blocked' });
             return;
         }
 

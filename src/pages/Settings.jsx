@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Moon, Bell, Lock, Globe, Eye, Zap, LayoutGrid, Play, Key, Copy, CheckCircle, EyeOff, AlertTriangle, Fingerprint, Smartphone, Wallet, Trash2, UserCog } from 'lucide-react';
+import { Moon, Bell, Lock, Globe, Eye, Zap, LayoutGrid, Play, Key, Copy, CheckCircle, EyeOff, AlertTriangle, Fingerprint, Smartphone, Wallet, Trash2, UserCog, Ban, FileText, Shield, LifeBuoy, Mail, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import WalletConnect from '../components/WalletConnect';
@@ -14,6 +14,8 @@ import { nostrSigner } from '../services/nostrSigner';
 import { keytrService, isLikelyExtensionInterference, isPrfUnsupportedError } from '../services/keytrService';
 import { PASSKEY_ENABLED, CUSTOM_BOTTOM_NAV_ENABLED } from '../config/featureFlags';
 import { isNativePlatform } from '../utils/platform';
+import { openExternal } from '../utils/openExternal';
+import { legalPage, SUPPORT_EMAIL } from '../config/legal';
 
 const Settings = () => {
     const { theme, setTheme } = useTheme();
@@ -711,6 +713,50 @@ const Settings = () => {
                         {t('account.deleteButton')}
                     </Link>
                 </div>
+                <div className="setting-item">
+                    <div className="setting-info">
+                        <div className="icon-box"><Ban size={20} /></div>
+                        <div>
+                            <p className="setting-label">{t('moderation.settings.blockedLabel')}</p>
+                            <p className="setting-desc">{t('moderation.settings.blockedDesc')}</p>
+                        </div>
+                    </div>
+                    <Link to="/settings/blocked" className="btn btn-outline btn-sm" data-testid="settings-blocked" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        {t('moderation.settings.blockedButton')}
+                    </Link>
+                </div>
+            </div>
+
+            {/* Terms, privacy and help: on buildinelsalvador.com, in the app's language. */}
+            <div className="settings-section">
+                <h2><Shield size={16} /> {t('moderation.settings.legalTitle')}</h2>
+                {[
+                    { key: 'terms', Icon: FileText, label: t('moderation.settings.terms') },
+                    { key: 'privacy', Icon: Shield, label: t('moderation.settings.privacy') },
+                    { key: 'support', Icon: LifeBuoy, label: t('moderation.settings.support') },
+                ].map(({ key, Icon, label }) => (
+                    <a
+                        key={key}
+                        className="setting-item setting-link"
+                        href={legalPage(i18n.language, key)}
+                        onClick={(e) => { e.preventDefault(); openExternal(legalPage(i18n.language, key)); }}
+                    >
+                        <div className="setting-info">
+                            <div className="icon-box"><Icon size={20} /></div>
+                            <p className="setting-label">{label}</p>
+                        </div>
+                        <ExternalLink size={16} />
+                    </a>
+                ))}
+                <a className="setting-item setting-link" href={`mailto:${SUPPORT_EMAIL}`}>
+                    <div className="setting-info">
+                        <div className="icon-box"><Mail size={20} /></div>
+                        <div>
+                            <p className="setting-label">{t('moderation.settings.email')}</p>
+                            <p className="setting-desc">{SUPPORT_EMAIL}</p>
+                        </div>
+                    </div>
+                </a>
             </div>
 
             <div className="version-footer">
@@ -725,6 +771,8 @@ const Settings = () => {
 
                 .setting-item { padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-gray-100); }
                 .setting-item:last-child { border-bottom: none; }
+                .setting-link { text-decoration: none; color: inherit; cursor: pointer; }
+                .setting-link > svg { color: var(--color-gray-400); flex-shrink: 0; }
 
                 .setting-info { display: flex; align-items: center; gap: 1rem; }
                 .icon-box { width: 40px; height: 40px; background: var(--color-gray-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--color-gray-600); }
