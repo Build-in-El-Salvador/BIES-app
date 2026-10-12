@@ -211,6 +211,7 @@
     "keyFileBackupLabel": "Encrypted backup",
     "keyFilePasswordLabel": "Password of the key file",
     "keyFileSignIn": "Unlock and sign in",
+    "backToEmail": "Back to email sign-in",
     "keyFileUnlocking": "Unlocking…"
   },
   "emailSignIn": {

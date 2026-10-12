@@ -143,7 +143,7 @@ const AmberCallback = () => {
                     <>
                         <AlertCircle size={32} className="ac-warn" />
                         <p className="ac-text">{t('amberCallback.expired')}</p>
-                        <Link className="ac-btn" to="/login">{t('amberCallback.backToLogin')}</Link>
+                        <Link className="ac-btn" to="/login/nostr">{t('amberCallback.backToLogin')}</Link>
                     </>
                 )}
 
@@ -151,7 +151,7 @@ const AmberCallback = () => {
                     <>
                         <AlertCircle size={32} className="ac-warn" />
                         <p className="ac-text">{message}</p>
-                        <Link className="ac-btn" to="/login">{t('amberCallback.backToLogin')}</Link>
+                        <Link className="ac-btn" to="/login/nostr">{t('amberCallback.backToLogin')}</Link>
                     </>
                 )}
             </div>
