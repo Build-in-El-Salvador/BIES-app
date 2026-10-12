@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { objectionableMessage } from '../components/moderation/objectionable';
 import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
 import { nip19 } from 'nostr-tools';
 import { profilesApi } from '../services/api';
@@ -144,7 +145,7 @@ const ProfileSetup = () => {
             await refreshUser();
             navigate('/feed');
         } catch (err) {
-            setError(err.message || 'Failed to save profile.');
+            setError(objectionableMessage(t, err) || err.message || 'Failed to save profile.');
         } finally {
             setSubmitting(false);
         }

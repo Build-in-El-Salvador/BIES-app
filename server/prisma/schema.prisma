@@ -1204,6 +1204,8 @@ model Report {
   // private_info | fake_recommendation | inaccurate_listing | other
   reason       String
   details      String    @default("")
+  // For a note: its text when reported, from the signed event (it may be deleted later)
+  snapshot     String    @default("")
   // OPEN | ACTIONED | DISMISSED
   status       String    @default("OPEN")
   resolution   String    @default("")

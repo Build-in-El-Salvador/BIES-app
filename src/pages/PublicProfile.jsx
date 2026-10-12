@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy, Flag, Ban } from 'lucide-react';
@@ -59,6 +59,8 @@ const PublicProfile = ({ type }) => {
     // Bumped after a block or unblock: the server then answers differently.
     const [reloadKey, setReloadKey] = useState(0);
     const [unblocking, setUnblocking] = useState(false);
+    // Focus goes back to the menu button when a Report or Block sheet closes.
+    const menuButtonRef = useRef(null);
     const { openReport, openBlock, dialogs } = useModerationDialogs({
         // Blocking ends any follow between them.
         onBlocked: () => { setIsFollowing(false); setReloadKey((k) => k + 1); },
@@ -337,7 +339,7 @@ const PublicProfile = ({ type }) => {
                             )}
 
                             <div style={{ position: 'relative' }}>
-                                <button onClick={() => setShowMenu(!showMenu)} aria-label={t('moderation.menu.more')} aria-expanded={showMenu} style={{
+                                <button ref={menuButtonRef} onClick={() => setShowMenu(!showMenu)} aria-label={t('moderation.menu.more')} aria-expanded={showMenu} style={{
                                     borderRadius: 'var(--radius-md)', background: 'var(--color-surface-raised)', color: 'var(--color-gray-900)',
                                     border: '1px solid var(--color-gray-200)', height: '42px', width: '42px', padding: 0,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -373,6 +375,7 @@ const PublicProfile = ({ type }) => {
                                                 <button
                                                     onClick={() => {
                                                         setShowMenu(false);
+                                                        menuButtonRef.current?.focus({ preventScroll: true });
                                                         openReport({ type: 'user', id: targetUserId }, { name: profile.name, blockTarget: { userId: targetUserId } });
                                                     }}
                                                     style={{
@@ -386,6 +389,7 @@ const PublicProfile = ({ type }) => {
                                                 <button
                                                     onClick={() => {
                                                         setShowMenu(false);
+                                                        menuButtonRef.current?.focus({ preventScroll: true });
                                                         openBlock({ userId: targetUserId }, { name: profile.name });
                                                     }}
                                                     style={{

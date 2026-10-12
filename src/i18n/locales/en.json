@@ -2239,23 +2239,24 @@
         "not_found": "We couldn't find it. It may have been removed already.",
         "own_content": "That's yours. Edit or delete it instead.",
         "too_many": "You've sent a lot of reports today. Please email info@buildinelsalvador.com instead.",
-        "generic": "The report didn't send. Please try again."
+        "generic": "The report didn't send. Please try again.",
+        "bad_event": "We couldn't check that post. Please try again."
       }
     },
     "block": {
       "title": "Block {{name}}?",
       "titleUnnamed": "Block this member?",
       "hides": "You won't see their profile, listings, recommendations or posts, or get notifications from them.",
-      "noContact": "Neither of you can follow or message the other, and any follow between you ends.",
+      "noContact": "Their messages won't reach you, and neither of you can follow the other. Any follow between you ends.",
       "notTold": "They aren't told.",
-      "undo": "You can unblock them any time in Settings → Blocked members.",
+      "undo": "You can undo this any time in Settings → Blocked members.",
       "confirm": "Block",
       "blocking": "Blocking…",
       "doneTitle": "Blocked",
       "doneBody": "You won't see {{name}} on BIES any more.",
       "doneBodyUnnamed": "You won't see this member on BIES any more.",
       "mutedTitle": "Hidden on this device",
-      "mutedBody": "This account isn't a BIES member, so we've hidden their posts on this device instead.",
+      "mutedBody": "This account isn't a BIES member, so we've hidden their posts and messages on this device instead. You can undo this in Settings → Blocked members.",
       "errors": {
         "self": "You can't block yourself.",
         "generic": "That didn't work. Please try again."
@@ -2263,7 +2264,7 @@
     },
     "blockedProfile": {
       "title": "You blocked {{name}}",
-      "body": "You don't see their profile, listings or posts, and neither of you can follow or message the other."
+      "body": "You don't see their profile, listings, posts or messages, and neither of you can follow the other."
     },
     "blockedListing": {
       "title": "You blocked the member who runs this listing",
@@ -2295,9 +2296,13 @@
     },
     "blocked": {
       "title": "Blocked members",
-      "intro": "You don't see these members' profiles, listings or posts, and they can't follow or message you. They aren't told.",
+      "intro": "You don't see these members' profiles, listings, posts or messages, and they can't follow you. They aren't told.",
       "empty": "You haven't blocked anyone.",
-      "unblockFailed": "That didn't work. Please try again."
-    }
+      "unblockFailed": "That didn't work. Please try again.",
+      "loadFailed": "We couldn't load the list.",
+      "mutedTitle": "Muted on this device",
+      "mutedIntro": "Accounts outside BIES whose posts and messages are hidden on this device."
+    },
+    "unmute": "Unmute"
   }
 }

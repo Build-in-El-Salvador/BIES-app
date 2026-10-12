@@ -17,7 +17,8 @@ import { nip19 } from 'nostr-tools';
 import { Note, FeedSkeleton, Paginator } from '../components/feed';
 import { formatTime as formatTimeUtil, parseNoteContent as parseNoteContentUtil, getDisplayName as getDisplayNameUtil } from '../utils/noteUtils';
 import '../components/feed/Feed.css';
-import { useBlocks } from '../hooks/useBlocks';
+import { useBlocks, useMuted } from '../hooks/useBlocks';
+import { mute } from '../services/muteStore';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 
 const EXPLORE_ICONS = {
@@ -959,19 +960,10 @@ const Feed = () => {
         }
     };
 
-    // Mute a user — add to local mute set (stored in localStorage)
-    const [mutedUsers, setMutedUsers] = useState(() => {
-        try { return new Set(JSON.parse(localStorage.getItem('bies_muted_users') || '[]')); }
-        catch { return new Set(); }
-    });
-
-    const handleMuteUser = (pubkey) => {
-        setMutedUsers(prev => {
-            const next = new Set(prev).add(pubkey);
-            localStorage.setItem('bies_muted_users', JSON.stringify([...next]));
-            return next;
-        });
-    };
+    // Mute a user on this device, for this account (services/muteStore.js;
+    // undone in Settings → Blocked members).
+    const mutedUsers = useMuted();
+    const handleMuteUser = (pubkey) => mute(user?.id, pubkey);
 
     // Report and Block go to BIES (terms of use §6). Not a NIP-56 report
     // event: that would publish who reported whom, for anyone to read. Someone
@@ -981,11 +973,13 @@ const Feed = () => {
         onNotMember: (target) => handleMuteUser(target.pubkey),
     });
 
+    // The signed note goes with the report: it proves who wrote it.
     const handleReport = (note) => {
         setPostMenu(null);
+        const { id, pubkey, created_at, kind, tags, content, sig } = note;
         openReport(
-            { type: 'note', id: note.id, pubkey: note.pubkey },
-            { name: getDisplayName(note.pubkey), blockTarget: { pubkey: note.pubkey } },
+            { type: 'note', id, event: { id, pubkey, created_at, kind, tags, content, sig } },
+            { name: getDisplayName(pubkey), blockTarget: { pubkey } },
         );
     };
 
@@ -1483,11 +1477,15 @@ const Feed = () => {
                             const isCommentsOpen = openComments.has(post.id);
                             const postComments = (comments[post.id] || []).filter(c => !isHidden(c.pubkey));
                             const isOwnPost = myPubkey && post.pubkey === myPubkey;
+                            // Don't name blocked or muted reposters in the repost header.
+                            const shownPost = post._reposters?.some(r => isHidden(r.pubkey))
+                                ? { ...post, _reposters: post._reposters.filter(r => !isHidden(r.pubkey)) }
+                                : post;
 
                             return (
                                 <Note
                                     key={post.id}
-                                    post={post}
+                                    post={shownPost}
                                     profiles={profiles}
                                     stats={stats}
                                     isLiked={isLiked}

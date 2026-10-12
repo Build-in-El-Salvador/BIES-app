@@ -53,6 +53,7 @@ import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFla
 import {
     adminDeleteEndorsement,
     adminListReports,
+    adminRemoveReportedNote,
     adminResolveReport,
     resolveReportSchema,
 } from '../controllers/moderation.controller';
@@ -105,6 +106,7 @@ router.delete('/directory/:id', deleteDirectoryListing);
 // Reports (terms of use §6: reviewed within 24 hours)
 router.get('/reports', adminListReports);
 router.put('/reports/:id', validate(resolveReportSchema), adminResolveReport);
+router.delete('/reports/:id/note', adminRemoveReportedNote);
 router.delete('/endorsements/:id', adminDeleteEndorsement);
 
 // Courses

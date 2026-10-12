@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 
-const LISTING_TEXT = ['name', 'about', 'location', 'instagram', 'products', 'skills', 'bestFor', 'pricing', 'comment'];
+const LISTING_TEXT = ['name', 'about', 'location', 'instagram', 'website', 'languages', 'products', 'skills', 'bestFor', 'pricing', 'comment'];
 
 // Public routes
 router.get('/', optionalAuth, listListings);

@@ -6,20 +6,20 @@
  *
  * Deliberately short and unambiguous: slurs and explicit sexual terms in
  * English and Spanish, matched as whole words after lower-casing, removing
- * accents and undoing common letter swaps. Words with everyday uses in El
- * Salvador are left out on purpose ("negro" is a colour, "rapé" is snuff,
- * "vergón" means great); a false positive on a farm listing costs more trust
- * than this filter earns. Report text is never filtered: a report may need to
- * quote what it reports.
+ * accents and undoing common letter swaps and look-alike characters. Words
+ * with everyday uses are left out on purpose: "negro" is a colour, "rapé" is
+ * snuff, "vergón" means great, Kike is short for Enrique, a matate is a pita
+ * bag, cold storage retards ripening, a tranny is a gearbox. A false positive
+ * on a farm listing costs more trust than this filter earns. Report text is
+ * never filtered: a report may need to quote what it reports.
  */
 
 // Single words, without accents.
 const WORDS = [
     // English slurs
-    'nigger', 'niggers', 'nigga', 'niggas', 'faggot', 'faggots', 'fag', 'fags', 'kike', 'kikes',
-    'chink', 'chinks', 'spic', 'spics', 'wetback', 'wetbacks', 'tranny', 'trannies', 'retard', 'retards',
+    'nigger', 'niggers', 'nigga', 'niggas', 'faggot', 'faggots', 'wetback', 'wetbacks',
     // English sexual and degrading terms
-    'cunt', 'cunts', 'whore', 'whores', 'slut', 'sluts', 'porn', 'porno', 'blowjob', 'blowjobs',
+    'cunt', 'cunts', 'whore', 'whores', 'slut', 'sluts', 'porno', 'blowjob', 'blowjobs',
     'cumshot', 'gangbang', 'kys',
     // Spanish slurs and sexual insults
     'maricon', 'maricones', 'joto', 'jotos', 'sudaca', 'sudacas', 'puta', 'putas', 'puto', 'putos',
@@ -27,21 +27,46 @@ const WORDS = [
 ];
 
 // Phrases, without accents, words separated by single spaces.
-const PHRASES = ['kill yourself', 'hijo de puta', 'hijos de puta', 'matate', 'suicidate'];
+const PHRASES = ['kill yourself', 'hijo de puta', 'hijos de puta', 'suicidate'];
 
 const BLOCKED = new Set(WORDS);
 
 const LETTER_SWAPS: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's' };
 
-/** Lower-case, accents removed, common letter swaps undone, words split by spaces. */
+// Cyrillic and Greek letters that look like Latin ones.
+const LOOKALIKES: Record<string, string> = {
+    'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'і': 'i', 'ї': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h',
+    'о': 'o', 'р': 'p', 'с': 'c', 'ѕ': 's', 'т': 't', 'у': 'y', 'х': 'x', 'ԁ': 'd', 'ɡ': 'g',
+    'α': 'a', 'β': 'b', 'γ': 'y', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't',
+    'υ': 'u', 'χ': 'x',
+};
+
+// Formatting tags inside a word (<b>ni</b>gger) go without a trace; other tags
+// separate words. Invisible characters (zero-width spaces, soft hyphens) go.
+const INLINE_TAGS = /<\/?(?:a|b|i|u|s|em|strong|span|mark|small|sub|sup|font|code)\b[^>]*>/gi;
+const OTHER_TAGS = /<[^>]*>/g;
+const INVISIBLE = /\p{Cf}/gu;
+
+/**
+ * Lower-case words separated by spaces: tags and invisible characters gone,
+ * look-alikes and accents folded to plain letters, and letter swaps undone
+ * in words that have letters ("f4gg0t", but not "$500").
+ */
 export function normalize(text: string): string {
     return text
+        .replace(INLINE_TAGS, '')
+        .replace(OTHER_TAGS, ' ')
+        .replace(INVISIBLE, '')
+        .normalize('NFKC')
         .toLowerCase()
+        .replace(/[^\x00-\x7f]/g, (c) => LOOKALIKES[c] ?? c)
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .replace(/[013457@$]/g, (c) => LETTER_SWAPS[c])
-        .replace(/[^a-z]+/g, ' ')
-        .trim();
+        .replace(/[\u0300-\u036f]/g, '')
+        .split(/[^a-z0-9@$]+/)
+        .map((token) => (/[a-z]/.test(token) ? token.replace(/[013457@$]/g, (c) => LETTER_SWAPS[c]) : ''))
+        .map((token) => token.replace(/[^a-z]/g, ''))
+        .filter(Boolean)
+        .join(' ');
 }
 
 /** The first objectionable word or phrase in the text, or null. */

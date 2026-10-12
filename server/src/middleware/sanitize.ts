@@ -96,7 +96,9 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
 // different text) and stores none of it; Nostr content is escaped by whatever
 // displays it. The account routes check signed events, whose id covers the
 // content: any change would break the signature. They store no text.
-const UNSANITIZED_PREFIXES = ['/api/signer/', '/api/account/'];
+// Reports carry a signed note the same way; the report text they store is
+// only ever shown escaped (React in Admin → Reports, the moderator email).
+const UNSANITIZED_PREFIXES = ['/api/signer/', '/api/account/', '/api/reports'];
 
 /**
  * Sanitize req.body, req.query, and req.params.

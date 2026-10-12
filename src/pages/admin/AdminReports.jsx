@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Flag, ExternalLink, Trash2, UserX, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
-import { adminApi } from '../../services/api';
+import { adminApi, eventsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { openExternal } from '../../utils/openExternal';
 
@@ -78,13 +78,21 @@ const AdminReports = () => {
 
     const resolve = (r, next) => run(r.id, () => adminApi.resolveReport(r.id, { status: next, resolution: notes[r.id] ?? r.resolution ?? '' }));
 
+    const REMOVE = {
+        listing: { label: 'listing', confirm: 'Remove this listing for good?', action: (r) => adminApi.deleteDirectoryListing(r.targetId) },
+        endorsement: { label: 'recommendation', confirm: 'Remove this recommendation for good?', action: (r) => adminApi.deleteEndorsement(r.targetId) },
+        // From the BIES relay; copies on other Nostr relays are out of reach.
+        note: { label: 'post', confirm: 'Remove this post from the BIES relay?', action: (r) => adminApi.removeReportedNote(r.id) },
+        // Deleting an event is for admins (as on the event page).
+        ...(isAdmin ? { event: { label: 'event', confirm: 'Delete this event for good?', action: (r) => eventsApi.delete(r.targetId) } } : {}),
+    };
+
     const removeContent = (r) => {
-        const what = r.targetType === 'listing' ? 'this listing' : 'this recommendation';
-        if (!window.confirm(`Remove ${what} for good?`)) return;
+        const remove = REMOVE[r.targetType];
+        if (!window.confirm(remove.confirm)) return;
         run(r.id, async () => {
-            if (r.targetType === 'listing') await adminApi.deleteDirectoryListing(r.targetId);
-            else await adminApi.deleteEndorsement(r.targetId);
-            await adminApi.resolveReport(r.id, { status: 'ACTIONED', resolution: notes[r.id] || `Removed the ${TARGET_LABELS[r.targetType].toLowerCase()}.` });
+            await remove.action(r);
+            await adminApi.resolveReport(r.id, { status: 'ACTIONED', resolution: notes[r.id] || `Removed the ${remove.label}.` });
         });
     };
 
@@ -130,7 +138,7 @@ const AdminReports = () => {
                 <div className="rep-list">
                     {reports.map((r) => {
                         const late = r.status === 'OPEN' && hoursSince(r.createdAt) >= HOURS_WARN;
-                        const removable = (r.targetType === 'listing' || r.targetType === 'endorsement') && r.link;
+                        const removable = REMOVE[r.targetType] && (r.targetType === 'note' || r.link);
                         const canSuspend = isAdmin && r.targetUser && !r.targetUser.isBanned && !r.targetUser.deleted;
                         const working = busy === r.id;
                         return (
@@ -178,7 +186,7 @@ const AdminReports = () => {
                                         <div className="rep-actions">
                                             {removable && (
                                                 <button className="rep-btn danger" disabled={working} onClick={() => removeContent(r)}>
-                                                    <Trash2 size={14} /> Remove {r.targetType === 'listing' ? 'listing' : 'recommendation'}
+                                                    <Trash2 size={14} /> Remove {REMOVE[r.targetType].label}
                                                 </button>
                                             )}
                                             {canSuspend && (

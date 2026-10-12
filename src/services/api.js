@@ -588,6 +588,7 @@ export const adminApi = {
     updateInvestorRequest: (id, status) => put(`/admin/investor-requests/${id}`, { status }),
     reports: (params = {}) => get('/admin/reports', params),
     resolveReport: (id, data) => put(`/admin/reports/${id}`, data),
+    removeReportedNote: (id) => del(`/admin/reports/${id}/note`),
     deleteEndorsement: (id) => del(`/admin/endorsements/${id}`),
     feedback: (params = {}) => get('/admin/feedback', params),
     updateFeedback: (id, data) => put(`/admin/feedback/${id}`, data),

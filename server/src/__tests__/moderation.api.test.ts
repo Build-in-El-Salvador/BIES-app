@@ -48,7 +48,9 @@ import adminRoutes from '../routes/admin.routes';
 import moderationRoutes from '../routes/moderation.routes';
 import { auditLog } from '../middleware/audit';
 import { sanitize } from '../middleware/sanitize';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
+import { PURGE_DIR } from '../services/relayWhitelist.service';
 import { createNotification } from '../services/notification.service';
 import { deleteOldReports } from '../services/moderation.service';
 
@@ -98,24 +100,30 @@ async function call(method: string, url: string, { token, body }: { token?: stri
     return { status: res.status, body: (await res.json().catch(() => ({}))) as any };
 }
 
-type Member = { id: string; pubkey: string; token: string; name: string };
+type Member = { id: string; pubkey: string; secretKey: Uint8Array; token: string; name: string };
 
 /** A signed-in member with a public profile, who accepted the terms unless told otherwise. */
-async function member(name: string, { terms = true, role = 'MEMBER' } = {}): Promise<Member> {
-    const pubkey = crypto.randomBytes(32).toString('hex');
+async function member(name: string, { terms = true, role = 'MEMBER', admin = false } = {}): Promise<Member> {
+    const secretKey = generateSecretKey();
+    const pubkey = getPublicKey(secretKey);
     const user = await prisma.user.create({
         data: {
             nostrPubkey: pubkey,
             role,
+            isAdmin: admin,
             termsVersion: terms ? '2026-10' : null,
             termsAcceptedAt: terms ? new Date() : null,
             profile: { create: { name, bio: `${name} builds things` } },
         },
     });
     const session = await createSession(user.id, 'native');
-    const token = signAccessToken({ id: user.id, role, isAdmin: false }, session.sessionId);
-    return { id: user.id, pubkey, token, name };
+    const token = signAccessToken({ id: user.id, role, isAdmin: admin }, session.sessionId);
+    return { id: user.id, pubkey, secretKey, token, name };
 }
+
+/** A Feed post, signed by its author. */
+const note = (secretKey: Uint8Array, content: string) =>
+    finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content }, secretKey);
 
 async function listing(owner: Member, name: string, extra: { memberUserId?: string } = {}) {
     return prisma.directoryListing.create({
@@ -138,6 +146,8 @@ describe('terms of use', () => {
         const refused = await call('POST', '/api/directory', { token: dana.token, body: { type: 'FARM', name: 'Finca Dana' } });
         expect(refused.status).toBe(403);
         expect(refused.body).toMatchObject({ reason: 'terms_required', termsVersion: '2026-10' });
+        // A profile is public too.
+        expect((await call('PUT', '/api/profiles/me', { token: dana.token, body: { bio: 'Hola' } })).body.reason).toBe('terms_required');
 
         // Terms that changed while the app showed the old ones.
         const stale = await call('POST', '/api/account/terms', { token: dana.token, body: { version: '2025-01' } });
@@ -242,19 +252,28 @@ describe('reports', () => {
         const rec = await prisma.directoryEndorsement.create({ data: { listingId: theirs.id, userId: max.id, comment: 'Paid me' } });
         await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'endorsement', targetId: rec.id, reason: 'fake_recommendation' } });
 
-        const stranger = crypto.randomBytes(32).toString('hex');
-        const noteId = crypto.randomBytes(32).toString('hex');
-        expect((await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: noteId, reason: 'sexual' } })).status).toBe(400);
-        await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: noteId, targetPubkey: stranger, reason: 'sexual' } });
-        const memberNote = crypto.randomBytes(32).toString('hex');
-        await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: memberNote, targetPubkey: max.pubkey, reason: 'harassment' } });
+        // A note proves its author: the reporter sends the signed note.
+        const strangerKey = generateSecretKey();
+        const strangers = note(strangerKey, 'Explicit spam <3 & more');
+        expect((await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: strangers.id, reason: 'sexual' } })).status).toBe(400);
+        await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: strangers.id, event: strangers, reason: 'sexual' } });
+        const maxs = note(max.secretKey, 'You will regret this');
+        await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: maxs.id, event: maxs, reason: 'harassment' } });
+
+        // Pinning someone else's name on a note doesn't work.
+        const forged = { ...note(strangerKey, 'Pin it on Max'), pubkey: max.pubkey };
+        const refused = await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: forged.id, event: forged, reason: 'harassment' } });
+        expect(refused.status).toBe(400);
+        expect(refused.body.reason).toBe('bad_event');
+        const other = note(strangerKey, 'Another note');
+        expect((await call('POST', '/api/reports', { token: lia.token, body: { targetType: 'note', targetId: other.id, event: maxs, reason: 'other' } })).body.reason).toBe('bad_event');
 
         const rows = await prisma.report.findMany({ where: { reporterId: lia.id }, orderBy: { createdAt: 'asc' } });
-        expect(rows.map((r) => [r.targetType, r.targetUserId, r.targetPubkey])).toEqual([
-            ['listing', max.id, null],
-            ['endorsement', max.id, null],
-            ['note', null, stranger],
-            ['note', max.id, max.pubkey],
+        expect(rows.map((r) => [r.targetType, r.targetUserId, r.targetPubkey, r.snapshot])).toEqual([
+            ['listing', max.id, null, ''],
+            ['endorsement', max.id, null, ''],
+            ['note', null, getPublicKey(strangerKey), 'Explicit spam <3 & more'],
+            ['note', max.id, max.pubkey, 'You will regret this'],
         ]);
     });
 
@@ -318,6 +337,63 @@ describe('reports', () => {
         expect(await prisma.report.findUnique({ where: { id: stillOpen.id } })).not.toBeNull();
     });
 
+    it("aren't shown to the moderator they are about; an admin sees them", async () => {
+        const mod = await member('Moderator 3', { role: 'MOD' });
+        const admin = await member('Admin', { admin: true });
+        const reporter = await member('Sol');
+        await call('POST', '/api/reports', { token: reporter.token, body: { targetType: 'user', targetId: mod.id, reason: 'harassment', details: 'About the moderator' } });
+        const report = await prisma.report.findFirstOrThrow({ where: { reporterId: reporter.id } });
+
+        const modQueue = await call('GET', '/api/admin/reports?status=OPEN&limit=50', { token: mod.token });
+        expect(modQueue.body.reports.some((r: any) => r.id === report.id)).toBe(false);
+        expect((await call('PUT', `/api/admin/reports/${report.id}`, { token: mod.token, body: { status: 'DISMISSED' } })).status).toBe(404);
+
+        const adminQueue = await call('GET', '/api/admin/reports?status=OPEN&limit=50', { token: admin.token });
+        expect(adminQueue.body.reports.some((r: any) => r.id === report.id)).toBe(true);
+        expect(adminQueue.body.open).toBe(modQueue.body.open + 1);
+        expect((await call('PUT', `/api/admin/reports/${report.id}`, { token: admin.token, body: { status: 'DISMISSED' } })).status).toBe(200);
+    });
+
+    it('let a moderator remove a reported post from the BIES relay', async () => {
+        const mod = await member('Moderator 4', { role: 'MOD' });
+        const ann = await member('Ann');
+        const ben = await member('Ben');
+        const post = note(ben.secretKey, 'Buy followers here');
+        await call('POST', '/api/reports', { token: ann.token, body: { targetType: 'note', targetId: post.id, event: post, reason: 'scam_spam' } });
+        const report = await prisma.report.findFirstOrThrow({ where: { reporterId: ann.id } });
+
+        const queue = await call('GET', '/api/admin/reports?status=OPEN&limit=50', { token: mod.token });
+        expect(queue.body.reports.find((r: any) => r.id === report.id).target).toContain('Buy followers here');
+
+        expect((await call('DELETE', `/api/admin/reports/${report.id}/note`, { token: ann.token })).status).toBe(403);
+        expect((await call('DELETE', `/api/admin/reports/${report.id}/note`, { token: mod.token })).status).toBe(200);
+        expect(fs.existsSync(path.join(PURGE_DIR, `event-${post.id}`))).toBe(true);
+        expect(await prisma.auditLog.count({ where: { action: 'NOTE_REMOVED', resource: `report:${report.id}` } })).toBe(1);
+
+        // Only notes: a profile report has no post to remove.
+        const profileReport = await call('POST', '/api/reports', { token: ann.token, body: { targetType: 'user', targetId: ben.id, reason: 'other' } });
+        expect(profileReport.status).toBe(201);
+        const row = await prisma.report.findFirstOrThrow({ where: { reporterId: ann.id, targetType: 'user' } });
+        expect((await call('DELETE', `/api/admin/reports/${row.id}/note`, { token: mod.token })).status).toBe(404);
+    });
+
+    it('email the moderators at most 20 times a day', async () => {
+        const target = await member('Busy target');
+        const sinceEmails = () => mail.sent.filter((m) => m.to === 'moderators@example.test');
+        for (let i = 0; i < 3; i++) {
+            const reporter = await member(`Flooder ${i}`);
+            for (let j = 0; j < 10; j++) {
+                const t = j === 0 ? target : await member(`Flood target ${i}-${j}`);
+                await call('POST', '/api/reports', { token: reporter.token, body: { targetType: 'user', targetId: t.id, reason: 'other' } });
+            }
+        }
+        expect(await prisma.report.count()).toBeGreaterThan(20);
+        await vi.waitFor(() => expect(sinceEmails().length).toBe(20));
+        expect(sinceEmails().filter((m) => m.text.includes('no more emails today'))).toHaveLength(1);
+        await new Promise((r) => setTimeout(r, 200));
+        expect(sinceEmails().length).toBe(20);
+    });
+
     it('let a moderator remove a recommendation', async () => {
         const mod = await member('Moderator 2', { role: 'MOD' });
         const target = await listing(await member('Quinn'), 'Quinn Solar');
@@ -375,6 +451,12 @@ describe('blocking a member', () => {
         expect((await call('GET', `/api/directory/${umasListing.id}`, { token: sam.token })).body.endorsements).toHaveLength(0);
         expect((await call('GET', `/api/directory/${umasListing.id}`, { token: uma.token })).body.endorsements).toHaveLength(1);
 
+        // Tom can't recommend Sam's listing.
+        const samsListing = await listing(sam, 'Sam Bakery');
+        const rec = await call('POST', `/api/directory/${samsListing.id}/endorse`, { token: tom.token, body: { comment: 'Great' } });
+        expect(rec.status).toBe(403);
+        expect(rec.body.reason).toBe('blocked');
+
         // No follows either way.
         for (const [who, whom] of [[sam, tom], [tom, sam]]) {
             const follow = await call('POST', `/api/profiles/${whom.id}/follow`, { token: who.token });
@@ -395,6 +477,13 @@ describe('blocking a member', () => {
         expect((await call('DELETE', `/api/blocks/${tom.id}`, { token: sam.token })).status).toBe(200);
         expect((await call('GET', `/api/profiles/${tom.id}`, { token: sam.token })).body.blocked).toBeUndefined();
         expect((await call('POST', `/api/profiles/${tom.id}/follow`, { token: sam.token })).status).toBe(201);
+    });
+
+    it("returns who was blocked, so the app can hide their posts at once", async () => {
+        const xia = await member('Xia');
+        const yan = await member('Yan');
+        const res = await call('POST', '/api/blocks', { token: xia.token, body: { pubkey: yan.pubkey } });
+        expect(res.body.member).toEqual({ id: yan.id, nostrPubkey: yan.pubkey, name: 'Yan', avatar: expect.any(String) });
     });
 
     it('works by pubkey, and says when someone is not a member', async () => {

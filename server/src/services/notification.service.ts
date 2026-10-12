@@ -60,7 +60,7 @@ export async function removePushTargets(userId: string): Promise<void> {
 }
 
 // Where the wrappers below name the member who caused a notification.
-const ACTOR_ID_KEYS = ['senderId', 'followerId', 'viewerId', 'attendeeId'] as const;
+const ACTOR_ID_KEYS = ['actorId', 'senderId', 'followerId', 'viewerId', 'attendeeId', 'inviterId', 'buyerId'] as const;
 const ACTOR_PUBKEY_KEYS = ['actorPubkey', 'senderPubkey'] as const;
 
 /** Whoever caused the notification, when the recipient blocked them. */

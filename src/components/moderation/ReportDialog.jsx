@@ -19,7 +19,7 @@ const REASONS = {
  * moderators (server/src/services/moderation.service.ts). Private: the
  * member reported isn't told who sent it.
  *
- * @param {{ type: keyof REASONS, id: string, pubkey?: string }} target  a note needs its author's pubkey
+ * @param {{ type: keyof REASONS, id: string, event?: object }} target  a note comes with its signed event
  * @param {string} [name]       who is responsible, for "Block {name} too"
  * @param {() => void} [onBlock]  offered once the report is sent
  */
@@ -39,13 +39,13 @@ const ReportDialog = ({ target, name, onClose, onBlock }) => {
             await moderationApi.report({
                 targetType: target.type,
                 targetId: target.id,
-                ...(target.pubkey ? { targetPubkey: target.pubkey } : {}),
+                ...(target.event ? { event: target.event } : {}),
                 reason,
                 ...(details.trim() ? { details: details.trim() } : {}),
             });
             setPhase('done');
         } catch (err) {
-            const known = ['not_found', 'own_content', 'too_many'];
+            const known = ['not_found', 'own_content', 'too_many', 'bad_event'];
             const r = err?.data?.reason;
             setError(t(`moderation.report.errors.${known.includes(r) ? r : 'generic'}`));
             setPhase('form');
@@ -54,7 +54,7 @@ const ReportDialog = ({ target, name, onClose, onBlock }) => {
 
     if (phase === 'done') {
         return (
-            <ModerationSheet title={t('moderation.report.doneTitle')} onClose={onClose} className="mod-done">
+            <ModerationSheet key="done" title={t('moderation.report.doneTitle')} onClose={onClose} className="mod-done">
                 <CheckCircle size={40} />
                 <p className="mod-muted">{t('moderation.report.doneBody')}</p>
                 <div className="mod-actions">
@@ -71,7 +71,7 @@ const ReportDialog = ({ target, name, onClose, onBlock }) => {
 
     const sending = phase === 'sending';
     return (
-        <ModerationSheet title={t(`moderation.report.title.${target.type}`)} onClose={sending ? undefined : onClose}>
+        <ModerationSheet key="form" title={t(`moderation.report.title.${target.type}`)} onClose={sending ? undefined : onClose}>
             <form onSubmit={send} style={{ display: 'contents' }}>
                 <fieldset className="mod-reasons" disabled={sending}>
                     <legend>{t('moderation.report.why')}</legend>

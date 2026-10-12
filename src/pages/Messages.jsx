@@ -8,14 +8,25 @@ import { Link, useLocation } from 'react-router-dom';
 import { searchApi, notificationsApi } from '../services/api';
 import { nip19 } from 'nostr-tools';
 import { notifyIncomingMessage, requestNotificationPermission, getNotificationPermission, subscribeToPush } from '../utils/notificationManager';
+import { useBlocks, useMuted } from '../hooks/useBlocks';
 
 const Messages = () => {
     const { t } = useTranslation();
     const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
 
+    // Members this member blocked, and accounts muted on this device: their
+    // messages arrive over Nostr, so they are hidden here, and can't be
+    // answered (terms of use §6).
+    const blocks = useBlocks();
+    const muted = useMuted();
+    const isHidden = useCallback((pubkey) => blocks.pubkeys.has(pubkey) || muted.has(pubkey), [blocks.pubkeys, muted]);
+    const isHiddenRef = useRef(isHidden);
+    isHiddenRef.current = isHidden;
+
     // Notification callback — fires for every received (non-sender) DM
     const profilesRef = useRef({});
     const handleIncomingMessage = useCallback((dm) => {
+        if (isHiddenRef.current(dm.partnerPubkey)) return;
         const p = profilesRef.current[dm.partnerPubkey];
         const senderName = p?.name || p?.display_name || dm.partnerPubkey.substring(0, 12) + '...';
         notifyIncomingMessage(dm.id, senderName, dm.content);
@@ -64,8 +75,14 @@ const Messages = () => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [activeChatPubkey, messages]);
 
+    // Close any open chat with someone who is now blocked or muted.
+    useEffect(() => {
+        setOpenChats((prev) => (prev.some(isHidden) ? prev.filter((p) => !isHidden(p)) : prev));
+        setActiveChatPubkey((prev) => (prev && isHidden(prev) ? null : prev));
+    }, [isHidden]);
+
     const handleSendMessage = async () => {
-        if (!newMessage.trim() || !activeChatPubkey || sending) return;
+        if (!newMessage.trim() || !activeChatPubkey || sending || isHidden(activeChatPubkey)) return;
 
         setSending(true);
         try {
@@ -107,7 +124,7 @@ const Messages = () => {
 
                 if (biesRes.status === 'fulfilled' && biesRes.value?.profiles) {
                     for (const p of biesRes.value.profiles) {
-                        if (p.user?.nostrPubkey && !seen.has(p.user.nostrPubkey) && !existingPubkeys.has(p.user.nostrPubkey)) {
+                        if (p.user?.nostrPubkey && !seen.has(p.user.nostrPubkey) && !existingPubkeys.has(p.user.nostrPubkey) && !isHiddenRef.current(p.user.nostrPubkey)) {
                             seen.add(p.user.nostrPubkey);
                             results.push({
                                 pubkey: p.user.nostrPubkey,
@@ -121,7 +138,7 @@ const Messages = () => {
 
                 if (nostrResults.status === 'fulfilled') {
                     for (const p of nostrResults.value) {
-                        if (p.pubkey && !seen.has(p.pubkey) && !existingPubkeys.has(p.pubkey)) {
+                        if (p.pubkey && !seen.has(p.pubkey) && !existingPubkeys.has(p.pubkey) && !isHiddenRef.current(p.pubkey)) {
                             seen.add(p.pubkey);
                             results.push({
                                 pubkey: p.pubkey,
@@ -144,6 +161,7 @@ const Messages = () => {
     }, [conversations]);
 
     const openChat = (pubkey) => {
+        if (isHidden(pubkey)) return;
         setOpenChats(prev => prev.includes(pubkey) ? prev : [...prev, pubkey]);
         setActiveChatPubkey(pubkey);
         setMobileView('chat');
@@ -230,6 +248,7 @@ const Messages = () => {
             messages: msgs,
             lastMessage: msgs[msgs.length - 1],
         }))
+        .filter(c => !isHidden(c.pubkey))
         .filter(c => {
             if (!searchQuery) return true;
             const name = getDisplayName(c.pubkey).toLowerCase();
@@ -237,7 +256,7 @@ const Messages = () => {
         })
         .sort((a, b) => (b.lastMessage?.created_at || 0) - (a.lastMessage?.created_at || 0));
 
-    const activeMessages = activeChatPubkey ? (conversations[activeChatPubkey] || []) : [];
+    const activeMessages = activeChatPubkey && !isHidden(activeChatPubkey) ? (conversations[activeChatPubkey] || []) : [];
 
     // Amber (NIP-55) sessions can't drive messaging — see comment above.
     if (isAmberSigner) {

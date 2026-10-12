@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,6 +15,7 @@ import ZapButton from '../../components/ZapButton';
 import CertifiedBadge from '../../components/directory/CertifiedBadge';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
+import { objectionableMessage } from '../../components/moderation/objectionable';
 import '../../components/moderation/Moderation.css';
 
 const PRACTICE_META = {
@@ -47,6 +48,8 @@ const ListingDetail = () => {
     // The member who runs it is one this member blocked.
     const [blockedOwner, setBlockedOwner] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    // Focus goes back to the menu button when a Report or Block sheet closes.
+    const menuButtonRef = useRef(null);
 
     // Endorse UI state
     const [showEndorseForm, setShowEndorseForm] = useState(false);
@@ -91,9 +94,7 @@ const ListingDetail = () => {
             setShowEndorseForm(false);
             await fetchListing({ silent: true });
         } catch (err) {
-            setEndorseError(err?.data?.reason === 'objectionable_content'
-                ? t('moderation.objectionable')
-                : err.message || 'Failed to endorse');
+            setEndorseError(objectionableMessage(t, err) || err.message || 'Failed to endorse');
         } finally {
             setEndorseBusy(false);
         }
@@ -294,6 +295,7 @@ const ListingDetail = () => {
                                 {canModerate && (
                                     <div style={{ position: 'relative' }}>
                                         <button
+                                            ref={menuButtonRef}
                                             type="button"
                                             className="dir-more-btn"
                                             aria-label={t('moderation.menu.more')}
@@ -311,6 +313,7 @@ const ListingDetail = () => {
                                                         role="menuitem"
                                                         onClick={() => {
                                                             setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
                                                             openReport({ type: 'listing', id: listing.id }, { name: listingMemberName, blockTarget: { userId: listingMemberId } });
                                                         }}
                                                     >
@@ -322,6 +325,7 @@ const ListingDetail = () => {
                                                         className="danger"
                                                         onClick={() => {
                                                             setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
                                                             openBlock({ userId: listingMemberId }, { name: listingMemberName });
                                                         }}
                                                     >

@@ -14,7 +14,7 @@ import EmailSignIn from '../components/EmailSignIn';
 
 const Signup = () => {
     const { t } = useTranslation();
-    const { loginWithNsec } = useAuth();
+    const { loginWithNsec, whenTermsAccepted } = useAuth();
     const navigate = useNavigate();
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -134,6 +134,8 @@ const Signup = () => {
             const result = await loginWithNsec(keys.nsec);
 
             if (result.success) {
+                // The terms come first (they show over this page): a profile is public.
+                if (!(await whenTermsAccepted(result.user))) return;
                 // Update profile name + NIP-05 via API
                 const { authService } = await import('../services/authService.js');
                 const profileData = { name: profile.name };

@@ -4,10 +4,16 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import './Moderation.css';
 
+// While any sheet is open the app behind it is inert: no Tab into it, no
+// clicks, nothing for a screen reader. The sheets live outside #root.
+let openSheets = 0;
+const appRoot = () => document.getElementById('root');
+
 /**
  * The sheet Report, Block and the terms of use open in: over the page, on
  * document.body so no menu's styles clip it. Escape and a tap outside close
- * it, unless `onClose` is left out.
+ * it, unless `onClose` is left out. Give each step its own `key`, so the new
+ * step takes focus and is announced.
  */
 const ModerationSheet = ({ title, onClose, children, className = '' }) => {
     const { t } = useTranslation();
@@ -20,6 +26,7 @@ const ModerationSheet = ({ title, onClose, children, className = '' }) => {
 
     useEffect(() => {
         const previous = document.activeElement;
+        if (openSheets++ === 0) appRoot()?.setAttribute('inert', '');
         sheetRef.current?.focus();
         const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
         document.addEventListener('keydown', onKey);
@@ -28,7 +35,9 @@ const ModerationSheet = ({ title, onClose, children, className = '' }) => {
         return () => {
             document.removeEventListener('keydown', onKey);
             document.body.style.overflow = overflow;
-            previous?.focus?.();
+            if (--openSheets === 0) appRoot()?.removeAttribute('inert');
+            // Back where the member was, if that is still on the page.
+            if (previous && previous !== document.body && previous.isConnected) previous.focus({ preventScroll: true });
         };
     }, []);
 

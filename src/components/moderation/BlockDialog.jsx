@@ -48,6 +48,7 @@ const BlockDialog = ({ target, name, onClose, onBlocked, onNotMember }) => {
         const muted = phase === 'muted';
         return (
             <ModerationSheet
+                key="done"
                 title={muted ? t('moderation.block.mutedTitle') : t('moderation.block.doneTitle')}
                 onClose={finish}
                 className="mod-done"
@@ -68,6 +69,7 @@ const BlockDialog = ({ target, name, onClose, onBlocked, onNotMember }) => {
     const blocking = phase === 'blocking';
     return (
         <ModerationSheet
+            key="confirm"
             title={name ? t('moderation.block.title', { name }) : t('moderation.block.titleUnnamed')}
             onClose={blocking ? undefined : onClose}
         >

@@ -12,6 +12,7 @@ CREATE TABLE "reports" (
     "target_pubkey" TEXT,
     "reason" TEXT NOT NULL,
     "details" TEXT NOT NULL DEFAULT '',
+    "snapshot" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'OPEN',
     "resolution" TEXT NOT NULL DEFAULT '',
     "handled_by_id" TEXT,

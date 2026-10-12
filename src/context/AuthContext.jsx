@@ -40,12 +40,23 @@ export const AuthProvider = ({ children }) => {
         window.addEventListener('bies:terms-required', onTermsRequired);
         return () => window.removeEventListener('bies:terms-required', onTermsRequired);
     }, []);
+    // Work that has to wait for the terms (a profile is public): resolves
+    // true once they are accepted, false if the member signs out instead.
+    const termsWaiters = useRef([]);
+    const settleTermsWaiters = (accepted) => {
+        termsWaiters.current.splice(0).forEach((resolve) => resolve(accepted));
+    };
+    const whenTermsAccepted = useCallback((forUser) => {
+        if (!forUser || forUser.termsAccepted !== false) return Promise.resolve(!!forUser);
+        return new Promise((resolve) => termsWaiters.current.push(resolve));
+    }, []);
     const handleTermsAccepted = useCallback((updated) => {
         setUser((prev) => {
             const next = prev ? { ...prev, ...updated } : updated;
             authService.setCachedUser(next);
             return next;
         });
+        settleTermsWaiters(true);
     }, []);
 
     // ─── Passkey save prompt ─────────────────────────────────────────────────
@@ -313,7 +324,7 @@ export const AuthProvider = ({ children }) => {
 
         const isNew = result.user?.profile?.name?.startsWith('nostr:');
         if (isNew && result.user?.nostrPubkey) {
-            seedProfileFromNostr(result.user.nostrPubkey).catch(() => {});
+            seedAfterTerms(result.user);
         }
         return { ...result, needsProfileSetup: isNew };
     };
@@ -324,7 +335,7 @@ export const AuthProvider = ({ children }) => {
 
         const isNew = result.user?.profile?.name?.startsWith('nostr:');
         if (isNew && result.user?.nostrPubkey) {
-            seedProfileFromNostr(result.user.nostrPubkey).catch(() => {});
+            seedAfterTerms(result.user);
         }
         return { ...result, needsProfileSetup: isNew };
     };
@@ -346,7 +357,7 @@ export const AuthProvider = ({ children }) => {
 
         const isNew = result.user?.profile?.name?.startsWith('nostr:');
         if (isNew && result.user?.nostrPubkey) {
-            seedProfileFromNostr(result.user.nostrPubkey).catch(() => {});
+            seedAfterTerms(result.user);
         }
         return { ...result, needsProfileSetup: isNew };
     };
@@ -362,7 +373,7 @@ export const AuthProvider = ({ children }) => {
 
         const isNew = user?.profile?.name?.startsWith('nostr:');
         if (isNew && user?.nostrPubkey) {
-            seedProfileFromNostr(user.nostrPubkey).catch(() => {});
+            seedAfterTerms(user);
         }
         return isNew ? '/profile-setup' : '/feed';
     };
@@ -379,7 +390,7 @@ export const AuthProvider = ({ children }) => {
 
             const isNew = user?.profile?.name?.startsWith('nostr:');
             if (isNew && user?.nostrPubkey) {
-                seedProfileFromNostr(user.nostrPubkey).catch(() => {});
+                seedAfterTerms(user);
             }
             return { success: true, user, needsProfileSetup: isNew };
         } catch (error) {
@@ -406,7 +417,7 @@ export const AuthProvider = ({ children }) => {
 
         const isNew = result.user?.profile?.name?.startsWith('nostr:');
         if (isNew && result.user?.nostrPubkey) {
-            seedProfileFromNostr(result.user.nostrPubkey).catch(() => {});
+            seedAfterTerms(result.user);
         }
         return { ...result, needsProfileSetup: isNew };
     };
@@ -426,7 +437,7 @@ export const AuthProvider = ({ children }) => {
 
         // Auto-seed BIES profile from Nostr Kind 0 for new users
         if (isNew && result.user?.nostrPubkey) {
-            seedProfileFromNostr(result.user.nostrPubkey).catch(() => {});
+            seedAfterTerms(result.user);
         }
 
         return { ...result, needsProfileSetup: isNew };
@@ -438,6 +449,13 @@ export const AuthProvider = ({ children }) => {
      * This ensures the user's name/avatar from their existing Nostr identity
      * shows up on BIES before they manually set it.
      */
+    /** A new Nostr member's Nostr profile, copied in once they accept the terms. */
+    const seedAfterTerms = (newUser) => {
+        whenTermsAccepted(newUser)
+            .then((accepted) => accepted && seedProfileFromNostr(newUser.nostrPubkey))
+            .catch(() => {});
+    };
+
     const seedProfileFromNostr = async (pubkey) => {
         try {
             // Explicitly fetch from public relays (Primal, Damus, etc.) since
@@ -472,6 +490,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
+        settleTermsWaiters(false);
         wsClient?.disconnect();
         setWsClient(null);
         // The logout request also removes this phone's push registration.
@@ -533,6 +552,7 @@ export const AuthProvider = ({ children }) => {
             logout,
             updateRole,
             refreshUser,
+            whenTermsAccepted,
             isAuthenticated: !!user,
             isBuilder: user?.role === 'BUILDER',
             isInvestor: user?.role === 'INVESTOR',

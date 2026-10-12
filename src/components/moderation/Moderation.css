@@ -1,5 +1,9 @@
-/* Report, Block and the terms of use: a plain sheet over the page. */
-.mod-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(15, 23, 42, 0.45); }
+/* Report, Block and the terms of use: a plain white sheet over the page, in
+   light colours whatever the app's theme (fixed values, not theme tokens). */
+.mod-sheet, .mod-blocked-card { --mod-primary: #0047AB; color: #111827; }
+/* Above every other modal (they go up to 10003): a terms_required answer can
+   open the terms over one. */
+.mod-overlay { position: fixed; inset: 0; z-index: 10100; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(15, 23, 42, 0.45); }
 .mod-sheet { width: 100%; max-width: 28rem; max-height: calc(100vh - 2rem); overflow-y: auto; box-sizing: border-box; background: #ffffff; color: #111827; border-radius: 1rem; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25); font-family: var(--font-sans, 'Inter', sans-serif); }
 .mod-sheet:focus { outline: none; }
 .mod-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
@@ -10,18 +14,18 @@
 .mod-reasons { display: flex; flex-direction: column; gap: 0.4rem; margin: 0; padding: 0; border: none; }
 .mod-reasons legend { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.35rem; padding: 0; }
 .mod-reason { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 0.65rem; cursor: pointer; font-size: 0.95rem; line-height: 1.35; }
-.mod-reason:has(input:checked) { border-color: var(--color-primary, #1e3a8a); background: #f5f7ff; }
+.mod-reason:has(input:checked) { border-color: var(--mod-primary); background: #f5f7ff; }
 .mod-reason input { width: 1.05rem; height: 1.05rem; flex-shrink: 0; margin: 0; }
 .mod-label { font-size: 0.9rem; font-weight: 600; }
 .mod-textarea { width: 100%; box-sizing: border-box; min-height: 5rem; padding: 0.65rem 0.8rem; border: 1px solid #e5e7eb; border-radius: 0.65rem; font: inherit; font-size: 0.95rem; color: inherit; background: #ffffff; resize: vertical; outline: none; }
-.mod-textarea:focus { border-color: var(--color-primary, #1e3a8a); }
+.mod-textarea:focus { border-color: var(--mod-primary); }
 .mod-list { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.45rem; color: #374151; font-size: 0.95rem; line-height: 1.45; }
 .mod-actions { display: flex; flex-direction: column; gap: 0.6rem; }
-.mod-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; width: 100%; padding: 0.75rem 1rem; border-radius: 9999px; border: 1px solid var(--color-primary, #1e3a8a); background: var(--color-primary, #1e3a8a); color: #ffffff; font-weight: 600; font-size: 1rem; cursor: pointer; }
+.mod-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; width: 100%; padding: 0.75rem 1rem; border-radius: 9999px; border: 1px solid var(--mod-primary); background: var(--mod-primary); color: #ffffff; font-weight: 600; font-size: 1rem; cursor: pointer; }
 .mod-button:disabled { opacity: 0.55; cursor: not-allowed; }
-.mod-button.secondary { background: #ffffff; color: var(--color-primary, #1e3a8a); }
+.mod-button.secondary { background: #ffffff; color: var(--mod-primary); }
 .mod-button.danger { background: #dc2626; border-color: #dc2626; }
-.mod-link { align-self: center; background: none; border: none; padding: 0.25rem; color: var(--color-primary, #1e3a8a); font-weight: 600; font-size: 0.9rem; cursor: pointer; text-decoration: none; }
+.mod-link { align-self: center; background: none; border: none; padding: 0.25rem; color: var(--mod-primary); font-weight: 600; font-size: 0.9rem; cursor: pointer; text-decoration: none; }
 .mod-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 .mod-links .mod-link { align-self: auto; padding: 0; }
 .mod-error { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.65rem 0.8rem; border-radius: 0.65rem; background: #fef2f2; color: #b91c1c; font-size: 0.9rem; line-height: 1.4; }

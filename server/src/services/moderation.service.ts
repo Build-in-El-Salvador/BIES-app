@@ -5,9 +5,11 @@
  * stop seeing someone.
  *
  * Reports go into the queue moderators work in Admin → Reports, and an email
- * goes to the moderation address. One open report per member per thing, at
- * most 20 a day per member. Closed reports are deleted after 12 months, as
- * the privacy notice says.
+ * goes to the moderation address: at most 20 emails a day, so a flood of
+ * reports can't use up the email quota sign-in codes depend on. One open
+ * report per member per thing, at most 20 a day per member. A moderator
+ * doesn't see reports about themselves; an admin does. Closed reports are
+ * deleted after 12 months, as the privacy notice says.
  *
  * Blocks: the blocker stops seeing the blocked member's profile, listings,
  * recommendations and posts. Neither can follow or message the other, and a
@@ -19,6 +21,7 @@ import { config } from '../config';
 import { sendEmail } from './email.service';
 import { cache } from './redis.service';
 import { nip19 } from 'nostr-tools';
+import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
 
 export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note'] as const;
 export const REPORT_REASONS = [
@@ -51,6 +54,7 @@ export const REASON_LABELS: Record<ReportReason, string> = {
 };
 
 const MAX_REPORTS_PER_DAY = 20;
+const MAX_MODERATION_EMAILS_PER_DAY = 20;
 const MAX_DETAILS = 2000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CLOSED_REPORT_RETENTION_MS = 365 * DAY_MS;
@@ -62,7 +66,7 @@ const CLOSED_REPORT_RETENTION_MS = 365 * DAY_MS;
  * a BIES member (a note from elsewhere on Nostr), undefined when there is no
  * such thing.
  */
-async function responsibleMember(type: ReportTarget, id: string, pubkey?: string): Promise<string | null | undefined> {
+async function responsibleMember(type: ReportTarget, id: string, pubkey?: string | null): Promise<string | null | undefined> {
     switch (type) {
         case 'user':
             return (await prisma.user.findFirst({ where: { id, deletedAt: null }, select: { id: true } }))?.id;
@@ -86,18 +90,32 @@ async function responsibleMember(type: ReportTarget, id: string, pubkey?: string
 export type ReportInput = {
     targetType: ReportTarget;
     targetId: string;
-    /** For a note: its author's pubkey. */
-    targetPubkey?: string;
+    /**
+     * For a note: the signed event itself, which proves who wrote it and
+     * keeps its text for moderators (it may be deleted later).
+     */
+    event?: NostrEvent;
     reason: ReportReason;
     details?: string;
 };
 
 export type ReportResult =
     | { ok: true; reportId: string; duplicate: boolean }
-    | { ok: false; reason: 'not_found' | 'own_content' | 'too_many' };
+    | { ok: false; reason: 'not_found' | 'own_content' | 'too_many' | 'bad_event' };
 
 export async function createReport(reporterId: string, input: ReportInput): Promise<ReportResult> {
-    const targetUserId = await responsibleMember(input.targetType, input.targetId, input.targetPubkey);
+    let author: string | null = null;
+    let snapshot = '';
+    if (input.targetType === 'note') {
+        const event = input.event;
+        if (!event || event.id !== input.targetId || event.kind !== 1 || !verifyEvent(event)) {
+            return { ok: false, reason: 'bad_event' };
+        }
+        author = event.pubkey;
+        snapshot = event.content.slice(0, MAX_DETAILS);
+    }
+
+    const targetUserId = await responsibleMember(input.targetType, input.targetId, author);
     if (targetUserId === undefined) return { ok: false, reason: 'not_found' };
     if (targetUserId === reporterId) return { ok: false, reason: 'own_content' };
 
@@ -116,13 +134,19 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
             targetType: input.targetType,
             targetId: input.targetId,
             targetUserId,
-            targetPubkey: input.targetType === 'note' ? input.targetPubkey ?? null : null,
+            targetPubkey: author,
             reason: input.reason,
             details: (input.details ?? '').trim().slice(0, MAX_DETAILS),
+            snapshot,
         },
     });
-    emailModerators(report.id).catch((err) =>
-        console.error('[Moderation] Report email failed:', err instanceof Error ? err.message : err));
+
+    // Email the moderators, up to a daily cap; past it, reports wait in the queue.
+    const reportsToday = await prisma.report.count({ where: { createdAt: { gte: new Date(Date.now() - DAY_MS) } } });
+    if (reportsToday <= MAX_MODERATION_EMAILS_PER_DAY) {
+        emailModerators(report.id, reportsToday === MAX_MODERATION_EMAILS_PER_DAY).catch((err) =>
+            console.error('[Moderation] Report email failed:', err instanceof Error ? err.message : err));
+    }
     return { ok: true, reportId: report.id, duplicate: false };
 }
 
@@ -130,7 +154,7 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
  * What was reported, for people: a line, and where it is in the app (a path,
  * or a web link for a note). No link when it has been removed.
  */
-async function describeTarget(type: string, id: string, pubkey: string | null): Promise<{ text: string; link: string | null }> {
+async function describeTarget(type: string, id: string, pubkey: string | null, snapshot = ''): Promise<{ text: string; link: string | null }> {
     switch (type) {
         case 'user': {
             const profile = await prisma.profile.findUnique({ where: { userId: id }, select: { name: true } });
@@ -156,19 +180,20 @@ async function describeTarget(type: string, id: string, pubkey: string | null): 
         default: {
             let link: string | null = null;
             try { link = `https://njump.me/${nip19.noteEncode(id)}`; } catch { /* not a note id */ }
-            return { text: `Nostr note ${id}${pubkey ? ` by ${pubkey}` : ''}`, link };
+            const quoted = snapshot ? `: "${snapshot.length > 280 ? `${snapshot.slice(0, 280)}…` : snapshot}"` : '';
+            return { text: `Post${pubkey ? ` by ${nip19.npubEncode(pubkey).slice(0, 16)}…` : ''}${quoted}`, link };
         }
     }
 }
 
-async function emailModerators(reportId: string): Promise<void> {
+async function emailModerators(reportId: string, lastToday = false): Promise<void> {
     const report = await prisma.report.findUnique({
         where: { id: reportId },
         include: { reporter: { select: { profile: { select: { name: true } } } } },
     });
     if (!report) return;
     const label = REASON_LABELS[report.reason as ReportReason] ?? report.reason;
-    const what = (await describeTarget(report.targetType, report.targetId, report.targetPubkey)).text;
+    const what = (await describeTarget(report.targetType, report.targetId, report.targetPubkey, report.snapshot)).text;
     const link = `${config.appPublicUrl}/admin/reports`;
     const lines = [
         `New report on BIES: ${label}.`,
@@ -176,6 +201,7 @@ async function emailModerators(reportId: string): Promise<void> {
         `Details: ${report.details || '(none)'}`,
         `Reported by: ${report.reporter?.profile?.name || 'a member'}`,
         `Review it within 24 hours (terms of use §6): ${link}`,
+        ...(lastToday ? [`That's ${MAX_MODERATION_EMAILS_PER_DAY} reports in 24 hours: no more emails today. New ones wait in the queue.`] : []),
     ];
     const escape = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     await sendEmail({
@@ -188,8 +214,14 @@ async function emailModerators(reportId: string): Promise<void> {
     });
 }
 
-export async function listReports({ status, page = 1, limit = 20 }: { status?: ReportStatus; page?: number; limit?: number }) {
-    const where = status ? { status } : {};
+type Moderator = { id: string; isAdmin: boolean };
+
+/** A moderator never handles reports about themselves; an admin may. */
+const visibleTo = (viewer: Moderator) =>
+    viewer.isAdmin ? {} : { OR: [{ targetUserId: null }, { targetUserId: { not: viewer.id } }] };
+
+export async function listReports({ status, page = 1, limit = 20, viewer }: { status?: ReportStatus; page?: number; limit?: number; viewer: Moderator }) {
+    const where = { ...(status ? { status } : {}), ...visibleTo(viewer) };
     const [rows, total, open] = await Promise.all([
         prisma.report.findMany({
             where,
@@ -202,7 +234,7 @@ export async function listReports({ status, page = 1, limit = 20 }: { status?: R
             },
         }),
         prisma.report.count({ where }),
-        prisma.report.count({ where: { status: 'OPEN' } }),
+        prisma.report.count({ where: { status: 'OPEN', ...visibleTo(viewer) } }),
     ]);
     const targetUserIds = [...new Set(rows.map((r) => r.targetUserId).filter((id): id is string => !!id))];
     const targetUsers = await prisma.user.findMany({
@@ -218,7 +250,7 @@ export async function listReports({ status, page = 1, limit = 20 }: { status?: R
             : { id, name: '', nostrPubkey: null, isBanned: false, deleted: true };
     };
     const reports = await Promise.all(rows.map(async (r) => {
-        const { text, link } = await describeTarget(r.targetType, r.targetId, r.targetPubkey);
+        const { text, link } = await describeTarget(r.targetType, r.targetId, r.targetPubkey, r.snapshot);
         return {
             id: r.id,
             targetType: r.targetType,
@@ -242,18 +274,23 @@ export async function listReports({ status, page = 1, limit = 20 }: { status?: R
 }
 
 /** A moderator closes (or reopens) a report, with a note on what was done. */
-export async function resolveReport(id: string, moderatorId: string, status: ReportStatus, resolution: string) {
+export async function resolveReport(id: string, moderator: Moderator, status: ReportStatus, resolution: string): Promise<boolean> {
     const closing = status !== 'OPEN';
     const { count } = await prisma.report.updateMany({
-        where: { id },
+        where: { id, ...visibleTo(moderator) },
         data: {
             status,
             resolution: resolution.trim().slice(0, MAX_DETAILS),
-            handledById: closing ? moderatorId : null,
+            handledById: closing ? moderator.id : null,
             handledAt: closing ? new Date() : null,
         },
     });
     return count > 0;
+}
+
+/** Whether a moderator may act on this report (not one about themselves, unless an admin). */
+export async function canHandleReport(id: string, moderator: Moderator): Promise<boolean> {
+    return !!(await prisma.report.findFirst({ where: { id, ...visibleTo(moderator) }, select: { id: true } }));
 }
 
 /** Closed reports leave after 12 months (privacy notice). */

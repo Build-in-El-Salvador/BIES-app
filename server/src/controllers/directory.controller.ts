@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { recomputeListingScore } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
-import { blockedIds } from '../services/moderation.service';
+import { blockedEitherWay, blockedIds } from '../services/moderation.service';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -385,10 +385,14 @@ export async function endorseListing(req: Request, res: Response): Promise<void>
     try {
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true },
+            select: { id: true, ownerId: true, memberUserId: true },
         });
 
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+        if (await blockedEitherWay(req.user!.id, listingMember(listing))) {
+            res.status(403).json({ error: "You can't recommend this listing", reason: 'blocked' });
+            return;
+        }
 
         const comment = req.body.comment || '';
 

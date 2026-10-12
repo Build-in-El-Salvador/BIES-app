@@ -7,12 +7,17 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { blockedIds } from '../services/moderation.service';
 
-/** Leave out the members the viewer blocked: results are cached for all viewers. */
+/**
+ * Leave out what members the viewer blocked published: their profiles, their
+ * projects and the events they host. Results are cached for all viewers.
+ */
 async function withoutBlocked(req: Request, results: any): Promise<any> {
     const hidden = new Set(await blockedIds(req.user?.id));
     if (!hidden.size) return results;
     const out = { ...results };
     if (Array.isArray(out.profiles)) out.profiles = out.profiles.filter((p: any) => !hidden.has(p.userId));
+    if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.ownerId));
+    if (Array.isArray(out.events)) out.events = out.events.filter((e: any) => !hidden.has(e.hostId));
     if (Array.isArray(out.suggestions)) {
         out.suggestions = out.suggestions.filter((s: any) => s.type !== 'profile' || !hidden.has(s.id));
     }

@@ -7,6 +7,7 @@ import {
     REPORT_STATUSES,
     REPORT_TARGETS,
     blockMember,
+    canHandleReport,
     createReport,
     listBlocks,
     listReports,
@@ -14,22 +15,35 @@ import {
     unblockMember,
 } from '../services/moderation.service';
 import { recomputeListingScore } from '../services/directoryReputation.service';
+import { requestEventRemoval } from '../services/relayWhitelist.service';
 import { publicUser } from './auth.controller';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
 // ─── Request bodies ───────────────────────────────────────────────────────────
 
+/** A signed Nostr event, as the app has it. Checked in createReport. */
+const nostrEvent = z.object({
+    id: z.string().regex(HEX64),
+    pubkey: z.string().regex(HEX64),
+    created_at: z.number().int().nonnegative(),
+    kind: z.number().int().nonnegative(),
+    tags: z.array(z.array(z.string().max(2048)).max(16)).max(200),
+    content: z.string().max(64_000),
+    sig: z.string().regex(/^[0-9a-f]{128}$/),
+});
+
 export const reportSchema = z.object({
     targetType: z.enum(REPORT_TARGETS),
     targetId: z.string().min(1).max(128),
-    targetPubkey: z.string().regex(HEX64).optional(),
+    // For a note: the signed note, which proves its author.
+    event: nostrEvent.optional(),
     reason: z.enum(REPORT_REASONS),
     // Never filtered: a report may need to quote what it reports.
     details: z.string().max(4000).optional(),
-}).refine((r) => r.targetType !== 'note' || !!r.targetPubkey, {
-    message: "A note's author is needed",
-    path: ['targetPubkey'],
+}).refine((r) => r.targetType !== 'note' || !!r.event, {
+    message: 'A reported note must come with the note itself',
+    path: ['event'],
 });
 
 export const blockSchema = z.object({
@@ -56,6 +70,7 @@ export async function report(req: Request, res: Response): Promise<void> {
         }
         const answers = {
             not_found: [404, "We couldn't find what you reported. It may have been removed already."],
+            bad_event: [400, "That post couldn't be checked. Please try again from the Feed."],
             own_content: [400, "That's yours: edit or delete it instead."],
             too_many: [429, "You've sent a lot of reports today. Please email info@buildinelsalvador.com instead."],
         } as const;
@@ -99,7 +114,16 @@ export async function block(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Member not found', reason: 'not_found' });
             return;
         }
-        res.status(201).json({ ok: true, userId: blockedId });
+        // Who was blocked, so the app can hide their posts at once.
+        const member = await prisma.user.findUnique({
+            where: { id: blockedId },
+            select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } },
+        });
+        res.status(201).json({
+            ok: true,
+            userId: blockedId,
+            member: member && { id: member.id, nostrPubkey: member.nostrPubkey, name: member.profile?.name ?? '', avatar: member.profile?.avatar ?? '' },
+        });
     } catch (error) {
         console.error('[Moderation] Block failed:', error);
         res.status(500).json({ error: 'Failed to block the member' });
@@ -145,7 +169,7 @@ export async function adminListReports(req: Request, res: Response): Promise<voi
         const status = REPORT_STATUSES.find((s) => s === req.query.status);
         const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
         const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
-        res.json(await listReports({ status, page, limit }));
+        res.json(await listReports({ status, page, limit, viewer: { id: req.user!.id, isAdmin: req.user!.isAdmin } }));
     } catch (error) {
         console.error('[Moderation] List reports failed:', error);
         res.status(500).json({ error: 'Failed to load reports' });
@@ -156,7 +180,7 @@ export async function adminListReports(req: Request, res: Response): Promise<voi
 export async function adminResolveReport(req: Request, res: Response): Promise<void> {
     try {
         const { status, resolution = '' } = req.body;
-        const found = await resolveReport(req.params.id, req.user!.id, status, resolution);
+        const found = await resolveReport(req.params.id, { id: req.user!.id, isAdmin: req.user!.isAdmin }, status, resolution);
         if (!found) {
             res.status(404).json({ error: 'Report not found' });
             return;
@@ -202,5 +226,37 @@ export async function adminDeleteEndorsement(req: Request, res: Response): Promi
     } catch (error) {
         console.error('[Moderation] Remove recommendation failed:', error);
         res.status(500).json({ error: 'Failed to remove the recommendation' });
+    }
+}
+
+/**
+ * DELETE /api/admin/reports/:id/note: remove a reported post from the BIES
+ * relay. Copies on other Nostr relays are beyond BIES's reach; suspending
+ * the member stops them posting here again.
+ */
+export async function adminRemoveReportedNote(req: Request, res: Response): Promise<void> {
+    try {
+        const moderator = { id: req.user!.id, isAdmin: req.user!.isAdmin };
+        const report = await prisma.report.findUnique({ where: { id: req.params.id }, select: { id: true, targetType: true, targetId: true, targetPubkey: true } });
+        if (!report || report.targetType !== 'note' || !(await canHandleReport(report.id, moderator))) {
+            res.status(404).json({ error: 'Report not found' });
+            return;
+        }
+        if (!requestEventRemoval(report.targetId)) {
+            res.status(500).json({ error: "Couldn't ask the relay to remove it" });
+            return;
+        }
+        await prisma.auditLog.create({
+            data: {
+                userId: req.user!.id,
+                action: 'NOTE_REMOVED',
+                resource: `report:${report.id}`,
+                metadata: JSON.stringify({ eventId: report.targetId, author: report.targetPubkey }),
+            },
+        });
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Moderation] Remove post failed:', error);
+        res.status(500).json({ error: 'Failed to remove the post' });
     }
 }
