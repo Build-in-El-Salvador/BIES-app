@@ -719,8 +719,9 @@ textarea {
   }
 
   /* Paint the safe-area strip below the bottom nav with the nav's colour
-     so there is never a visible gap on notched phones. */
-  body::after {
+     so there is never a visible gap on notched phones. Only while the nav
+     is on the page: without it (sign-in, sign-up) it is a stray blue bar. */
+  body:has(.mobile-bottom-nav)::after {
     content: '';
     display: block;
     position: fixed;

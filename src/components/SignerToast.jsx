@@ -80,7 +80,7 @@ const SignerToast = () => {
                         ) : (
                             <>
                                 <p className="st-text">{t('signer.disconnected')}</p>
-                                <Link className="st-action" to="/login" onClick={() => dismiss(id)}>
+                                <Link className="st-action" to="/login/nostr" onClick={() => dismiss(id)}>
                                     {t('signer.reLogin')}
                                 </Link>
                             </>

@@ -275,7 +275,7 @@ export const authService = {
         // (not-installed watchdog, or callback landing in another tab).
         return amberSignerService.requestPublicKey(AMBER_PERMISSIONS, {
             kind: 'login-pubkey',
-            returnPath: '/login',
+            returnPath: '/login/nostr',
         });
     },
 
@@ -299,7 +299,7 @@ export const authService = {
             },
             // Callback-driven (gestureless) navigation — skip the not-installed
             // watchdog; the AmberCallback page renders a manual continue button.
-            { resume: { kind: 'login-challenge', returnPath: '/login' }, skipWatchdog: true }
+            { resume: { kind: 'login-challenge', returnPath: '/login/nostr' }, skipWatchdog: true }
         );
     },
 

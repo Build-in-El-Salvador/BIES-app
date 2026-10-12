@@ -211,6 +211,7 @@
     "keyFileBackupLabel": "Respaldo cifrado",
     "keyFilePasswordLabel": "Contraseña del archivo de clave",
     "keyFileSignIn": "Desbloquear e iniciar sesión",
+    "backToEmail": "Volver a iniciar sesión con correo",
     "keyFileUnlocking": "Desbloqueando…"
   },
   "emailSignIn": {

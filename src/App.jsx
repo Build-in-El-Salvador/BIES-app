@@ -190,6 +190,7 @@ const AppContent = () => {
                         <ProtectedRoute><Feed /></ProtectedRoute>
                     } />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/login/nostr" element={<Login nostr />} />
                     <Route path="/signup" element={<Signup />} />
                     {/* NIP-55 Amber intent callback (public — used mid-login) */}
                     <Route path="/amber-callback" element={<AmberCallback />} />

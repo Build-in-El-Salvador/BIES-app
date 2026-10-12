@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
-import { AlertCircle, Loader2, Key, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, Loader2, Key, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { PASSKEY_ENABLED, NIP46_ENABLED, AMBER_NIP55_ENABLED } from '../config/featureFlags';
 import { isLikelyExtensionInterference, keytrService } from '../services/keytrService';
@@ -15,10 +15,15 @@ import NostrConnectQR from '../components/NostrConnectQR';
 import EmailSignIn from '../components/EmailSignIn';
 import { readKeyInput, unlockBackup } from '../services/accountKey';
 
-const Login = () => {
+/**
+ * Sign-in, on two screens: /login is email, and /login/nostr (`nostr`) holds
+ * the Nostr methods, with a Back to the email screen.
+ */
+const Login = ({ nostr = false }) => {
     const { t } = useTranslation();
     const { user: authedUser, loading: authLoading, loginWithNostrAndCheckNew, loginWithNsecAndCheckNew, loginWithSeedPhraseAndCheckNew, loginWithBunkerAndCheckNew, loginWithPasskeyAndCheckNew } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [nsecInput, setNsecInput] = useState('');
@@ -37,12 +42,16 @@ const Login = () => {
     const [hasNostrExtension, setHasNostrExtension] = useState(
         typeof window !== 'undefined' && !!window.nostr
     );
-    // Email sign-in comes first; the Nostr methods sit behind one button,
-    // opened from the start when a Nostr browser extension is present.
-    const [showNostr, setShowNostr] = useState(hasNostrExtension);
-    useEffect(() => {
-        if (hasNostrExtension) setShowNostr(true);
-    }, [hasNostrExtension]);
+    // An error belongs to the screen it happened on.
+    useEffect(() => setError(''), [nostr]);
+
+    const openNostr = () => navigate('/login/nostr', { state: { fromEmail: true } });
+    // Back through history when the email screen is behind this one, so the
+    // device's own back button agrees; arriving by a link replaces instead.
+    const backToEmail = () => {
+        if (location.state?.fromEmail) navigate(-1);
+        else navigate('/login', { replace: true });
+    };
 
     // Passkey — shown when the feature flag is on AND WebAuthn actually exists.
     // WKWebView (Capacitor native shell) has no PublicKeyCredential, so the
@@ -282,35 +291,39 @@ const Login = () => {
     return (
         <div className="login-container">
             <div className="login-card">
+                {nostr && (
+                    <button type="button" className="login-back" onClick={backToEmail} aria-label={t('login.backToEmail')}>
+                        <ArrowLeft size={16} /> {t('common.back')}
+                    </button>
+                )}
+
                 <div className="logo mb-6">
                     <img src={logoIcon} alt="BIES" style={{ height: '64px', width: 'auto' }} />
                 </div>
 
-                <h2 className="login-heading" style={{ fontSize: '1.5rem' }}>{t('login.welcomeBack')}</h2>
-                <p className="login-subtext" style={{ marginBottom: '2rem', textAlign: 'center' }}>
-                    {t('login.accessEcosystem')}
+                <h2 className="login-heading" style={{ fontSize: '1.5rem' }}>
+                    {nostr ? t('emailSignIn.useNostr') : t('login.welcomeBack')}
+                </h2>
+                <p className="login-subtext" style={{ marginBottom: nostr ? '1.5rem' : '2rem', textAlign: 'center' }}>
+                    {nostr ? t('emailSignIn.nostrIntro') : t('login.accessEcosystem')}
                 </p>
 
+                {!nostr && (<>
                 <EmailSignIn onSuccess={handleResult} />
 
                 <div className="divider"><span>{t('common.or')}</span></div>
 
-                {!showNostr && (
-                    <button
-                        type="button"
-                        onClick={() => { setShowNostr(true); setError(''); }}
-                        className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full"
-                    >
-                        <NostrIcon size={20} color="#8b5cf6" />
-                        <span>{t('emailSignIn.useNostr')}</span>
-                    </button>
-                )}
+                <button
+                    type="button"
+                    onClick={openNostr}
+                    className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full"
+                >
+                    <NostrIcon size={20} color="#8b5cf6" />
+                    <span>{t('emailSignIn.useNostr')}</span>
+                </button>
+                </>)}
 
-                {showNostr && (<>
-                <p className="login-subtext" style={{ textAlign: 'center', marginBottom: '0.75rem' }}>
-                    {t('emailSignIn.nostrIntro')}
-                </p>
-
+                {nostr && (<>
                 {error && (
                     <div className="error-banner">
                         <AlertCircle size={16} />
@@ -587,9 +600,8 @@ const Login = () => {
                     </Link>
                 </div>
 
-
-                {/* Extension hint — shown when no extension detected */}
-                {!hasNostrExtension && (
+                {/* Extension hint — on the web, when no extension was detected */}
+                {!hasNostrExtension && !isNativePlatform() && (
                     <>
                         <div className="divider mt-4"><span>or</span></div>
                         <p className="login-subtext" style={{ textAlign: 'center' }}>
@@ -662,6 +674,21 @@ const Login = () => {
                     font-size: 0.875rem;
                     color: var(--color-gray-500);
                 }
+                .login-back {
+                    align-self: flex-start;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin: -0.25rem 0 0.5rem;
+                    padding: 0.25rem 0;
+                    background: none;
+                    border: none;
+                    color: var(--color-gray-500);
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                }
+                .login-back:hover { color: var(--color-primary); }
                 .login-footer {
                     margin-top: clamp(1rem, 3vh, 1.5rem);
                     padding-top: clamp(0.5rem, 1.5vh, 0.75rem);
@@ -690,6 +717,7 @@ const Login = () => {
                 .btn-nostr {
                     background: transparent;
                     color: var(--color-text, inherit);
+                    font-size: 1rem;
                     font-weight: 600;
                     border: 1px solid var(--color-gray-200);
                     cursor: pointer;
@@ -710,7 +738,8 @@ const Login = () => {
                 }
                 .btn-passkey:hover { opacity: 0.9; }
                 .btn-passkey:disabled { opacity: 0.5; cursor: not-allowed; }
-                .btn-create-account {
+                /* :global() for components (Link, icons): styled-jsx only scopes plain elements */
+                .login-footer :global(.btn-create-account) {
                     display: block;
                     width: 100%;
                     padding: clamp(0.75rem, 2vh, 1rem) 1.5rem;
@@ -723,7 +752,7 @@ const Login = () => {
                     border-radius: 9999px;
                     transition: opacity 0.2s;
                 }
-                .btn-create-account:hover { opacity: 0.9; }
+                .login-footer :global(.btn-create-account:hover) { opacity: 0.9; }
                 .login-link-btn {
                     background: none;
                     border: none;
@@ -797,7 +826,7 @@ const Login = () => {
                 .key-input-wrapper:focus-within {
                     border-color: var(--color-primary);
                 }
-                .key-input-icon {
+                .key-input-wrapper :global(.key-input-icon) {
                     flex-shrink: 0;
                     color: var(--color-gray-500);
                 }
@@ -856,7 +885,7 @@ const Login = () => {
                     margin-bottom: 1rem;
                     border: 1px solid var(--badge-error-bg);
                 }
-                .spin {
+                .login-card :global(.spin) {
                     animation: spin 1s linear infinite;
                 }
                 @keyframes spin {

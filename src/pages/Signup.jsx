@@ -189,7 +189,7 @@ const Signup = () => {
                             {t('signup.generateKeys')}
                         </button>
                         <div className="mt-4 text-sm text-gray-400">
-                            {t('signup.alreadyHaveKeys')} <Link to="/login" className="text-blue-500">{t('common.logIn')}</Link>
+                            {t('signup.alreadyHaveKeys')} <Link to="/login/nostr" className="text-blue-500">{t('common.logIn')}</Link>
                         </div>
                     </div>
                 )}
