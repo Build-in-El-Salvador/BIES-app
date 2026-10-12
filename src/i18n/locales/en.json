@@ -214,6 +214,19 @@
     "backToEmail": "Back to email sign-in",
     "keyFileUnlocking": "Unlocking…"
   },
+  "savedKey": {
+    "useSaved": "Use a saved key",
+    "none": "There's no key saved for BIES on this phone yet.",
+    "notAKey": "That saved password isn't a Nostr key.",
+    "unavailable": "Your phone's password manager isn't available right now.",
+    "offerTitle": "Save your key in your password manager?",
+    "offerBody": "Next time you can sign in with one tap, on this phone or any device that shares your passwords. Your phone keeps it, not BIES.",
+    "save": "Save key",
+    "notNow": "Not now",
+    "saveFailed": "Your phone didn't save the key. Try again, or keep a copy another way.",
+    "saveButton": "Save to password manager",
+    "saved": "Saved in your password manager"
+  },
   "emailSignIn": {
     "emailLabel": "Email",
     "emailPlaceholder": "you@example.com",

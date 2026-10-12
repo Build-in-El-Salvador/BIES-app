@@ -214,6 +214,19 @@
     "backToEmail": "Volver a iniciar sesión con correo",
     "keyFileUnlocking": "Desbloqueando…"
   },
+  "savedKey": {
+    "useSaved": "Usar una clave guardada",
+    "none": "Aún no hay una clave guardada para BIES en este teléfono.",
+    "notAKey": "Esa contraseña guardada no es una clave de Nostr.",
+    "unavailable": "El gestor de contraseñas de tu teléfono no está disponible ahora.",
+    "offerTitle": "¿Guardar tu clave en tu gestor de contraseñas?",
+    "offerBody": "La próxima vez podrás iniciar sesión con un toque, en este teléfono o en cualquier dispositivo que comparta tus contraseñas. La guarda tu teléfono, no BIES.",
+    "save": "Guardar clave",
+    "notNow": "Ahora no",
+    "saveFailed": "Tu teléfono no guardó la clave. Inténtalo de nuevo o guarda una copia de otra forma.",
+    "saveButton": "Guardar en el gestor de contraseñas",
+    "saved": "Guardada en tu gestor de contraseñas"
+  },
   "emailSignIn": {
     "emailLabel": "Correo electrónico",
     "emailPlaceholder": "usted@ejemplo.com",
