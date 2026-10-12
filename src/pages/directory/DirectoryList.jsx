@@ -316,8 +316,8 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 40px;
-                    height: 40px;
+                    width: 44px;
+                    height: 44px;
                     border-radius: 50%;
                     border: none;
                     background: none;

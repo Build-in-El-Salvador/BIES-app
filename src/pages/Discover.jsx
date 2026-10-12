@@ -941,9 +941,12 @@ const Discover = ({ membersOnly = false }) => {
                         if (builder.user?.role === 'MOD') roleTags.push('Moderator');
                         if (builder.user?._count?.projects > 0) roleTags.push('Builder');
                         if (builder.user?._count?.hostedEvents > 0) roleTags.push('Event Host');
-                        if (roleTags.length === 0) roleTags.push('Member');
-
-                        const tags = [...roleTags, ...(builder.skills || builder.tags || [])];
+                        // Like a LinkedIn card: the headline and location say who they are;
+                        // a few tags, no generic "Member" pill.
+                        const tags = [...roleTags, ...(builder.skills || builder.tags || [])].slice(0, 3);
+                        const subline = builder.location
+                            ? <><MapPin size={13} aria-hidden="true" /> {builder.location}</>
+                            : !builder.title && !builder.company ? stripHtml(builder.bio || '') : '';
 
                         if (memberViewType === 'icons') {
                             return (
@@ -970,12 +973,13 @@ const Discover = ({ membersOnly = false }) => {
                                             {builder.user?.isAdmin && <div className="badge-shield list-badge" title="Admin">👑</div>}
                                         </div>
                                         <div className="builder-info-list" style={{ flex: 1, overflow: 'hidden' }}>
-                                            <h3 className="font-semibold text-lg" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{builder.name}</h3>
+                                            <h3 className="font-semibold text-lg builder-name-clamp">{builder.name}</h3>
                                             {(builder.company || builder.title || builder.role) && (
                                                 <p className="text-primary font-medium text-sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                     {builder.title ? `${builder.title} at ${builder.company || builder.role}` : builder.company || builder.role}
                                                 </p>
                                             )}
+                                            {subline && <p className="builder-subline">{subline}</p>}
                                             {tags.length > 0 && (
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
                                                     {tags.map((tag, i) => (
@@ -1015,6 +1019,7 @@ const Discover = ({ membersOnly = false }) => {
                                     <div className="p-5 flex-1 flex flex-col">
                                         <h3 className="font-semibold text-xl mb-1">{builder.name}</h3>
                                         {(builder.company || builder.title || builder.role) && <p className="text-primary font-medium text-sm mb-2">{builder.title ? `${builder.title} at ${builder.company || builder.role}` : builder.company || builder.role}</p>}
+                                        {builder.location && <p className="builder-subline mb-2"><MapPin size={13} aria-hidden="true" /> {builder.location}</p>}
                                         <p className="text-sm text-gray-500 line-clamp-2 mb-4">{stripHtml(builder.bio || '')}</p>
 
                                         {tags.length > 0 && (
@@ -1139,6 +1144,26 @@ const Discover = ({ membersOnly = false }) => {
         .search-btn-desktop {
           white-space: nowrap;
           flex-shrink: 0;
+        }
+
+        /* Member cards */
+        .builder-name-clamp {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          word-break: break-word;
+        }
+        .builder-subline {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin: 2px 0 0;
+          font-size: 0.82rem;
+          color: var(--color-gray-500);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         /* Layout */

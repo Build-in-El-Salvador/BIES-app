@@ -248,9 +248,9 @@ const PublicProfile = ({ type }) => {
                     {/* Cover Banner */}
                     <div
                         onClick={() => (profile.banner || nostrProfile?.banner) && lightbox.open(profile.banner || nostrProfile?.banner)}
+                        className="profile-cover"
                         style={{
                             position: 'relative',
-                            height: '240px',
                             background: (profile.banner || nostrProfile?.banner)
                                 ? `url(${profile.banner || nostrProfile?.banner}) center/cover no-repeat`
                                 : 'linear-gradient(to right, #0052cc, #0a192f)',
@@ -409,21 +409,22 @@ const PublicProfile = ({ type }) => {
                     {/* Profile Info Section */}
                     <div className="pb-8" style={{ paddingLeft: '24px', paddingRight: '24px', position: 'relative', zIndex: 5 }}>
                         {/* Avatar */}
-                        <div style={{ marginTop: '-80px', position: 'relative', zIndex: 5 }}>
+                        <div className="profile-avatar-wrap" style={{ position: 'relative', zIndex: 5 }}>
                             {(profile.avatar || nostrProfile?.picture) ? (
                                 <img
                                     src={profile.avatar || nostrProfile?.picture}
                                     alt={profile.name}
                                     onClick={() => lightbox.open(profile.avatar || nostrProfile?.picture)}
+                                    className="profile-avatar"
                                     style={{
-                                        width: '168px', height: '168px', borderRadius: '50%', objectFit: 'cover',
+                                        borderRadius: '50%', objectFit: 'cover',
                                         border: '5px solid var(--color-surface)', boxShadow: 'var(--shadow-md)', background: 'var(--color-surface)',
                                         cursor: 'pointer',
                                     }}
                                 />
                             ) : (
-                                <div style={{
-                                    width: '168px', height: '168px', borderRadius: '50%', border: '5px solid var(--color-surface)',
+                                <div className="profile-avatar" style={{
+                                    borderRadius: '50%', border: '5px solid var(--color-surface)',
                                     background: 'var(--color-surface-raised)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     fontSize: '3rem', fontWeight: 700, color: 'var(--color-gray-400)',
                                     boxShadow: 'var(--shadow-md)',
@@ -436,7 +437,7 @@ const PublicProfile = ({ type }) => {
 
                         {/* Name & Title */}
                         <div style={{ marginTop: '16px' }}>
-                            <h1 style={{ fontSize: '2rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '0.25rem' }}>
+                            <h1 className="profile-name" style={{ fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '0.25rem' }}>
                                 {profile.name}
                             </h1>
                             {isEventHost && (
@@ -954,6 +955,19 @@ const PublicProfile = ({ type }) => {
             </div>
 
             <style jsx>{`
+        /* Compact header on phones (as Instagram/LinkedIn): the cover and
+           avatar don't take the whole first screen */
+        .profile-cover { height: 240px; }
+        .profile-avatar-wrap { margin-top: -80px; }
+        .profile-avatar { width: 168px; height: 168px; }
+        .profile-name { font-size: 2rem; }
+        @media (max-width: 768px) {
+            .profile-cover { height: 140px; }
+            .profile-avatar-wrap { margin-top: -48px; }
+            .profile-avatar { width: 96px; height: 96px; font-size: 2rem !important; border-width: 4px !important; }
+            .profile-name { font-size: 1.5rem; }
+        }
+
                 .profile-page {
                     min-height: 100vh;
                     background: var(--color-gray-50);

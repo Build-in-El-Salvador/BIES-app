@@ -33,7 +33,7 @@ const CertifiedBadge = ({ size = 'sm' }) => {
                 borderRadius: 'var(--radius-full)',
                 background: 'var(--color-orange-tint)',
                 border: '1px solid var(--color-secondary)',
-                color: 'var(--color-secondary)',
+                color: 'var(--color-orange-text)',
                 fontSize: s.font,
                 fontWeight: 700,
                 lineHeight: 1.25,

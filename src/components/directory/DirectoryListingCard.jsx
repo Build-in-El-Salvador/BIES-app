@@ -9,7 +9,7 @@ import CertifiedBadge from './CertifiedBadge';
  * Directory listing card (list row) per the mockup:
  * rounded photo left, bold name, produce/skills summary in primary blue,
  * MapPin + Phone rows in gray, chevron at the right edge.
- * Then the BIES Trust Score (vouches minus downvotes), the BIES Trusted pill,
+ * Then the vouch and downvote counts (the Trust Score is their difference), the BIES Trusted pill,
  * BTC and pricing.
  *
  * @param {object} listing - parsed listing from directoryApi
@@ -28,8 +28,9 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
     const photo = listing.photo || (listing.photos || [])[0] || '';
     const phone = listing.phone || listing.whatsapp || '';
 
-    const score = listing.reputationScore ?? 0;
-    const votes = (listing.vouchCount ?? 0) + (listing.downvoteCount ?? 0);
+    const vouches = listing.vouchCount ?? 0;
+    const downvotes = listing.downvoteCount ?? 0;
+    const votes = vouches + downvotes;
     const scoreTitle = [
         t('directory.trust.vouches', { count: listing.vouchCount ?? 0 }),
         t('directory.trust.downvotes', { count: listing.downvoteCount ?? 0 }),
@@ -75,9 +76,14 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                     {(votes > 0 || listing.isCertified || listing.btcAccepted || (isProvider && listing.pricing)) && (
                         <div className="dir-card-pills">
                             {votes > 0 && (
-                                <span className={`dir-score-pill${score < 0 ? ' negative' : ''}`} title={scoreTitle} aria-label={`${t('directory.reputation')}: ${scoreTitle}`}>
-                                    {score < 0 ? <ThumbsDown size={12} /> : <ThumbsUp size={12} />}
-                                    {score > 0 ? `+${score}` : score}
+                                <span className="dir-score-pill" aria-label={scoreTitle}>
+                                    <ThumbsUp size={12} aria-hidden="true" /> {vouches}
+                                    {downvotes > 0 && (
+                                        <>
+                                            <span className="dir-score-sep" aria-hidden="true">·</span>
+                                            <ThumbsDown size={12} aria-hidden="true" /> {downvotes}
+                                        </>
+                                    )}
                                 </span>
                             )}
                             {listing.isCertified && <CertifiedBadge size="sm" />}
@@ -191,9 +197,9 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                     padding: 2px 8px;
                     border-radius: var(--radius-full);
                 }
-                .dir-score-pill.negative {
-                    background: var(--color-red-tint);
-                    color: var(--color-error);
+                .dir-score-sep {
+                    margin: 0 2px;
+                    opacity: 0.6;
                 }
                 .dir-btc-icon {
                     color: #f7931a;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate } from 'react-router-dom';
-import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Pencil, Users, Copy, Check, Trophy, Flame, Award } from 'lucide-react';
+import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Pencil, Users, Trophy, Flame, Award } from 'lucide-react';
 import { getAssetUrl } from '../utils/assets';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
@@ -33,7 +33,6 @@ const Profile = () => {
     const [biesFollowing, setBiesFollowing] = useState(0);
     const [nostrFollowers, setNostrFollowers] = useState(null);
     const [nostrFollowing, setNostrFollowing] = useState(null);
-    const [npubCopied, setNpubCopied] = useState(false);
     const [points, setPoints] = useState(null);
     const pointsEnabled = useFeature('points');
     const projectsEnabled = useFeature('projects');
@@ -118,9 +117,8 @@ const Profile = () => {
                 {/* Header Card */}
                 <div className="profile-card mb-8" style={{ padding: 0, overflow: 'hidden' }}>
                     {/* Cover Banner */}
-                    <div style={{
+                    <div className="profile-cover" style={{
                         position: 'relative',
-                        height: '240px',
                         background: (profile.banner || nostrProfile?.banner)
                             ? `url(${profile.banner || nostrProfile?.banner}) center/cover no-repeat`
                             : 'linear-gradient(to right, #0052cc, #0a192f)'
@@ -157,11 +155,11 @@ const Profile = () => {
                     {/* Profile Info Section */}
                     <div className="pb-8" style={{ paddingLeft: '24px', paddingRight: '24px', position: 'relative', zIndex: 5 }}>
                         {/* Avatar */}
-                        <div style={{ marginTop: '-80px', position: 'relative', zIndex: 5 }}>
+                        <div className="profile-avatar-wrap" style={{ position: 'relative', zIndex: 5 }}>
                             {(profile.avatar || nostrProfile?.picture) ? (
-                                <img src={profile.avatar || nostrProfile?.picture} alt={profile.name} className="shadow-md flex-shrink-0" style={{ width: '168px', height: '168px', borderRadius: '50%', objectFit: 'cover', border: '5px solid var(--color-surface)', background: 'var(--color-surface-raised)' }} />
+                                <img src={profile.avatar || nostrProfile?.picture} alt={profile.name} className="shadow-md flex-shrink-0 profile-avatar" style={{ borderRadius: '50%', objectFit: 'cover', border: '5px solid var(--color-surface)', background: 'var(--color-surface-raised)' }} />
                             ) : (
-                                <div className="shadow-md flex-shrink-0 flex items-center justify-center" style={{ width: '168px', height: '168px', borderRadius: '50%', border: '5px solid var(--color-surface)', background: 'var(--color-surface-raised)', fontSize: '3rem', fontWeight: 700, color: 'var(--color-gray-400)' }}>
+                                <div className="shadow-md flex-shrink-0 flex items-center justify-center profile-avatar" style={{ borderRadius: '50%', border: '5px solid var(--color-surface)', background: 'var(--color-surface-raised)', fontSize: '3rem', fontWeight: 700, color: 'var(--color-gray-400)' }}>
                                     {(profile.name || user?.email || '?').charAt(0).toUpperCase()}
                                 </div>
                             )}
@@ -169,30 +167,10 @@ const Profile = () => {
 
                         {/* Name & Title */}
                         <div style={{ marginTop: '16px' }}>
-                            <h1 className="h1-title mb-1" style={{ fontSize: '2rem' }}>
+                            <h1 className="h1-title mb-1 profile-name">
                                 {profile.name || profile.biesDisplayName || user?.email || 'Unnamed'}
                             </h1>
-                            {npub && (
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(npub);
-                                        setNpubCopied(true);
-                                        setTimeout(() => setNpubCopied(false), 2000);
-                                    }}
-                                    style={{
-                                        display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                                        background: 'var(--color-gray-100)', border: '1px solid var(--color-gray-200)',
-                                        borderRadius: '999px', padding: '0.3rem 0.75rem', cursor: 'pointer',
-                                        fontSize: '0.8rem', color: 'var(--color-gray-500)', fontFamily: 'monospace',
-                                        marginBottom: '0.5rem', transition: 'all 0.2s',
-                                    }}
-                                    title="Click to copy full npub"
-                                >
-                                    <NostrIcon size={14} style={{ flexShrink: 0 }} />
-                                    <span>{npub.substring(0, 16)}...{npub.substring(npub.length - 6)}</span>
-                                    {npubCopied ? <Check size={14} style={{ color: '#15803d' }} /> : <Copy size={14} />}
-                                </button>
-                            )}
+                            {/* The Nostr key lives in the Nostr Identity card below */}
                             {(profile.title || profile.company) && (
                                 <p className="role-text mb-3 text-xl text-gray-600">
                                     {profile.title}{profile.title && profile.company && ' at '}
@@ -559,6 +537,19 @@ const Profile = () => {
             </div >
 
             <style jsx>{`
+        /* Compact header on phones (as Instagram/LinkedIn): the cover and
+           avatar don't take the whole first screen */
+        .profile-cover { height: 240px; }
+        .profile-avatar-wrap { margin-top: -80px; }
+        .profile-avatar { width: 168px; height: 168px; }
+        .profile-name { font-size: 2rem; }
+        @media (max-width: 768px) {
+            .profile-cover { height: 140px; }
+            .profile-avatar-wrap { margin-top: -48px; }
+            .profile-avatar { width: 96px; height: 96px; font-size: 2rem !important; border-width: 4px !important; }
+            .profile-name { font-size: 1.5rem; }
+        }
+
                 .profile-page {
                     min-height: 100vh;
                     background: var(--color-gray-50);

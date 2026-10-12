@@ -68,8 +68,8 @@ const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onTog
 
             <style jsx>{`
                 .icon-btn {
-                    width: 36px;
-                    height: 36px;
+                    width: 44px;
+                    height: 44px;
                     border-radius: 8px;
                     border: 1px solid var(--color-gray-200);
                     display: flex;

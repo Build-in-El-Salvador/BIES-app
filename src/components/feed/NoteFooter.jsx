@@ -72,14 +72,17 @@ const NoteFooter = ({
         )}
       </div>
 
-      {/* Share */}
-      <button
-        className="primal-action-btn primal-action-share"
-        onClick={onShare}
-        title="Share"
-      >
-        <Share size={16} />
-      </button>
+      {/* Share — public posts only */}
+      {onShare && (
+        <button
+          className="primal-action-btn primal-action-share"
+          onClick={onShare}
+          title="Share"
+          aria-label="Share"
+        >
+          <Share size={16} />
+        </button>
+      )}
     </div>
   );
 };
