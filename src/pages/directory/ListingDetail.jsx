@@ -335,7 +335,7 @@ const ListingDetail = () => {
                             </div>
                         )}
                         {listing.isOwnBusiness && (
-                            <p className="dir-own-note">{t('directory.review.ownBusinessNote')}</p>
+                            <p className="dir-own-note">{t('directory.review.ownBusinessNote', { context: isFarm ? 'farm' : undefined })}</p>
                         )}
                     </div>
 

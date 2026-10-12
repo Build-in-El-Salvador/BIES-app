@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { blockedEitherWay, blockedIds } from '../services/moderation.service';
+import { config } from '../config';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -122,6 +123,26 @@ function pickAllowedFields(body: any, staff: boolean): any {
         if (data[field]) data[field] = JSON.stringify(data[field]);
     }
     return data;
+}
+
+/**
+ * Mirror a live listing to the BIES relay as a NIP-99 classified (replaceable
+ * kind:30402 keyed by d-tag = listing id), signed by the linked member's key
+ * when set, else the owner's. Doesn't wait; members who sign on their own
+ * device mirror from the app instead.
+ */
+function mirrorToNostr(listing: any): void {
+    if (listing.status !== 'active') return;
+    publishDirectoryListing(listing.memberUserId ?? listing.ownerId, listing)
+        .then(async (eventId) => {
+            if (eventId) {
+                await prisma.directoryListing.update({
+                    where: { id: listing.id },
+                    data: { nostrListingEventId: eventId },
+                });
+            }
+        })
+        .catch((err) => console.error('[Nostr] Directory listing sync failed:', err));
 }
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
@@ -269,8 +290,9 @@ export async function getListing(req: Request, res: Response): Promise<void> {
 
 /**
  * POST /directory
- * Create a listing. Allow-listed fields only. MOD/admin listings go live
- * immediately; member submissions await review.
+ * Create a listing. Allow-listed fields only. It goes live at once, and its
+ * Trust Score tells members how far to trust it — unless
+ * DIRECTORY_REQUIRE_APPROVAL holds members' listings for staff to approve.
  */
 export async function createListing(req: Request, res: Response): Promise<void> {
     try {
@@ -288,7 +310,7 @@ export async function createListing(req: Request, res: Response): Promise<void> 
             }
         }
 
-        const status = isStaff(req) ? 'active' : 'pending-review';
+        const status = isStaff(req) || !config.directoryRequireApproval ? 'active' : 'pending-review';
 
         // A member recommending a business vouches for it with their review;
         // one adding their own business doesn't.
@@ -308,6 +330,7 @@ export async function createListing(req: Request, res: Response): Promise<void> 
         await recomputeListingScore(listing.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
+        mirrorToNostr(listing);
 
         res.status(201).json(parseListing(listing));
     } catch (error) {
@@ -364,21 +387,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
             console.error('[Directory] Score recompute failed:', err)
         );
 
-        // Re-mirror to Nostr only when the listing is live (replaceable
-        // kind:30402 keyed by d-tag = listing id), signed by the linked
-        // member's key when set, else the owner's.
-        if (listing.status === 'active') {
-            publishDirectoryListing(listing.memberUserId ?? listing.ownerId, listing)
-                .then(async (eventId) => {
-                    if (eventId) {
-                        await prisma.directoryListing.update({
-                            where: { id: listing.id },
-                            data: { nostrListingEventId: eventId },
-                        });
-                    }
-                })
-                .catch((err) => console.error('[Nostr] Directory listing sync failed:', err));
-        }
+        mirrorToNostr(listing);
 
         res.json(parseListing(listing));
     } catch (error) {

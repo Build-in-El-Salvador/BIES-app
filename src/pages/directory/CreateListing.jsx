@@ -66,8 +66,8 @@ const CreateListing = ({ editMode = false }) => {
     const initialType = searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM';
     const [type, setType] = useState(initialType);
     // Whose listing it is: a customer recommending it (their review is their
-    // vouch) or the business itself. Farms are usually added by the farm.
-    const [isOwnBusiness, setIsOwnBusiness] = useState(initialType === 'FARM');
+    // vouch) or the business or farm itself.
+    const [isOwnBusiness, setIsOwnBusiness] = useState(false);
     const [photos, setPhotos] = useState([]); // gallery, up to MAX_PHOTOS
     const [form, setForm] = useState(emptyForm);
     const [languages, setLanguages] = useState([]);
@@ -249,6 +249,25 @@ const CreateListing = ({ editMode = false }) => {
     const detailPath = (listing) =>
         listing.type === 'PROVIDER' ? `/discover/trusted/${listing.id}` : `/discover/farms/${listing.id}`;
 
+    // Best-effort Nostr mirror for members who sign on their own device: the
+    // server only signs for hosted keys, so a live listing it couldn't mirror
+    // (no stored event id) is mirrored from here.
+    const mirrorFromDevice = (listing) => {
+        if (listing.status !== 'active' || listing.nostrListingEventId || !nostrSigner.signsOnDevice) return;
+        try {
+            nostrService.publishDirectoryListing({
+                id: listing.id,
+                type: listing.type,
+                name: listing.name,
+                about: listing.about,
+                photo: listing.photo,
+                location: listing.location,
+                products: listing.products,
+                skills: listing.skills,
+            }).catch(() => {});
+        } catch { /* non-blocking */ }
+    };
+
     const handleSubmit = async () => {
         setSubmitError('');
         const problem = !form.name.trim() ? t('directory.nameRequired')
@@ -267,29 +286,14 @@ const CreateListing = ({ editMode = false }) => {
             if (editMode) {
                 const result = await directoryApi.update(id, payload);
                 const listing = result?.data || result;
-                // Best-effort client-side Nostr mirror for Nostr-native owners:
-                // the server only signs for custodial users, so an active listing
-                // without a stored event id gets mirrored from the client.
-                if (listing.status === 'active' && !listing.nostrListingEventId && nostrSigner.signsOnDevice) {
-                    try {
-                        nostrService.publishDirectoryListing({
-                            id: listing.id,
-                            type: listing.type,
-                            name: listing.name,
-                            about: listing.about,
-                            photo: listing.photo,
-                            location: listing.location,
-                            products: listing.products,
-                            skills: listing.skills,
-                        }).catch(() => {});
-                    } catch { /* non-blocking */ }
-                }
+                mirrorFromDevice(listing);
                 navigate(detailPath(listing));
             } else {
                 const result = await directoryApi.create(payload);
                 const listing = result?.data || result;
                 if (listing.status === 'active') {
-                    // MOD/admin listings go live immediately — skip the review screen
+                    // Live at once (unless the server holds members' listings for approval)
+                    mirrorFromDevice(listing);
                     navigate(detailPath(listing));
                 } else {
                     setSubmitted(true);
@@ -390,17 +394,17 @@ const CreateListing = ({ editMode = false }) => {
 
                     {/* Whose listing this is */}
                     <div className="dir-form-card">
-                        <h3 className="dir-card-heading">{t('directory.connectionLabel')}</h3>
-                        <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel')}>
+                        <h3 className="dir-card-heading">{t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}</h3>
+                        <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}>
                             <label className={`dir-connection-option${!isOwnBusiness ? ' active' : ''}`}>
                                 <input type="radio" name="connection" checked={!isOwnBusiness} onChange={() => setIsOwnBusiness(false)} />
                                 <ThumbsUp size={18} />
-                                <span>{t('directory.connectionCustomer')}</span>
+                                <span>{t('directory.connectionCustomer', { context: isFarm ? 'farm' : undefined })}</span>
                             </label>
                             <label className={`dir-connection-option${isOwnBusiness ? ' active' : ''}`}>
                                 <input type="radio" name="connection" checked={isOwnBusiness} onChange={() => setIsOwnBusiness(true)} />
                                 <Store size={18} />
-                                <span>{t('directory.connectionOwner')}</span>
+                                <span>{t('directory.connectionOwner', { context: isFarm ? 'farm' : undefined })}</span>
                             </label>
                         </div>
                         {isOwnBusiness && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionOwnerHint')}</p>}
@@ -640,7 +644,7 @@ const CreateListing = ({ editMode = false }) => {
                                                 <option value="">{t('directory.iconAuto')}</option>
                                                 {PRODUCE_ICON_KEYS.map((key) => (
                                                     <option key={key} value={key}>
-                                                        {key.charAt(0).toUpperCase() + key.slice(1)}
+                                                        {t(`directory.produce.${key}`)}
                                                     </option>
                                                 ))}
                                             </select>
@@ -711,7 +715,7 @@ const CreateListing = ({ editMode = false }) => {
                     {!editMode && !isOwnBusiness && (
                         <div className="dir-form-card">
                             <h3 className="dir-card-heading">{t('directory.yourReview')} *</h3>
-                            <p className="dir-field-hint" style={{ marginTop: 0 }}>{t('directory.yourReviewHint')}</p>
+                            <p className="dir-field-hint" style={{ marginTop: 0 }}>{t('directory.yourReviewHint', { context: isFarm ? 'farm' : undefined })}</p>
                             <div className="dir-form-group" style={{ marginBottom: '0.9rem' }}>
                                 <textarea
                                     name="review"

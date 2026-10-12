@@ -37,7 +37,7 @@ export function TrustPanel({ listing }) {
             {listing.isCertified ? (
                 <div className="dir-trust-trusted">
                     <CertifiedBadge size="md" />
-                    <span>{t('directory.trust.trusted')}</span>
+                    <span>{t('directory.trust.trusted', { context: listing.type === 'FARM' ? 'farm' : undefined })}</span>
                 </div>
             ) : (
                 <>
@@ -198,7 +198,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
             const reason = err?.data?.reason;
             setError(
                 reason === 'reason_required' ? t('directory.review.reasonRequired', { min: REASON_MIN })
-                    : reason === 'own_business' ? t('directory.review.cantReviewOwn')
+                    : reason === 'own_business' ? t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })
                         : reason === 'not_live' ? t('directory.review.notLive')
                             : objectionableMessage(t, err) || err?.message || String(err),
             );
@@ -227,7 +227,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
         <section className="dir-detail-section dir-reviews">
             <h2 style={titleStyle}>{t('directory.endorsements')} ({reviews.length})</h2>
 
-            {runsIt && <p className="dir-review-note">{t('directory.review.cantReviewOwn')}</p>}
+            {runsIt && <p className="dir-review-note">{t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })}</p>}
             {!runsIt && !live && <p className="dir-review-note">{t('directory.review.notLive')}</p>}
 
             {canReview && !mine && mode === null && (

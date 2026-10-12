@@ -1667,12 +1667,23 @@
     "searchFarms": "Search farms, products, or locations",
     "searchProviders": "Search businesses, services or places",
     "sectionFarms": "Regenerative Farms",
-    "sectionFarmsSub": "Find local farms across El Salvador",
+    "sectionFarmsSub": "Local farms across El Salvador that BIES members vouch for",
     "sectionCertified": "BIES Trusted",
     "sectionCertifiedSub": "Businesses and services BIES members vouch for",
     "directoriesSection": "Directories",
     "addListing": "Add Listing",
     "whatTheyProduce": "What They Produce",
+    "produce": {
+      "vegetable": "Fruit & veg",
+      "egg": "Eggs",
+      "chicken": "Poultry",
+      "beef": "Meat",
+      "milk": "Dairy",
+      "coffee": "Coffee",
+      "honey": "Honey",
+      "tallow": "Tallow & oils",
+      "leaf": "Other"
+    },
     "aboutFarm": "About the Farm",
     "practicesLabel": "Farming Practices",
     "practices": {
@@ -1688,9 +1699,9 @@
     "editListing": "Edit Listing",
     "about": "About",
     "skillsLabel": "Skills",
-    "createTitleFarm": "Add Your Farm",
+    "createTitleFarm": "Add a farm",
     "createTitleProvider": "Recommend a business",
-    "createSubtitle": "Share it with the BIES community. Staff check new listings before they go live.",
+    "createSubtitle": "Share it with the BIES community. It goes live as soon as you post it, and members' vouches build its Trust Score.",
     "editTitle": "Edit Listing",
     "basicInfo": "Basic Information",
     "contactInfo": "Contact",
@@ -1739,6 +1750,7 @@
     "comingSoon": "Coming soon",
     "category": "Category",
     "allCategories": "All",
+    "allProduce": "Everything",
     "chooseCategory": "Choose a category",
     "categoryRequired": "Choose a category",
     "categories": {
@@ -1766,11 +1778,15 @@
     "photosHint": "Up to {{max}} photos of the place, the work or the products.",
     "removePhoto": "Remove photo",
     "connectionLabel": "Your connection to this business",
+    "connectionLabel_farm": "Your connection to this farm",
     "connectionCustomer": "I've used them and recommend them",
+    "connectionCustomer_farm": "I've bought from them and recommend them",
     "connectionOwner": "It's my business, or I work there",
+    "connectionOwner_farm": "It's my farm, or I work there",
     "connectionOwnerHint": "Members vouch for it once it's live. Your own vote doesn't count.",
     "yourReview": "Your review",
     "yourReviewHint": "Tell members about your experience: what they did, how it went, whether you'd go back. This is your vouch.",
+    "yourReviewHint_farm": "Tell members about your experience: what you bought, how it was, whether you'd buy again. This is your vouch.",
     "reviewRequired": "Tell members about your experience (at least {{min}} characters).",
     "trust": {
       "vouches_one": "{{count}} vouch",
@@ -1780,6 +1796,7 @@
       "toGo_one": "1 more vouch to become BIES Trusted",
       "toGo_other": "{{count}} more vouches to become BIES Trusted",
       "trusted": "Members vouch for this business.",
+      "trusted_farm": "Members vouch for this farm.",
       "how": "The Trust Score is members' vouches minus their downvotes. At {{threshold}}, a listing becomes BIES Trusted."
     },
     "review": {
@@ -1799,7 +1816,9 @@
       "downvoted": "Doesn't recommend",
       "addedListing": "Added this listing",
       "ownBusinessNote": "Added by the business itself.",
+      "ownBusinessNote_farm": "Added by the farm itself.",
       "cantReviewOwn": "This is your business, so you can't review it.",
+      "cantReviewOwn_farm": "This is your farm, so you can't review it.",
       "notLive": "Reviews open once staff approve the listing.",
       "edited": "edited"
     }

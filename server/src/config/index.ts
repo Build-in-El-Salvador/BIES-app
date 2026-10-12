@@ -85,6 +85,12 @@ export const config = {
     // gate). Change it when the terms change, and everyone accepts again.
     termsVersion: process.env.TERMS_VERSION || '2026-10',
 
+    // ─── Directories ──────────────────────────────────────────────────────────
+    // Members' new farm and business listings go live at once, and the Trust
+    // Score says how far to trust them. DIRECTORY_REQUIRE_APPROVAL=true holds
+    // them for staff to approve first. Staff listings always go live.
+    directoryRequireApproval: process.env.DIRECTORY_REQUIRE_APPROVAL === 'true',
+
     // ─── Hosted signer ────────────────────────────────────────────────────────
     // Relays the app may have BIES sign NIP-42 sign-in challenges for, on
     // behalf of an email account: BIES's own relay only. Comma-separated.

@@ -3,21 +3,23 @@ import { Link } from 'react-router-dom';
 import { CheckCircle, XCircle, Star, ExternalLink, Trash2, Loader2, Search, RefreshCw, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../services/api';
 
+// Members' listings go live at once (pending only while the server's
+// DIRECTORY_REQUIRE_APPROVAL is on), so staff mostly take listings down.
 const STATUS_TABS = [
-    { key: 'pending-review', label: 'Pending Review' },
-    { key: 'active', label: 'Active' },
-    { key: 'rejected', label: 'Rejected' },
     { key: '', label: 'All' },
+    { key: 'active', label: 'Live' },
+    { key: 'pending-review', label: 'Pending Review' },
+    { key: 'rejected', label: 'Rejected / Taken down' },
 ];
 
 const TYPE_OPTIONS = [
     { key: '', label: 'All Types' },
     { key: 'FARM', label: 'Farms' },
-    { key: 'PROVIDER', label: 'Providers' },
+    { key: 'PROVIDER', label: 'Businesses (BIES Trusted)' },
 ];
 
 const AdminDirectory = () => {
-    const [tab, setTab] = useState('pending-review');
+    const [tab, setTab] = useState('');
     const [type, setType] = useState('');
     const [search, setSearch] = useState('');
     const [listings, setListings] = useState([]);
@@ -45,8 +47,10 @@ const AdminDirectory = () => {
 
     useEffect(() => { fetchListings(1); }, [fetchListings]);
 
-    const handleReview = async (id, action) => {
-        const label = action === 'approve' ? 'approve' : 'reject';
+    const handleReview = async (id, action, status) => {
+        const label = action === 'approve'
+            ? (status === 'rejected' ? 'put back' : 'approve')
+            : (status === 'active' ? 'take down' : 'reject');
         if (!window.confirm(`Are you sure you want to ${label} this listing?`)) return;
         setActionLoading(id);
         try {
@@ -209,25 +213,25 @@ const AdminDirectory = () => {
                                     <td data-label="Created" className="mobile-hide">{new Date(l.createdAt).toLocaleDateString()}</td>
                                     <td>
                                         <div className="action-group">
-                                            {l.status === 'pending-review' && (
-                                                <>
-                                                    <button
-                                                        className="icon-btn approve"
-                                                        onClick={() => handleReview(l.id, 'approve')}
-                                                        title="Approve"
-                                                        disabled={actionLoading === l.id}
-                                                    >
-                                                        <CheckCircle size={16} />
-                                                    </button>
-                                                    <button
-                                                        className="icon-btn reject"
-                                                        onClick={() => handleReview(l.id, 'reject')}
-                                                        title="Reject"
-                                                        disabled={actionLoading === l.id}
-                                                    >
-                                                        <XCircle size={16} />
-                                                    </button>
-                                                </>
+                                            {l.status !== 'active' && (
+                                                <button
+                                                    className="icon-btn approve"
+                                                    onClick={() => handleReview(l.id, 'approve', l.status)}
+                                                    title={l.status === 'rejected' ? 'Put back' : 'Approve'}
+                                                    disabled={actionLoading === l.id}
+                                                >
+                                                    <CheckCircle size={16} />
+                                                </button>
+                                            )}
+                                            {l.status !== 'rejected' && (
+                                                <button
+                                                    className="icon-btn reject"
+                                                    onClick={() => handleReview(l.id, 'reject', l.status)}
+                                                    title={l.status === 'active' ? 'Take down' : 'Reject'}
+                                                    disabled={actionLoading === l.id}
+                                                >
+                                                    <XCircle size={16} />
+                                                </button>
                                             )}
                                             <Link to={viewPath(l)} className="icon-btn" title="View">
                                                 <ExternalLink size={16} />

@@ -14,6 +14,7 @@ import { removePushTargets } from '../services/notification.service';
 import { deleteAccount } from '../services/account.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { isAdminPubkey } from '../middleware/auth';
+import { config } from '../config';
 import { recomputeListingScore, recomputeAllScores as recomputeAllDirectoryScores } from '../services/directoryReputation.service';
 import {
     applyPoints,
@@ -1494,12 +1495,23 @@ export async function listAdminDirectory(req: Request, res: Response): Promise<v
 
 /**
  * PUT /admin/directory/:id/review
- * Approve or reject a directory listing submission.
+ * Approve a listing (or put back one taken down), or reject it: a waiting
+ * submission, or a live listing a moderator takes down after a report.
  * Body: { action: 'approve' | 'reject' }
  */
 export async function reviewDirectoryListing(req: Request, res: Response): Promise<void> {
     try {
         const { action } = req.body;
+
+        const before = await prisma.directoryListing.findUnique({
+            where: { id: req.params.id },
+            select: { status: true },
+        });
+        if (!before) {
+            res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        const takenDown = action === 'reject' && before.status === 'active';
 
         const data: any = action === 'approve'
             ? { status: 'active', isPublished: true }
@@ -1528,21 +1540,24 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
                     }
                 })
                 .catch((err) => console.error('[Nostr] Directory listing sync failed:', err));
-
-            recomputeListingScore(listing.id).catch((err) =>
-                console.error('[Admin] Directory score recompute failed:', err)
-            );
         }
+        // Only a live listing can be BIES Trusted.
+        await recomputeListingScore(listing.id).catch((err) =>
+            console.error('[Admin] Directory score recompute failed:', err)
+        );
 
         // Notify listing owner
         await prisma.notification.create({
             data: {
                 userId: listing.ownerId,
                 type: 'SYSTEM',
-                title: action === 'approve' ? 'Directory Listing Approved' : 'Directory Listing Not Approved',
+                title: action === 'approve' ? 'Directory Listing Approved'
+                    : takenDown ? 'Directory Listing Taken Down' : 'Directory Listing Not Approved',
                 body: action === 'approve'
                     ? `Your directory listing "${listing.name}" has been approved and is now live.`
-                    : `Your directory listing "${listing.name}" was not approved. Please review and resubmit.`,
+                    : takenDown
+                        ? `A moderator took down your directory listing "${listing.name}". If you think this is a mistake, write to ${config.email.supportAddress}.`
+                        : `Your directory listing "${listing.name}" was not approved. Please review and resubmit.`,
                 data: JSON.stringify({ listingId: listing.id }),
             },
         });
@@ -1550,7 +1565,8 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
         await prisma.auditLog.create({
             data: {
                 userId: req.user!.id,
-                action: action === 'approve' ? 'DIRECTORY_LISTING_APPROVED' : 'DIRECTORY_LISTING_REJECTED',
+                action: action === 'approve' ? 'DIRECTORY_LISTING_APPROVED'
+                    : takenDown ? 'DIRECTORY_LISTING_TAKEN_DOWN' : 'DIRECTORY_LISTING_REJECTED',
                 resource: `directory:${req.params.id}`,
                 metadata: JSON.stringify({ listingName: listing.name }),
             },

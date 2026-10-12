@@ -1668,12 +1668,23 @@
     "searchFarms": "Buscar fincas, productos o ubicaciones",
     "searchProviders": "Busca negocios, servicios o lugares",
     "sectionFarms": "Fincas Regenerativas",
-    "sectionFarmsSub": "Encuentra fincas locales en todo El Salvador",
+    "sectionFarmsSub": "Fincas locales en El Salvador que los miembros de BIES recomiendan",
     "sectionCertified": "Negocios de confianza",
     "sectionCertifiedSub": "Negocios y servicios que los miembros de BIES recomiendan",
     "directoriesSection": "Directorios",
     "addListing": "Agregar Listado",
     "whatTheyProduce": "Que Producen",
+    "produce": {
+      "vegetable": "Frutas y verduras",
+      "egg": "Huevos",
+      "chicken": "Aves",
+      "beef": "Carne",
+      "milk": "Lácteos",
+      "coffee": "Café",
+      "honey": "Miel",
+      "tallow": "Sebo y aceites",
+      "leaf": "Otro"
+    },
     "aboutFarm": "Sobre la Finca",
     "practicesLabel": "Practicas Agricolas",
     "practices": {
@@ -1689,9 +1700,9 @@
     "editListing": "Editar Listado",
     "about": "Acerca de",
     "skillsLabel": "Habilidades",
-    "createTitleFarm": "Agrega Tu Finca",
+    "createTitleFarm": "Agrega una finca",
     "createTitleProvider": "Recomienda un negocio",
-    "createSubtitle": "Compártelo con la comunidad BIES. El equipo revisa los listados nuevos antes de publicarlos.",
+    "createSubtitle": "Compártelo con la comunidad BIES. Se publica en cuanto lo envías, y las recomendaciones de los miembros forman su puntaje de confianza.",
     "editTitle": "Editar Listado",
     "basicInfo": "Informacion Basica",
     "contactInfo": "Contacto",
@@ -1740,6 +1751,7 @@
     "comingSoon": "Proximamente",
     "category": "Categoría",
     "allCategories": "Todas",
+    "allProduce": "Todo",
     "chooseCategory": "Elige una categoría",
     "categoryRequired": "Elige una categoría",
     "categories": {
@@ -1767,11 +1779,15 @@
     "photosHint": "Hasta {{max}} fotos del lugar, del trabajo o de los productos.",
     "removePhoto": "Quitar foto",
     "connectionLabel": "Tu relación con este negocio",
+    "connectionLabel_farm": "Tu relación con esta finca",
     "connectionCustomer": "Usé sus servicios y lo recomiendo",
+    "connectionCustomer_farm": "Les he comprado y los recomiendo",
     "connectionOwner": "Es mi negocio, o trabajo ahí",
+    "connectionOwner_farm": "Es mi finca, o trabajo ahí",
     "connectionOwnerHint": "Los miembros lo recomiendan cuando esté publicado. Tu propio voto no cuenta.",
     "yourReview": "Tu reseña",
     "yourReviewHint": "Cuéntales a los miembros tu experiencia: qué hicieron, cómo te fue, si volverías. Esta es tu recomendación.",
+    "yourReviewHint_farm": "Cuéntales a los miembros tu experiencia: qué compraste, cómo te fue, si volverías a comprar. Esta es tu recomendación.",
     "reviewRequired": "Cuéntales a los miembros tu experiencia (al menos {{min}} caracteres).",
     "trust": {
       "vouches_one": "{{count}} lo recomienda",
@@ -1781,6 +1797,7 @@
       "toGo_one": "Falta 1 recomendación para Confianza BIES",
       "toGo_other": "Faltan {{count}} recomendaciones para Confianza BIES",
       "trusted": "Los miembros recomiendan este negocio.",
+      "trusted_farm": "Los miembros recomiendan esta finca.",
       "how": "El puntaje de confianza son las recomendaciones de los miembros menos sus votos en contra. Con {{threshold}}, un listado obtiene Confianza BIES."
     },
     "review": {
@@ -1800,7 +1817,9 @@
       "downvoted": "No lo recomienda",
       "addedListing": "Agregó este listado",
       "ownBusinessNote": "Agregado por el propio negocio.",
+      "ownBusinessNote_farm": "Agregada por la propia finca.",
       "cantReviewOwn": "Es tu negocio, así que no puedes reseñarlo.",
+      "cantReviewOwn_farm": "Es tu finca, así que no puedes reseñarla.",
       "notLive": "Las reseñas se abren cuando el equipo apruebe el listado.",
       "edited": "editada"
     }

@@ -1,8 +1,9 @@
 /**
- * BIES Trusted, end to end: members add businesses they recommend, vouch for
- * or downvote them (a downvote needs a reason), and 5 net vouches make a live
- * listing BIES Trusted. Real routes and middleware against a real SQLite
- * database built from the repo's migrations.
+ * BIES Trusted and the farm directory, end to end: members add businesses and
+ * farms they recommend, which go live at once; others vouch for or downvote
+ * them (a downvote needs a reason), and 5 net vouches make a live listing
+ * BIES Trusted. Staff can take a listing down. Real routes and middleware
+ * against a real SQLite database built from the repo's migrations.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
@@ -36,6 +37,7 @@ import adminRoutes from '../routes/admin.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryReputation.service';
+import { config } from '../config';
 
 let server: http.Server;
 let base: string;
@@ -90,19 +92,21 @@ async function member({ role = 'MEMBER', admin = false } = {}): Promise<Member> 
 
 const REASON = 'They took the deposit and never came back to finish the job.';
 
-/** A member adds a business; staff approves it so it can be reviewed. */
+/** A member adds a business, which goes live at once. */
 async function liveListing(poster: Member, body: Record<string, unknown> = {}) {
     const created = await call('POST', '/api/directory', {
         token: poster.token,
         body: { type: 'PROVIDER', name: `Biz ${++counter}`, category: 'home', review: 'Fixed our roof quickly and fairly.', ...body },
     });
     expect(created.status).toBe(201);
-    const admin = await member({ role: 'ADMIN', admin: true });
-    const approved = await call('PUT', `/api/admin/directory/${created.body.id}/review`, { token: admin.token, body: { action: 'approve' } });
-    expect(approved.status).toBe(200);
-    await recomputeListingScore(created.body.id);
+    expect(created.body.status).toBe('active');
     return created.body.id as string;
 }
+
+const staffReview = async (id: string, action: 'approve' | 'reject') => {
+    const admin = await member({ role: 'ADMIN', admin: true });
+    return call('PUT', `/api/admin/directory/${id}/review`, { token: admin.token, body: { action } });
+};
 
 const row = (id: string) => prisma.directoryListing.findUniqueOrThrow({ where: { id } });
 
@@ -112,7 +116,7 @@ const vote = (m: Member, id: string, v: 1 | -1, comment?: string) =>
 // ─── Adding a business ────────────────────────────────────────────────────────
 
 describe('adding a business', () => {
-    it("counts the poster's review as the first vouch, and waits for review", async () => {
+    it("goes live at once, with the poster's review as the first vouch", async () => {
         const ana = await member();
         const res = await call('POST', '/api/directory', {
             token: ana.token,
@@ -124,13 +128,40 @@ describe('adding a business', () => {
             },
         });
         expect(res.status).toBe(201);
-        expect(res.body).toMatchObject({ status: 'pending-review', category: 'home', hours: 'Mon–Sat 8–5', isOwnBusiness: false });
+        expect(res.body).toMatchObject({ status: 'active', category: 'home', hours: 'Mon–Sat 8–5', isOwnBusiness: false });
         expect(res.body.photos).toEqual(['/uploads/a.jpg', '/uploads/b.jpg']);
 
         const reviews = await prisma.directoryEndorsement.findMany({ where: { listingId: res.body.id } });
         expect(reviews).toHaveLength(1);
         expect(reviews[0]).toMatchObject({ userId: ana.id, vote: 1, comment: 'Fixed a burst pipe at night and charged a fair price.' });
         expect(await row(res.body.id)).toMatchObject({ vouchCount: 1, reputationScore: 1, isCertified: false });
+
+        const list = await call('GET', '/api/directory?type=PROVIDER&limit=50');
+        expect(list.body.data.map((l: any) => l.id)).toContain(res.body.id);
+    });
+
+    it('waits for staff when DIRECTORY_REQUIRE_APPROVAL is on, except for staff', async () => {
+        config.directoryRequireApproval = true;
+        try {
+            const held = await call('POST', '/api/directory', {
+                token: (await member()).token,
+                body: { type: 'PROVIDER', name: 'Held', category: 'home', review: 'Good people, fair prices, on time.' },
+            });
+            expect(held.body.status).toBe('pending-review');
+            const res = await vote(await member(), held.body.id, 1);
+            expect(res.status).toBe(409);
+            expect(res.body.reason).toBe('not_live');
+
+            const byStaff = await call('POST', '/api/directory', {
+                token: (await member({ role: 'MOD' })).token, body: { type: 'PROVIDER', name: 'Staff pick' },
+            });
+            expect(byStaff.body.status).toBe('active');
+
+            expect((await staffReview(held.body.id, 'approve')).status).toBe(200);
+            expect((await vote(await member(), held.body.id, 1)).status).toBe(201);
+        } finally {
+            config.directoryRequireApproval = false;
+        }
     });
 
     it("doesn't vouch for the poster's own business, and they can't review it", async () => {
@@ -183,12 +214,27 @@ describe('adding a business', () => {
 // ─── Voting ───────────────────────────────────────────────────────────────────
 
 describe('vouching and downvoting', () => {
-    it("can't happen before the listing is live", async () => {
+    it("can't happen once staff take the listing down", async () => {
         const fay = await member();
-        const created = await call('POST', '/api/directory', { token: fay.token, body: { type: 'PROVIDER', name: 'Pending' } });
-        const res = await vote(await member(), created.body.id, 1);
+        const id = await liveListing(fay);
+        const voters = await Promise.all([1, 2, 3, 4].map(() => member()));
+        for (const v of voters) await vote(v, id, 1);
+        expect((await row(id)).isCertified).toBe(true);
+
+        const down = await staffReview(id, 'reject');
+        expect(down.status).toBe(200);
+        expect(await row(id)).toMatchObject({ status: 'rejected', isCertified: false });
+        const notice = await prisma.notification.findFirst({ where: { userId: fay.id }, orderBy: { createdAt: 'desc' } });
+        expect(notice?.title).toBe('Directory Listing Taken Down');
+
+        const res = await vote(await member(), id, 1);
         expect(res.status).toBe(409);
         expect(res.body.reason).toBe('not_live');
+        expect((await call('GET', '/api/directory?type=PROVIDER&limit=50')).body.data.map((l: any) => l.id)).not.toContain(id);
+
+        // Put back, it's BIES Trusted again.
+        expect((await staffReview(id, 'approve')).status).toBe(200);
+        expect(await row(id)).toMatchObject({ status: 'active', isCertified: true });
     });
 
     it('needs a reason for a downvote', async () => {
@@ -277,6 +323,37 @@ describe('BIES Trusted', () => {
         const home = await call('GET', '/api/directory?type=PROVIDER&category=home&limit=50');
         expect(home.body.data.every((l: any) => l.category === 'home')).toBe(true);
         expect((await call('GET', '/api/directory?type=PROVIDER&category=legal')).body.data).toHaveLength(0);
+    });
+});
+
+// ─── Farms ────────────────────────────────────────────────────────────────────
+
+describe('the farm directory', () => {
+    it('works the same way, on its own list', async () => {
+        const farm = await call('POST', '/api/directory', {
+            token: (await member()).token,
+            body: {
+                type: 'FARM', name: 'Finca El Roble', location: 'Chalatenango',
+                products: [{ label: 'Huevos de campo', icon: 'egg' }, { label: 'Café' }],
+                practices: ['regenerative'],
+                review: 'We buy eggs here every week. Always fresh, fair price.',
+            },
+        });
+        expect(farm.status).toBe(201);
+        expect(farm.body).toMatchObject({ status: 'active', type: 'FARM', isOwnBusiness: false });
+        expect(await row(farm.body.id)).toMatchObject({ vouchCount: 1, reputationScore: 1 });
+
+        const ownFarm = await call('POST', '/api/directory', {
+            token: (await member()).token, body: { type: 'FARM', name: 'Mi Finca', isOwnBusiness: true },
+        });
+        expect(await row(ownFarm.body.id)).toMatchObject({ status: 'active', vouchCount: 0 });
+
+        const farms = await call('GET', '/api/directory?type=FARM&sort=score&limit=50');
+        const ids = farms.body.data.map((l: any) => l.id);
+        expect(ids.slice(0, 2)).toEqual([farm.body.id, ownFarm.body.id]);
+        expect(farms.body.data.every((l: any) => l.type === 'FARM')).toBe(true);
+        const businesses = await call('GET', '/api/directory?type=PROVIDER&limit=50');
+        expect(businesses.body.data.some((l: any) => l.type === 'FARM')).toBe(false);
     });
 });
 

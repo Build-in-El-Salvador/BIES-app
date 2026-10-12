@@ -5,6 +5,7 @@ import { Search, SlidersHorizontal, Plus, Leaf, ShieldCheck, Loader2 } from 'luc
 import { directoryApi } from '../../services/api';
 import DirectoryListingCard from '../../components/directory/DirectoryListingCard';
 import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
+import { PRODUCE_KINDS, produceKind } from './produceIcons';
 
 const FARM_PRACTICES = [
     { id: 'regenerative', tKey: 'directory.practices.regenerative' },
@@ -15,8 +16,9 @@ const FARM_PRACTICES = [
 
 /**
  * Directory list page per the mockup: search row with filter toggle and
- * circular "+" button, tinted section header, listing cards. BIES Trusted
- * (PROVIDER) adds category chips and lists the highest Trust Score first.
+ * circular "+" button, tinted section header, listing cards, highest Trust
+ * Score first. Farms and BIES Trusted (PROVIDER) are separate pages: farms
+ * filter by what they sell, businesses by category.
  *
  * @param {'FARM'|'PROVIDER'} type
  */
@@ -35,6 +37,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const [certifiedOnly, setCertifiedOnly] = useState(false);
     const [btcOnly, setBtcOnly] = useState(false);
     const [category, setCategory] = useState('');
+    const [produce, setProduce] = useState(''); // FARM: a PRODUCE_KINDS key
     const [threshold, setThreshold] = useState(5);
 
     // Reset state when switching between /discover/farms and /discover/trusted
@@ -44,6 +47,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
         setCertifiedOnly(false);
         setBtcOnly(false);
         setCategory('');
+        setProduce('');
         setFiltersOpen(false);
     }, [type]);
 
@@ -52,9 +56,8 @@ const DirectoryList = ({ type = 'FARM' }) => {
         const fetchListings = async () => {
             setLoading(true);
             try {
-                const params = { type, limit: 50 };
+                const params = { type, limit: 50, sort: 'score' };
                 if (searchQuery) params.search = searchQuery;
-                if (!isFarm) params.sort = 'score';
                 if (category) params.category = category;
                 const result = await directoryApi.list(params);
                 const list = result?.data || result || [];
@@ -68,12 +71,13 @@ const DirectoryList = ({ type = 'FARM' }) => {
         };
         const debounce = setTimeout(fetchListings, 300);
         return () => clearTimeout(debounce);
-    }, [searchQuery, type, category, isFarm]);
+    }, [searchQuery, type, category]);
 
     // Client-side filtering (minimal drawer for now)
     const filtered = listings.filter((l) => {
         if (certifiedOnly && !l.isCertified) return false;
         if (isFarm) {
+            if (produce && !(l.products || []).some((p) => produceKind(p) === produce)) return false;
             if (selectedPractices.length > 0) {
                 const practices = l.practices || [];
                 if (!selectedPractices.some((p) => practices.includes(p))) return false;
@@ -190,10 +194,21 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     </div>
                 )}
 
-                {/* BIES Trusted: by category */}
-                {!isFarm && (
-                    <div className="dir-category-row" role="group" aria-label={t('directory.category')}>
-                        {['', ...DIRECTORY_CATEGORIES].map((c) => (
+                {/* Farms by what they sell; BIES Trusted by category */}
+                <div className="dir-category-row" role="group" aria-label={isFarm ? t('directory.whatTheyProduce') : t('directory.category')}>
+                    {isFarm
+                        ? ['', ...PRODUCE_KINDS].map((k) => (
+                            <button
+                                key={k || 'all'}
+                                type="button"
+                                className={`dir-chip${produce === k ? ' active' : ''}`}
+                                aria-pressed={produce === k}
+                                onClick={() => setProduce(k)}
+                            >
+                                {k ? t(`directory.produce.${k}`) : t('directory.allProduce')}
+                            </button>
+                        ))
+                        : ['', ...DIRECTORY_CATEGORIES].map((c) => (
                             <button
                                 key={c || 'all'}
                                 type="button"
@@ -204,8 +219,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                                 {c ? t(`directory.categories.${c}`) : t('directory.allCategories')}
                             </button>
                         ))}
-                    </div>
-                )}
+                </div>
 
                 {/* Section header */}
                 <div className="dir-section-header">
@@ -217,7 +231,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         <p>{isFarm ? t('directory.sectionFarmsSub') : t('directory.sectionCertifiedSub')}</p>
                     </div>
                 </div>
-                {!isFarm && <p className="dir-trust-how">{t('directory.trust.how', { threshold })}</p>}
+                <p className="dir-trust-how">{t('directory.trust.how', { threshold })}</p>
 
                 {/* Listing cards */}
                 {loading ? (
@@ -235,9 +249,9 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         {searchQuery
                             ? t('directory.noResultsSearch', { query: searchQuery })
                             : isFarm ? t('directory.noFarms') : t('directory.noProviders')}
-                        {!isFarm && !searchQuery && (
-                            <Link to="/discover/directory/new?type=provider" className="dir-empty-cta">
-                                <Plus size={16} /> {t('directory.createTitleProvider')}
+                        {!searchQuery && (
+                            <Link to={`/discover/directory/new?type=${isFarm ? 'farm' : 'provider'}`} className="dir-empty-cta">
+                                <Plus size={16} /> {isFarm ? t('directory.createTitleFarm') : t('directory.createTitleProvider')}
                             </Link>
                         )}
                     </div>
@@ -412,16 +426,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     margin: 0;
                     accent-color: var(--color-primary);
                     cursor: pointer;
-                }
-
-                .dir-score-select {
-                    padding: 0.5rem;
-                    border-radius: var(--radius-md);
-                    border: 1px solid var(--color-gray-300);
-                    background: var(--color-surface);
-                    color: inherit;
-                    font-size: 0.85rem;
-                    max-width: 200px;
                 }
 
                 .dir-section-header {
