@@ -197,9 +197,7 @@ const SendModal = ({ open, onClose, onPaid }) => {
                 return;
             }
             setPayError(err?.message === 'wallet_token_expired'
-                ? (walletType === 'blink'
-                    ? t('wallet.sessionExpiredBlink', 'Your Blink API key no longer works — reconnect your Blink wallet in Settings')
-                    : t('wallet.sessionExpired', 'Wallet session expired — reconnect your Coinos wallet in Settings'))
+                ? t('wallet.sessionExpired', 'Wallet session expired — reconnect your Coinos wallet in Settings')
                 : (err?.message || t('wallet.send.payFailed', 'Payment failed')));
             setStep('error');
         }

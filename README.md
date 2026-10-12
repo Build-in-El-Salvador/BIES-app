@@ -39,7 +39,7 @@ BIES extends Nostr into a full community operating system:
 
 ### For Admins
 - **Moderation** — Approve, feature, or flag projects and events.
-- **User management** — Role assignment, bans, fingerprint-based ban evasion detection.
+- **User management** — Role assignment and bans.
 - **Audit log** — Every admin action logged with actor, resource, IP, and timestamp.
 
 ## The Nostrbook Vision

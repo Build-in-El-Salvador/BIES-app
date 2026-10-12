@@ -48,7 +48,6 @@ const Wallet = () => {
     const caps = receiveCapabilities
         || { canMakeInvoice: false, canListTransactions: false, lightningAddress: null };
     const coinosUsername = user?.profile?.coinosUsername || null;
-    const blinkUsername = user?.profile?.blinkUsername || null;
 
     // ── STATE A: let useWallet's restore effect settle before deciding ──────
     const [settled, setSettled] = useState(false);
@@ -104,7 +103,7 @@ const Wallet = () => {
     // ── Transactions (hidden gracefully only when genuinely unsupported) ────
     const [txStatus, setTxStatus] = useState('idle'); // idle | loading | ready | hidden | error
     const [txItems, setTxItems] = useState([]);
-    // Server wallet credential expired (Coinos JWT / revoked Blink API key) —
+    // Server wallet credential expired (Coinos JWT) —
     // the wallet needs to be reconnected.
     const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -224,7 +223,7 @@ const Wallet = () => {
                     <div className="w-card" data-testid="wallet-connect-card">
                         <h2 className="w-card-title">{t('wallet.connectOwn.title', 'Connect your own wallet')}</h2>
                         <p className="w-card-sub">
-                            {t('wallet.connectOwn.subtitle', 'Link a Lightning wallet you already use — via Nostr Wallet Connect, an existing Coinos account, or a Blink API key.')}
+                            {t('wallet.connectOwn.subtitle', 'Link a Lightning wallet you already use — via Nostr Wallet Connect, or an existing Coinos account.')}
                         </p>
                         <WalletConnect />
                     </div>
@@ -236,9 +235,7 @@ const Wallet = () => {
                         <div className="w-card w-session-expired" data-testid="wallet-session-expired">
                             <AlertCircle size={18} />
                             <span>
-                                {walletType === 'blink'
-                                    ? t('wallet.sessionExpiredBannerBlink', 'Your Blink API key no longer works — reconnect your Blink wallet to keep using it.')
-                                    : t('wallet.sessionExpiredBanner', 'Wallet session expired — reconnect your Coinos wallet to keep using it.')}
+                                {t('wallet.sessionExpiredBanner', 'Wallet session expired — reconnect your Coinos wallet to keep using it.')}
                             </span>
                             <Link to="/settings" className="w-reconnect-link">
                                 {t('wallet.reconnect', 'Reconnect')}
@@ -258,9 +255,7 @@ const Wallet = () => {
                                 <p className="w-balance-sub">
                                     {walletType === 'coinos'
                                         ? `${t('wallet.biesWallet', 'BIES wallet')}${coinosUsername ? ` · @${coinosUsername}` : ''}`
-                                        : walletType === 'blink'
-                                            ? `${t('wallet.blinkWallet', 'Blink wallet')}${blinkUsername ? ` · @${blinkUsername}` : ''}`
-                                            : t('wallet.nwcConnected', 'Connected via NWC')}
+                                        : t('wallet.nwcConnected', 'Connected via NWC')}
                                 </p>
                             </div>
                             <button
@@ -286,12 +281,7 @@ const Wallet = () => {
                                 {addressCopied && (
                                     <span className="w-address-flash">{t('wallet.copied', 'Copied')}</span>
                                 )}
-                                {/* blink only sets the address when it was empty, so a custom
-                                    (non-wallet) address can sit under a blink connection too */}
-                                {(walletType === 'nwc'
-                                    || (walletType === 'blink'
-                                        && !!blinkUsername
-                                        && caps.lightningAddress !== `${blinkUsername}@blink.sv`)) && (
+                                {walletType === 'nwc' && (
                                     <span className="w-address-note">{t('wallet.profileAddressNote', 'from your profile')}</span>
                                 )}
                             </button>

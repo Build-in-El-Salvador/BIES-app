@@ -245,7 +245,6 @@ Authentication: the access token is sent as a WebSocket subprotocol (`new WebSoc
 | `AuditLog` | Admin action history |
 | `Session` | One per sign-in per device: refresh-token counter, idle and hard expiry, revocation |
 | `PushSubscription` | Web Push API subscriptions |
-| `BrowserFingerprint` | Ban evasion detection |
 
 ### External Integrations
 
@@ -273,7 +272,7 @@ Authentication: the access token is sent as a WebSocket subprotocol (`new WebSoc
 - **Rate limiting** — Graduated per endpoint type
 - **Input validation** — Zod schemas on all API inputs
 - **Audit trail** — Every admin action logged
-- **Fingerprinting** — Browser fingerprint tracking for ban evasion
+- **No device fingerprinting** — removed in Oct 2026: Apple forbids deriving data from a device to identify it, and the privacy notice says BIES doesn't
 
 ### Network
 

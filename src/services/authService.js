@@ -16,7 +16,6 @@ import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
 import { isNativePlatform } from '../utils/platform.js';
-import { fingerprintService } from './fingerprintService.js';
 import { nwcClient } from './nwcService.js';
 import { clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
 
@@ -117,8 +116,7 @@ export const authService = {
             content: challenge,
         });
 
-        const fingerprint = await fingerprintService.getFingerprint();
-        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
 
         authService.setSession(session);
@@ -153,8 +151,7 @@ export const authService = {
             content: challenge,
         }, sk);
 
-        const fingerprint = await fingerprintService.getFingerprint();
-        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
 
         authService.setSession(session);
@@ -188,8 +185,7 @@ export const authService = {
             content: challenge,
         }, sk);
 
-        const fingerprint = await fingerprintService.getFingerprint();
-        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
 
         authService.setSession(session);
@@ -230,8 +226,7 @@ export const authService = {
             content: challenge,
         });
 
-        const fingerprint = await fingerprintService.getFingerprint();
-        const session = await authApi.nostrLogin(pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
 
         authService.setSession(session);
@@ -331,8 +326,7 @@ export const authService = {
         // no pending state and takes the duplicate-success path above.
         amberSignerService.clearLoginState();
 
-        const fingerprint = await fingerprintService.getFingerprint();
-        const session = await authApi.nostrLogin(state.pubkey, signedEvent, fingerprint);
+        const session = await authApi.nostrLogin(state.pubkey, signedEvent);
         const { user } = session;
 
         authService.setSession(session);

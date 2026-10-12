@@ -56,7 +56,7 @@ async function coinosFetch(path: string, opts: RequestInit = {}): Promise<any> {
         // Transport failure (timeout / connection reset): the request may or
         // may not have reached Coinos, so callers MUST treat this as
         // outcome-unknown — status 502 is the indeterminate marker (same
-        // convention as blink.service), never a definitive rejection.
+        // convention as the other wallet services had), never a definitive rejection.
         const err: any = new Error(e?.name === 'AbortError' ? 'Coinos API timed out' : 'Coinos API unreachable');
         err.status = 502;
         throw err;

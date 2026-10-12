@@ -1,12 +1,11 @@
 /**
- * Wallet routes — Coinos custodial wallet + Blink (Galoy) wallet management.
+ * Wallet routes — Coinos custodial wallet management.
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { moneyLimiter } from '../middleware/rateLimit';
 import * as coinosService from '../services/coinos.service';
-import * as blinkService from '../services/blink.service';
 
 const router = Router();
 
@@ -151,119 +150,6 @@ router.get('/coinos/transactions', async (req: Request, res: Response) => {
         const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 50) : 20;
 
         const transactions = await coinosService.listPayments(req.user!.id, limit);
-        res.json({ transactions });
-    } catch (err: any) {
-        sendWalletError(res, err, 'Failed to fetch transactions');
-    }
-});
-
-// ─── Blink (Galoy GraphQL API) ───────────────────────────────────────────────
-
-/**
- * POST /api/wallet/blink/connect
- * Connect a Blink account with a user-supplied API key
- * (created at dashboard.blink.sv, Read + Write scopes).
- * Body: { apiKey: string }
- */
-router.post('/blink/connect', moneyLimiter, async (req: Request, res: Response) => {
-    try {
-        const apiKey = typeof req.body.apiKey === 'string' ? req.body.apiKey.trim() : '';
-        if (apiKey.length < 10 || apiKey.length > 200) {
-            res.status(400).json({ error: 'A valid Blink API key is required' });
-            return;
-        }
-
-        const result = await blinkService.connectWallet(req.user!.id, apiKey);
-        res.json(result);
-    } catch (err: any) {
-        // Never emit 401 from wallet routes — the client's api.js treats any
-        // 401 outside /auth/ as an expired BIES session and logs the user out.
-        // A bad/rejected key is a 400; an unreachable Blink API stays a 502.
-        res.status(err?.status === 502 ? 502 : 400).json({ error: err?.message || 'Failed to connect Blink wallet' });
-    }
-});
-
-/**
- * POST /api/wallet/blink/disconnect
- * Disconnect the Blink wallet.
- */
-router.post('/blink/disconnect', async (req: Request, res: Response) => {
-    try {
-        await blinkService.disconnectWallet(req.user!.id);
-        res.json({ ok: true });
-    } catch (err: any) {
-        res.status(500).json({ error: err.message || 'Failed to disconnect' });
-    }
-});
-
-/**
- * GET /api/wallet/blink/balance
- * Get the current BTC wallet balance in sats.
- */
-router.get('/blink/balance', async (req: Request, res: Response) => {
-    try {
-        const sats = await blinkService.getBalance(req.user!.id);
-        res.json({ sats });
-    } catch (err: any) {
-        sendWalletError(res, err, 'Failed to fetch balance');
-    }
-});
-
-/**
- * POST /api/wallet/blink/pay
- * Pay a BOLT-11 invoice from the Blink wallet.
- * Body: { bolt11: string }
- * Returns: { status: 'SUCCESS' | 'ALREADY_PAID' | 'PENDING' }
- */
-router.post('/blink/pay', moneyLimiter, async (req: Request, res: Response) => {
-    try {
-        const { bolt11 } = req.body;
-        if (!bolt11) {
-            res.status(400).json({ error: 'bolt11 invoice is required' });
-            return;
-        }
-
-        const result = await blinkService.payInvoice(req.user!.id, bolt11);
-        res.json(result);
-    } catch (err: any) {
-        sendWalletError(res, err, 'Payment failed');
-    }
-});
-
-/**
- * POST /api/wallet/blink/invoice
- * Create a Lightning invoice on the user's Blink BTC wallet.
- * Body: { amountSats: number, memo?: string }
- * Returns: { pr: string, hash: string }
- */
-router.post('/blink/invoice', moneyLimiter, async (req: Request, res: Response) => {
-    try {
-        const amountSats = req.body.amountSats;
-        if (!Number.isInteger(amountSats) || amountSats < 1 || amountSats > 100_000_000) {
-            res.status(400).json({ error: 'amountSats must be an integer between 1 and 100,000,000' });
-            return;
-        }
-
-        const memo = typeof req.body.memo === 'string' ? req.body.memo.trim().slice(0, 200) : undefined;
-
-        const result = await blinkService.createInvoice(req.user!.id, amountSats, memo || undefined);
-        res.json(result);
-    } catch (err: any) {
-        sendWalletError(res, err, 'Failed to create invoice');
-    }
-});
-
-/**
- * GET /api/wallet/blink/transactions?limit=20
- * List recent wallet transactions, newest first.
- * Returns: { transactions: [{ type, amountSats, createdAt, memo, hash }] }
- */
-router.get('/blink/transactions', async (req: Request, res: Response) => {
-    try {
-        const parsed = parseInt(String(req.query.limit ?? ''), 10);
-        const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 50) : 20;
-
-        const transactions = await blinkService.listTransactions(req.user!.id, limit);
         res.json({ transactions });
     } catch (err: any) {
         sendWalletError(res, err, 'Failed to fetch transactions');

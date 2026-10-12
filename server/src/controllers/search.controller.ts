@@ -100,7 +100,6 @@ export async function search(req: Request, res: Response): Promise<void> {
                 // Never expose encrypted wallet credentials — this endpoint is
                 // public (no authenticate middleware on the search routes).
                 coinosToken: undefined,
-                blinkApiKey: undefined,
                 skills: JSON.parse(p.skills || '[]'),
                 tags: JSON.parse(p.tags || '[]'),
             }));

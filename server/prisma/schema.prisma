@@ -50,7 +50,6 @@ model User {
   eventRSVPs      EventAttendee[]
   eventTickets     Ticket[]
   settings         UserSettings?
-  fingerprints     BrowserFingerprint[]
   feedback         Feedback[]
   coworkVenues      CoworkVenue[]
   coworkSessions    CoworkSession[]
@@ -180,10 +179,6 @@ model Profile {
   // Coinos custodial wallet
   coinosUsername   String?  @unique @map("coinos_username")
   coinosToken      String?  @map("coinos_token") // Encrypted JWT for Coinos API
-  // Blink (Galoy) wallet — connected with a user-supplied API key
-  blinkUsername    String?  @map("blink_username")
-  blinkWalletId    String?  @map("blink_wallet_id")
-  blinkApiKey      String?  @map("blink_api_key") // Encrypted API key for the Blink GraphQL API
   // Misc
   isPublic     Boolean  @default(true) @map("is_public")
   viewCount    Int      @default(0) @map("view_count")
@@ -784,21 +779,6 @@ model ZapReceipt {
 // ─────────────────────────────────────────────────────────────────────────────
 // Browser Fingerprints (ban evasion detection)
 // ─────────────────────────────────────────────────────────────────────────────
-
-model BrowserFingerprint {
-  id              String   @id @default(cuid())
-  fingerprintHash String   @map("fingerprint_hash")
-  userId          String   @map("user_id")
-  ipAddress       String?  @map("ip_address")
-  userAgent       String?  @map("user_agent")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([fingerprintHash])
-  @@index([userId])
-  @@map("browser_fingerprints")
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Investor Role Requests
