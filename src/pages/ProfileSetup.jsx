@@ -126,7 +126,8 @@ const ProfileSetup = () => {
                 }
             }
 
-            // Announce new user on both public and private relays
+            // Welcome them in the BIES private feed only, never on public
+            // relays: this screen promises their name is shown on BIES only.
             try {
                 const announceEvent = {
                     kind: 1,
@@ -134,10 +135,7 @@ const ProfileSetup = () => {
                     tags: [['t', 'bies'], ['t', 'new-user'], ['t', 'introductions'], ['t', 'buildinelsalvador']],
                     content: `${biesName.trim()} just joined the Builder Hub! Welcome to the Highest Signal Builder Ecosystem of El Salvador. #introductions #buildinelsalvador`,
                 };
-                await Promise.allSettled([
-                    nostrService.publishToBiesRelay(announceEvent),
-                    nostrService.publishEvent(announceEvent),
-                ]);
+                await nostrService.publishToBiesRelay(announceEvent);
             } catch (announceErr) {
                 console.error('New user announcement failed (non-blocking):', announceErr);
             }

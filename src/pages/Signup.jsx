@@ -166,7 +166,7 @@ const Signup = () => {
                     }
                 }
 
-                navigate('/dashboard');
+                navigate('/feed');
             } else {
                 setError(result.error || 'Failed to register. Please try again.');
             }

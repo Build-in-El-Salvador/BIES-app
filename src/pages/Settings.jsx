@@ -59,6 +59,10 @@ const Settings = () => {
 
     const { user } = useAuth();
     const zapsOn = useFeature('zaps');
+    const projectsOn = useFeature('projects');
+    const eventsOn = useFeature('events');
+    const mediaOn = useFeature('media');
+    const investorsOn = useFeature('investors');
     const [investorMessage, setInvestorMessage] = React.useState('');
     const [submittingInvestor, setSubmittingInvestor] = React.useState(false);
     const [investorRequested, setInvestorRequested] = React.useState(false);
@@ -288,19 +292,21 @@ const Settings = () => {
                         <option value="es">Espanol</option>
                     </select>
                 </div>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><LayoutGrid size={20} /></div>
-                        <div>
-                            <p className="setting-label">Projects View</p>
-                            <p className="setting-desc">Default layout for the Discover projects page</p>
+                {projectsOn && (
+                    <div className="setting-item">
+                        <div className="setting-info">
+                            <div className="icon-box"><LayoutGrid size={20} /></div>
+                            <div>
+                                <p className="setting-label">Projects View</p>
+                                <p className="setting-desc">Default layout for the Discover projects page</p>
+                            </div>
                         </div>
+                        <select className="select-input" value={projectsView} onChange={handleViewChange('bies_projects_view', setProjectsView)}>
+                            <option value="list">List</option>
+                            <option value="standard">Grid</option>
+                        </select>
                     </div>
-                    <select className="select-input" value={projectsView} onChange={handleViewChange('bies_projects_view', setProjectsView)}>
-                        <option value="list">List</option>
-                        <option value="standard">Grid</option>
-                    </select>
-                </div>
+                )}
                 <div className="setting-item">
                     <div className="setting-info">
                         <div className="icon-box"><Eye size={20} /></div>
@@ -315,33 +321,37 @@ const Settings = () => {
                         <option value="icons">Icons</option>
                     </select>
                 </div>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><LayoutGrid size={20} /></div>
-                        <div>
-                            <p className="setting-label">Events View</p>
-                            <p className="setting-desc">Default layout for the Events page</p>
+                {eventsOn && (
+                    <div className="setting-item">
+                        <div className="setting-info">
+                            <div className="icon-box"><LayoutGrid size={20} /></div>
+                            <div>
+                                <p className="setting-label">Events View</p>
+                                <p className="setting-desc">Default layout for the Events page</p>
+                            </div>
                         </div>
+                        <select className="select-input" value={eventsView} onChange={handleViewChange('bies_events_view', setEventsView)}>
+                            <option value="list">List</option>
+                            <option value="standard">Grid</option>
+                        </select>
                     </div>
-                    <select className="select-input" value={eventsView} onChange={handleViewChange('bies_events_view', setEventsView)}>
-                        <option value="list">List</option>
-                        <option value="standard">Grid</option>
-                    </select>
-                </div>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><Play size={20} /></div>
-                        <div>
-                            <p className="setting-label">Media View</p>
-                            <p className="setting-desc">Default layout for the Media page</p>
+                )}
+                {mediaOn && (
+                    <div className="setting-item">
+                        <div className="setting-info">
+                            <div className="icon-box"><Play size={20} /></div>
+                            <div>
+                                <p className="setting-label">Media View</p>
+                                <p className="setting-desc">Default layout for the Media page</p>
+                            </div>
                         </div>
+                        <select className="select-input" value={mediaView} onChange={handleViewChange('bies_media_view', setMediaView)}>
+                            <option value="card">Cards</option>
+                            <option value="list">List</option>
+                            <option value="icon">Icons</option>
+                        </select>
                     </div>
-                    <select className="select-input" value={mediaView} onChange={handleViewChange('bies_media_view', setMediaView)}>
-                        <option value="card">Cards</option>
-                        <option value="list">List</option>
-                        <option value="icon">Icons</option>
-                    </select>
-                </div>
+                )}
             </div>
 
             {CUSTOM_BOTTOM_NAV_ENABLED && (
@@ -362,138 +372,109 @@ const Settings = () => {
             </div>
             )}
 
-            <div className="settings-section">
-                <h2>{t('settings.notifications')}</h2>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><Bell size={20} /></div>
-                        <div>
-                            <p className="setting-label">{t('settings.emailNotifications')}</p>
-                            <p className="setting-desc">{t('settings.emailNotificationsDesc')}</p>
-                        </div>
-                    </div>
-                    <button className="toggle-btn active">{t('common.on')}</button>
-                </div>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><Bell size={20} /></div>
-                        <div>
-                            <p className="setting-label">Push Notifications</p>
-                            <p className="setting-desc">
-                                {pushState === 'unsupported' && 'Not supported on this browser'}
-                                {pushState === 'denied' && 'Blocked in browser settings'}
-                                {pushState === 'prompt' && 'Get notified when the app is closed'}
-                                {pushState === 'subscribed' && 'Receiving push notifications'}
-                                {pushState === 'unsubscribed' && 'Not receiving push notifications'}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        className={`toggle-btn ${pushState === 'subscribed' ? 'active' : ''}`}
-                        disabled={pushState === 'unsupported' || pushState === 'denied'}
-                        onClick={handleTogglePush}
-                    >
-                        {pushState === 'subscribed' ? t('common.on') : t('common.off')}
-                    </button>
-                </div>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><Eye size={20} /></div>
-                        <div>
-                            <p className="setting-label">{t('settings.profileVisibility')}</p>
-                            <p className="setting-desc">{t('settings.profileVisibilityDesc')}</p>
-                        </div>
-                    </div>
-                    <button className="toggle-btn active">{t('common.on')}</button>
-                </div>
-            </div>
-
-            <div className="settings-section">
-                <h2>Account Roles</h2>
-                {user?.role === 'INVESTOR' ? (
+            {!isNativePlatform() && (
+                <div className="settings-section">
+                    <h2>{t('settings.notifications')}</h2>
                     <div className="setting-item">
                         <div className="setting-info">
-                            <div className="icon-box" style={{ background: 'var(--color-primary-light)', color: 'white' }}><Globe size={20} /></div>
+                            <div className="icon-box"><Bell size={20} /></div>
                             <div>
-                                <p className="setting-label">Investor Status</p>
-                                <p className="setting-desc">You are currently verified as an Investor.</p>
+                                <p className="setting-label">Push Notifications</p>
+                                <p className="setting-desc">
+                                    {pushState === 'unsupported' && 'Not supported on this browser'}
+                                    {pushState === 'denied' && 'Blocked in browser settings'}
+                                    {pushState === 'prompt' && 'Get notified when the app is closed'}
+                                    {pushState === 'subscribed' && 'Receiving push notifications'}
+                                    {pushState === 'unsubscribed' && 'Not receiving push notifications'}
+                                </p>
                             </div>
                         </div>
-                        <span className="badge-shield" style={{ position: 'static', padding: '4px 12px', background: 'var(--color-primary)', color: 'white', borderRadius: '99px', fontSize: '0.85rem' }}>Verified</span>
+                        <button
+                            className={`toggle-btn ${pushState === 'subscribed' ? 'active' : ''}`}
+                            disabled={pushState === 'unsupported' || pushState === 'denied'}
+                            onClick={handleTogglePush}
+                        >
+                            {pushState === 'subscribed' ? t('common.on') : t('common.off')}
+                        </button>
                     </div>
-                ) : (
-                    <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '1rem' }}>
-                        <div className="setting-info" style={{ width: '100%' }}>
-                            <div className="icon-box"><Globe size={20} /></div>
-                            <div>
-                                <p className="setting-label">Apply for Investor Role</p>
-                                <p className="setting-desc">Investors must be vetted. Submit an application to gain the Investor badge.</p>
-                            </div>
-                        </div>
-                        {investorRequested ? (
-                            <div style={{ background: 'var(--color-green-tint)', color: 'var(--color-green-700)', padding: '0.75rem 1rem', borderRadius: '12px', width: '100%', fontSize: '0.9rem', fontWeight: 500 }}>
-                                Your application has been submitted and is pending review!
-                            </div>
-                        ) : (
-                            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                <textarea
-                                    className="select-input"
-                                    placeholder="Briefly describe your investment focus or background (optional)"
-                                    value={investorMessage}
-                                    onChange={(e) => setInvestorMessage(e.target.value)}
-                                    rows={3}
-                                    style={{ width: '100%', resize: 'none', fontFamily: 'inherit' }}
-                                />
-                                {investorError && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', margin: 0 }}>{investorError}</p>}
-                                <button
-                                    onClick={handleApplyInvestor}
-                                    disabled={submittingInvestor}
-                                    className="btn btn-outline btn-sm"
-                                    style={{ alignSelf: 'flex-end', marginLeft: 'auto' }}
-                                >
-                                    {submittingInvestor ? 'Submitting...' : 'Submit Request'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-
-            <div className="settings-section">
-                <h2>{t('settings.security')}</h2>
-                <div className="setting-item">
-                    <div className="setting-info">
-                        <div className="icon-box"><Lock size={20} /></div>
-                        <div>
-                            <p className="setting-label">{t('settings.changePassword')}</p>
-                            <p className="setting-desc">{t('settings.changePasswordDesc')}</p>
-                        </div>
-                    </div>
-                    <button className="btn btn-outline btn-sm">{t('common.update')}</button>
                 </div>
-            </div>
+            )}
 
-            <div className="settings-section">
-                <h2><Zap size={16} /> {t('settings.lightningWallet')}</h2>
-                {zapsOn && (
+            {investorsOn && (
+                <div className="settings-section">
+                    <h2>Account Roles</h2>
+                    {user?.role === 'INVESTOR' ? (
+                        <div className="setting-item">
+                            <div className="setting-info">
+                                <div className="icon-box" style={{ background: 'var(--color-primary-light)', color: 'white' }}><Globe size={20} /></div>
+                                <div>
+                                    <p className="setting-label">Investor Status</p>
+                                    <p className="setting-desc">You are currently verified as an Investor.</p>
+                                </div>
+                            </div>
+                            <span className="badge-shield" style={{ position: 'static', padding: '4px 12px', background: 'var(--color-primary)', color: 'white', borderRadius: '99px', fontSize: '0.85rem' }}>Verified</span>
+                        </div>
+                    ) : (
+                        <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '1rem' }}>
+                            <div className="setting-info" style={{ width: '100%' }}>
+                                <div className="icon-box"><Globe size={20} /></div>
+                                <div>
+                                    <p className="setting-label">Apply for Investor Role</p>
+                                    <p className="setting-desc">Investors must be vetted. Submit an application to gain the Investor badge.</p>
+                                </div>
+                            </div>
+                            {investorRequested ? (
+                                <div style={{ background: 'var(--color-green-tint)', color: 'var(--color-green-700)', padding: '0.75rem 1rem', borderRadius: '12px', width: '100%', fontSize: '0.9rem', fontWeight: 500 }}>
+                                    Your application has been submitted and is pending review!
+                                </div>
+                            ) : (
+                                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <textarea
+                                        className="select-input"
+                                        placeholder="Briefly describe your investment focus or background (optional)"
+                                        value={investorMessage}
+                                        onChange={(e) => setInvestorMessage(e.target.value)}
+                                        rows={3}
+                                        style={{ width: '100%', resize: 'none', fontFamily: 'inherit' }}
+                                    />
+                                    {investorError && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', margin: 0 }}>{investorError}</p>}
+                                    <button
+                                        onClick={handleApplyInvestor}
+                                        disabled={submittingInvestor}
+                                        className="btn btn-outline btn-sm"
+                                        style={{ alignSelf: 'flex-end', marginLeft: 'auto' }}
+                                    >
+                                        {submittingInvestor ? 'Submitting...' : 'Submit Request'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {zapsOn && (
+                <div className="settings-section">
+                    <h2><Zap size={16} /> {t('settings.lightningWallet')}</h2>
+                    {zapsOn && (
+                        <div className="setting-item">
+                            <div className="setting-info">
+                                <div className="icon-box"><Wallet size={20} /></div>
+                                <div>
+                                    <p className="setting-label">{t('settings.openWalletLabel', 'BIES Wallet')}</p>
+                                    <p className="setting-desc">{t('settings.openWalletDesc', 'Check your balance, send and receive sats')}</p>
+                                </div>
+                            </div>
+                            <Link to="/wallet" className="btn btn-outline btn-sm" data-testid="settings-open-wallet" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                <Wallet size={14} style={{ marginRight: '0.4rem' }} /> {t('settings.openWallet', 'Open wallet')}
+                            </Link>
+                        </div>
+                    )}
                     <div className="setting-item">
-                        <div className="setting-info">
-                            <div className="icon-box"><Wallet size={20} /></div>
-                            <div>
-                                <p className="setting-label">{t('settings.openWalletLabel', 'BIES Wallet')}</p>
-                                <p className="setting-desc">{t('settings.openWalletDesc', 'Check your balance, send and receive sats')}</p>
-                            </div>
-                        </div>
-                        <Link to="/wallet" className="btn btn-outline btn-sm" data-testid="settings-open-wallet" style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                            <Wallet size={14} style={{ marginRight: '0.4rem' }} /> {t('settings.openWallet', 'Open wallet')}
-                        </Link>
+                        <WalletConnect />
                     </div>
-                )}
-                <div className="setting-item">
-                    <WalletConnect />
                 </div>
-            </div>
+            )}
 
             {npub && (
             <div className="settings-section">

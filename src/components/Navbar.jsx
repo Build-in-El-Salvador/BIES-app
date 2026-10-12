@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUserMode } from '../context/UserModeContext';
 import { useAuth } from '../context/AuthContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
-import { User, Search, ChevronDown, LogOut, Trophy } from 'lucide-react';
+import { User, Search, ChevronDown, LogOut, Trophy, X } from 'lucide-react';
 import NostrIcon from './NostrIcon';
 import NostrNotifications from './NostrNotifications';
 import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config/featureFlags';
@@ -72,7 +73,9 @@ const Navbar = () => {
     if (path.startsWith('/about')) return t('pageTitles.about');
     if (path.startsWith('/cowork')) return t('pageTitles.cowork');
     if (path.startsWith('/wallet')) return t('pageTitles.wallet', 'Wallet');
-    if (path.startsWith('/profile') || path.startsWith('/dashboard')) return t('pageTitles.dashboard');
+    if (path.startsWith('/profile')) return t('pageTitles.profile');
+    if (path.startsWith('/dashboard')) return t('pageTitles.dashboard');
+    if (path.startsWith('/notifications')) return t('pageTitles.notifications');
     if (path.startsWith('/messages')) return t('pageTitles.messages');
     if (path === '/settings/navbar') return t('customNav.title');
     if (path.startsWith('/settings')) return t('pageTitles.settings');
@@ -229,7 +232,9 @@ const Navbar = () => {
                       {featureOn('zaps') && (
                         <Link to="/wallet" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>{t('nav.wallet', 'Wallet')}</Link>
                       )}
-                      <Link to="/dashboard" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>{t('nav.dashboard')}</Link>
+                      {featureOn('dashboard') && (
+                        <Link to="/dashboard" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>{t('nav.dashboard')}</Link>
+                      )}
                       {(user?.isAdmin || user?.role === 'MOD') && (
                         <Link to="/admin" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)} style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{t('nav.adminPanel')}</Link>
                       )}
@@ -267,6 +272,8 @@ const Navbar = () => {
             <button
               className="mobile-toggle"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              aria-label={t('nav.openMenu')}
+              aria-expanded={isMenuOpen}
             >
               <div className="avatar" style={{ width: 32, height: 32 }}>
                 {user?.profile?.avatar ? (
@@ -282,14 +289,14 @@ const Navbar = () => {
 
       {/* Mode Indicator Strip - Removed since it conflicts with the bottom orange border in this layout */}
 
-      {/* Mobile Slide-Out Menu */}
-      {isMenuOpen && (
+      {/* Mobile Slide-Out Menu — portalled to <body> so it sits above the bottom bar (the navbar is its own z-index 100 layer) */}
+      {isMenuOpen && createPortal(
         <>
           <div className="mobile-overlay" onClick={() => setIsMenuOpen(false)} />
           <div className="mobile-drawer">
             <div className="mobile-drawer-header">
               <img src={logoIconDark} alt="BIES" style={{ height: '32px' }} />
-              <button onClick={() => setIsMenuOpen(false)} style={{ color: 'white', background: 'none', border: 'none', fontSize: '1.5rem', padding: '8px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setIsMenuOpen(false)} aria-label={t('nav.closeMenu')} style={{ display: 'flex', color: 'white', background: 'none', border: 'none', padding: '10px', cursor: 'pointer' }}><X size={24} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
               {/* Top Section: Profile, Messages, News, About */}
@@ -327,11 +334,10 @@ const Navbar = () => {
                 );
               })}
             </div>
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0))' }}>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
               {/* Bottom Section: Feedback, FAQ, Settings, Log Out */}
               {[
                 ...(featureOn('feedback') ? [{ to: '/feedback', label: 'Feedback' }] : []),
-                { to: '/about', label: 'FAQ' }, // FAQ points to About for now
                 { to: '/settings', label: t('nav.settings') },
               ].map(item => (
                 <Link key={item.to} to={item.to} style={{ display: 'block', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
@@ -351,7 +357,7 @@ const Navbar = () => {
             </div>
           </div>
         </>
-      )}
+        , document.body)}
 
       {/* Bitcoin Orange Line — bottom box-shadow fills any sub-pixel gap between navbar and page */}
       <div className="navbar-orange-line" style={{ height: '3px', width: '100%', backgroundColor: 'var(--color-secondary)', flexShrink: 0 }} />
@@ -655,7 +661,7 @@ const Navbar = () => {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(0,0,0,0.5);
-          z-index: 200;
+          z-index: 10001; /* above the bottom bar (10000) */
           animation: fadeIn 0.2s ease-out;
         }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -666,7 +672,7 @@ const Navbar = () => {
           width: 180px;
           max-width: 60vw;
           background: var(--color-primary);
-          z-index: 201;
+          z-index: 10002;
           display: flex;
           flex-direction: column;
           animation: slideIn 0.25s ease-out;

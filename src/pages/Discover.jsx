@@ -6,6 +6,7 @@ import { projectsApi, watchlistApi, profilesApi } from '../services/api';
 import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import { useAuth } from '../context/AuthContext';
+import { useFeature } from '../context/FeatureFlagsContext';
 import { useUserMode } from '../context/UserModeContext';
 import { useViewPreference } from '../context/ViewContext';
 import { getAssetUrl } from '../utils/assets';
@@ -391,8 +392,14 @@ const ProjectCard = ({ project, t, viewType = 'standard' }) => {
   );
 };
 
-const Discover = () => {
+/**
+ * Projects and members. `membersOnly` (/members), or the `projects` feature
+ * being off (as in the store app), leaves just the member directory.
+ */
+const Discover = ({ membersOnly = false }) => {
   const { t } = useTranslation();
+  const projectsOn = useFeature('projects');
+  const onlyMembers = membersOnly || !projectsOn;
   const location = useLocation();
   const { user } = useAuth();
   const { mode } = useUserMode();
@@ -415,8 +422,8 @@ const Discover = () => {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-  const [discoverView, setDiscoverView] = useState('projects');
-  const [showProjects, setShowProjects] = useState(true);
+  const [discoverView, setDiscoverView] = useState(onlyMembers ? 'members' : 'projects');
+  const [showProjects, setShowProjects] = useState(!onlyMembers);
   const [showMembers, setShowMembers] = useState(true);
   const [builders, setBuilders] = useState([]);
   const [buildersLoading, setBuildersLoading] = useState(false);
@@ -432,7 +439,8 @@ const Discover = () => {
   }, []);
 
   // On mobile: use tab toggle. On desktop: use checkboxes (show both if both checked).
-  const currentView = isMobile ? discoverView : (showProjects && !showMembers ? 'projects' : !showProjects && showMembers ? 'members' : 'both');
+  const currentView = onlyMembers ? 'members'
+    : isMobile ? discoverView : (showProjects && !showMembers ? 'projects' : !showProjects && showMembers ? 'members' : 'both');
 
   const categories = [
     { id: 'FINTECH', label: 'Fintech' },
@@ -485,6 +493,7 @@ const Discover = () => {
 
   // Fetch projects from API
   useEffect(() => {
+    if (onlyMembers) { setLoading(false); return; }
     const fetchProjects = async () => {
       setLoading(true);
       try {
@@ -523,7 +532,7 @@ const Discover = () => {
 
     const debounce = setTimeout(fetchProjects, 300);
     return () => clearTimeout(debounce);
-  }, [searchQuery, selectedIndustries, selectedStages, minFunding, maxFunding, page, user?.id]);
+  }, [searchQuery, selectedIndustries, selectedStages, minFunding, maxFunding, page, user?.id, onlyMembers]);
 
   useEffect(() => {
     if (currentView !== 'members' && currentView !== 'both') return;
@@ -588,7 +597,7 @@ const Discover = () => {
   return (
     <div className="discover-page container">
       {/* Header */}
-      <h1 className="page-header" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>{t('discover.title')}</h1>
+      <h1 className="page-header" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>{onlyMembers ? t('discover.members', 'Members') : t('discover.title')}</h1>
 
       <div className="search-row">
         <div className="search-left-column">
@@ -603,7 +612,7 @@ const Discover = () => {
             <Search size={20} className="search-icon" />
             <input
               type="text"
-              placeholder={t('discover.searchPlaceholder')}
+              placeholder={onlyMembers ? t('discover.searchMembers') : t('discover.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="search-input"
@@ -669,7 +678,7 @@ const Discover = () => {
             </button>
             <button className="btn btn-primary search-btn-desktop" onClick={() => { }}>{t('common.search')}</button>
           </div>
-          {isPWA && (mode === 'builder' || user?.role === 'BUILDER' || user?.isAdmin || user?.role === 'MOD') && (
+          {isPWA && !onlyMembers && (mode === 'builder' || user?.role === 'BUILDER' || user?.isAdmin || user?.role === 'MOD') && (
             <Link to="/dashboard/builder/new-project" className="pwa-create-btn" title={t('discover.newProject')} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               width: 44, height: 44, minWidth: 44, borderRadius: '50%',
@@ -680,7 +689,7 @@ const Discover = () => {
           )}
         </div>
 
-        <div className="discover-mobile-tabs">
+        {!onlyMembers && <div className="discover-mobile-tabs">
           <button
             className={`discover-tab ${discoverView === 'projects' ? 'active' : ''}`}
             onClick={() => setDiscoverView('projects')}
@@ -693,7 +702,7 @@ const Discover = () => {
           >
             <span>{t('discover.members', 'Members')}</span>
           </button>
-        </div>
+        </div>}
       </div>
 
       <div className="content-layout">
@@ -725,35 +734,37 @@ const Discover = () => {
               )}
             </div>
 
-            <div className="filter-group type-filter-desktop">
-              <label>{t('discover.type', 'Type')}</label>
-              <div className="checkbox-list">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showProjects}
-                    onChange={() => {
-                      const next = !showProjects;
-                      if (!next && !showMembers) return;
-                      setShowProjects(next);
-                    }}
-                  />
-                  {t('discover.projects', 'Projects')}
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showMembers}
-                    onChange={() => {
-                      const next = !showMembers;
-                      if (!next && !showProjects) return;
-                      setShowMembers(next);
-                    }}
-                  />
-                  {t('discover.members', 'Members')}
-                </label>
+            {!onlyMembers && (
+              <div className="filter-group type-filter-desktop">
+                <label>{t('discover.type', 'Type')}</label>
+                <div className="checkbox-list">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showProjects}
+                      onChange={() => {
+                        const next = !showProjects;
+                        if (!next && !showMembers) return;
+                        setShowProjects(next);
+                      }}
+                    />
+                    {t('discover.projects', 'Projects')}
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showMembers}
+                      onChange={() => {
+                        const next = !showMembers;
+                        if (!next && !showProjects) return;
+                        setShowMembers(next);
+                      }}
+                    />
+                    {t('discover.members', 'Members')}
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
             {(currentView === 'projects' || currentView === 'both') && (
               <>
@@ -910,7 +921,7 @@ const Discover = () => {
                 </div>
             ) : filteredBuilders.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-gray-500)' }}>
-                    {searchQuery ? t('discover.noProjectsSearch', { query: searchQuery }) : t('discover.noMembersFound', 'No members found')}
+                    {searchQuery ? t('discover.noMembersSearch', { query: searchQuery }) : t('discover.noMembersFound', 'No members found')}
                 </div>
             ) : (
                 <div className={`builders-layout-${memberViewType}`}>

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 
-const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshop…' }) => {
+/** `id` goes on the text input, so a <label htmlFor> can name it. */
+const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshop…', id }) => {
     const [input, setInput] = useState('');
     const inputRef = useRef(null);
 
@@ -30,13 +31,14 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshop�
             {tags.map(tag => (
                 <span key={tag} className="tag-chip">
                     {tag}
-                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove">
+                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove" aria-label={`Remove ${tag}`}>
                         <X size={11} />
                     </button>
                 </span>
             ))}
             <input
                 ref={inputRef}
+                id={id}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}

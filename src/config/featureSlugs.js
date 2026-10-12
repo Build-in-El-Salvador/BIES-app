@@ -16,6 +16,8 @@ export const FEATURE_SLUGS = [
     'cowork',      // Cowork check-in page
     'marketplace', // Shopstr-compatible NIP-99 marketplace
     'bounties',    // bounty board (sats/points escrow)
+    'dashboard',   // personal dashboard (UI gate only)
+    'courses',     // courses catalog and player (UI gate only)
 ];
 
 // Fail-open default: every feature enabled. Used while the flags fetch is in

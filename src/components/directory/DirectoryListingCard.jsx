@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, ChevronRight, Leaf, ShieldCheck, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { MapPin, Phone, ChevronRight, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getAssetUrl } from '../../utils/assets';
 import CertifiedBadge from './CertifiedBadge';
@@ -35,7 +35,8 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
         t('directory.trust.downvotes', { count: listing.downvoteCount ?? 0 }),
     ].join(' · ');
 
-    const FallbackIcon = isProvider ? ShieldCheck : Leaf;
+    // Not the shield: that would read as BIES Trusted, which a listing earns.
+    const FallbackIcon = isProvider ? Building2 : Leaf;
 
     return (
         /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div */

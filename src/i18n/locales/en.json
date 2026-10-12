@@ -81,7 +81,9 @@
     "adminView": "Admin View",
     "bounties": "Bounties",
     "wallet": "Wallet",
-    "more": "More"
+    "more": "More",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -101,7 +103,9 @@
     "farmDirectory": "Regenerative Farm Directory",
     "certifiedDirectory": "BIES Trusted",
     "bounties": "Bounty Board",
-    "wallet": "Wallet"
+    "wallet": "Wallet",
+    "profile": "Profile",
+    "notifications": "Notifications"
   },
   "settings": {
     "title": "Settings",
@@ -145,9 +149,9 @@
   },
   "login": {
     "welcome": "Welcome to BIES",
-    "welcomeBack": "Welcome Back",
+    "welcomeBack": "Welcome to BIES",
     "signIn": "Sign in to your account",
-    "accessEcosystem": "Access the BIES ecosystem",
+    "accessEcosystem": "Find local farms, businesses members trust, and the people building in El Salvador.",
     "nostrExtension": "Nostr Extension",
     "nsecKey": "nsec Key",
     "seedPhrase": "Seed Phrase",
@@ -406,7 +410,9 @@
       "seriesA": "Series A",
       "earlyRevenue": "Early Revenue",
       "scaling": "Scaling"
-    }
+    },
+    "searchMembers": "Search members",
+    "noMembersSearch": "No members found matching \"{{query}}\""
   },
   "members": {
     "title": "Members Directory",
@@ -1823,7 +1829,16 @@
       "cantReviewOwn_farm": "This is your farm, so you can't review it.",
       "notLive": "Reviews open once staff approve the listing.",
       "edited": "edited"
-    }
+    },
+    "productName": "Product {{n}}",
+    "productIcon": "Product {{n}} icon",
+    "removeProduct": "Remove product {{n}}",
+    "removeCover": "Remove cover photo",
+    "removeLogo": "Remove logo",
+    "yourReviewPlaceholder": "What did they do for you, how did it go, would you go back?",
+    "yourReviewPlaceholder_farm": "What did you buy, how was it, would you buy again?",
+    "reviewMinCount": "{{count}} of at least {{min}} characters",
+    "whatsappRow": "WhatsApp {{number}}"
   },
   "marketplace": {
     "entryLabel": "Marketplace",
@@ -1895,6 +1910,7 @@
   "mobileNav": {
     "home": "Feed",
     "discover": "Discover",
+    "members": "Members",
     "farms": "Farms",
     "trusted": "Trusted",
     "events": "Events",
@@ -2114,6 +2130,7 @@
     "title": "Feature Toggles",
     "subtitle": "Turn app features on or off for everyone, instantly - no redeploy needed",
     "propagationNote": "Changes apply to you immediately. Other users pick them up within about 5 minutes (server cache) or on their next app focus. Disabled features disappear from navigation, their pages show Not Found and their APIs are blocked.",
+    "appNote": "The iOS and Android apps show only the Farm Directory and BIES Trusted from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
     "adminOnly": "Only administrators can change feature toggles. Moderators have read-only access.",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -2170,6 +2187,14 @@
       "bounties": {
         "name": "Bounties",
         "description": "Bounty board with sats and points escrow"
+      },
+      "dashboard": {
+        "name": "Dashboard",
+        "description": "Personal dashboard: analytics, my projects, events and courses"
+      },
+      "courses": {
+        "name": "Courses",
+        "description": "Course catalog, lessons and enrolment"
       }
     }
   },

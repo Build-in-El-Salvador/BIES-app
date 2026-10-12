@@ -36,6 +36,8 @@ const Profile = () => {
     const [npubCopied, setNpubCopied] = useState(false);
     const [points, setPoints] = useState(null);
     const pointsEnabled = useFeature('points');
+    const projectsEnabled = useFeature('projects');
+    const eventsEnabled = useFeature('events');
 
     useEffect(() => {
         loadProfile();
@@ -383,101 +385,105 @@ const Profile = () => {
                     {/* Right Column - Side Panels */}
                     <div className="profile-sidebar space-y-6">
                         {/* Projects Panel */}
-                        <div className="profile-card bg-gray-50 border border-gray-200">
-                            <h3 className="h3-title mb-4">{projectsTitle}</h3>
-                            {profile.biesProjects && profile.biesProjects.length > 0 ? (
-                                <div>
-                                    {profile.biesProjects.map((proj, idx) => (
-                                        <div
-                                            key={idx}
-                                            style={{
-                                                marginBottom: idx !== profile.biesProjects.length - 1 ? '24px' : '0',
-                                                position: 'relative',
-                                            }}
-                                        >
-                                            <Link
-                                                to={`/project/${proj.id}`}
-                                                className="project-link flex items-stretch justify-between gap-4 p-4 border rounded-xl transition-all hover:border-primary"
+                        {projectsEnabled && (
+                            <div className="profile-card bg-gray-50 border border-gray-200">
+                                <h3 className="h3-title mb-4">{projectsTitle}</h3>
+                                {profile.biesProjects && profile.biesProjects.length > 0 ? (
+                                    <div>
+                                        {profile.biesProjects.map((proj, idx) => (
+                                            <div
+                                                key={idx}
                                                 style={{
-                                                    background: 'var(--color-surface)',
-                                                    borderColor: 'var(--color-gray-200)',
+                                                    marginBottom: idx !== profile.biesProjects.length - 1 ? '24px' : '0',
+                                                    position: 'relative',
                                                 }}
                                             >
-                                                <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="font-semibold text-gray-900 text-lg truncate">{proj.name}</h4>
+                                                <Link
+                                                    to={`/project/${proj.id}`}
+                                                    className="project-link flex items-stretch justify-between gap-4 p-4 border rounded-xl transition-all hover:border-primary"
+                                                    style={{
+                                                        background: 'var(--color-surface)',
+                                                        borderColor: 'var(--color-gray-200)',
+                                                    }}
+                                                >
+                                                    <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className="font-semibold text-gray-900 text-lg truncate">{proj.name}</h4>
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-sm mt-2">
+                                                            <span className="text-primary font-medium truncate">{proj.role}</span>
+                                                            <span className="text-gray-300">•</span>
+                                                            <span className="status-badge flex-shrink-0">{proj.status}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center gap-3 text-sm mt-2">
-                                                        <span className="text-primary font-medium truncate">{proj.role}</span>
-                                                        <span className="text-gray-300">•</span>
-                                                        <span className="status-badge flex-shrink-0">{proj.status}</span>
+                                                    <div className="rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200" style={{ width: '120px', height: '68px', minWidth: '120px', minHeight: '68px', background: 'var(--color-surface-raised)' }}>
+                                                        {proj.image ? (
+                                                            <img src={proj.image} alt={proj.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <span className="text-gray-400 font-bold text-xl">{proj.name.charAt(0)}</span>
+                                                        )}
                                                     </div>
+                                                </Link>
+                                                <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
+                                                    <ZappableTag tag={proj.name} mode="project" projectId={proj.id} />
                                                 </div>
-                                                <div className="rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200" style={{ width: '120px', height: '68px', minWidth: '120px', minHeight: '68px', background: 'var(--color-surface-raised)' }}>
-                                                    {proj.image ? (
-                                                        <img src={proj.image} alt={proj.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <span className="text-gray-400 font-bold text-xl">{proj.name.charAt(0)}</span>
-                                                    )}
-                                                </div>
-                                            </Link>
-                                            <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
-                                                <ZappableTag tag={proj.name} mode="project" projectId={proj.id} />
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-gray-500">No active network projects listed.</p>
-                            )}
-                        </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-500">No active network projects listed.</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Events Attending Panel */}
-                        <div className="profile-card">
-                            <h3 className="h3-title mb-4">Events Attending</h3>
-                            {profile.user?.eventRSVPs && profile.user.eventRSVPs.length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {profile.user.eventRSVPs.map((rsvp, idx) => (
-                                        <Link
-                                            to={`/events/${rsvp.event.id}`}
-                                            key={idx}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '1rem',
-                                                padding: '0.75rem 1rem',
-                                                borderRadius: '10px',
-                                                border: '1px solid var(--color-gray-200)',
-                                                background: 'var(--color-gray-50)',
-                                                textDecoration: 'none',
-                                                transition: 'border-color 0.2s, box-shadow 0.2s',
-                                            }}
-                                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-gray-200)'; e.currentTarget.style.boxShadow = 'none'; }}
-                                        >
-                                            {rsvp.event.thumbnail ? (
-                                                <div style={{ width: '56px', height: '42px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
-                                                    <img src={getAssetUrl(rsvp.event.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {eventsEnabled && (
+                            <div className="profile-card">
+                                <h3 className="h3-title mb-4">Events Attending</h3>
+                                {profile.user?.eventRSVPs && profile.user.eventRSVPs.length > 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        {profile.user.eventRSVPs.map((rsvp, idx) => (
+                                            <Link
+                                                to={`/events/${rsvp.event.id}`}
+                                                key={idx}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    padding: '0.75rem 1rem',
+                                                    borderRadius: '10px',
+                                                    border: '1px solid var(--color-gray-200)',
+                                                    background: 'var(--color-gray-50)',
+                                                    textDecoration: 'none',
+                                                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-gray-200)'; e.currentTarget.style.boxShadow = 'none'; }}
+                                            >
+                                                {rsvp.event.thumbnail ? (
+                                                    <div style={{ width: '56px', height: '42px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
+                                                        <img src={getAssetUrl(rsvp.event.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ width: '56px', height: '42px', borderRadius: '6px', background: 'var(--color-gray-200)', flexShrink: 0 }} />
+                                                )}
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                                        <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                        <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: rsvp.status === 'GOING' ? 'var(--color-green-tint)' : 'var(--color-amber-tint)', color: rsvp.status === 'GOING' ? '#15803d' : '#854d0e' }}>
+                                                            {rsvp.status === 'GOING' ? 'Attending' : 'Interested'}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                <div style={{ width: '56px', height: '42px', borderRadius: '6px', background: 'var(--color-gray-200)', flexShrink: 0 }} />
-                                            )}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                                    <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                                    <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: rsvp.status === 'GOING' ? 'var(--color-green-tint)' : 'var(--color-amber-tint)', color: rsvp.status === 'GOING' ? '#15803d' : '#854d0e' }}>
-                                                        {rsvp.status === 'GOING' ? 'Attending' : 'Interested'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </Link>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>Not RSVP'd to any upcoming events.</p>
-                            )}
-                        </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>Not RSVP'd to any upcoming events.</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Custom Sections (Right / Sidebar) */}
                         {Array.isArray(profile.customSections) && profile.customSections

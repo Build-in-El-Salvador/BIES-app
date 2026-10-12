@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Share, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy, Flag, Ban } from 'lucide-react';
+import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy, Flag, Ban } from 'lucide-react';
 import { getAssetUrl } from '../utils/assets';
 import { nip19 } from 'nostr-tools';
 import { profilesApi, eventsApi, pointsApi } from '../services/api';
@@ -56,6 +56,8 @@ const PublicProfile = ({ type }) => {
     const lightbox = useLightbox();
     const pointsEnabled = useFeature('points');
     const messagesEnabled = useFeature('messages');
+    const projectsEnabled = useFeature('projects');
+    const eventsEnabled = useFeature('events');
     // Bumped after a block or unblock: the server then answers differently.
     const [reloadKey, setReloadKey] = useState(0);
     const [unblocking, setUnblocking] = useState(false);
@@ -338,73 +340,69 @@ const PublicProfile = ({ type }) => {
                                 />
                             )}
 
-                            <div style={{ position: 'relative' }}>
-                                <button ref={menuButtonRef} onClick={() => setShowMenu(!showMenu)} aria-label={t('moderation.menu.more')} aria-expanded={showMenu} style={{
-                                    borderRadius: 'var(--radius-md)', background: 'var(--color-surface-raised)', color: 'var(--color-gray-900)',
-                                    border: '1px solid var(--color-gray-200)', height: '42px', width: '42px', padding: 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                                    boxShadow: 'var(--shadow-sm)',
-                                }}>
-                                    <MoreHorizontal size={20} />
-                                </button>
-                                {showMenu && (
-                                    <div style={{
-                                        position: 'absolute', right: 0, marginTop: '0.5rem', width: '12rem',
-                                        background: 'var(--color-surface-overlay)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)',
-                                        border: '1px solid var(--color-gray-200)', padding: '0.25rem 0', zIndex: 50,
+                            {/* Report, block, connect: only for someone else's profile */}
+                            {currentUser && targetUserId && currentUser.id !== targetUserId && (
+                                <div style={{ position: 'relative' }}>
+                                    <button ref={menuButtonRef} onClick={() => setShowMenu(!showMenu)} aria-label={t('moderation.menu.more')} aria-expanded={showMenu} style={{
+                                        borderRadius: 'var(--radius-md)', background: 'var(--color-surface-raised)', color: 'var(--color-gray-900)',
+                                        border: '1px solid var(--color-gray-200)', height: '42px', width: '42px', padding: 0,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                                        boxShadow: 'var(--shadow-sm)',
                                     }}>
-                                        {/* Connect option in ... menu on mobile */}
-                                        {isMobile && messagesEnabled && currentUser && targetUserId && currentUser.id !== targetUserId && (
-                                            <Link to="/messages" onClick={() => setShowMenu(false)} style={{
-                                                width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
-                                                display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
-                                                fontWeight: 500, color: 'var(--color-gray-700)', textDecoration: 'none',
-                                            }}>
-                                                <MessageSquare size={16} /> {t('publicProfile.connect', 'Connect')}
-                                            </Link>
-                                        )}
-                                        <button onClick={() => setShowMenu(false)} style={{
-                                            width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
-                                            display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
-                                            fontWeight: 500, color: 'var(--color-gray-700)', background: 'none', border: 'none', cursor: 'pointer',
+                                        <MoreHorizontal size={20} />
+                                    </button>
+                                    {showMenu && (
+                                        <div style={{
+                                            position: 'absolute', right: 0, marginTop: '0.5rem', width: '12rem',
+                                            background: 'var(--color-surface-overlay)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)',
+                                            border: '1px solid var(--color-gray-200)', padding: '0.25rem 0', zIndex: 50,
                                         }}>
-                                            <Share size={16} /> {t('publicProfile.shareProfile', 'Share Profile')}
-                                        </button>
-                                        {currentUser && targetUserId && currentUser.id !== targetUserId && (
-                                            <>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowMenu(false);
-                                                        menuButtonRef.current?.focus({ preventScroll: true });
-                                                        openReport({ type: 'user', id: targetUserId }, { name: profile.name, blockTarget: { userId: targetUserId } });
-                                                    }}
-                                                    style={{
-                                                        width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
-                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
-                                                        fontWeight: 500, color: 'var(--color-gray-700)', background: 'none', border: 'none', cursor: 'pointer',
-                                                    }}
-                                                >
-                                                    <Flag size={16} /> {t('moderation.menu.reportProfile')}
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setShowMenu(false);
-                                                        menuButtonRef.current?.focus({ preventScroll: true });
-                                                        openBlock({ userId: targetUserId }, { name: profile.name });
-                                                    }}
-                                                    style={{
-                                                        width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
-                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
-                                                        fontWeight: 500, color: 'var(--color-danger, #dc2626)', background: 'none', border: 'none', cursor: 'pointer',
-                                                    }}
-                                                >
-                                                    <Ban size={16} /> {t('moderation.menu.blockMember')}
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                            {/* Connect option in ... menu on mobile */}
+                                            {isMobile && messagesEnabled && currentUser && targetUserId && currentUser.id !== targetUserId && (
+                                                <Link to="/messages" onClick={() => setShowMenu(false)} style={{
+                                                    width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
+                                                    display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
+                                                    fontWeight: 500, color: 'var(--color-gray-700)', textDecoration: 'none',
+                                                }}>
+                                                    <MessageSquare size={16} /> {t('publicProfile.connect', 'Connect')}
+                                                </Link>
+                                            )}
+                                            {currentUser && targetUserId && currentUser.id !== targetUserId && (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
+                                                            openReport({ type: 'user', id: targetUserId }, { name: profile.name, blockTarget: { userId: targetUserId } });
+                                                        }}
+                                                        style={{
+                                                            width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
+                                                            display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
+                                                            fontWeight: 500, color: 'var(--color-gray-700)', background: 'none', border: 'none', cursor: 'pointer',
+                                                        }}
+                                                    >
+                                                        <Flag size={16} /> {t('moderation.menu.reportProfile')}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowMenu(false);
+                                                            menuButtonRef.current?.focus({ preventScroll: true });
+                                                            openBlock({ userId: targetUserId }, { name: profile.name });
+                                                        }}
+                                                        style={{
+                                                            width: '100%', textAlign: 'left', padding: '0.625rem 1rem',
+                                                            display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem',
+                                                            fontWeight: 500, color: 'var(--color-danger, #dc2626)', background: 'none', border: 'none', cursor: 'pointer',
+                                                        }}
+                                                    >
+                                                        <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -689,79 +687,81 @@ const PublicProfile = ({ type }) => {
                     <div className="profile-sidebar">
 
                         {/* Projects Panel */}
-                        <div className="profile-card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-overlay)', border: '1px solid var(--color-gray-200)' }}>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '1rem' }}>{projectsTitle}</h3>
+                        {projectsEnabled && (
+                            <div className="profile-card" style={{ marginBottom: '1.5rem', background: 'var(--color-surface-overlay)', border: '1px solid var(--color-gray-200)' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '1rem' }}>{projectsTitle}</h3>
 
-                            {(profile.biesProjects || []).length > 0 ? (
-                                <div>
-                                    {profile.biesProjects.map((proj, idx) => (
-                                        <div
-                                            key={idx}
-                                            style={{
-                                                marginBottom: idx !== profile.biesProjects.length - 1 ? '1.5rem' : '0',
-                                                position: 'relative',
-                                            }}
-                                        >
-                                            <Link
-                                                to={`/project/${proj.id}`}
-                                                className="project-link"
-                                            >
-                                                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingTop: '0.25rem', paddingBottom: '0.25rem' }}>
-                                                    <h4 style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '1.125rem', fontFamily: 'var(--font-display)' }}>{proj.name}</h4>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                                                        {proj.role && <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{proj.role}</span>}
-                                                        {proj.role && proj.status && <span style={{ color: 'var(--color-gray-300)' }}>•</span>}
-                                                        {proj.status && <span className="status-badge">{proj.status}</span>}
-                                                    </div>
-                                                </div>
-                                                <div style={{
-                                                    width: '120px', height: '68px', minWidth: '120px', minHeight: '68px',
-                                                    background: 'var(--color-surface-raised)', borderRadius: '0.5rem', flexShrink: 0,
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                                                    border: '1px solid var(--color-gray-200)',
-                                                }}>
-                                                    {proj.image ? (
-                                                        <img src={proj.image} alt={proj.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <span style={{ color: 'var(--color-gray-400)', fontWeight: 700, fontSize: '1.25rem' }}>{proj.name.charAt(0)}</span>
-                                                    )}
-                                                </div>
-                                            </Link>
-                                            <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
-                                                <ZappableTag tag={proj.name} mode="project" projectId={proj.id} />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                // Show user's actual projects from the API if available
-                                (profile.user?.projects || []).length > 0 ? (
+                                {(profile.biesProjects || []).length > 0 ? (
                                     <div>
-                                        {profile.user.projects.map((proj, idx) => (
-                                            <Link
-                                                to={`/project/${proj.id}`}
+                                        {profile.biesProjects.map((proj, idx) => (
+                                            <div
                                                 key={idx}
-                                                className="project-link"
-                                                style={{ marginBottom: idx !== profile.user.projects.length - 1 ? '1.5rem' : '0' }}
+                                                style={{
+                                                    marginBottom: idx !== profile.biesProjects.length - 1 ? '1.5rem' : '0',
+                                                    position: 'relative',
+                                                }}
                                             >
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <h4 style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '1rem', fontFamily: 'var(--font-display)' }}>{proj.title}</h4>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-                                                        {proj.category && <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{proj.category}</span>}
-                                                        {proj.stage && <span className="status-badge">{proj.stage}</span>}
+                                                <Link
+                                                    to={`/project/${proj.id}`}
+                                                    className="project-link"
+                                                >
+                                                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingTop: '0.25rem', paddingBottom: '0.25rem' }}>
+                                                        <h4 style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '1.125rem', fontFamily: 'var(--font-display)' }}>{proj.name}</h4>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                                                            {proj.role && <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{proj.role}</span>}
+                                                            {proj.role && proj.status && <span style={{ color: 'var(--color-gray-300)' }}>•</span>}
+                                                            {proj.status && <span className="status-badge">{proj.status}</span>}
+                                                        </div>
                                                     </div>
+                                                    <div style={{
+                                                        width: '120px', height: '68px', minWidth: '120px', minHeight: '68px',
+                                                        background: 'var(--color-surface-raised)', borderRadius: '0.5rem', flexShrink: 0,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                                                        border: '1px solid var(--color-gray-200)',
+                                                    }}>
+                                                        {proj.image ? (
+                                                            <img src={proj.image} alt={proj.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <span style={{ color: 'var(--color-gray-400)', fontWeight: 700, fontSize: '1.25rem' }}>{proj.name.charAt(0)}</span>
+                                                        )}
+                                                    </div>
+                                                </Link>
+                                                <div style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10 }}>
+                                                    <ZappableTag tag={proj.name} mode="project" projectId={proj.id} />
                                                 </div>
-                                            </Link>
+                                            </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>{t('publicProfile.noProjectsListed', 'No projects listed.')}</p>
-                                )
-                            )}
-                        </div>
+                                    // Show user's actual projects from the API if available
+                                    (profile.user?.projects || []).length > 0 ? (
+                                        <div>
+                                            {profile.user.projects.map((proj, idx) => (
+                                                <Link
+                                                    to={`/project/${proj.id}`}
+                                                    key={idx}
+                                                    className="project-link"
+                                                    style={{ marginBottom: idx !== profile.user.projects.length - 1 ? '1.5rem' : '0' }}
+                                                >
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <h4 style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '1rem', fontFamily: 'var(--font-display)' }}>{proj.title}</h4>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+                                                            {proj.category && <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{proj.category}</span>}
+                                                            {proj.stage && <span className="status-badge">{proj.stage}</span>}
+                                                        </div>
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>{t('publicProfile.noProjectsListed', 'No projects listed.')}</p>
+                                    )
+                                )}
+                            </div>
+                        )}
 
                         {/* Events Hosting Panel — the Event Host trust surface */}
-                        {(hostedEvents.length > 0 || hostedTotal > 0) && (
+                        {eventsEnabled && (hostedEvents.length > 0 || hostedTotal > 0) && (
                             <div className="profile-card" style={{ marginBottom: '1.5rem' }}>
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Calendar size={20} style={{ color: '#f7931a' }} />
@@ -828,58 +828,60 @@ const PublicProfile = ({ type }) => {
                         )}
 
                         {/* Events Attending Panel */}
-                        <div className="profile-card" style={{ marginBottom: '1.5rem' }}>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '1rem' }}>{t('publicProfile.eventsAttending', 'Events Attending')}</h3>
-                            {profile.user?.eventRSVPs && profile.user.eventRSVPs.length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {profile.user.eventRSVPs.map((rsvp, idx) => (
-                                        <Link
-                                            to={`/events/${rsvp.event.id}`}
-                                            key={idx}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '1rem',
-                                                padding: '0.75rem 1rem',
-                                                borderRadius: '10px',
-                                                border: '1px solid var(--color-gray-200)',
-                                                background: 'var(--color-gray-50)',
-                                                textDecoration: 'none',
-                                                transition: 'border-color 0.2s, box-shadow 0.2s',
-                                            }}
-                                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-gray-200)'; e.currentTarget.style.boxShadow = 'none'; }}
-                                        >
-                                            {rsvp.event.thumbnail ? (
-                                                <div style={{ width: '56px', height: '42px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
-                                                    <img src={getAssetUrl(rsvp.event.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {eventsEnabled && (
+                            <div className="profile-card" style={{ marginBottom: '1.5rem' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, fontFamily: 'var(--font-display)', marginBottom: '1rem' }}>{t('publicProfile.eventsAttending', 'Events Attending')}</h3>
+                                {profile.user?.eventRSVPs && profile.user.eventRSVPs.length > 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        {profile.user.eventRSVPs.map((rsvp, idx) => (
+                                            <Link
+                                                to={`/events/${rsvp.event.id}`}
+                                                key={idx}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    padding: '0.75rem 1rem',
+                                                    borderRadius: '10px',
+                                                    border: '1px solid var(--color-gray-200)',
+                                                    background: 'var(--color-gray-50)',
+                                                    textDecoration: 'none',
+                                                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-gray-200)'; e.currentTarget.style.boxShadow = 'none'; }}
+                                            >
+                                                {rsvp.event.thumbnail ? (
+                                                    <div style={{ width: '56px', height: '42px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
+                                                        <img src={getAssetUrl(rsvp.event.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ width: '56px', height: '42px', borderRadius: '6px', background: 'var(--color-gray-200)', flexShrink: 0 }} />
+                                                )}
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
+                                                        <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                        <span style={{
+                                                            padding: '0.15rem 0.5rem',
+                                                            borderRadius: '999px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 600,
+                                                            background: rsvp.status === 'GOING' ? 'var(--color-green-tint)' : 'var(--color-amber-tint)',
+                                                            color: rsvp.status === 'GOING' ? '#15803d' : '#854d0e',
+                                                        }}>
+                                                            {rsvp.status === 'GOING' ? t('publicProfile.attending', 'Attending') : t('publicProfile.interested', 'Interested')}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                <div style={{ width: '56px', height: '42px', borderRadius: '6px', background: 'var(--color-gray-200)', flexShrink: 0 }} />
-                                            )}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                                    <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                                    <span style={{
-                                                        padding: '0.15rem 0.5rem',
-                                                        borderRadius: '999px',
-                                                        fontSize: '0.75rem',
-                                                        fontWeight: 600,
-                                                        background: rsvp.status === 'GOING' ? 'var(--color-green-tint)' : 'var(--color-amber-tint)',
-                                                        color: rsvp.status === 'GOING' ? '#15803d' : '#854d0e',
-                                                    }}>
-                                                        {rsvp.status === 'GOING' ? t('publicProfile.attending', 'Attending') : t('publicProfile.interested', 'Interested')}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </Link>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>{t('publicProfile.noUpcomingEvents', 'No upcoming events.')}</p>
-                            )}
-                        </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={{ fontSize: '0.875rem', color: 'var(--color-gray-500)' }}>{t('publicProfile.noUpcomingEvents', 'No upcoming events.')}</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Custom Sections (Right / Sidebar) */}
                         {Array.isArray(profile.customSections) && profile.customSections
