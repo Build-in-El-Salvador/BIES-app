@@ -29,7 +29,7 @@ export const formatListingPrice = (price) => {
 /**
  * Marketplace listing card (grid tile), modeled on DirectoryListingCard:
  * product photo on top, title, price badge, location, sold badge, seller name.
- * Links to /discover/market/<naddr>.
+ * Links to /market/<naddr>.
  *
  * @param {object} listing - parsed NIP-99 listing (see utils/nip99 parseListingEvent)
  */
@@ -43,7 +43,7 @@ const MarketListingCard = ({ listing }) => {
     return (
         /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div */
         <Link
-            to={`/discover/market/${listing.naddr}`}
+            to={`/market/${listing.naddr}`}
             className="mk-card-link"
             style={{ textDecoration: 'none', color: 'inherit', display: 'block', height: '100%' }}
         >

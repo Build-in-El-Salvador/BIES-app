@@ -105,7 +105,7 @@ const MarketplaceList = () => {
                         />
                     </div>
                     <Link
-                        to="/discover/market/new"
+                        to="/market/new"
                         className="market-add-btn"
                         title={t('marketplace.post')}
                         style={{

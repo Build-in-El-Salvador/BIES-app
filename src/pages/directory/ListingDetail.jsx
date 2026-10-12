@@ -5,17 +5,17 @@ import {
     ArrowLeft, MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
     Loader2, Leaf, ShieldCheck, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
-    Languages, Target, Tag, Bitcoin, ThumbsUp, BadgeCheck, Flag, Ban, MoreHorizontal,
+    Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
-import CertifiedBadge from '../../components/directory/CertifiedBadge';
+import ListingReviews, { TrustPanel } from '../../components/directory/ListingReviews';
+import { useLightbox } from '../../context/LightboxContext';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
-import { objectionableMessage } from '../../components/moderation/objectionable';
 import '../../components/moderation/Moderation.css';
 
 const PRACTICE_META = {
@@ -51,13 +51,9 @@ const ListingDetail = () => {
     // Focus goes back to the menu button when a Report or Block sheet closes.
     const menuButtonRef = useRef(null);
 
-    // Endorse UI state
-    const [showEndorseForm, setShowEndorseForm] = useState(false);
-    const [endorseComment, setEndorseComment] = useState('');
-    const [endorseBusy, setEndorseBusy] = useState(false);
-    const [endorseError, setEndorseError] = useState('');
+    const lightbox = useLightbox();
 
-    // silent=true refreshes in place (after endorse/unendorse) without the full-page loader
+    // silent=true refreshes in place (after a review changes) without the full-page loader
     const fetchListing = useCallback(async ({ silent = false } = {}) => {
         if (!silent) {
             setLoading(true);
@@ -85,37 +81,9 @@ const ListingDetail = () => {
     // After a block the server hides the member's listing or recommendation.
     const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => fetchListing() });
 
-    const handleEndorse = async () => {
-        setEndorseBusy(true);
-        setEndorseError('');
-        try {
-            await directoryApi.endorse(id, endorseComment.trim());
-            setEndorseComment('');
-            setShowEndorseForm(false);
-            await fetchListing({ silent: true });
-        } catch (err) {
-            setEndorseError(objectionableMessage(t, err) || err.message || 'Failed to endorse');
-        } finally {
-            setEndorseBusy(false);
-        }
-    };
-
-    const handleUnendorse = async () => {
-        setEndorseBusy(true);
-        setEndorseError('');
-        try {
-            await directoryApi.unendorse(id);
-            await fetchListing({ silent: true });
-        } catch (err) {
-            setEndorseError(err.message || 'Failed to remove endorsement');
-        } finally {
-            setEndorseBusy(false);
-        }
-    };
-
-    const isProviderPath = location.pathname.startsWith('/discover/certified');
+    const isProviderPath = location.pathname.startsWith('/trusted');
     const isFarm = listing ? listing.type === 'FARM' : !isProviderPath;
-    const backPath = isFarm ? '/discover/farms' : '/discover/certified';
+    const backPath = isFarm ? '/farms' : '/trusted';
 
     if (loading) {
         return (
@@ -175,11 +143,9 @@ const ListingDetail = () => {
     const skills = Array.isArray(listing.skills) ? listing.skills.filter(Boolean) : [];
     const languages = Array.isArray(listing.languages) ? listing.languages.filter(Boolean) : [];
 
-    // Endorsements (included on GET /:id, newest first)
-    const endorsements = Array.isArray(listing.endorsements) ? listing.endorsements : [];
-    const endorsementCount = listing._count?.endorsements ?? endorsements.length;
-    const hasEndorsed = !!user?.id && endorsements.some((e) => e.userId === user.id);
-    const canEndorse = !!user?.id && !isOwner;
+    const photos = (Array.isArray(listing.photos) ? listing.photos : []).filter(Boolean);
+    const photoUrls = photos.map((p) => getAssetUrl(p));
+    const categoryLabel = listing.category ? t(`directory.categories.${listing.category}`) : '';
 
     // Zap recipient — same shape as Discover's member/project cards
     const memberProfile = listing.memberUser?.profile || {};
@@ -231,8 +197,8 @@ const ListingDetail = () => {
             {/* Hero — full-bleed on mobile, 760px rounded column on desktop */}
             <div className="dir-hero-wrap">
                 <div className="dir-hero">
-                    {listing.photo ? (
-                        <img src={getAssetUrl(listing.photo)} alt={listing.name} className="dir-hero-img" />
+                    {listing.photo || photos[0] ? (
+                        <img src={getAssetUrl(listing.photo || photos[0])} alt={listing.name} className="dir-hero-img" />
                     ) : (
                         <div className="dir-hero-fallback">
                             {isFarm ? <Leaf size={56} /> : <ShieldCheck size={56} />}
@@ -280,7 +246,7 @@ const ListingDetail = () => {
                                 )}
                                 {canEdit && (
                                     <Link
-                                        to={`/discover/directory/${listing.id}/edit`}
+                                        to={`${backPath}/${listing.id}/edit`}
                                         style={{
                                             display: 'inline-flex', alignItems: 'center', gap: 6,
                                             padding: '0.4rem 0.9rem', borderRadius: 'var(--radius-full)',
@@ -339,13 +305,12 @@ const ListingDetail = () => {
                             </div>
                         </div>
 
-                        {/* Farms also get scores — surface the certified mark universally */}
-                        {isFarm && listing.isCertified && (
-                            <div style={{ margin: '0.15rem 0 0.6rem' }}>
-                                <CertifiedBadge size="md" />
+                        {categoryLabel && (
+                            <div className="dir-detail-meta">
+                                <Store size={17} />
+                                <span>{categoryLabel}</span>
                             </div>
                         )}
-
                         {listing.location && (
                             <div className="dir-detail-meta">
                                 <MapPin size={17} />
@@ -363,7 +328,37 @@ const ListingDetail = () => {
                                 <span>{contactNumber}</span>
                             </a>
                         )}
+                        {listing.hours && (
+                            <div className="dir-detail-meta">
+                                <Clock size={17} />
+                                <span>{listing.hours}</span>
+                            </div>
+                        )}
+                        {listing.isOwnBusiness && (
+                            <p className="dir-own-note">{t('directory.review.ownBusinessNote', { context: isFarm ? 'farm' : undefined })}</p>
+                        )}
                     </div>
+
+                    <TrustPanel listing={listing} />
+
+                    {photos.length > 0 && (
+                        <section className="dir-detail-section">
+                            <h2 style={sectionTitleStyle}>{t('directory.photosLabel')}</h2>
+                            <div className="dir-gallery">
+                                {photoUrls.map((url, i) => (
+                                    <button
+                                        key={url}
+                                        type="button"
+                                        className="dir-gallery-item"
+                                        onClick={() => lightbox.open(url, photoUrls)}
+                                        aria-label={`${t('directory.photosLabel')} ${i + 1}`}
+                                    >
+                                        <img src={url} alt="" loading="lazy" />
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     {isFarm ? (
                         <>
@@ -464,16 +459,6 @@ const ListingDetail = () => {
                                 </section>
                             )}
 
-                            {/* Reputation */}
-                            <section className="dir-detail-section dir-reputation-block">
-                                <h2 style={sectionTitleStyle}>{t('directory.reputation')}</h2>
-                                <div className="dir-reputation-row">
-                                    <span className="dir-score-big">{listing.reputationScore ?? 0}%</span>
-                                    {listing.isCertified && <CertifiedBadge size="md" />}
-                                </div>
-                                <p className="dir-reputation-hint">{t('directory.reputationHint')}</p>
-                            </section>
-
                             {listing.about && (
                                 <section className="dir-detail-section">
                                     <TranslatableText
@@ -495,115 +480,16 @@ const ListingDetail = () => {
                                 </section>
                             )}
 
-                            {/* Endorsements */}
-                            <section className="dir-detail-section dir-endorsements">
-                                <div className="dir-endorse-head">
-                                    <h2 style={{ ...sectionTitleStyle, margin: 0 }}>
-                                        {t('directory.endorsements')} ({endorsementCount})
-                                    </h2>
-                                    {canEndorse && (hasEndorsed ? (
-                                        <button
-                                            type="button"
-                                            className="dir-endorse-btn endorsed"
-                                            onClick={handleUnendorse}
-                                            disabled={endorseBusy}
-                                        >
-                                            {endorseBusy
-                                                ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                                                : <BadgeCheck size={15} />}
-                                            {t('directory.endorsed')}
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            className="dir-endorse-btn"
-                                            onClick={() => { setShowEndorseForm((v) => !v); setEndorseError(''); }}
-                                            disabled={endorseBusy}
-                                        >
-                                            <ThumbsUp size={15} />
-                                            {t('directory.endorse')}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {endorseError && (
-                                    <p className="dir-endorse-error">{endorseError}</p>
-                                )}
-
-                                {showEndorseForm && !hasEndorsed && (
-                                    <div className="dir-endorse-form">
-                                        <textarea
-                                            className="dir-endorse-textarea"
-                                            value={endorseComment}
-                                            onChange={(e) => setEndorseComment(e.target.value)}
-                                            placeholder={t('directory.endorsePlaceholder')}
-                                            maxLength={500}
-                                            rows={2}
-                                        />
-                                        <div className="dir-endorse-actions">
-                                            <button
-                                                type="button"
-                                                className="dir-endorse-cancel"
-                                                onClick={() => { setShowEndorseForm(false); setEndorseComment(''); }}
-                                                disabled={endorseBusy}
-                                            >
-                                                {t('common.cancel')}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="dir-endorse-submit"
-                                                onClick={handleEndorse}
-                                                disabled={endorseBusy}
-                                            >
-                                                {endorseBusy && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                                                {t('directory.endorse')}
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {endorsements.length === 0 ? (
-                                    <p className="dir-no-endorsements">{t('directory.noEndorsements')}</p>
-                                ) : (
-                                    <div className="dir-endorsement-list">
-                                        {endorsements.map((e) => {
-                                            const endorserName = e.user?.profile?.name || 'Member';
-                                            const endorserAvatar = e.user?.profile?.avatar || '';
-                                            return (
-                                                <div key={e.id} className="dir-endorsement-item">
-                                                    <div className="dir-endorsement-avatar">
-                                                        {endorserAvatar ? (
-                                                            <img src={getAssetUrl(endorserAvatar)} alt={endorserName} />
-                                                        ) : (
-                                                            <span>{endorserName[0].toUpperCase()}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="dir-endorsement-body">
-                                                        <span className="dir-endorsement-name">{endorserName}</span>
-                                                        {e.comment && (
-                                                            <p className="dir-endorsement-comment">{e.comment}</p>
-                                                        )}
-                                                        {user?.id && e.userId !== user.id && (
-                                                            <button
-                                                                type="button"
-                                                                className="mod-inline-report"
-                                                                onClick={() => openReport(
-                                                                    { type: 'endorsement', id: e.id },
-                                                                    { name: endorserName, blockTarget: { userId: e.userId } },
-                                                                )}
-                                                            >
-                                                                <Flag size={12} /> {t('moderation.menu.report')}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </section>
                         </>
                     )}
+
+                    <ListingReviews
+                        listing={listing}
+                        user={user}
+                        onChanged={() => fetchListing({ silent: true })}
+                        openReport={openReport}
+                        titleStyle={sectionTitleStyle}
+                    />
 
                     {/* Learn More */}
                     {learnMoreRows.length > 0 && (
@@ -841,24 +727,6 @@ const ListingDetail = () => {
                     color: inherit;
                 }
 
-                .dir-reputation-row {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.85rem;
-                    flex-wrap: wrap;
-                }
-                .dir-score-big {
-                    font-size: 2.4rem;
-                    font-weight: 800;
-                    line-height: 1;
-                    color: var(--color-primary);
-                }
-                .dir-reputation-hint {
-                    margin: 0.5rem 0 0;
-                    font-size: 0.8rem;
-                    color: var(--color-gray-500);
-                }
-
                 .dir-comment-quote {
                     margin: 0;
                     padding: 0.65rem 1rem;
@@ -872,158 +740,36 @@ const ListingDetail = () => {
                     white-space: pre-wrap;
                 }
 
-                .dir-endorse-head {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: 0.75rem;
-                    margin-bottom: 0.85rem;
-                }
-
-                .dir-endorse-btn {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    padding: 0.4rem 0.95rem;
-                    border-radius: var(--radius-full);
-                    border: 1px solid var(--color-primary);
-                    background: var(--color-surface);
-                    color: var(--color-primary);
+                .dir-own-note {
+                    margin: 0.4rem 0 0;
                     font-size: 0.82rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    white-space: nowrap;
-                    flex-shrink: 0;
-                    transition: background 0.15s, color 0.15s;
-                }
-                .dir-endorse-btn:hover:not(:disabled) {
-                    background: var(--color-blue-tint);
-                }
-                .dir-endorse-btn.endorsed {
-                    background: var(--color-primary);
-                    color: white;
-                }
-                .dir-endorse-btn:disabled {
-                    opacity: 0.6;
-                    cursor: default;
-                }
-
-                .dir-endorse-error {
-                    margin: 0 0 0.75rem;
-                    font-size: 0.82rem;
-                    color: var(--color-error, #b91c1c);
-                }
-
-                .dir-endorse-form {
-                    margin-bottom: 1rem;
-                }
-                .dir-endorse-textarea {
-                    width: 100%;
-                    box-sizing: border-box;
-                    padding: 0.6rem 0.85rem;
-                    border: 1px solid var(--color-gray-300);
-                    border-radius: var(--radius-md);
-                    background: var(--color-surface);
-                    color: inherit;
-                    font-size: 0.9rem;
-                    font-family: inherit;
-                    resize: vertical;
-                    outline: none;
-                }
-                .dir-endorse-textarea:focus {
-                    border-color: var(--color-primary);
-                    box-shadow: 0 0 0 3px rgba(0, 82, 204, 0.1);
-                }
-                .dir-endorse-actions {
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 0.5rem;
-                    margin-top: 0.5rem;
-                }
-                .dir-endorse-cancel {
-                    padding: 0.4rem 0.9rem;
-                    border-radius: var(--radius-full);
-                    border: 1px solid var(--color-gray-300);
-                    background: none;
-                    color: var(--color-gray-600);
-                    font-size: 0.82rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                }
-                .dir-endorse-submit {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 5px;
-                    padding: 0.4rem 1.1rem;
-                    border-radius: var(--radius-full);
-                    border: none;
-                    background: var(--color-primary);
-                    color: white;
-                    font-size: 0.82rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                }
-                .dir-endorse-submit:disabled,
-                .dir-endorse-cancel:disabled {
-                    opacity: 0.6;
-                    cursor: default;
-                }
-
-                .dir-no-endorsements {
-                    margin: 0;
-                    font-size: 0.88rem;
                     color: var(--color-gray-500);
                 }
 
-                .dir-endorsement-list {
+                .dir-gallery {
                     display: flex;
-                    flex-direction: column;
+                    gap: 0.6rem;
+                    overflow-x: auto;
+                    padding-bottom: 4px;
+                    scroll-snap-type: x mandatory;
                 }
-                .dir-endorsement-item {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 0.75rem;
-                    padding: 0.8rem 0;
-                }
-                .dir-endorsement-item + .dir-endorsement-item {
-                    border-top: 1px solid var(--color-gray-200);
-                }
-                .dir-endorsement-avatar {
-                    width: 38px;
-                    height: 38px;
-                    border-radius: 50%;
+                .dir-gallery-item {
+                    flex: 0 0 auto;
+                    width: 150px;
+                    height: 110px;
+                    padding: 0;
+                    border: none;
+                    border-radius: 12px;
                     overflow: hidden;
-                    flex-shrink: 0;
-                    background: var(--color-blue-tint);
-                    color: var(--color-primary);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 0.9rem;
-                    font-weight: 700;
+                    cursor: zoom-in;
+                    background: var(--color-gray-100);
+                    scroll-snap-align: start;
                 }
-                .dir-endorsement-avatar img {
+                .dir-gallery-item img {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;
                     display: block;
-                }
-                .dir-endorsement-body {
-                    flex: 1;
-                    min-width: 0;
-                    padding-top: 2px;
-                }
-                .dir-endorsement-name {
-                    display: block;
-                    font-size: 0.9rem;
-                    font-weight: 600;
-                }
-                .dir-endorsement-comment {
-                    margin: 0.2rem 0 0;
-                    font-size: 0.88rem;
-                    line-height: 1.55;
-                    color: var(--color-gray-600);
-                    overflow-wrap: break-word;
                 }
 
                 .dir-learn-list {

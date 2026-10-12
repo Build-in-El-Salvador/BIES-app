@@ -91,7 +91,7 @@ const MarketListingDetail = () => {
                     <div style={{ textAlign: 'center', padding: '4rem 0' }}>
                         <h2>{t('marketplace.loadError')}</h2>
                         <Link
-                            to="/discover/market"
+                            to="/market"
                             style={{
                                 marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8,
                                 textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)',
@@ -156,7 +156,7 @@ const MarketListingDetail = () => {
             } else {
                 await marketplaceApi.remove({ eventId: listing.id, dTag: listing.dTag });
             }
-            navigate('/discover/market');
+            navigate('/market');
         } catch (err) {
             setActionError(err.message || 'Failed to delete listing');
             setBusy(false);
@@ -168,7 +168,7 @@ const MarketListingDetail = () => {
         setActionError('');
         try {
             await marketplaceApi.block({ type, value });
-            navigate('/discover/market');
+            navigate('/market');
         } catch (err) {
             setActionError(err.message || 'Failed to block');
             setBusy(false);
@@ -204,7 +204,7 @@ const MarketListingDetail = () => {
                     )}
                     {isSold && <span className="mk-detail-sold">{t('marketplace.sold')}</span>}
                     <Link
-                        to="/discover/market"
+                        to="/market"
                         aria-label={t('marketplace.title')}
                         style={{
                             position: 'absolute', top: 16, left: 16,
@@ -303,7 +303,7 @@ const MarketListingDetail = () => {
                         {isSeller && (
                             <>
                                 <Link
-                                    to={`/discover/market/${listing.naddr}/edit`}
+                                    to={`/market/${listing.naddr}/edit`}
                                     className="mk-action-btn"
                                     style={{ textDecoration: 'none' }}
                                 >

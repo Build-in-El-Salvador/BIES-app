@@ -18,6 +18,8 @@ import {
   Settings,
   MessageCircle,
   Wallet,
+  Leaf,
+  ShieldCheck,
 } from 'lucide-react';
 import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags';
 
@@ -29,6 +31,13 @@ import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags';
 export const NAV_PAGES = [
   { id: 'feed', path: '/feed', icon: MessageSquare, labelKey: 'mobileNav.home' },
   { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover' },
+  { id: 'farms', path: '/farms', icon: Leaf, labelKey: 'mobileNav.farms', auth: true, flag: 'directories' },
+  { id: 'trusted', path: '/trusted', icon: ShieldCheck, labelKey: 'mobileNav.trusted', auth: true, flag: 'directories' },
+  // Spread conditionally so the entry is absent (not just hidden) when the
+  // build-time constant is off; the `flag:` key layers the runtime toggle on top.
+  ...(MARKETPLACE_ENABLED
+    ? [{ id: 'marketplace', path: '/market', icon: Store, labelKey: 'marketplace.navLabel', auth: true, flag: 'marketplace' }]
+    : []),
   { id: 'events', path: '/events', icon: Calendar, labelKey: 'mobileNav.events', flag: 'events' },
   { id: 'media', path: '/media', icon: Play, labelKey: 'nav.media', flag: 'media' },
   { id: 'courses', path: '/courses', icon: GraduationCap, labelKey: 'courses.catalogTitle', auth: true },
@@ -38,11 +47,6 @@ export const NAV_PAGES = [
   { id: 'notifications', path: '/notifications', icon: Bell, labelKey: 'customNav.pages.notifications', auth: true },
   { id: 'cowork', path: '/cowork', icon: Coffee, labelKey: 'mobileNav.cowork', auth: true, flag: 'cowork' },
   { id: 'wallet', path: '/wallet', icon: Wallet, labelKey: 'nav.wallet', auth: true, flag: 'zaps' },
-  // Spread conditionally so the entry is absent (not just hidden) when the
-  // build-time constant is off; the `flag:` key layers the runtime toggle on top.
-  ...(MARKETPLACE_ENABLED
-    ? [{ id: 'marketplace', path: '/discover/market', icon: Store, labelKey: 'marketplace.navLabel', auth: true, flag: 'marketplace' }]
-    : []),
   ...(BOUNTIES_ENABLED
     ? [{ id: 'bounties', path: '/bounties', icon: Target, labelKey: 'nav.bounties', auth: true, flag: 'bounties' }]
     : []),

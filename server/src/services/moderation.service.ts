@@ -150,6 +150,9 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
     return { ok: true, reportId: report.id, duplicate: false };
 }
 
+/** Where a directory listing lives in the app. */
+const listingPath = (type: string, id: string) => `/${type === 'FARM' ? 'farms' : 'trusted'}/${id}`;
+
 /**
  * What was reported, for people: a line, and where it is in the app (a path,
  * or a web link for a note). No link when it has been removed.
@@ -161,17 +164,18 @@ async function describeTarget(type: string, id: string, pubkey: string | null, s
             return { text: `Member profile: ${profile?.name || '(no name)'}`, link: profile ? `/builder/${id}` : null };
         }
         case 'listing': {
-            const listing = await prisma.directoryListing.findUnique({ where: { id }, select: { name: true } });
-            return { text: `Directory listing: ${listing?.name ?? '(deleted)'}`, link: listing ? `/discover/certified/${id}` : null };
+            const listing = await prisma.directoryListing.findUnique({ where: { id }, select: { name: true, type: true } });
+            return { text: `Directory listing: ${listing?.name ?? '(deleted)'}`, link: listing ? listingPath(listing.type, id) : null };
         }
         case 'endorsement': {
             const e = await prisma.directoryEndorsement.findUnique({
                 where: { id },
-                select: { comment: true, listingId: true, listing: { select: { name: true } } },
+                select: { comment: true, vote: true, listingId: true, listing: { select: { name: true, type: true } } },
             });
+            const kind = e && e.vote < 0 ? 'Downvote' : 'Vouch';
             return e
-                ? { text: `Recommendation on ${e.listing.name}: "${e.comment}"`, link: `/discover/certified/${e.listingId}` }
-                : { text: 'Recommendation (deleted)', link: null };
+                ? { text: `${kind} on ${e.listing.name}: "${e.comment}"`, link: listingPath(e.listing.type, e.listingId) }
+                : { text: 'Review (deleted)', link: null };
         }
         case 'event': {
             const event = await prisma.event.findUnique({ where: { id }, select: { title: true } });

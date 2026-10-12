@@ -266,7 +266,8 @@ export const directoryApi = {
 
     delete: (id) => del(`/directory/${id}`),
 
-    endorse: (id, comment = '') => post(`/directory/${id}/endorse`, { comment }),
+    // A review: vote 1 vouches, -1 doesn't recommend (and needs a comment).
+    endorse: (id, { vote = 1, comment = '' } = {}) => post(`/directory/${id}/endorse`, { vote, comment }),
 
     unendorse: (id) => del(`/directory/${id}/endorse`),
 };
@@ -604,7 +605,6 @@ export const adminApi = {
     listDirectory: (params = {}) => get('/admin/directory', params),
     reviewDirectoryListing: (id, action) => put(`/admin/directory/${id}/review`, { action }),
     featureDirectoryListing: (id, featured) => put(`/admin/directory/${id}/feature`, { featured }),
-    setDirectoryScore: (id, baseScore) => put(`/admin/directory/${id}/score`, { baseScore }),
     recomputeDirectoryScores: () => post('/admin/directory/recompute', {}),
     deleteDirectoryListing: (id) => del(`/admin/directory/${id}`),
     listCourses: (params = {}) => get('/admin/courses', params),

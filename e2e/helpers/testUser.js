@@ -1,7 +1,7 @@
 /**
  * Create a test account the way Nostr users sign in: a fresh key answers the
  * server's challenge. (Email sign-in needs a code from an inbox, so tests
- * don't use it.) Optionally sets the profile name.
+ * don't use it.) Accepts the current terms, and optionally sets the profile name.
  *
  * Returns { token, user, skHex } — skHex is the account's own key, for specs
  * that inject it as the in-browser signer.
@@ -25,6 +25,17 @@ export async function createTestUser(request, api, name) {
     const res = await request.post(`${api}/auth/nostr-login`, { data: { pubkey, signedEvent } });
     if (!res.ok()) throw new Error(`Test sign-in failed: ${res.status()}`);
     let { token, user } = await res.json();
+
+    // Accept the current terms first: the server refuses posts and profile
+    // edits until they are (the app's terms gate).
+    if (user.termsAccepted === false && user.termsVersion) {
+        const terms = await request.post(`${api}/account/terms`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data: { version: user.termsVersion },
+        });
+        if (!terms.ok()) throw new Error(`Accepting the terms failed: ${terms.status()}`);
+        user = { ...user, termsAccepted: true };
+    }
 
     if (name) {
         const update = await request.put(`${api}/profiles/me`, {

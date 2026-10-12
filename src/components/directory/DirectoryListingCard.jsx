@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, ChevronRight, Leaf, ShieldCheck, Bitcoin } from 'lucide-react';
+import { MapPin, Phone, ChevronRight, Leaf, ShieldCheck, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getAssetUrl } from '../../utils/assets';
 import CertifiedBadge from './CertifiedBadge';
@@ -9,7 +9,8 @@ import CertifiedBadge from './CertifiedBadge';
  * Directory listing card (list row) per the mockup:
  * rounded photo left, bold name, produce/skills summary in primary blue,
  * MapPin + Phone rows in gray, chevron at the right edge.
- * PROVIDER cards additionally show score pill / certified pill / BTC / pricing.
+ * Then the BIES Trust Score (vouches minus downvotes), the BIES Trusted pill,
+ * BTC and pricing.
  *
  * @param {object} listing - parsed listing from directoryApi
  * @param {'FARM'|'PROVIDER'} type
@@ -17,11 +18,22 @@ import CertifiedBadge from './CertifiedBadge';
 const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
     const { t } = useTranslation();
     const isProvider = type === 'PROVIDER';
-    const basePath = isProvider ? '/discover/certified' : '/discover/farms';
+    const basePath = isProvider ? '/trusted' : '/farms';
 
-    const summary = isProvider
+    const category = isProvider && listing.category ? t(`directory.categories.${listing.category}`) : '';
+    const details = isProvider
         ? (listing.skills || []).join(', ')
         : (listing.products || []).map((p) => p?.label).filter(Boolean).join(', ');
+    const summary = [category, details].filter(Boolean).join(' · ');
+    const photo = listing.photo || (listing.photos || [])[0] || '';
+    const phone = listing.phone || listing.whatsapp || '';
+
+    const score = listing.reputationScore ?? 0;
+    const votes = (listing.vouchCount ?? 0) + (listing.downvoteCount ?? 0);
+    const scoreTitle = [
+        t('directory.trust.vouches', { count: listing.vouchCount ?? 0 }),
+        t('directory.trust.downvotes', { count: listing.downvoteCount ?? 0 }),
+    ].join(' · ');
 
     const FallbackIcon = isProvider ? ShieldCheck : Leaf;
 
@@ -34,8 +46,8 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
         >
             <div className="dir-card">
                 <div className="dir-card-photo">
-                    {listing.photo ? (
-                        <img src={getAssetUrl(listing.photo)} alt={listing.name} />
+                    {photo ? (
+                        <img src={getAssetUrl(photo)} alt={listing.name} />
                     ) : (
                         <div className="dir-card-photo-fallback">
                             <FallbackIcon size={28} />
@@ -52,23 +64,26 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                             <span>{listing.location}</span>
                         </div>
                     )}
-                    {listing.phone && (
+                    {phone && (
                         <div className="dir-card-meta">
                             <Phone size={14} />
-                            <span>{listing.phone}</span>
+                            <span>{phone}</span>
                         </div>
                     )}
 
-                    {isProvider && (
+                    {(votes > 0 || listing.isCertified || listing.btcAccepted || (isProvider && listing.pricing)) && (
                         <div className="dir-card-pills">
-                            {typeof listing.reputationScore === 'number' && (
-                                <span className="dir-score-pill">{listing.reputationScore}%</span>
+                            {votes > 0 && (
+                                <span className={`dir-score-pill${score < 0 ? ' negative' : ''}`} title={scoreTitle} aria-label={`${t('directory.reputation')}: ${scoreTitle}`}>
+                                    {score < 0 ? <ThumbsDown size={12} /> : <ThumbsUp size={12} />}
+                                    {score > 0 ? `+${score}` : score}
+                                </span>
                             )}
                             {listing.isCertified && <CertifiedBadge size="sm" />}
                             {listing.btcAccepted && (
                                 <Bitcoin size={15} className="dir-btc-icon" aria-label={t('directory.btcAccepted')} />
                             )}
-                            {listing.pricing && <span className="dir-card-pricing">{listing.pricing}</span>}
+                            {isProvider && listing.pricing && <span className="dir-card-pricing">{listing.pricing}</span>}
                         </div>
                     )}
                 </div>
@@ -165,12 +180,19 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                     margin-top: 2px;
                 }
                 .dir-score-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
                     background: var(--color-blue-tint);
                     color: var(--color-primary);
                     font-size: 0.75rem;
                     font-weight: 700;
                     padding: 2px 8px;
                     border-radius: var(--radius-full);
+                }
+                .dir-score-pill.negative {
+                    background: var(--color-red-tint);
+                    color: var(--color-error);
                 }
                 .dir-btc-icon {
                     color: #f7931a;
