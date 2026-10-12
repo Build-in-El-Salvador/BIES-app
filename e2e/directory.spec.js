@@ -1,17 +1,16 @@
 /**
- * E2E test: Farm & Certified Provider directories
+ * E2E test: the Farm Directory and BIES Trusted, each on its own page
  *
  * Run with the repo default config (boots the API on :3001 and vite on :5173,
  * reusing already-running servers):
  *   npx playwright test e2e/directory.spec.js
  *
  * Covers:
- *  - /discover/farms renders the section header, search input, and add button
- *  - the Discover bottom-nav tab is active on /discover/farms (rgb(255,91,0))
- *  - /discover still shows exactly 2 mobile tabs (Projects/Members untouched)
- *  - member submit flow: form submission lands as pending-review and is
- *    excluded from the public list while visible to the owner
- *  - desktop /discover/certified renders the certified section header
+ *  - /farms renders the section header, search input, and add button
+ *  - links from before the move (/discover/farms, /discover/certified) redirect
+ *  - /discover no longer carries the directory cards, and keeps its 2 tabs
+ *  - a member's listing goes live at once and lands on its own page
+ *  - desktop /trusted renders the BIES Trusted section header
  */
 
 import { test, expect } from '@playwright/test';
@@ -44,7 +43,7 @@ test.describe('Directories', () => {
     test('mobile: farm directory renders header, search, and add button', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await loginAs(page, token);
-        await page.goto('/discover/farms');
+        await page.goto('/farms');
         await page.waitForLoadState('networkidle');
 
         // Section header with title + subtitle
@@ -62,19 +61,18 @@ test.describe('Directories', () => {
         await page.screenshot({ path: 'e2e/screenshots/directory-farms-mobile.png', fullPage: false });
     });
 
-    test('mobile: Discover bottom-nav tab is active on /discover/farms', async ({ page }) => {
+    test('links from before the move redirect to the new pages', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await loginAs(page, token);
         await page.goto('/discover/farms');
-        await page.waitForLoadState('networkidle');
-
-        const discoverTab = page.locator('.mobile-bottom-nav a[href="/discover"]');
-        await expect(discoverTab).toBeVisible();
-        const color = await discoverTab.evaluate((el) => getComputedStyle(el).color);
-        expect(color).toBe('rgb(255, 91, 0)');
+        await expect(page).toHaveURL(/\/farms$/);
+        await page.goto('/discover/certified');
+        await expect(page).toHaveURL(/\/trusted$/);
+        await page.goto('/discover/directory/new?type=provider');
+        await expect(page).toHaveURL(/\/trusted\/new$/);
     });
 
-    test('mobile: /discover still has exactly 2 tabs', async ({ page }) => {
+    test('mobile: /discover has its 2 tabs and no directory cards', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await loginAs(page, token);
         await page.goto('/discover');
@@ -82,54 +80,48 @@ test.describe('Directories', () => {
 
         const tabs = page.locator('.discover-mobile-tabs .discover-tab');
         await expect(tabs).toHaveCount(2);
+        await expect(page.locator('.directory-entry-card')).toHaveCount(0);
     });
 
-    test('submit flow: member submission is pending and hidden from public list', async ({ page, request }) => {
+    test("submit flow: a member's farm goes live at once on its own page", async ({ page, request }) => {
         const listingName = `E2E Test Farm ${Date.now()}`;
 
         await page.setViewportSize({ width: 390, height: 844 });
         await loginAs(page, token);
-        await page.goto('/discover/directory/new?type=farm');
+        await page.goto('/farms/new');
         await page.waitForLoadState('networkidle');
 
-        // Fill the name field (first input in the basic-info card) and submit
-        const nameInput = page.locator('.dir-form-card .dir-input').first();
+        // Their own farm, so no review is needed; name it and submit
+        await page.getByText("It's my farm, or I work there").click();
+        const nameInput = page.locator('input[name="name"]');
         await expect(nameInput).toBeVisible();
         await nameInput.fill(listingName);
         await page.getByRole('button', { name: 'Submit Listing' }).click();
 
-        // Confirmation screen: submitted for review
-        await expect(page.getByText('submitted for review')).toBeVisible({ timeout: 10_000 });
-        await page.screenshot({ path: 'e2e/screenshots/directory-submit-confirmation.png', fullPage: false });
+        // Lands on the live listing
+        await expect(page).toHaveURL(/\/farms\/[a-z0-9]+$/, { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: listingName })).toBeVisible();
 
-        // Public list (unauthenticated) must NOT include the pending listing
+        // And it's in the public list
         const publicRes = await request.get(`${API}/directory?type=FARM&search=${encodeURIComponent(listingName)}`);
         expect(publicRes.ok()).toBeTruthy();
         const publicBody = await publicRes.json();
-        expect((publicBody.data || []).some((l) => l.name === listingName)).toBeFalsy();
-
-        // Owner sees their own submission with pending-review status
-        const ownRes = await request.get(
-            `${API}/directory?type=FARM&ownerId=${user.id}&search=${encodeURIComponent(listingName)}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-        );
-        expect(ownRes.ok()).toBeTruthy();
-        const ownBody = await ownRes.json();
-        const mine = (ownBody.data || []).find((l) => l.name === listingName);
-        expect(mine, 'owner should see their pending listing').toBeTruthy();
-        expect(mine.status).toBe('pending-review');
+        const live = (publicBody.data || []).find((l) => l.name === listingName);
+        expect(live, 'the new farm should be listed').toBeTruthy();
+        expect(live.status).toBe('active');
+        expect(live.ownerId).toBe(user.id);
     });
 
-    test('desktop: certified directory renders section header', async ({ page }) => {
+    test('desktop: BIES Trusted renders its section header', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 800 });
         await loginAs(page, token);
-        await page.goto('/discover/certified');
+        await page.goto('/trusted');
         await page.waitForLoadState('networkidle');
 
         const header = page.locator('.dir-section-header');
         await expect(header).toBeVisible();
-        await expect(header).toContainText('BIES Certified Professionals');
+        await expect(header).toContainText('BIES Trusted');
 
-        await page.screenshot({ path: 'e2e/screenshots/directory-certified-desktop.png', fullPage: false });
+        await page.screenshot({ path: 'e2e/screenshots/directory-trusted-desktop.png', fullPage: false });
     });
 });

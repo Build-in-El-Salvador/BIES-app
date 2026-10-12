@@ -40,7 +40,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const [produce, setProduce] = useState(''); // FARM: a PRODUCE_KINDS key
     const [threshold, setThreshold] = useState(5);
 
-    // Reset state when switching between /discover/farms and /discover/trusted
+    // Reset state when switching between /farms and /trusted
     useEffect(() => {
         setSearchQuery('');
         setSelectedPractices([]);
@@ -125,7 +125,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         </button>
                     </div>
                     <Link
-                        to={`/discover/directory/new?type=${isFarm ? 'farm' : 'provider'}`}
+                        to={isFarm ? '/farms/new' : '/trusted/new'}
                         className="directory-add-btn"
                         title={t('directory.addListing')}
                         style={{
@@ -250,7 +250,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                             ? t('directory.noResultsSearch', { query: searchQuery })
                             : isFarm ? t('directory.noFarms') : t('directory.noProviders')}
                         {!searchQuery && (
-                            <Link to={`/discover/directory/new?type=${isFarm ? 'farm' : 'provider'}`} className="dir-empty-cta">
+                            <Link to={isFarm ? '/farms/new' : '/trusted/new'} className="dir-empty-cta">
                                 <Plus size={16} /> {isFarm ? t('directory.createTitleFarm') : t('directory.createTitleProvider')}
                             </Link>
                         )}

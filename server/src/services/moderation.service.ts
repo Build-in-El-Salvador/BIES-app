@@ -151,7 +151,7 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
 }
 
 /** Where a directory listing lives in the app. */
-const listingPath = (type: string, id: string) => `/discover/${type === 'FARM' ? 'farms' : 'trusted'}/${id}`;
+const listingPath = (type: string, id: string) => `/${type === 'FARM' ? 'farms' : 'trusted'}/${id}`;
 
 /**
  * What was reported, for people: a line, and where it is in the app (a path,

@@ -59,6 +59,7 @@
   },
   "nav": {
     "discover": "Discover",
+    "trusted": "BIES Trusted",
     "members": "Members",
     "events": "Events",
     "media": "Media",
@@ -79,7 +80,8 @@
     "memberView": "Member View",
     "adminView": "Admin View",
     "bounties": "Bounties",
-    "wallet": "Wallet"
+    "wallet": "Wallet",
+    "more": "More"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -1893,6 +1895,8 @@
   "mobileNav": {
     "home": "Feed",
     "discover": "Discover",
+    "farms": "Farms",
+    "trusted": "Trusted",
     "events": "Events",
     "news": "News",
     "dashboard": "Dashboard",

@@ -35,7 +35,7 @@ const toAbsoluteUrl = (url) => {
  * when one is connected (extension/nsec/bunker/amber), otherwise through the
  * custodial server signer (marketplaceApi.publish).
  *
- * @param {boolean} editMode - true when mounted at /discover/market/:naddr/edit
+ * @param {boolean} editMode - true when mounted at /market/:naddr/edit
  */
 const CreateMarketListing = ({ editMode = false }) => {
     const { t } = useTranslation();
@@ -157,7 +157,7 @@ const CreateMarketListing = ({ editMode = false }) => {
                 ? await nostrService.publishMarketplaceListing(payload)
                 : await marketplaceApi.publish(payload);
             const published = result?.data || result;
-            navigate(`/discover/market/${published?.naddr || naddr}`);
+            navigate(`/market/${published?.naddr || naddr}`);
         } catch (err) {
             setSubmitError(err.message || 'Failed to publish listing');
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -181,7 +181,7 @@ const CreateMarketListing = ({ editMode = false }) => {
                     <h2>{t('marketplace.loadError')}</h2>
                     <p style={{ color: 'var(--color-gray-500)', margin: '0.5rem 0' }}>{loadError}</p>
                     <Link
-                        to="/discover/market"
+                        to="/market"
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
                         <ArrowLeft size={16} /> {t('marketplace.title')}

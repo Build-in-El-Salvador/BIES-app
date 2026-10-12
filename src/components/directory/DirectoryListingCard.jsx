@@ -18,7 +18,7 @@ import CertifiedBadge from './CertifiedBadge';
 const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
     const { t } = useTranslation();
     const isProvider = type === 'PROVIDER';
-    const basePath = isProvider ? '/discover/trusted' : '/discover/farms';
+    const basePath = isProvider ? '/trusted' : '/farms';
 
     const category = isProvider && listing.category ? t(`directory.categories.${listing.category}`) : '';
     const details = isProvider

@@ -59,6 +59,7 @@
   },
   "nav": {
     "discover": "Descubrir",
+    "trusted": "Confianza BIES",
     "members": "Miembros",
     "events": "Eventos",
     "media": "Medios",
@@ -79,7 +80,8 @@
     "memberView": "Vista Miembro",
     "adminView": "Vista Admin",
     "bounties": "Recompensas",
-    "wallet": "Billetera"
+    "wallet": "Billetera",
+    "more": "Más"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -1894,6 +1896,8 @@
   "mobileNav": {
     "home": "Feed",
     "discover": "Descubrir",
+    "farms": "Fincas",
+    "trusted": "Confianza",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",

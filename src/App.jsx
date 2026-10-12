@@ -145,10 +145,20 @@ const FeatureRoute = ({ flag, children }) => {
     return children;
 };
 
-/** A listing link from when BIES Trusted was "Certified". */
-const LegacyListingRedirect = () => {
-    const { id } = useParams();
-    return <Navigate to={`/discover/trusted/${id}`} replace />;
+/**
+ * A link from before the directories and the marketplace had their own pages
+ * (/discover/farms/…, /discover/certified/…): the same place at its new path.
+ */
+const Moved = ({ to }) => {
+    const { '*': rest } = useParams();
+    const { search } = useLocation();
+    return <Navigate to={`${to}${rest ? `/${rest}` : ''}${search}`} replace />;
+};
+
+/** The old "add a listing" link, /discover/directory/new?type=farm|provider. */
+const LegacyNewListing = () => {
+    const { search } = useLocation();
+    return <Navigate to={new URLSearchParams(search).get('type') === 'provider' ? '/trusted/new' : '/farms/new'} replace />;
 };
 
 const AppContent = () => {
@@ -204,25 +214,31 @@ const AppContent = () => {
                     <Route path="/access/:code" element={<VoucherRedeem />} />
                     <Route path="/join/:code" element={<Join />} />
 
-                    {/* Directories (declared before the generic /discover route) */}
-                    <Route path="/discover/farms" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="FARM" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/farms/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/trusted" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/trusted/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
-                    {/* BIES Trusted was "Certified": links to the old paths still work */}
-                    <Route path="/discover/certified" element={<Navigate to="/discover/trusted" replace />} />
-                    <Route path="/discover/certified/:id" element={<LegacyListingRedirect />} />
-                    <Route path="/discover/directory/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover/directory/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
-                    {/* Marketplace (declared before the generic /discover route) */}
+                    {/* Farm Directory and BIES Trusted: pages of their own, so members can put them in their bottom bar */}
+                    <Route path="/farms" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="FARM" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/farms/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing key="new-farm" type="FARM" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/farms/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/farms/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/trusted" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/trusted/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing key="new-business" type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/trusted/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/trusted/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
+                    {/* Marketplace: its own page too */}
                     {MARKETPLACE_ENABLED && (
                         <>
-                            <Route path="/discover/market" element={<FeatureRoute flag="marketplace"><ProtectedRoute><MarketplaceList /></ProtectedRoute></FeatureRoute>} />
-                            <Route path="/discover/market/new" element={<FeatureRoute flag="marketplace"><ProtectedRoute><CreateMarketListing /></ProtectedRoute></FeatureRoute>} />
-                            <Route path="/discover/market/:naddr/edit" element={<FeatureRoute flag="marketplace"><ProtectedRoute><CreateMarketListing editMode /></ProtectedRoute></FeatureRoute>} />
-                            <Route path="/discover/market/:naddr" element={<FeatureRoute flag="marketplace"><ProtectedRoute><MarketListingDetail /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/market" element={<FeatureRoute flag="marketplace"><ProtectedRoute><MarketplaceList /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/market/new" element={<FeatureRoute flag="marketplace"><ProtectedRoute><CreateMarketListing /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/market/:naddr/edit" element={<FeatureRoute flag="marketplace"><ProtectedRoute><CreateMarketListing editMode /></ProtectedRoute></FeatureRoute>} />
+                            <Route path="/market/:naddr" element={<FeatureRoute flag="marketplace"><ProtectedRoute><MarketListingDetail /></ProtectedRoute></FeatureRoute>} />
                         </>
                     )}
+                    {/* Their old paths under /discover (and "Certified", BIES Trusted's old name) still work */}
+                    <Route path="/discover/farms/*" element={<Moved to="/farms" />} />
+                    <Route path="/discover/trusted/*" element={<Moved to="/trusted" />} />
+                    <Route path="/discover/certified/*" element={<Moved to="/trusted" />} />
+                    <Route path="/discover/market/*" element={<Moved to="/market" />} />
+                    <Route path="/discover/directory/new" element={<LegacyNewListing />} />
+                    <Route path="/discover/directory/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/discover" element={<ProtectedRoute><Discover /></ProtectedRoute>} />
                     <Route path="/events" element={<FeatureRoute flag="events"><ProtectedRoute><Events /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/events/create" element={

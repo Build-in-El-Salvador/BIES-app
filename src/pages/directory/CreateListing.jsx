@@ -54,16 +54,17 @@ const emptyForm = {
  * via uploadApi.media with the ImageCropModal pattern (photo: wide crop,
  * logo: square/round crop), error banner, submitting states.
  *
- * @param {boolean} editMode - true when mounted at /discover/directory/:id/edit
+ * @param {'FARM'|'PROVIDER'} [type] - the directory a new listing goes in (/farms/new, /trusted/new)
+ * @param {boolean} editMode - true when mounted at /farms/:id/edit or /trusted/:id/edit
  */
-const CreateListing = ({ editMode = false }) => {
+const CreateListing = ({ type: typeProp, editMode = false }) => {
     const { t } = useTranslation();
     const { isStaff } = useAuth();
     const navigate = useNavigate();
     const { id } = useParams();
     const [searchParams] = useSearchParams();
 
-    const initialType = searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM';
+    const initialType = typeProp || (searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM');
     const [type, setType] = useState(initialType);
     // Whose listing it is: a customer recommending it (their review is their
     // vouch) or the business or farm itself.
@@ -247,7 +248,7 @@ const CreateListing = ({ editMode = false }) => {
     };
 
     const detailPath = (listing) =>
-        listing.type === 'PROVIDER' ? `/discover/trusted/${listing.id}` : `/discover/farms/${listing.id}`;
+        listing.type === 'PROVIDER' ? `/trusted/${listing.id}` : `/farms/${listing.id}`;
 
     // Best-effort Nostr mirror for members who sign on their own device: the
     // server only signs for hosted keys, so a live listing it couldn't mirror
@@ -327,7 +328,7 @@ const CreateListing = ({ editMode = false }) => {
                         <p style={{ color: 'var(--color-gray-600)', lineHeight: 1.6, marginBottom: '2rem' }}>
                             {t('directory.submittedForReview')}
                         </p>
-                        <Link to={isFarm ? '/discover/farms' : '/discover/trusted'} className="btn btn-primary">
+                        <Link to={isFarm ? '/farms' : '/trusted'} className="btn btn-primary">
                             {t('directory.backToDirectory')}
                         </Link>
                     </div>
@@ -355,7 +356,7 @@ const CreateListing = ({ editMode = false }) => {
                     <h2>{t('directory.notFound')}</h2>
                     <p style={{ color: 'var(--color-gray-500)', margin: '0.5rem 0' }}>{loadError}</p>
                     <Link
-                        to={isFarm ? '/discover/farms' : '/discover/trusted'}
+                        to={isFarm ? '/farms' : '/trusted'}
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
                         <ArrowLeft size={16} /> {t('directory.backToDirectory')}

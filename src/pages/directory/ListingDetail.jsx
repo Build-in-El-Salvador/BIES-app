@@ -81,9 +81,9 @@ const ListingDetail = () => {
     // After a block the server hides the member's listing or recommendation.
     const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => fetchListing() });
 
-    const isProviderPath = location.pathname.startsWith('/discover/trusted');
+    const isProviderPath = location.pathname.startsWith('/trusted');
     const isFarm = listing ? listing.type === 'FARM' : !isProviderPath;
-    const backPath = isFarm ? '/discover/farms' : '/discover/trusted';
+    const backPath = isFarm ? '/farms' : '/trusted';
 
     if (loading) {
         return (
@@ -246,7 +246,7 @@ const ListingDetail = () => {
                                 )}
                                 {canEdit && (
                                     <Link
-                                        to={`/discover/directory/${listing.id}/edit`}
+                                        to={`${backPath}/${listing.id}/edit`}
                                         style={{
                                             display: 'inline-flex', alignItems: 'center', gap: 6,
                                             padding: '0.4rem 0.9rem', borderRadius: 'var(--radius-full)',

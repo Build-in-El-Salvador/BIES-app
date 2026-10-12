@@ -7,7 +7,7 @@ import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { User, Search, ChevronDown, LogOut, Trophy } from 'lucide-react';
 import NostrIcon from './NostrIcon';
 import NostrNotifications from './NostrNotifications';
-import { BOUNTIES_ENABLED, COWORK_ENABLED } from '../config/featureFlags';
+import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config/featureFlags';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
 import logoIconDark from '../assets/logo-icon-dark.svg';
 
@@ -19,6 +19,7 @@ const Navbar = () => {
   const featureOn = (slug) => flags[slug] !== false;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
@@ -35,24 +36,32 @@ const Navbar = () => {
 
   // `flag:` ties a link to a runtime feature toggle — disabled features
   // disappear from the nav entirely.
+  // `more:` links sit under "More" on desktop, so the bar fits; `squeeze:`
+  // links join them there on narrow desktops (under 1024px).
   const navLinks = [
     { label: t('nav.discover'), path: '/discover' },
-    { label: t('nav.events'), path: '/events', flag: 'events' },
-    ...(BOUNTIES_ENABLED ? [{ label: t('nav.bounties'), path: '/bounties', flag: 'bounties' }] : []),
-    { label: t('nav.leaderboard'), path: '/leaderboard', icon: Trophy, flag: 'points' },
-    { label: t('nav.media'), path: '/media', flag: 'media' },
-    { label: t('nav.news'), path: '/news', flag: 'news' },
-    { label: t('nav.about'), path: '/about' },
+    { label: t('mobileNav.farms'), path: '/farms', flag: 'directories' },
+    { label: t('nav.trusted'), path: '/trusted', flag: 'directories' },
+    ...(MARKETPLACE_ENABLED ? [{ label: t('marketplace.entryLabel'), path: '/market', flag: 'marketplace' }] : []),
+    { label: t('nav.events'), path: '/events', flag: 'events', squeeze: true },
+    { label: t('nav.media'), path: '/media', flag: 'media', squeeze: true },
+    ...(BOUNTIES_ENABLED ? [{ label: t('nav.bounties'), path: '/bounties', flag: 'bounties', more: true }] : []),
+    { label: t('nav.leaderboard'), path: '/leaderboard', icon: Trophy, flag: 'points', more: true },
+    { label: t('nav.news'), path: '/news', flag: 'news', more: true },
+    { label: t('nav.about'), path: '/about', more: true },
   ].filter((link) => !link.flag || featureOn(link.flag));
+  const moreLinks = navLinks.filter((link) => link.more);
+  const squeezeLinks = navLinks.filter((link) => link.squeeze);
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   // Derive mobile navbar title from route
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/' || path === '/feed') return t('pageTitles.biesFeed');
-    if (path.startsWith('/discover/farms')) return t('pageTitles.farmDirectory');
-    if (path.startsWith('/discover/trusted')) return t('pageTitles.certifiedDirectory');
+    if (path.startsWith('/farms')) return t('pageTitles.farmDirectory');
+    if (path.startsWith('/trusted')) return t('pageTitles.certifiedDirectory');
+    if (path.startsWith('/market')) return t('marketplace.title');
     if (path.startsWith('/discover')) return t('pageTitles.discover', 'Discover');
     if (path.startsWith('/events')) return t('pageTitles.ecosystemEvents');
     if (path.startsWith('/bounties')) return t('pageTitles.bounties');
@@ -98,17 +107,50 @@ const Navbar = () => {
 
         {/* Desktop Nav */}
         <div className="desktop-links flex items-center gap-lg">
-          {navLinks.map((link) => (
+          {navLinks.filter((link) => !link.more).map((link) => (
             <Link
               key={link.path}
               to={link.path}
-              className={`nav-link ${isActive(link.path) ? 'active' : ''}`}
+              className={`nav-link ${link.squeeze ? 'squeeze' : ''} ${isActive(link.path) ? 'active' : ''}`}
               style={{ color: 'white', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
               {link.icon && <link.icon size={15} />}
               {link.label}
             </Link>
           ))}
+          {moreLinks.length > 0 && (
+            <div className="more-menu relative">
+              <button
+                type="button"
+                className={`more-btn ${moreLinks.some((link) => isActive(link.path)) ? 'active' : ''} ${squeezeLinks.some((link) => isActive(link.path)) ? 'squeeze-active' : ''}`}
+                onClick={() => setIsMoreOpen(!isMoreOpen)}
+                aria-haspopup="menu"
+                aria-expanded={isMoreOpen}
+              >
+                {t('nav.more')}
+                <ChevronDown size={14} style={{ transform: isMoreOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </button>
+              {isMoreOpen && (
+                <>
+                  <div className="click-outside-overlay" onClick={() => setIsMoreOpen(false)}></div>
+                  <div className="dropdown more-dropdown" role="menu">
+                    {[...squeezeLinks, ...moreLinks].map((link) => (
+                      <Link
+                        key={link.path}
+                        to={link.path}
+                        role="menuitem"
+                        className={`more-item ${link.squeeze ? 'squeeze-only' : ''} ${isActive(link.path) ? 'active' : ''}`}
+                        onClick={() => setIsMoreOpen(false)}
+                      >
+                        {link.icon && <link.icon size={15} />}
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Actions */}
@@ -253,6 +295,11 @@ const Navbar = () => {
               {/* Top Section: Profile, Messages, News, About */}
               {[
                 { to: '/profile', label: t('nav.profile') },
+                ...(featureOn('directories') ? [
+                  { to: '/farms', label: t('directory.farmTitle') },
+                  { to: '/trusted', label: t('directory.certifiedTitle') },
+                ] : []),
+                ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),
                 ...(featureOn('messages') ? [{ to: '/messages', label: t('nav.messages') }] : []),
                 ...(COWORK_ENABLED && featureOn('cowork') ? [{ to: '/cowork', label: t('nav.cowork') }] : []),
                 ...(featureOn('zaps') ? [{ to: '/wallet', label: t('nav.wallet', 'Wallet') }] : []),
@@ -368,6 +415,65 @@ const Navbar = () => {
           font-size: 0.95rem;
           padding: 0.5rem 0;
           position: relative;
+        }
+
+        /* Links are <Link>s, which styled-jsx doesn't scope */
+        .desktop-links :global(a) {
+          white-space: nowrap;
+        }
+        .more-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0.5rem 0;
+          background: none;
+          border: none;
+          color: white;
+          font-family: var(--font-sans);
+          font-size: 0.95rem;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .more-btn.active {
+          font-family: var(--font-display);
+          font-weight: 700;
+        }
+        .more-dropdown {
+          left: 0;
+          right: auto;
+        }
+        .more-dropdown :global(.more-item) {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0.65rem 0.9rem;
+          border-radius: var(--radius-sm);
+          color: var(--color-neutral-dark);
+          font-size: 0.9rem;
+          text-decoration: none;
+          white-space: nowrap;
+        }
+        .more-dropdown :global(.more-item:hover) {
+          background: var(--color-gray-100);
+        }
+        .more-dropdown :global(.more-item.active) {
+          font-weight: 700;
+          color: var(--color-primary);
+        }
+        .more-dropdown :global(.squeeze-only) {
+          display: none;
+        }
+        @media (max-width: 1023px) {
+          .desktop-links :global(.squeeze) {
+            display: none !important;
+          }
+          .more-dropdown :global(.squeeze-only) {
+            display: flex;
+          }
+          .more-btn.squeeze-active {
+            font-family: var(--font-display);
+            font-weight: 700;
+          }
         }
 
         .nav-link:hover {
