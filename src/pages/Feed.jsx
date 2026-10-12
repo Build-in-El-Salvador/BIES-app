@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { isNativePlatform } from '../utils/platform';
+import { useFeature } from '../context/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
@@ -62,6 +63,7 @@ const Feed = () => {
     // The store app shows only the BIES private feed: Explore is the open
     // Nostr network, which BIES doesn't moderate (App Review guideline 1.2).
     const exploreAllowed = !isNativePlatform();
+    const zapsOn = useFeature('zaps');
     const [exploreView, setExploreView] = useState('trending_24h');
     const [exploreDropdownOpen, setExploreDropdownOpen] = useState(false);
     const exploreDropdownRef = useRef(null);
@@ -1509,13 +1511,14 @@ const Feed = () => {
                                         setRepostMenu(repostMenu === post.id ? null : post.id);
                                     }}
                                     onRepost={(relay) => handleRepost(post, relay)}
-                                    onZap={() => setZapTarget({
+                                    allowPublicRepost={exploreAllowed}
+                                    onZap={zapsOn ? () => setZapTarget({
                                         pubkey: post.pubkey,
                                         name: getDisplayName(post.pubkey),
                                         avatar: getAvatar(post.pubkey),
                                         lud16: profiles[post.pubkey]?.lud16,
                                         eventId: post.id,
-                                    })}
+                                    }) : undefined}
                                     // njump.me links only open public posts
                                     onShare={feedMode === 'explore' ? () => handleShare(post) : undefined}
                                     onPostMenuToggle={() => {

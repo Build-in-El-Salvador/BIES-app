@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { isNativePlatform } from '../utils/platform';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Briefcase, Globe, Twitter, Linkedin, MoreHorizontal, Loader2, ArrowLeft, Users, Copy, Check, UserPlus, UserCheck, Zap, MessageSquare, Calendar, Trophy, Flag, Ban } from 'lucide-react';
@@ -680,7 +681,7 @@ const PublicProfile = ({ type }) => {
 
                         {/* Nostr Feed */}
                         {(profile.nostrFeedMode || 'combined') !== 'off' && npub && (
-                            <NostrFeed npub={npub} mode={profile.nostrFeedMode || 'combined'} />
+                            <NostrFeed npub={npub} mode={isNativePlatform() ? 'private' : profile.nostrFeedMode || 'combined'} />
                         )}
                     </div>
 

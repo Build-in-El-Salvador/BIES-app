@@ -30,6 +30,7 @@ const Note = ({
   onRepost,
   onZap,
   onShare,
+  allowPublicRepost,
   onPostMenuToggle,
   onDeletePost,
   onMuteUser,
@@ -175,6 +176,7 @@ const Note = ({
         onRepost={onRepost}
         onZap={onZap}
         onShare={onShare}
+        allowPublicRepost={allowPublicRepost}
         repostMenuOpen={repostMenuOpen}
         onRepostMenuToggle={onRepostMenuToggle}
         formatCount={formatCount}

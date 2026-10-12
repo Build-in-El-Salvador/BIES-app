@@ -945,8 +945,9 @@ const Discover = ({ membersOnly = false }) => {
                         // a few tags, no generic "Member" pill.
                         const tags = [...roleTags, ...(builder.skills || builder.tags || [])].slice(0, 3);
                         const subline = builder.location
-                            ? <><MapPin size={13} aria-hidden="true" /> {builder.location}</>
-                            : !builder.title && !builder.company ? stripHtml(builder.bio || '') : '';
+                            ? <><MapPin size={13} aria-hidden="true" /><span className="builder-subline-text">{builder.location}</span></>
+                            : !builder.title && !builder.company && builder.bio
+                                ? <span className="builder-subline-text">{stripHtml(builder.bio)}</span> : '';
 
                         if (memberViewType === 'icons') {
                             return (
@@ -1019,7 +1020,7 @@ const Discover = ({ membersOnly = false }) => {
                                     <div className="p-5 flex-1 flex flex-col">
                                         <h3 className="font-semibold text-xl mb-1">{builder.name}</h3>
                                         {(builder.company || builder.title || builder.role) && <p className="text-primary font-medium text-sm mb-2">{builder.title ? `${builder.title} at ${builder.company || builder.role}` : builder.company || builder.role}</p>}
-                                        {builder.location && <p className="builder-subline mb-2"><MapPin size={13} aria-hidden="true" /> {builder.location}</p>}
+                                        {builder.location && <p className="builder-subline mb-2"><MapPin size={13} aria-hidden="true" /><span className="builder-subline-text">{builder.location}</span></p>}
                                         <p className="text-sm text-gray-500 line-clamp-2 mb-4">{stripHtml(builder.bio || '')}</p>
 
                                         {tags.length > 0 && (
@@ -1161,6 +1162,13 @@ const Discover = ({ membersOnly = false }) => {
           margin: 2px 0 0;
           font-size: 0.82rem;
           color: var(--color-gray-500);
+          min-width: 0;
+        }
+        .builder-subline :global(svg) {
+          flex-shrink: 0;
+        }
+        .builder-subline-text {
+          min-width: 0;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
