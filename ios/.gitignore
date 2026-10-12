@@ -11,3 +11,9 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# TestFlight: App Store Connect key ids (ios/ship.sh)
+.asc-credentials
+
+# TestFlight archives and exports (ios/ship.sh)
+archives
