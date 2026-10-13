@@ -166,6 +166,21 @@ describe('push follows the switches; the bell keeps everything', () => {
         expect(push.apns).toHaveLength(1);
     });
 
+    it('tapping one opens what it is about', async () => {
+        const ana = await member('Ana I');
+        const post = 'ab'.repeat(32);
+        await createNotification({ userId: ana.id, type: 'POST_LIKE', title: 'like', body: 'b', data: { eventId: post } });
+        await createNotification({ userId: ana.id, type: 'FOLLOW', title: 'follow', body: 'b', data: { followerId: 'user123' } });
+        await createNotification({ userId: ana.id, type: 'PROFILE_VIEW', title: 'view', body: 'b', data: { viewerId: 'user456' } });
+        await createNotification({ userId: ana.id, type: 'POST_COMMENT', title: 'odd', body: 'b', data: { eventId: '../admin' } });
+        expect(push.apns.map((p) => [p.title, p.url])).toEqual([
+            ['like', `/feed?post=${post}`],
+            ['follow', '/builder/user123'],
+            ['view', '/builder/user456'],
+            ['odd', '/feed'],
+        ]);
+    });
+
     it('a phone registers its push token, and signs it out again', async () => {
         const ana = await member('Ana H');
         const token = 'a'.repeat(64);

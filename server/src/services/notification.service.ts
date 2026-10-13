@@ -564,8 +564,9 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
             return data.projectId ? `/projects/${data.projectId}` : '/projects';
         case 'FOLLOW':
         case 'PROFILE_VIEW':
-            return data.followerId ? `/profile/${data.followerId}` :
-                   data.viewerId ? `/profile/${data.viewerId}` : '/';
+            // A member's profile, by user id.
+            return data.followerId ? `/builder/${data.followerId}` :
+                   data.viewerId ? `/builder/${data.viewerId}` : '/notifications';
         case 'INVESTMENT_STATUS':
             return data.projectId ? `/projects/${data.projectId}` : '/notifications';
         case 'ZAP_RECEIVED':
@@ -576,7 +577,9 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
         case 'POST_LIKE':
         case 'COMMENT_LIKE':
         case 'COMMENT_REPLY':
-            return '/feed';
+            // The post, with its replies open (a comment opens its post).
+            return typeof data.eventId === 'string' && /^[0-9a-f]{64}$/.test(data.eventId)
+                ? `/feed?post=${data.eventId}` : '/feed';
         case 'LEVEL_UP':
         case 'BADGE_EARNED':
             return '/leaderboard';
