@@ -23,6 +23,7 @@ import { useLightbox } from '../../context/LightboxContext';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
+import AlbumsBlock, { useAlbums } from '../../components/albums/AlbumsBlock';
 import '../../components/moderation/Moderation.css';
 
 const PRACTICE_META = {
@@ -60,6 +61,7 @@ const ListingDetail = () => {
     const [searchParams] = useSearchParams();
     const [saved, setSaved] = useState(null); // null until the listing says
     const [ownershipSheet, setOwnershipSheet] = useState(null); // 'claim' | 'offer' | 'staff'
+    const albums = useAlbums({ listingId: id });
     const [ownershipNotice, setOwnershipNotice] = useState('');
     useEffect(() => { setSaved(null); }, [id]);
     // From "Recommend this one" in the add form (?recommend=1): open the
@@ -609,6 +611,13 @@ const ListingDetail = () => {
                             )}
 
                         </>
+                    )}
+
+                    {/* Its albums: the place's parts, its growth, its team (whoever runs it adds them). */}
+                    {albums.show && (
+                        <section className="dir-detail-section">
+                            <AlbumsBlock albums={albums.albums} canManage={albums.canManage} listingId={listing.id} titleStyle={sectionTitleStyle} />
+                        </section>
                     )}
 
                     <ListingReviews

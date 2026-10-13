@@ -8,7 +8,7 @@ import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X,
 import { nostrService, BIES_RELAY, profileCache } from '../services/nostrService';
 import { primalService, EXPLORE_VIEWS } from '../services/primalService';
 import { nostrSigner } from '../services/nostrSigner';
-import { blossomService } from '../services/blossomService';
+import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
 import { notificationsApi } from '../services/api';
 import NostrIcon from '../components/NostrIcon';
@@ -636,12 +636,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
 
         const newAttachments = [];
         for (const file of files) {
-            const err = blossomService.validateFile(file, attachedFiles.length + newAttachments.length);
+            const err = mediaService.validateFile(file, attachedFiles.length + newAttachments.length);
             if (err) {
                 setPostError(err);
                 break;
             }
-            const dimensions = await blossomService.getImageDimensions(file);
+            const dimensions = await mediaService.getImageDimensions(file);
             newAttachments.push({
                 file,
                 previewUrl: URL.createObjectURL(file),
@@ -682,7 +682,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             if (attachedFiles.length > 0) {
                 setUploading(true);
                 const uploadResults = await Promise.all(
-                    attachedFiles.map(a => blossomService.uploadFile(a.file))
+                    attachedFiles.map(a => mediaService.uploadFile(a.file))
                 );
 
                 const urls = uploadResults.map(r => r.url);
@@ -690,7 +690,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 content += urls.join('\n');
 
                 uploadResults.forEach((result, i) => {
-                    tags.push(blossomService.buildImetaTag(result, attachedFiles[i].file, attachedFiles[i].dimensions));
+                    tags.push(mediaService.buildImetaTag(result, attachedFiles[i].file, attachedFiles[i].dimensions));
                 });
             }
 
@@ -1560,7 +1560,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                     className="primal-compose-btn"
                                     onClick={() => fileInputRef.current?.click()}
                                     title="Attach image or video"
-                                    disabled={attachedFiles.length >= blossomService.MAX_ATTACHMENTS || posting || uploading}
+                                    disabled={attachedFiles.length >= mediaService.MAX_ATTACHMENTS || posting || uploading}
                                 >
                                     <ImagePlus size={18} />
                                 </button>

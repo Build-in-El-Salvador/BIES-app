@@ -1,0 +1,83 @@
+/* Photo albums: the grid on a profile or listing (AlbumsBlock), the album
+   page (pages/AlbumPage), and the form in the shared sheet (AlbumForm). */
+
+.alb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.alb-head h2 { margin: 0; }
+.alb-new {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: 36px; padding: 0 14px;
+  border: none; border-radius: 999px;
+  background: var(--color-gray-100); color: var(--color-gray-900);
+  font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+}
+.alb-new:active { background: var(--color-gray-200); }
+.alb-hint { margin: 0; color: var(--color-gray-500); font-size: 0.9rem; line-height: 1.45; }
+
+.alb-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+@media (min-width: 769px) { .alb-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.alb-card { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
+.alb-cover {
+  position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden;
+  background: var(--color-gray-100); color: var(--color-gray-400);
+  display: flex; align-items: center; justify-content: center;
+}
+.alb-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.alb-card-title { font-weight: 600; font-size: 0.95rem; line-height: 1.25; color: var(--color-gray-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alb-card-meta { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--color-gray-500); }
+
+/* The form */
+.alb-input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 0.65rem; font: inherit; font-size: 1rem; color: inherit; background: #ffffff; outline: none; }
+.alb-input:focus, .alb-select:focus { border-color: var(--mod-primary); }
+.alb-select { width: 100%; box-sizing: border-box; min-height: 46px; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 0.65rem; font: inherit; font-size: 1rem; color: inherit; background: #ffffff; }
+.alb-field { display: flex; flex-direction: column; gap: 0.4rem; }
+
+/* The album page */
+.alb-page { max-width: 820px; margin: 0 auto; padding: var(--page-top, 1.5rem) 16px 3rem; }
+.alb-page .back-head { margin-bottom: 6px; }
+.alb-title { font-family: var(--font-sans); font-size: 1.6rem; font-weight: 700; letter-spacing: -0.015em; margin: 0; overflow-wrap: anywhere; }
+.alb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 8px; color: var(--color-gray-500); font-size: 0.9rem; }
+.alb-meta a { color: var(--color-primary); font-weight: 600; text-decoration: none; }
+.alb-meta svg { flex-shrink: 0; }
+.alb-desc { margin: 0 0 14px; color: var(--color-gray-800); font-size: 0.98rem; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.alb-toolbar { display: flex; gap: 8px; margin: 0 0 16px; }
+.alb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 42px; padding: 0 16px;
+  border: none; border-radius: 10px;
+  background: var(--color-gray-100); color: var(--color-gray-900);
+  font: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.alb-btn.primary { background: var(--color-primary); color: #ffffff; flex: 1; }
+.alb-btn.icon { flex: 0 0 46px; width: 46px; padding: 0; }
+.alb-btn:disabled { opacity: 0.6; cursor: wait; }
+.alb-status { margin: 0 0 12px; font-size: 0.9rem; color: var(--color-gray-600); display: flex; align-items: center; gap: 8px; }
+.alb-error { margin: 0 0 12px; font-size: 0.9rem; color: var(--color-danger, #dc2626); }
+
+.alb-photos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
+@media (min-width: 769px) { .alb-photos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.alb-photo { position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.alb-photo-img { padding: 0; border: none; border-radius: 10px; overflow: hidden; aspect-ratio: 1; background: var(--color-gray-100); cursor: zoom-in; }
+.alb-photo-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.alb-photo-more {
+  position: absolute; top: 6px; right: 6px;
+  width: 32px; height: 32px; min-height: 32px; border-radius: 50%; border: none;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.92); color: #0f172a; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+}
+.alb-cover-badge {
+  position: absolute; top: 6px; left: 6px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7); color: #ffffff; font-size: 0.72rem; font-weight: 600;
+}
+.alb-caption { margin: 0; font-size: 0.88rem; line-height: 1.35; color: var(--color-gray-800); overflow-wrap: anywhere; }
+.alb-date { margin: 0; font-size: 0.76rem; color: var(--color-gray-500); }
+.alb-empty { text-align: center; padding: 2.5rem 1rem; color: var(--color-gray-500); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.alb-missing { max-width: 32rem; margin: 3rem auto; padding: 0 16px; text-align: center; color: var(--color-gray-600); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.alb-sheet-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.alb-sheet-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 12px;
+  border: 1px solid #e5e7eb; border-radius: 0.65rem; background: #ffffff; color: #111827;
+  font: inherit; font-size: 0.98rem; text-align: left; cursor: pointer;
+}
+.alb-sheet-row.danger { color: #dc2626; }

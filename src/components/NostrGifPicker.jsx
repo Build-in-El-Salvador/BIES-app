@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Upload, X, Loader2, Tag } from 'lucide-react';
 import { gifStore } from '../services/gifStore';
-import { blossomService } from '../services/blossomService';
+import { mediaService } from '../services/mediaService';
 
 const NostrGifPicker = ({ onSelect, onClose, dropDown = false }) => {
     const [gifs, setGifs] = useState(gifStore.gifs);
@@ -48,7 +48,7 @@ const NostrGifPicker = ({ onSelect, onClose, dropDown = false }) => {
             setError('Only GIF files can be added to the library');
             return;
         }
-        const err = blossomService.validateFile(file, 0);
+        const err = mediaService.validateFile(file, 0);
         if (err) {
             setError(err);
             return;

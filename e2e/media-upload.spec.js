@@ -1,6 +1,7 @@
 /**
- * Playwright E2E tests for Blossom media upload in Feed compose box.
- * Tests file attachment UI, preview, removal, and the upload+post flow.
+ * Playwright E2E tests for media upload in the Feed compose box: file
+ * attachment UI, preview, removal, and the upload+post flow. Photos go to
+ * BIES's own storage (POST /api/upload/media, services/mediaService.js).
  */
 
 import { test, expect } from '@playwright/test';
@@ -100,7 +101,7 @@ function createTestPng2() {
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-test.describe('Blossom Media Upload - Compose Box UI', () => {
+test.describe('Media Upload - Compose Box UI', () => {
     let sk, skHex, pk, token, user;
 
     test.beforeAll(async ({ request }) => {
@@ -112,6 +113,15 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
         const auth = await nostrLogin(request, sk, pk);
         token = auth.token;
         user = auth.user;
+
+        // A new account is asked for the terms and a name first (TermsGate,
+        // ProfileGate); answer both here, so the Feed is what's on screen.
+        const headers = { Authorization: `Bearer ${token}` };
+        const terms = await request.post(`${API}/account/terms`, { headers, data: { version: user.termsVersion } });
+        expect(terms.ok(), `Accepting the terms failed: ${terms.status()}`).toBeTruthy();
+        const named = await request.put(`${API}/profiles/me`, { headers, data: { name: 'Media Tester' } });
+        expect(named.ok(), `Naming the profile failed: ${named.status()}`).toBeTruthy();
+        user = { ...user, termsAccepted: true, profile: { ...(user.profile || {}), name: 'Media Tester' } };
     });
 
     test('media attach button is visible in compose box', async ({ page }) => {
@@ -124,7 +134,7 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
         const composeInput = page.locator('[data-testid="compose-input"]');
         await expect(composeInput).toBeVisible({ timeout: 10000 });
 
-        const attachBtn = page.locator('.media-attach-btn');
+        const attachBtn = page.locator('button[title="Attach image or video"]');
         await expect(attachBtn).toBeVisible();
         await expect(attachBtn).toBeEnabled();
 
@@ -144,13 +154,13 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
         const fileInput = page.locator('input[type="file"][accept="image/*,video/*"]');
         await fileInput.setInputFiles(testPng);
 
-        const previewContainer = page.locator('.compose-media-preview');
+        const previewContainer = page.locator('.primal-compose-media-preview');
         await expect(previewContainer).toBeVisible({ timeout: 5000 });
 
-        const previewItem = page.locator('.media-preview-item');
+        const previewItem = page.locator('.primal-compose-media-item');
         await expect(previewItem).toBeVisible();
         await expect(previewItem.locator('img')).toBeVisible();
-        await expect(page.locator('.media-remove-btn')).toBeVisible();
+        await expect(page.locator('.primal-compose-media-remove')).toBeVisible();
 
         fs.unlinkSync(testPng);
     });
@@ -164,12 +174,12 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
         const testPng = createTestPng();
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles(testPng);
 
-        const previewItem = page.locator('.media-preview-item');
+        const previewItem = page.locator('.primal-compose-media-item');
         await expect(previewItem).toBeVisible({ timeout: 5000 });
 
-        await page.locator('.media-remove-btn').click();
+        await page.locator('.primal-compose-media-remove').click();
         await expect(previewItem).not.toBeVisible();
-        await expect(page.locator('.compose-media-preview')).not.toBeVisible();
+        await expect(page.locator('.primal-compose-media-preview')).not.toBeVisible();
 
         fs.unlinkSync(testPng);
     });
@@ -185,10 +195,10 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
 
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles([testPng1, testPng2]);
 
-        const previewItems = page.locator('.media-preview-item');
+        const previewItems = page.locator('.primal-compose-media-item');
         await expect(previewItems).toHaveCount(2, { timeout: 5000 });
 
-        await page.locator('.media-remove-btn').first().click();
+        await page.locator('.primal-compose-media-remove').first().click();
         await expect(previewItems).toHaveCount(1);
 
         fs.unlinkSync(testPng1);
@@ -206,32 +216,21 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
 
         const testPng = createTestPng();
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles(testPng);
-        await expect(page.locator('.media-preview-item')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.primal-compose-media-item')).toBeVisible({ timeout: 5000 });
 
         await expect(postBtn).toBeEnabled();
 
         fs.unlinkSync(testPng);
     });
 
-    test('post with media calls Blossom upload and publishes', async ({ page }) => {
-        // Mock Blossom upload BEFORE navigating
-        const mockUrl = 'https://blossom.primal.net/fake-hash-abc123.png';
-        await page.route('**/upload', async (route) => {
-            if (route.request().method() === 'PUT') {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        url: mockUrl,
-                        sha256: 'abc123def456abc123def456abc123def456abc123def456abc123def456abc1',
-                        size: 67,
-                        type: 'image/png',
-                        created: Math.floor(Date.now() / 1000),
-                    }),
-                });
-            } else {
-                await route.continue();
-            }
+    test('post with media uploads to BIES and publishes', async ({ page }) => {
+        // Mock the BIES upload BEFORE navigating
+        await page.route('**/api/upload/media', async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ url: '/uploads/public/fake-abc123.png' }),
+            });
         });
 
         // Use addInitScript to inject signer key before page JS loads
@@ -244,7 +243,7 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
         // Attach a test image
         const testPng = createTestPng();
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles(testPng);
-        await expect(page.locator('.media-preview-item')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.primal-compose-media-item')).toBeVisible({ timeout: 5000 });
 
         const uniqueMsg = `Media test ${Date.now()}`;
         await composeInput.fill(uniqueMsg);
@@ -255,34 +254,25 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
 
         // Wait for compose box to clear (post completed)
         await expect(composeInput).toHaveValue('', { timeout: 20000 });
-        await expect(page.locator('.compose-media-preview')).not.toBeVisible();
+        await expect(page.locator('.primal-compose-media-preview')).not.toBeVisible();
 
         // Post should appear in feed
         const feedList = page.locator('[data-testid="feed-list"]');
         await expect(feedList).toBeVisible({ timeout: 20000 });
-        await expect(page.locator('[data-testid="feed-note"]', { hasText: uniqueMsg })).toBeVisible({ timeout: 20000 });
+        await expect(page.locator('[data-post-id]', { hasText: uniqueMsg })).toBeVisible({ timeout: 20000 });
 
         fs.unlinkSync(testPng);
     });
 
     test('post button shows uploading state during upload', async ({ page }) => {
-        // Mock Blossom upload with delay
-        await page.route('**/upload', async (route) => {
-            if (route.request().method() === 'PUT') {
-                await new Promise(r => setTimeout(r, 2000));
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        url: 'https://blossom.primal.net/test.png',
-                        sha256: 'deadbeef'.repeat(8),
-                        size: 67,
-                        type: 'image/png',
-                    }),
-                });
-            } else {
-                await route.continue();
-            }
+        // Mock the BIES upload with a delay
+        await page.route('**/api/upload/media', async (route) => {
+            await new Promise(r => setTimeout(r, 2000));
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ url: '/uploads/public/test.png' }),
+            });
         });
 
         await injectAuthAndSigner(page, token, user, skHex);
@@ -293,7 +283,7 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
 
         const testPng = createTestPng();
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles(testPng);
-        await expect(page.locator('.media-preview-item')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.primal-compose-media-item')).toBeVisible({ timeout: 5000 });
 
         await composeInput.fill('Upload state test');
 
@@ -310,13 +300,9 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
     });
 
     test('upload failure shows error and preserves attachments', async ({ page }) => {
-        // Mock ALL Blossom servers to fail
-        await page.route('**/upload', async (route) => {
-            if (route.request().method() === 'PUT') {
-                await route.fulfill({ status: 500, body: 'Server Error' });
-            } else {
-                await route.continue();
-            }
+        // Mock the BIES upload to fail
+        await page.route('**/api/upload/media', async (route) => {
+            await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Failed to upload media' }) });
         });
 
         await injectAuthAndSigner(page, token, user, skHex);
@@ -327,19 +313,19 @@ test.describe('Blossom Media Upload - Compose Box UI', () => {
 
         const testPng = createTestPng();
         await page.locator('input[type="file"][accept="image/*,video/*"]').setInputFiles(testPng);
-        await expect(page.locator('.media-preview-item')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.primal-compose-media-item')).toBeVisible({ timeout: 5000 });
 
         await composeInput.fill('This should fail');
 
         await page.locator('[data-testid="post-btn"]').click();
 
         // Error message should appear
-        const errorEl = page.locator('.compose-error');
+        const errorEl = page.locator('.primal-compose-error');
         await expect(errorEl).toBeVisible({ timeout: 15000 });
         await expect(errorEl).toContainText('failed', { ignoreCase: true });
 
         // Attachments should be preserved for retry
-        await expect(page.locator('.media-preview-item')).toBeVisible();
+        await expect(page.locator('.primal-compose-media-item')).toBeVisible();
         await expect(composeInput).toHaveValue('This should fail');
 
         fs.unlinkSync(testPng);

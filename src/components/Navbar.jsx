@@ -78,6 +78,7 @@ const Navbar = () => {
     if (path.startsWith('/notifications')) return t('pageTitles.notifications');
     if (path.startsWith('/messages')) return t('pageTitles.messages');
     if (path.startsWith('/settings')) return t('pageTitles.settings');
+    if (path.startsWith('/albums')) return t('albums.title');
     if (path.startsWith('/feedback')) return 'Feedback';
     if (path.startsWith('/admin')) return t('pageTitles.adminPanel');
     return '';

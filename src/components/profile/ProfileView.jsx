@@ -15,6 +15,7 @@ import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
 import BackButton from '../BackButton';
+import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -27,6 +28,9 @@ function isSafeUrl(url) {
         return false;
     }
 }
+
+// The albums heading, as .pv-h2 (styled-jsx doesn't reach another component's h2).
+const H2 = { fontFamily: 'var(--font-sans)', fontSize: '1.15rem', fontWeight: 700, color: 'var(--color-gray-900)' };
 
 const listingPath = (l) => `${l.type === 'FARM' ? '/farms' : '/trusted'}/${l.id}`;
 const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -66,13 +70,13 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
             return decoded?.type === 'npub' ? decoded.data : null;
         } catch { return null; }
     }, [profile.user?.nostrPubkey, profile.nostrNpub]);
-    // Their posts in the BIES feed, unless they turned them off in Edit profile.
+    // Their posts in the BIES feed, unless they turned them off (Settings → Privacy).
     const showPosts = !!pubkey && profile.nostrFeedMode !== 'off';
 
     useEffect(() => {
         if (!userId) return undefined;
         let cancelled = false;
-        const page = (res) => ({ list: res?.data || [], total: res?.pagination?.total ?? (res?.data || []).length });
+        const page = (res) => ({ list: res?.data || [], total: res?.pagination?.total ?? (res?.data || []).length, hidden: !!res?.hidden });
         profilesApi.getFollowers(userId, { limit: 50 }).then((res) => { if (!cancelled) setFollowers(page(res)); }).catch(() => {});
         profilesApi.getFollowing(userId, { limit: 50 }).then((res) => { if (!cancelled) setFollowing(page(res)); }).catch(() => {});
         directoryApi.list({ ownerId: userId, limit: 20 })
@@ -90,6 +94,10 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         for (const p of followers.list) if (!people.has(p.id)) people.set(p.id, { ...p, mutual: false });
         return [...people.values()].sort((a, b) => Number(b.mutual) - Number(a.mutual));
     }, [followers.list, following.list]);
+
+    // Kept to themselves (Settings → Privacy: Network): the counts, no one listed.
+    const networkHidden = !isOwn && (followers.hidden || following.hidden);
+    const albums = useAlbums({ userId });
 
     // The businesses and farms they run (theirs, or one staff linked them to).
     const businesses = listings.filter((l) => (l.isOwnBusiness && (l.ownerId === userId || l.owner?.id === userId)) || l.memberUserId === userId);
@@ -183,9 +191,14 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 </div>
             </div>
 
+            {tab === 'photos' && albums.show && (
+                <section className="pv-section">
+                    <AlbumsBlock albums={albums.albums} canManage={albums.canManage} titleStyle={H2} />
+                </section>
+            )}
             {tab === 'photos' && (
                 <section className="pv-section">
-                    <h2 className="pv-h2">{t('profileView.tabs.photos')}</h2>
+                    <h2 className="pv-h2">{t(albums.albums.length ? 'profileView.photosFromPosts' : 'profileView.tabs.photos')}</h2>
                     {photos.length > 0 ? (
                         <div className="pv-photos">
                             {photos.map((src, i) => (
@@ -263,13 +276,15 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     <div className="pv-section-head">
                         <h2 className="pv-h2">
                             {t('profileView.network')}
-                            {network.length > 0 && <span className="pv-h2-count">{network.length}</span>}
+                            {network.length > 0 && !networkHidden && <span className="pv-h2-count">{network.length}</span>}
                         </h2>
-                        {network.length > 0 && userId && (
+                        {network.length > 0 && userId && !networkHidden && (
                             <Link to={`/members/${userId}/network`} className="pv-link pv-see-all">{t('profileView.seeAll')}</Link>
                         )}
                     </div>
-                    {network.length > 0 ? (
+                    {networkHidden ? (
+                        <p className="pv-muted">{t('profileView.networkPrivate', { name })}</p>
+                    ) : network.length > 0 ? (
                         <ul className="pv-network">
                             {network.slice(0, NETWORK_SHOWN).map((p) => (
                                 <li key={p.id}>

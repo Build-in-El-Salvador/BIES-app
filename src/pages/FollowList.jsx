@@ -22,14 +22,17 @@ const FollowList = ({ kind }) => {
     const { userId } = useParams();
     const { user } = useAuth();
     const [people, setPeople] = useState(null); // null while loading
+    const [hidden, setHidden] = useState(false); // kept to themselves (Settings → Privacy)
     const [myFollowing, setMyFollowing] = useState(new Set());
 
     useEffect(() => {
         let cancelled = false;
         setPeople(null);
+        setHidden(false);
         const load = kind === 'network'
             ? Promise.all([profilesApi.getFollowing(userId, { limit: 100 }), profilesApi.getFollowers(userId, { limit: 100 })])
                 .then(([out, inc]) => {
+                    if (out?.hidden || inc?.hidden) return { data: [], hidden: true };
                     const followerIds = new Set((inc?.data || []).map((p) => p.id));
                     const people = new Map();
                     for (const p of out?.data || []) people.set(p.id, { ...p, mutual: followerIds.has(p.id) });
@@ -38,7 +41,7 @@ const FollowList = ({ kind }) => {
                 })
             : (kind === 'followers' ? profilesApi.getFollowers : profilesApi.getFollowing)(userId, { limit: 50 });
         load
-            .then((res) => { if (!cancelled) setPeople(res?.data || []); })
+            .then((res) => { if (!cancelled) { setPeople(res?.data || []); setHidden(!!res?.hidden); } })
             .catch(() => { if (!cancelled) setPeople([]); });
         return () => { cancelled = true; };
     }, [kind, userId]);
@@ -66,7 +69,8 @@ const FollowList = ({ kind }) => {
                     <div className="follow-empty"><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
                 ) : people.length === 0 ? (
                     <p className="follow-empty">
-                        {kind === 'network' ? t('profileView.networkEmpty')
+                        {hidden ? t('profileView.networkPrivateList')
+                            : kind === 'network' ? t('profileView.networkEmpty')
                             : kind === 'followers' ? t('follow.noFollowers', 'No followers yet.') : t('follow.noFollowing', 'Not following anyone yet.')}
                     </p>
                 ) : (

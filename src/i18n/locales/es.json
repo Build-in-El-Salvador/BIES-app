@@ -143,7 +143,8 @@
     "layoutGrid": "Cuadrícula",
     "layoutCards": "Tarjetas",
     "layoutIcons": "Iconos",
-    "logOut": "Cerrar sesión"
+    "logOut": "Cerrar sesión",
+    "privacy": "Privacidad"
   },
   "landing": {
     "forInvestors": "Para Inversionistas Globales",
@@ -2404,7 +2405,9 @@
         "listing": "Reportar este listado",
         "endorsement": "Reportar esta recomendación",
         "event": "Reportar este evento",
-        "note": "Reportar esta publicación"
+        "note": "Reportar esta publicación",
+        "album": "Reportar este álbum",
+        "photo": "Reportar esta foto"
       },
       "why": "¿Cuál es el problema?",
       "detailsLabel": "¿Algo más que debamos saber? (opcional)",
@@ -2552,7 +2555,10 @@
     "posts": "Publicaciones",
     "noPosts": "Aún no hay publicaciones.",
     "noPhotos": "Aún no hay fotos.",
-    "newMember": "Miembro nuevo"
+    "newMember": "Miembro nuevo",
+    "photosFromPosts": "De publicaciones",
+    "networkPrivate": "{{name}} mantiene su red en privado.",
+    "networkPrivateList": "Este miembro mantiene su red en privado."
   },
   "notificationSettings": {
     "push": "Notificaciones push",
@@ -2579,5 +2585,91 @@
     "footer": "Los avisos sobre su cuenta y sus fichas siempre llegan. Todo aparece también en la campana.",
     "loadFailed": "No se pudo cargar su configuración. Inténtelo de nuevo.",
     "saveFailed": "No se pudo guardar. Inténtelo de nuevo."
+  },
+  "privacySettings": {
+    "title": "Privacidad",
+    "whoSees": "Quién puede ver su perfil",
+    "whoSeesFooter": "Su nombre, foto de perfil, foto de portada y titular son públicos. Cada álbum tiene su propia opción.",
+    "parts": {
+      "bio": "Biografía",
+      "location": "Ubicación",
+      "links": "Enlaces y Lightning",
+      "details": "Detalles y experiencia",
+      "network": "Red"
+    },
+    "partsDesc": {
+      "bio": "Sobre usted, bajo su nombre",
+      "location": "Dónde está",
+      "links": "Sitio web, X, LinkedIn y dirección Lightning",
+      "details": "Experiencia, secciones e intereses",
+      "network": "Sus seguidores y a quién sigue"
+    },
+    "audiences": {
+      "PUBLIC": "Todos",
+      "MEMBERS": "Miembros",
+      "ONLY_ME": "Solo yo"
+    },
+    "onBies": "En BIES",
+    "directory": "Aparecer en Miembros",
+    "directoryDesc": "Desactivado: no aparece en la lista ni en las búsquedas. Los miembros aún pueden abrir su perfil desde sus publicaciones.",
+    "posts": "Publicaciones en mi perfil",
+    "postsDesc": "Sus publicaciones del Feed Privado, que ven los miembros",
+    "browsePrivately": "Ver perfiles en privado",
+    "browsePrivatelyDesc": "No se avisa a los miembros cuando ve su perfil",
+    "nostrFooter": "Estas opciones cubren lo que muestra BIES. Lo que publique en Nostr público queda fuera del control de BIES.",
+    "loadFailed": "No se pudo cargar su configuración de privacidad. Inténtelo de nuevo.",
+    "saveFailed": "No se pudo guardar. Inténtelo de nuevo."
+  },
+  "albums": {
+    "title": "Álbumes",
+    "new": "Nuevo álbum",
+    "newTitle": "Nuevo álbum",
+    "editTitle": "Editar álbum",
+    "name": "Nombre",
+    "namePlaceholder": "Un viaje, un evento, su trabajo…",
+    "namePlaceholderListing": "La finca, Cosecha 2026, Nuestro equipo…",
+    "description": "Descripción",
+    "descriptionPlaceholder": "Qué muestran estas fotos (opcional)",
+    "audience": "Quién puede verlo",
+    "audiences": {
+      "PUBLIC": "Todos",
+      "MEMBERS": "Miembros",
+      "ONLY_ME": "Solo yo"
+    },
+    "audienceHints": {
+      "PUBLIC": "Cualquier persona, también quien no es miembro.",
+      "MEMBERS": "Solo los miembros de BIES.",
+      "ONLY_ME": "Solo usted."
+    },
+    "create": "Crear álbum",
+    "save": "Guardar",
+    "photoCount_one": "{{count}} foto",
+    "photoCount_other": "{{count}} fotos",
+    "emptyOwn": "Agrupe fotos en álbumes: un viaje, un evento, su trabajo.",
+    "emptyListing": "Muestre distintas partes del lugar, documente su crecimiento o presente al equipo.",
+    "addPhotos": "Agregar fotos",
+    "uploading": "Agregando fotos… {{done}} de {{total}}",
+    "uploadFailed": "No se pudo agregar esa foto. Inténtelo de nuevo.",
+    "saveFailed": "No se pudo guardar. Inténtelo de nuevo.",
+    "objectionable": "Ese texto no cumple las normas de la comunidad. Cámbielo e inténtelo de nuevo.",
+    "unavailable": "Este álbum no está disponible. Puede que se haya eliminado o que sea privado.",
+    "goHome": "Ir al inicio",
+    "noPhotos": "Aún no hay fotos.",
+    "noPhotosOwn": "Aún no hay fotos. Agregue algunas para empezar el álbum.",
+    "photo": "Foto",
+    "photoOptions": "Opciones de la foto",
+    "cover": "Portada",
+    "edit": "Editar álbum",
+    "delete": "Eliminar álbum",
+    "deleteConfirm": "¿Eliminar este álbum y sus fotos? No se puede deshacer.",
+    "reportAlbum": "Reportar álbum",
+    "reportPhoto": "Reportar foto",
+    "addCaption": "Agregar descripción",
+    "editCaption": "Editar descripción",
+    "caption": "Descripción",
+    "captionPlaceholder": "Qué muestra, o cuándo (opcional)",
+    "makeCover": "Usar como portada",
+    "deletePhoto": "Eliminar foto",
+    "deletePhotoConfirm": "¿Eliminar esta foto?"
   }
 }

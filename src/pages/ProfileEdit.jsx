@@ -7,7 +7,7 @@ import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
 import { profilesApi, uploadApi, projectsApi } from '../services/api';
 import { nostrSigner } from '../services/nostrSigner';
-import { blossomService } from '../services/blossomService';
+import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
@@ -71,7 +71,6 @@ const ProfileEdit = () => {
         banner: '',
         tags: [],
         showExperience: true,
-        nostrFeedMode: 'combined',
         experience: [],
         biesProjects: [],
         nostrNpub: '',
@@ -219,7 +218,6 @@ const ProfileEdit = () => {
                     banner: profile.banner || '',
                     tags: profile.tags || [],
                     showExperience: profile.showExperience ?? true,
-                    nostrFeedMode: profile.nostrFeedMode || 'combined',
                     experience: (profile.experience || []).map(exp => {
                         // Parse fromYear/toYear from existing date string like "2020 - Present"
                         let fromYear = exp.fromYear || '';
@@ -302,7 +300,6 @@ const ProfileEdit = () => {
                 biesProjects: form.biesProjects,
                 customSections: form.customSections,
                 showExperience: form.showExperience,
-                nostrFeedMode: form.nostrFeedMode,
                 nostrNpub: form.nostrNpub,
                 nip05Name: form.nip05Name || undefined,
                 lightningAddress: form.lightningAddress,
@@ -385,7 +382,7 @@ const ProfileEdit = () => {
         setError('');
 
         try {
-            const result = await blossomService.uploadFile(croppedFile);
+            const result = await mediaService.uploadFile(croppedFile);
             // Preload the image before showing it, so it doesn't flash white
             if (type === 'avatar') {
                 setAvatarImageLoading(true);
@@ -1131,48 +1128,6 @@ const ProfileEdit = () => {
                         {loadingNostr ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
                         {loadingNostr ? 'Fetching...' : 'Fetch from public Nostr'}
                     </button>
-                    <div>
-                        <span className="pe-label" style={{ padding: 0, marginBottom: '0.5rem', display: 'block' }}>
-                            {t('profileEdit.showNostrFeed', 'Show my posts on my profile')}
-                        </span>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
-                            {/* The profile shows BIES feed posts only, so it's on or off
-                                (an older Public or Combined choice counts as on). */}
-                            {[
-                                { value: 'off',      label: t('common.off', 'Off') },
-                                { value: 'private',  label: t('common.on', 'On') },
-                            ].map(opt => {
-                                const selected = opt.value === 'off' ? form.nostrFeedMode === 'off' : form.nostrFeedMode !== 'off';
-                                return (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        aria-pressed={selected}
-                                        onClick={() => setForm(prev => ({ ...prev, nostrFeedMode: opt.value }))}
-                                        style={{
-                                            padding: '0.45rem 0.5rem',
-                                            fontSize: '0.8rem',
-                                            fontWeight: 600,
-                                            borderRadius: 'var(--radius-md, 6px)',
-                                            border: selected
-                                                ? '2px solid var(--color-primary, #0052cc)'
-                                                : '1px solid var(--color-gray-300)',
-                                            background: selected
-                                                ? 'var(--color-primary-50, #e6f0ff)'
-                                                : 'var(--color-surface, #fff)',
-                                            color: selected
-                                                ? 'var(--color-primary, #0052cc)'
-                                                : 'var(--color-gray-600)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.15s',
-                                        }}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
                 </div>
 
                     </div>

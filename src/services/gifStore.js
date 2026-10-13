@@ -1,6 +1,6 @@
 import { nostrService } from './nostrService';
 import { nostrSigner } from './nostrSigner';
-import { blossomService } from './blossomService';
+import { mediaService } from './mediaService';
 
 const GIF_KIND = 1063; // NIP-94 file metadata
 
@@ -81,8 +81,8 @@ class GifStore {
     }
 
     async uploadGif(file, description = '', tags = []) {
-        const result = await blossomService.uploadFile(file);
-        const dimensions = await blossomService.getImageDimensions(file);
+        const result = await mediaService.uploadFile(file);
+        const dimensions = await mediaService.getImageDimensions(file);
 
         const eventTags = [
             ['url', result.url],
