@@ -5,6 +5,10 @@ import { uploadPublicFile, uploadPrivateFile } from '../services/storage.service
 
 // ─── Multer config (memory storage — files stay in buffer) ───
 
+// Photos and videos members add (feed posts, profile photos, albums): what
+// phones and browsers make, including iPhone videos (QuickTime).
+const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
+
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -12,7 +16,7 @@ const upload = multer({
     },
     fileFilter: (_req, file, cb) => {
         // Allowed MIME types
-        const allowedMedia = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
+        const allowedMedia = MEDIA_TYPES;
         const allowedDecks = ['application/pdf', 'application/vnd.ms-powerpoint',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
         const allAllowed = [...allowedMedia, ...allowedDecks];
@@ -42,7 +46,7 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const allowedMedia = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
+        const allowedMedia = MEDIA_TYPES;
         if (!allowedMedia.includes(req.file.mimetype)) {
             res.status(400).json({ error: 'Only images and videos are allowed for media upload' });
             return;

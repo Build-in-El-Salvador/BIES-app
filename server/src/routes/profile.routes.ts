@@ -37,8 +37,8 @@ router.put('/me', authenticate, requireTerms, validate(updateProfileSchema), scr
 // Follow routes (before generic /:id)
 router.post('/:id/follow', authenticate, requireTerms, followUser);
 router.delete('/:id/follow', authenticate, unfollowUser);
-router.get('/:id/followers', getFollowers);
-router.get('/:id/following', getFollowing);
+router.get('/:id/followers', authenticate, getFollowers);
+router.get('/:id/following', authenticate, getFollowing);
 
 // Public routes
 router.get('/', optionalAuth, listProfiles);

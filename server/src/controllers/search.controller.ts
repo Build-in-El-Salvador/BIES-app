@@ -6,16 +6,28 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { blockedIds } from '../services/moderation.service';
+import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
+
+const viewerOf = (req: Request, userId: string): Viewer =>
+    !req.user ? 'public' : req.user.id === userId ? 'self' : 'member';
 
 /**
- * Leave out what members the viewer blocked published: their profiles, their
- * projects and the events they host. Results are cached for all viewers.
+ * Results are cached for all viewers; then, for this one: leave out what
+ * members the viewer blocked published (their profiles, their projects and
+ * the events they host), and show each profile as this viewer may see it
+ * (Settings → Privacy), found only by what the viewer can see of it.
  */
 async function withoutBlocked(req: Request, results: any): Promise<any> {
     const hidden = new Set(await blockedIds(req.user?.id));
-    if (!hidden.size) return results;
     const out = { ...results };
-    if (Array.isArray(out.profiles)) out.profiles = out.profiles.filter((p: any) => !hidden.has(p.userId));
+    if (Array.isArray(out.profiles)) {
+        const q = String(out.query ?? req.query.q ?? '');
+        out.profiles = out.profiles
+            .filter((p: any) => !hidden.has(p.userId))
+            .filter((p: any) => !q || matchesVisibly(p, q, viewerOf(req, p.userId)))
+            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
+    }
+    if (!hidden.size) return out;
     if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.ownerId));
     if (Array.isArray(out.events)) out.events = out.events.filter((e: any) => !hidden.has(e.hostId));
     if (Array.isArray(out.suggestions)) {
@@ -113,11 +125,10 @@ export async function search(req: Request, res: Response): Promise<void> {
                     },
                 }),
             ]);
+            // Cached whole; withoutBlocked shows each viewer what they may see.
             results.profiles = profiles.map((p) => ({
                 ...p,
-                // Never expose encrypted wallet credentials — this endpoint is
-                // public (no authenticate middleware on the search routes).
-                coinosToken: undefined,
+                coinosToken: undefined, // never expose encrypted wallet credentials
                 skills: JSON.parse(p.skills || '[]'),
                 tags: JSON.parse(p.tags || '[]'),
             }));

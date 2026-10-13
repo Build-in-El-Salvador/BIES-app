@@ -52,6 +52,11 @@ const SAFE_EXTENSIONS: Record<string, string> = {
     'image/gif': '.gif',
     'image/webp': '.webp',
     'image/svg+xml': '.svg',
+    // Videos too: otherwise the uploader's own file name sets the extension,
+    // and "x.html" would be served from our domain as a web page.
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/webm': '.webm',
     'application/pdf': '.pdf',
     'application/vnd.ms-powerpoint': '.ppt',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
