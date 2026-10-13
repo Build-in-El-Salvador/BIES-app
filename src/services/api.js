@@ -720,6 +720,12 @@ export const mediaApi = {
 
 // ─── User Preferences (persistent across login/logout) ──────────────────────
 
+// Settings → Notifications: push on or off, and what to push (the bell keeps everything)
+export const settingsApi = {
+    get: () => get('/settings'),
+    updateNotifications: (data) => put('/settings/notifications', data),
+};
+
 export const preferencesApi = {
     get: () => get('/settings/preferences'),
     save: (data) => put('/settings/preferences', data),

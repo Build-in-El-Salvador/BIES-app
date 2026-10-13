@@ -11,6 +11,11 @@ export const updateNotificationSettingsSchema = z.object({
     notifyInvestments: z.boolean().optional(),
     notifyFollows: z.boolean().optional(),
     notifyProjectUpdates: z.boolean().optional(),
+    notifyLikes: z.boolean().optional(),
+    notifyComments: z.boolean().optional(),
+    notifyProfileViews: z.boolean().optional(),
+    notifyZaps: z.boolean().optional(),
+    notifyEvents: z.boolean().optional(),
 });
 
 export const updateRelaysSchema = z.object({
@@ -51,7 +56,7 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
 export async function updateNotificationSettings(req: Request, res: Response): Promise<void> {
     try {
         // Explicitly pick allowed fields to prevent mass assignment
-        const allowedFields = ['emailNotifications', 'pushNotifications', 'marketingEmails', 'notifyMessages', 'notifyInvestments', 'notifyFollows', 'notifyProjectUpdates'];
+        const allowedFields = Object.keys(updateNotificationSettingsSchema.shape);
         const data: any = {};
         for (const field of allowedFields) {
             if (req.body[field] !== undefined) data[field] = req.body[field];

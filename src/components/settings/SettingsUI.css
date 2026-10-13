@@ -1,0 +1,180 @@
+/* Settings and its sub-pages (SettingsUI.jsx): grouped one-line rows on
+   white cards, as iOS Settings and most apps lay them out. */
+.set-page {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--page-top, 1.5rem) 16px calc(2.5rem + env(safe-area-inset-bottom, 0px));
+}
+.set-head { display: flex; align-items: center; gap: 2px; margin: 0 0 16px; }
+/* On a phone the top bar already says "Settings". */
+@media (max-width: 768px) {
+  .set-head.main { display: none; }
+}
+.set-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; margin-left: -10px;
+  border-radius: 50%; color: var(--color-gray-700);
+}
+.set-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--color-gray-900);
+}
+
+.set-group { margin: 0 0 22px; }
+.set-group-title {
+  margin: 0 0 6px 14px;
+  font-family: var(--font-sans);
+  /* !important: index.css sizes every h2 on a phone with !important. */
+  font-size: 0.76rem !important;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-gray-500);
+}
+.set-card {
+  background: var(--color-surface);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--color-gray-200);
+}
+.set-group-footer { margin: 7px 14px 0; font-size: 0.8rem; line-height: 1.45; color: var(--color-gray-500); }
+
+.set-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 50px;
+  padding: 8px 14px;
+  box-sizing: border-box;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--color-gray-900);
+  text-align: left;
+  text-decoration: none;
+}
+a.set-row, button.set-row { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+a.set-row:active, button.set-row:active { background: var(--color-gray-50); }
+@media (hover: hover) {
+  a.set-row:hover, button.set-row:hover { background: var(--color-gray-50); }
+}
+/* A hairline between rows, from where the text starts. */
+.set-row + .set-row::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 48px; right: 0;
+  border-top: 1px solid var(--color-gray-100);
+}
+.set-icon { flex-shrink: 0; width: 22px; display: flex; justify-content: center; color: var(--color-gray-600); }
+.set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.set-label { font-size: 0.98rem; font-weight: 500; line-height: 1.3; }
+.set-desc { font-size: 0.82rem; line-height: 1.35; color: var(--color-gray-500); }
+.set-value {
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  color: var(--color-gray-500);
+}
+.set-chevron { flex-shrink: 0; color: var(--color-gray-400); }
+.set-row.danger, .set-row.danger .set-icon { color: var(--color-danger, #dc2626); }
+.set-row.center { justify-content: center; }
+.set-row.center .set-text { flex: 0 1 auto; align-items: center; }
+.set-row.center .set-label { font-weight: 600; }
+.set-row.dim { opacity: 0.45; }
+
+.set-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 51px;
+  height: 31px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-gray-300);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.set-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.22);
+  transition: transform 0.2s ease;
+}
+.set-switch[aria-checked='true'] { background: var(--color-primary); }
+.set-switch[aria-checked='true']::after { transform: translateX(20px); }
+.set-switch:disabled { opacity: 0.45; cursor: not-allowed; }
+.set-switch:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+.set-select-wrap { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
+.set-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--color-gray-500);
+  padding: 6px 20px 6px 6px;
+  text-align: right;
+  cursor: pointer;
+  outline: none;
+}
+.set-select:focus-visible { outline: 2px solid var(--color-primary); border-radius: 6px; }
+.set-select-icon { position: absolute; right: 0; color: var(--color-gray-400); pointer-events: none; }
+
+/* The member at the top of Settings. */
+.set-profile { gap: 14px; padding: 12px 14px; }
+.set-avatar {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-gray-100); color: var(--color-gray-400);
+}
+.set-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.set-profile .set-label { font-size: 1.1rem; font-weight: 700; }
+
+/* A notice inside a card, e.g. notifications turned off in iPhone Settings. */
+.set-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.set-note svg { flex-shrink: 0; margin-top: 2px; }
+.set-note-action {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.set-error { margin: 6px 14px 0; font-size: 0.85rem; color: var(--color-danger, #dc2626); }
+
+.set-version { margin: 4px 0 0; text-align: center; font-size: 0.75rem; letter-spacing: 0.02em; color: var(--color-gray-400); }
+
+/* Content that isn't a row: a key, a form, a banner. */
+.set-pad { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
