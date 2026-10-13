@@ -7,6 +7,7 @@ import { stripHtml } from '../utils/text';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useViewPreference } from '../context/ViewContext';
+import { safeHref } from '../utils/safeUrl';
 
 const EVENT_CATEGORY_COLORS = {
     CONFERENCE: 'var(--color-blue-tint)',
@@ -134,10 +135,10 @@ const EventCard = ({ event, isOfficial, viewType = 'standard' }) => {
                                     <Zap size={18} />
                                 </button>
                             </>
-                        ) : (event.ticketUrl || event.externalUrl) ? (
+                        ) : safeHref(event.ticketUrl || event.externalUrl) ? (
                             <>
                                 <a
-                                    href={event.ticketUrl || event.externalUrl}
+                                    href={safeHref(event.ticketUrl || event.externalUrl)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="btn btn-primary btn-xs ticket-btn-text"
@@ -146,7 +147,7 @@ const EventCard = ({ event, isOfficial, viewType = 'standard' }) => {
                                     {t('common.getTickets')}
                                 </a>
                                 <a
-                                    href={event.ticketUrl || event.externalUrl}
+                                    href={safeHref(event.ticketUrl || event.externalUrl)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="ticket-btn-icon"
@@ -266,8 +267,8 @@ const EventCard = ({ event, isOfficial, viewType = 'standard' }) => {
                 <div className="actions">
                     {event.priceSats > 0 ? (
                         <Link to={`/events/${event.id}`} className="btn btn-primary btn-xs reserve-btn"><Zap size={13} style={{ marginRight: 4 }} /> {t('common.buyTicket', 'Buy Ticket')}</Link>
-                    ) : (event.ticketUrl || event.externalUrl) ? (
-                        <a href={event.ticketUrl || event.externalUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-xs reserve-btn">{t('common.getTickets')}</a>
+                    ) : safeHref(event.ticketUrl || event.externalUrl) ? (
+                        <a href={safeHref(event.ticketUrl || event.externalUrl)} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-xs reserve-btn">{t('common.getTickets')}</a>
                     ) : (
                         <Link to={`/events/${event.id}`} className="btn btn-primary btn-xs reserve-btn">{t('common.rsvp', 'RSVP')}</Link>
                     )}
