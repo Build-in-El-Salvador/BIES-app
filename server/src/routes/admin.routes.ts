@@ -48,6 +48,7 @@ import {
     deleteAdminCourse,
 } from '../controllers/admin.controller';
 import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFlags.controller';
+import { listOpenTransfers, staffMoveListing, staffMoveSchema } from '../controllers/listingTransfer.controller';
 import {
     adminDeleteEndorsement,
     adminListReports,
@@ -99,6 +100,8 @@ router.put('/directory/:id/review', validate(reviewDirectoryListingSchema), revi
 router.put('/directory/:id/feature', validate(featureDirectoryListingSchema), featureDirectoryListing);
 router.post('/directory/recompute', recomputeDirectoryScores);
 router.delete('/directory/:id', deleteDirectoryListing);
+router.get('/directory/transfers', listOpenTransfers);
+router.post('/directory/:id/owner', validate(staffMoveSchema), staffMoveListing);
 
 // Reports (terms of use §6: reviewed within 24 hours)
 router.get('/reports', adminListReports);

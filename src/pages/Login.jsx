@@ -23,7 +23,7 @@ import { declineSave, getSavedKey, rememberSaved, saveKey, savedKeyAvailable, sh
  */
 const Login = ({ nostr = false }) => {
     const { t } = useTranslation();
-    const { user: authedUser, loading: authLoading, loginWithNostrAndCheckNew, loginWithNsecAndCheckNew, loginWithSeedPhraseAndCheckNew, loginWithBunkerAndCheckNew, loginWithPasskeyAndCheckNew } = useAuth();
+    const { user: authedUser, loading: authLoading, loginWithNostr, loginWithNsec, loginWithSeedPhrase, loginWithBunker, loginWithPasskey } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [error, setError] = useState('');
@@ -100,8 +100,7 @@ const Login = ({ nostr = false }) => {
     const handleResult = (result) => {
         offering.current = false;
         if (result.success) {
-            const target = result.needsProfileSetup ? '/profile-setup' : '/feed';
-            navigate(target);
+            navigate('/feed');
         } else {
             setError(result.error || 'Login failed. Please try again.');
         }
@@ -111,7 +110,7 @@ const Login = ({ nostr = false }) => {
     const signInWithKey = async (nsec) => {
         offering.current = canSaveKeys;
         try {
-            const result = await loginWithNsecAndCheckNew(nsec);
+            const result = await loginWithNsec(nsec);
             const pubkey = result.user?.nostrPubkey;
             if (result.success && shouldOfferToSave(pubkey)) {
                 setOffer({ nsec, pubkey, result });
@@ -163,7 +162,7 @@ const Login = ({ nostr = false }) => {
         if (found.notAKey) { setError(t('savedKey.notAKey')); return; }
         setLoading(true);
         try {
-            const result = await loginWithNsecAndCheckNew(found.nsec);
+            const result = await loginWithNsec(found.nsec);
             if (result.success) rememberSaved(result.user?.nostrPubkey);
             handleResult(result);
         } catch (err) {
@@ -177,7 +176,7 @@ const Login = ({ nostr = false }) => {
         setError('');
         setLoading(true);
         try {
-            const result = await loginWithNostrAndCheckNew();
+            const result = await loginWithNostr();
             handleResult(result);
         } catch (err) {
             setError(err.message || 'An unexpected error occurred.');
@@ -216,7 +215,7 @@ const Login = ({ nostr = false }) => {
             // If the nsec field has a real nsec, login with it and save as passkey
             const trimmed = nsecInput.trim();
             if (trimmed.startsWith('nsec1')) {
-                const result = await loginWithNsecAndCheckNew(trimmed);
+                const result = await loginWithNsec(trimmed);
                 if (!result.success) {
                     setError(result.error || 'Invalid nsec key.');
                     return;
@@ -236,7 +235,7 @@ const Login = ({ nostr = false }) => {
             }
 
             // No nsec present — normal passkey login flow
-            const result = await loginWithPasskeyAndCheckNew();
+            const result = await loginWithPasskey();
             if (result.cancelled) return;
             if (!result.success) {
                 setError(friendlyPasskeyError(result.error));
@@ -332,7 +331,7 @@ const Login = ({ nostr = false }) => {
             if (canSaveKeys && validateWords(words)) {
                 await signInWithKey(nip19.nsecEncode(privateKeyFromSeedWords(words)));
             } else {
-                handleResult(await loginWithSeedPhraseAndCheckNew(seedInput));
+                handleResult(await loginWithSeedPhrase(seedInput));
             }
         } catch (err) {
             setError(err.message || 'Invalid seed phrase or login failed.');
@@ -347,7 +346,7 @@ const Login = ({ nostr = false }) => {
         setError('');
         setLoading(true);
         try {
-            const result = await loginWithBunkerAndCheckNew(bunkerInput);
+            const result = await loginWithBunker(bunkerInput);
             handleResult(result);
         } catch (err) {
             setError(err.message || 'Failed to connect to remote signer.');

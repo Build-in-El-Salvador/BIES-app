@@ -1,0 +1,15 @@
+/* The name-and-photo step (ProfileGate): the terms sheet's look, plus a
+   photo picker and a name field. Fixed light colours, like the sheet. */
+.pg-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.pg-photo { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; }
+.pg-avatar { position: relative; width: 104px; height: 104px; padding: 0; border-radius: 50%; border: 2px dashed #cbd5e1; background: #f1f5f9; color: #94a3b8; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pg-avatar:has(img) { border-style: solid; border-color: #e5e7eb; }
+.pg-avatar:disabled { cursor: progress; }
+.pg-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.pg-avatar-badge { position: absolute; right: 2px; bottom: 2px; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--mod-primary); color: #ffffff; border: 2px solid #ffffff; }
+.pg-input { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0.65rem 0.8rem; border: 1px solid #d1d5db; border-radius: 0.65rem; font: inherit; font-size: 1rem; color: inherit; background: #ffffff; outline: none; }
+.pg-input:focus { border-color: var(--mod-primary); }
+.pg-missing { text-align: center; }
+.profile-gate .mod-actions { margin-top: 0.5rem; }
+/* The crop step opens over the sheet (z-index 10100). */
+.pg-crop-layer { position: fixed; inset: 0; z-index: 10200; }

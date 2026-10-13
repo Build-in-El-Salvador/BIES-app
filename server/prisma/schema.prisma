@@ -66,6 +66,8 @@ model User {
   directoryMemberships  DirectoryListing[]     @relation("DirectoryListingsAsMember")
   directoryEndorsements DirectoryEndorsement[]
   savedListings         SavedListing[]
+  listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
+  listingTransfersTo    ListingTransfer[]      @relation("ListingTransfersTo")
   courses               Course[]
   enrollments           Enrollment[]
   coursePurchases       CoursePurchase[]
@@ -941,6 +943,7 @@ model DirectoryListing {
   memberUser   User? @relation("DirectoryListingsAsMember", fields: [memberUserId], references: [id], onDelete: SetNull)
   endorsements DirectoryEndorsement[]
   saves        SavedListing[]
+  transfers    ListingTransfer[]
   @@index([type, status])
   @@map("directory_listings")
 }
@@ -956,6 +959,32 @@ model SavedListing {
   @@unique([userId, listingId])
   @@index([listingId])
   @@map("saved_listings")
+}
+
+// Handing a listing to the member who runs it. A claim is asked for by that
+// member (to_user) and granted by the listing's owner or by staff (who decide
+// when the owner can't or won't); an offer is made by the owner and answered
+// by the member it's for. Staff can also move a listing outright (kind
+// "staff", accepted at once).
+model ListingTransfer {
+  id          String    @id @default(cuid())
+  listingId   String    @map("listing_id")
+  fromUserId  String    @map("from_user_id")  // the listing's owner when asked
+  toUserId    String    @map("to_user_id")    // who would own it
+  kind        String                          // claim | offer | staff
+  message     String    @default("")
+  status      String    @default("pending")   // pending | accepted | declined | cancelled
+  // The owner said no to a claim: it stays open for staff to decide.
+  ownerDeclinedAt DateTime? @map("owner_declined_at")
+  decidedById String?   @map("decided_by_id")
+  decidedAt   DateTime? @map("decided_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  listing  DirectoryListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  fromUser User             @relation("ListingTransfersFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User             @relation("ListingTransfersTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  @@index([listingId, status])
+  @@index([status])
+  @@map("listing_transfers")
 }
 
 // A member's review of a listing: a vouch (+1) or a downvote (-1). A

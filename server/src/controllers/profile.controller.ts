@@ -94,7 +94,9 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         const cached = await cache.getJson<any>(cKey);
         if (cached) { res.setHeader('X-Cache', 'HIT'); await respond(cached); return; }
 
-        const where: any = { isPublic: true };
+        // Members who haven't finished their profile (no BIES name yet) stay
+        // out of the list; the app asks them for one when they sign in.
+        const where: any = { isPublic: true, AND: [{ name: { not: '' } }, { NOT: { name: { startsWith: 'nostr:' } } }] };
 
         if (role && typeof role === 'string') {
             const upRole = role.toUpperCase();

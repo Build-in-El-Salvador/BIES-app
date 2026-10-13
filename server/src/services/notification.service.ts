@@ -511,6 +511,8 @@ export async function notifyBountyCancelled(params: {
 // ─── URL helper for push notification click-through ──────────────────────────
 
 function getNotificationUrl(type: string, data: Record<string, unknown>): string {
+    // A notice that names its own page in the app (e.g. a listing).
+    if (typeof data.link === 'string' && /^\/(?!\/)/.test(data.link)) return data.link;
     switch (type) {
         case 'NEW_MESSAGE':
             return '/messages';

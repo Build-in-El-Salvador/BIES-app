@@ -55,7 +55,6 @@ import Signup from './pages/Signup';
 import AmberCallback from './pages/AmberCallback';
 import VoucherRedeem from './pages/VoucherRedeem';
 import Join from './pages/Join';
-import ProfileSetup from './pages/ProfileSetup';
 import Dashboard from './pages/Dashboard';
 import Leaderboard from './pages/Leaderboard';
 import Overview from './pages/Overview';
@@ -348,11 +347,8 @@ const AppContent = () => {
                         </FeatureRoute>
                     } />
 
-                    <Route path="/profile-setup" element={
-                        <ProtectedRoute>
-                            <ProfileSetup />
-                        </ProtectedRoute>
-                    } />
+                    {/* Old link: the name-and-photo step now opens over the app (ProfileGate). */}
+                    <Route path="/profile-setup" element={<Navigate to="/feed" replace />} />
                     <Route path="/profile" element={
                         <ProtectedRoute>
                             <Profile />

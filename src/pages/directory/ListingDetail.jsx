@@ -7,6 +7,7 @@ import {
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
     Building2, MessageCircle, Navigation, Share2, Check, Bookmark, BookmarkCheck,
+    UserCheck, ArrowRightLeft,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +15,7 @@ import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
 import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
+import { OwnershipBanner, OwnershipSheet } from '../../components/directory/ListingOwnership';
 import { openExternal } from '../../utils/openExternal';
 import { isAppleDevice } from '../../utils/mapApps';
 import { publicUrl } from '../../utils/publicUrl';
@@ -56,6 +58,8 @@ const ListingDetail = () => {
     const [linkCopied, setLinkCopied] = useState(false);
     const [searchParams] = useSearchParams();
     const [saved, setSaved] = useState(null); // null until the listing says
+    const [ownershipSheet, setOwnershipSheet] = useState(null); // 'claim' | 'offer' | 'staff'
+    const [ownershipNotice, setOwnershipNotice] = useState('');
     useEffect(() => { setSaved(null); }, [id]);
     // From "Recommend this one" in the add form (?recommend=1): open the
     // vouch form once the listing is here, if this member can vouch.
@@ -149,6 +153,24 @@ const ListingDetail = () => {
     const listingMemberName = listing.memberUser?.profile?.name || listing.owner?.profile?.name || listing.name;
     const canModerate = !!user?.id && listingMemberId !== user.id && !isOwner;
     const isPending = listing.status === 'pending-review';
+
+    // Handing it to the member who runs it: they claim it ("This is my
+    // business"), the owner offers it, or staff move it.
+    const transfers = Array.isArray(listing.transfers) ? listing.transfers : [];
+    const canClaim = !!user?.id && !isOwner && listing.status === 'active'
+        && !transfers.some((tr) => tr.kind === 'claim' && tr.toUserId === user.id);
+    const canMove = isStaff && !isOwner;
+    const hasMenu = canClaim || isOwner || canMove || canModerate;
+    const openOwnership = (mode) => {
+        setShowMenu(false);
+        menuButtonRef.current?.focus({ preventScroll: true });
+        setOwnershipSheet(mode);
+    };
+    const ownershipChanged = (notice) => {
+        setOwnershipSheet(null);
+        setOwnershipNotice(notice || '');
+        fetchListing({ silent: true });
+    };
 
     // Phone calls; WhatsApp opens WhatsApp (wa.me wants digits only).
     const telNumber = (listing.phone || '').replace(/[^\d+]/g, '');
@@ -272,6 +294,16 @@ const ListingDetail = () => {
     return (
         <div className="listing-detail-page">
             {dialogs}
+            {ownershipSheet && (
+                <OwnershipSheet
+                    mode={ownershipSheet}
+                    listing={listing}
+                    user={user}
+                    isFarm={isFarm}
+                    onClose={() => setOwnershipSheet(null)}
+                    onDone={ownershipChanged}
+                />
+            )}
             {/* Hero — full-bleed on mobile, 760px rounded column on desktop */}
             <div className="dir-hero-wrap">
                 <div className="dir-hero">
@@ -336,7 +368,7 @@ const ListingDetail = () => {
                                         <Edit3 size={14} /> {t('directory.editListing')}
                                     </Link>
                                 )}
-                                {canModerate && (
+                                {hasMenu && (
                                     <div style={{ position: 'relative' }}>
                                         <button
                                             ref={menuButtonRef}
@@ -352,6 +384,22 @@ const ListingDetail = () => {
                                             <>
                                                 <div className="dir-menu-backdrop" onClick={() => setShowMenu(false)} />
                                                 <div className="dir-menu" role="menu">
+                                                    {canClaim && (
+                                                        <button type="button" role="menuitem" onClick={() => openOwnership('claim')}>
+                                                            <UserCheck size={16} /> {t('directory.ownership.claimMenu', { context: isFarm ? 'farm' : undefined })}
+                                                        </button>
+                                                    )}
+                                                    {isOwner && (
+                                                        <button type="button" role="menuitem" onClick={() => openOwnership('offer')}>
+                                                            <ArrowRightLeft size={16} /> {t('directory.ownership.offerMenu')}
+                                                        </button>
+                                                    )}
+                                                    {canMove && (
+                                                        <button type="button" role="menuitem" onClick={() => openOwnership('staff')}>
+                                                            <ArrowRightLeft size={16} /> {t('directory.ownership.staffMenu')}
+                                                        </button>
+                                                    )}
+                                                    {canModerate && (<>
                                                     <button
                                                         type="button"
                                                         role="menuitem"
@@ -375,6 +423,7 @@ const ListingDetail = () => {
                                                     >
                                                         <Ban size={16} /> {t('moderation.menu.blockMember')}
                                                     </button>
+                                                    </>)}
                                                 </div>
                                             </>
                                         )}
@@ -405,6 +454,11 @@ const ListingDetail = () => {
                             <p className="dir-own-note">{t('directory.review.ownBusinessNote', { context: isFarm ? 'farm' : undefined })}</p>
                         )}
                     </div>
+
+                    {ownershipNotice && (
+                        <p className="dir-own-notice" role="status"><Check size={16} /> {ownershipNotice}</p>
+                    )}
+                    <OwnershipBanner listing={listing} user={user} isStaff={isStaff} isFarm={isFarm} onChanged={ownershipChanged} />
 
                     <div className="dir-actions" role="group" aria-label={t('directory.actions.label')}>
                         {actions.map(({ key, Icon, label, href, onClick, pressed }) => (
@@ -866,6 +920,12 @@ const ListingDetail = () => {
                     margin: 0.4rem 0 0;
                     font-size: 0.82rem;
                     color: var(--color-gray-500);
+                }
+                .dir-own-notice {
+                    display: flex; align-items: center; gap: 6px;
+                    margin: 0 0 1rem; padding: 0.6rem 0.85rem;
+                    border-radius: 0.75rem; background: #ecfdf5; color: var(--color-success-text, #047857);
+                    font-size: 0.9rem; font-weight: 600;
                 }
 
                 .dir-gallery {

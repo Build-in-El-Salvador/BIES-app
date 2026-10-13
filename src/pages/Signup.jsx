@@ -15,7 +15,7 @@ import { saveKey, savedKeyAvailable } from '../services/savedKey';
 
 const Signup = () => {
     const { t } = useTranslation();
-    const { loginWithNsec, whenTermsAccepted } = useAuth();
+    const { loginWithNsec, whenTermsAccepted, refreshUser } = useAuth();
     const navigate = useNavigate();
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -155,6 +155,8 @@ const Signup = () => {
                 const profileData = { name: profile.name };
                 if (nip05Name.trim()) profileData.nip05Name = nip05Name.trim().toLowerCase();
                 await authService.completeNostrProfile(profileData);
+                // The profile step (ProfileGate) then only asks for a photo.
+                await refreshUser();
 
                 // Optionally create Coinos wallet
                 if (enableCoinos && COINOS_SIGNUP_WALLET && coinosUsername.trim()) {
@@ -196,7 +198,7 @@ const Signup = () => {
                     <div className="text-center w-full">
                         <h2 className="text-2xl font-bold mb-2">{t('emailSignIn.joinHeading')}</h2>
                         <p className="text-gray-500 mb-6">{t('emailSignIn.joinSubtext')}</p>
-                        <EmailSignIn onSuccess={(result) => navigate(result.needsProfileSetup ? '/profile-setup' : '/feed')} />
+                        <EmailSignIn onSuccess={() => navigate('/feed')} />
                         <div className="signup-divider"><span>{t('common.or')}</span></div>
                         <p className="text-gray-500 text-sm mb-4">{t('emailSignIn.ownKeyIntro')}</p>
                         <button onClick={generateKeys} className="btn-outline w-full py-3 rounded-full">

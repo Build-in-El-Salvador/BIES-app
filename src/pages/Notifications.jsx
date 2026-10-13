@@ -87,11 +87,13 @@ const Notifications = () => {
         }
     };
 
-    // Deep-link for notification types that reference an entity
+    // Deep-link for notification types that reference an entity; a notice
+    // can also carry its own in-app link (e.g. the listing it's about).
     const typeLink = (notif) => {
-        if (!notif.type?.startsWith('BOUNTY_')) return null;
         try {
             const data = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
+            if (typeof data?.link === 'string' && /^\/(?!\/)/.test(data.link)) return data.link;
+            if (!notif.type?.startsWith('BOUNTY_')) return null;
             return data?.bountyId ? `/bounties/${data.bountyId}` : null;
         } catch {
             return null;

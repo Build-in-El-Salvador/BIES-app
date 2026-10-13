@@ -4,6 +4,7 @@ import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryR
 import { publishDirectoryListing } from '../services/nostr.service';
 import { blockedEitherWay, blockedIds } from '../services/moderation.service';
 import { config } from '../config';
+import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -135,7 +136,7 @@ function pickAllowedFields(body: any, staff: boolean): any {
  * when set, else the owner's. Doesn't wait; members who sign on their own
  * device mirror from the app instead.
  */
-function mirrorToNostr(listing: any): void {
+export function mirrorToNostr(listing: any): void {
     if (listing.status !== 'active') return;
     publishDirectoryListing(listing.memberUserId ?? listing.ownerId, listing)
         .then(async (eventId) => {
@@ -285,7 +286,9 @@ export async function getListing(req: Request, res: Response): Promise<void> {
                 select: { id: true },
             }))
             : false;
-        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe };
+        // Open ownership requests the viewer can see or answer.
+        const transfers = await transfersFor(listing, req);
+        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({

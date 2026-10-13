@@ -1,0 +1,25 @@
+/* Handing a listing over (ListingOwnership.jsx): the request banner on the
+   listing page, and the member picker inside the shared sheet. */
+.own-banner { display: flex; flex-direction: column; gap: 0.6rem; margin: 0 0 1rem; }
+.own-row { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.85rem 1rem; border: 1px solid #bfdbfe; background: #eff6ff; border-radius: 0.85rem; color: #1e293b; }
+.own-icon { flex-shrink: 0; margin-top: 2px; color: #0047AB; }
+.own-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.own-text { margin: 0; font-weight: 600; font-size: 0.95rem; line-height: 1.4; }
+.own-message { margin: 0; font-style: italic; color: #334155; font-size: 0.9rem; line-height: 1.45; overflow-wrap: anywhere; }
+.own-hint { margin: 0; color: #475569; font-size: 0.85rem; line-height: 1.4; }
+.own-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
+.own-button { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 40px; padding: 0.45rem 1rem; border-radius: 9999px; border: 1px solid #0047AB; background: #0047AB; color: #ffffff; font-weight: 600; font-size: 0.9rem; cursor: pointer; }
+.own-button.secondary { background: #ffffff; color: #0047AB; }
+.own-button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.own-search { width: 100%; box-sizing: border-box; min-height: 46px; padding: 0.6rem 0.8rem; border: 1px solid #d1d5db; border-radius: 0.65rem; font: inherit; font-size: 1rem; color: inherit; background: #ffffff; outline: none; }
+.own-search:focus { border-color: var(--mod-primary); }
+.own-results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; max-height: 16rem; overflow-y: auto; }
+.own-person { width: 100%; display: flex; align-items: center; gap: 0.7rem; padding: 0.5rem 0.65rem; min-height: 52px; border: 1px solid #e5e7eb; border-radius: 0.65rem; background: #ffffff; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.own-person.selected { border-color: var(--mod-primary); background: #f5f7ff; }
+.own-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #f1f5f9; color: #94a3b8; }
+.own-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.own-person-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.own-person-name { font-weight: 600; font-size: 0.95rem; }
+.own-person-sub { color: #6b7280; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.own-check { flex-shrink: 0; color: var(--mod-primary); }
