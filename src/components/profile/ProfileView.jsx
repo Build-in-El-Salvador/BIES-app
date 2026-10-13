@@ -414,9 +414,10 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     white-space: nowrap;
                 }
                 .pv-actions :global(.pv-btn.primary) { background: var(--color-primary); color: #fff; }
-                .pv-actions :global(.pv-btn.icon) { flex: 0 0 48px; padding: 0; }
+                /* An explicit width: Safari sizes the menu's wrapper by the icon, not the flex basis. */
+                .pv-actions :global(.pv-btn.icon) { flex: 0 0 48px; width: 48px; min-width: 48px; padding: 0; }
                 .pv-actions :global(.pv-btn:disabled) { opacity: 0.6; cursor: wait; }
-                .pv-actions :global(.pv-menu-wrap) { position: relative; display: flex; }
+                .pv-actions :global(.pv-menu-wrap) { position: relative; display: flex; flex: 0 0 auto; }
                 .pv-tabs { display: flex; gap: 6px; margin-top: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-gray-200); }
                 .pv-tab {
                     min-height: 38px;
