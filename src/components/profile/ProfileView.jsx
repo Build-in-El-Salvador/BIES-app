@@ -8,15 +8,14 @@ import {
 import { profilesApi, directoryApi } from '../../services/api';
 import { useFeature } from '../../context/FeatureFlagsContext';
 import { useLightbox } from '../../context/LightboxContext';
-import { useNostrFeed } from '../../hooks/useNostr';
 import { parseNoteContent } from '../../utils/noteUtils';
-import { isNativePlatform } from '../../utils/platform';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
-import NostrFeed from '../NostrFeed';
+import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
 
+// One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
 
 function isSafeUrl(url) {
@@ -36,7 +35,8 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
  * bar, the photo with the name and follower counts beside it, the bio, the
  * buttons, then All / Photos. All has their details (role, the BIES
  * business they run, projects, place, links), their Network, and their
- * posts in the BIES feed; Photos has the pictures from those posts.
+ * posts in the BIES feed, as the Feed shows them (likes, reposts, replies);
+ * Photos has the pictures from those posts.
  * Used by your own profile (Profile) and everyone else's (PublicProfile).
  *
  * @param {object}    profile      GET /profiles/:id or /profiles/me
@@ -56,6 +56,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
     const [listings, setListings] = useState([]);
+    const [posts, setPosts] = useState({ list: [], loading: true });
 
     const userId = profile.user?.id || profile.userId;
     const pubkey = useMemo(() => {
@@ -65,11 +66,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
             return decoded?.type === 'npub' ? decoded.data : null;
         } catch { return null; }
     }, [profile.user?.nostrPubkey, profile.nostrNpub]);
-    const npub = pubkey ? nip19.npubEncode(pubkey) : null;
-    // The app shows BIES posts only; the website follows the member's choice.
-    const feedMode = isNativePlatform() ? 'private' : (profile.nostrFeedMode || 'combined');
-    const showPosts = !!npub && feedMode !== 'off';
-    const feed = useNostrFeed(showPosts ? [npub] : [], feedMode, 50);
+    // Their posts in the BIES feed, unless they turned them off in Edit profile.
+    const showPosts = !!pubkey && profile.nostrFeedMode !== 'off';
 
     useEffect(() => {
         if (!userId) return undefined;
@@ -98,7 +96,11 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const companyListing = businesses.find((l) => sameName(l.name, profile.company));
     const otherBusinesses = businesses.filter((l) => l !== companyListing);
 
-    const photos = useMemo(() => feed.posts.flatMap((post) => parseNoteContent(post.content).images), [feed.posts]);
+    // Pictures from their own posts (not ones they reposted).
+    const photos = useMemo(
+        () => posts.list.filter((post) => post.pubkey === pubkey).flatMap((post) => parseNoteContent(post.content).images),
+        [posts.list, pubkey],
+    );
 
     const avatar = profile.avatar || nostrProfile?.picture || '';
     const banner = profile.banner || nostrProfile?.banner || '';
@@ -120,10 +122,17 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
 
     return (
         <div className="pv">
+            {/* A strip of the cover; tap it for the whole picture. */}
             <div
                 className={`pv-cover${banner ? ' has-image' : ''}`}
                 style={banner ? { backgroundImage: `url(${getAssetUrl(banner)})` } : undefined}
-                onClick={() => banner && lightbox?.open(getAssetUrl(banner))}
+                {...(banner ? {
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-label': t('profileView.viewCover'),
+                    onClick: () => lightbox?.open(getAssetUrl(banner)),
+                    onKeyDown: (e) => { if (e.key === 'Enter') lightbox?.open(getAssetUrl(banner)); },
+                } : {})}
             >
                 {showBack && (
                     <button
@@ -183,7 +192,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 </div>
             </div>
 
-            {tab === 'photos' ? (
+            {tab === 'photos' && (
                 <section className="pv-section">
                     <h2 className="pv-h2">{t('profileView.tabs.photos')}</h2>
                     {photos.length > 0 ? (
@@ -197,141 +206,141 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     ) : (
                         <p className="pv-empty">
                             <ImageOff size={20} aria-hidden="true" />
-                            {feed.loading && showPosts ? t('common.loading', 'Loading...') : t('profileView.noPhotos')}
+                            {posts.loading && showPosts ? t('common.loading', 'Loading...') : t('profileView.noPhotos')}
                         </p>
                     )}
                 </section>
-            ) : (
-                <>
-                    {hasDetails ? (
-                        <section className="pv-section">
-                            <h2 className="pv-h2">{t('profileView.details')}</h2>
-                            <ul className="pv-details">
-                                {role && (
-                                    <li>
-                                        <Briefcase size={20} aria-hidden="true" />
-                                        <span>
-                                            {role === 'both' && <>{profile.title} {t('profileView.at')} {companyText}</>}
-                                            {role === 'title' && profile.title}
-                                            {role === 'company' && companyText}
-                                        </span>
-                                    </li>
-                                )}
-                                {otherBusinesses.map((l) => (
-                                    <li key={l.id}>
-                                        {l.type === 'FARM' ? <Leaf size={20} aria-hidden="true" /> : <Store size={20} aria-hidden="true" />}
-                                        <span>{t('profileView.runs')} <Link to={listingPath(l)} className="pv-link">{l.name}</Link></span>
-                                    </li>
-                                ))}
-                                {projects.map((p) => (
-                                    <li key={p.id}>
-                                        <Rocket size={20} aria-hidden="true" />
-                                        <span>
-                                            {p.role ? `${p.role} · ` : `${t('profileView.workingOn')} `}
-                                            <Link to={`/project/${p.id}`} className="pv-link">{p.name}</Link>
-                                        </span>
-                                    </li>
-                                ))}
-                                {profile.location && (
-                                    <li><MapPin size={20} aria-hidden="true" /><span>{profile.location}</span></li>
-                                )}
-                                {links.map(({ key, Icon, href, label }) => (
-                                    <li key={key}>
-                                        <Icon size={20} aria-hidden="true" />
-                                        <a href={href} target="_blank" rel="noopener noreferrer" className="pv-link">{label}</a>
-                                    </li>
-                                ))}
-                            </ul>
-                            {profile.tags?.length > 0 && (
-                                <div className="pv-tags">
-                                    {profile.tags.map((tag, i) => <ZappableTag key={`${tag}-${i}`} tag={tag} />)}
-                                </div>
-                            )}
-                        </section>
-                    ) : isOwn && (
-                        <section className="pv-section">
-                            <h2 className="pv-h2">{t('profileView.details')}</h2>
-                            <p className="pv-muted">
-                                {t('profileView.addDetails')} <Link to="/profile/edit" className="pv-link">{t('profileView.editProfile')}</Link>
-                            </p>
-                        </section>
-                    )}
+            )}
 
+            {/* Kept mounted on Photos, so the posts stay loaded and as they were. */}
+            <div hidden={tab !== 'all'}>
+                {hasDetails ? (
                     <section className="pv-section">
-                        <div className="pv-section-head">
-                            <div>
-                                <h2 className="pv-h2">{t('profileView.network')}</h2>
-                                {network.length > 0 && <p className="pv-muted">{t('profileView.people', { count: network.length })}</p>}
-                            </div>
-                            {network.length > 0 && userId && (
-                                <Link to={`/members/${userId}/network`} className="pv-link pv-see-all">{t('profileView.seeAll')}</Link>
+                        <h2 className="pv-h2">{t('profileView.details')}</h2>
+                        <ul className="pv-details">
+                            {role && (
+                                <li>
+                                    <Briefcase size={20} aria-hidden="true" />
+                                    <span>
+                                        {role === 'both' && <>{profile.title} {t('profileView.at')} {companyText}</>}
+                                        {role === 'title' && profile.title}
+                                        {role === 'company' && companyText}
+                                    </span>
+                                </li>
                             )}
-                        </div>
-                        {network.length > 0 ? (
-                            <ul className="pv-network">
-                                {network.slice(0, NETWORK_SHOWN).map((p) => (
-                                    <li key={p.id}>
-                                        <Link to={`/builder/${p.nostrPubkey || p.id}`} className="pv-person">
-                                            <span className="pv-person-photo">
-                                                {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <User size={26} />}
-                                            </span>
-                                            <span className="pv-person-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="pv-muted">
-                                {isOwn
-                                    ? <>{t('profileView.networkEmptyOwn')} <Link to="/members" className="pv-link">{t('profileView.findMembers')}</Link></>
-                                    : t('profileView.networkEmpty')}
-                            </p>
+                            {otherBusinesses.map((l) => (
+                                <li key={l.id}>
+                                    {l.type === 'FARM' ? <Leaf size={20} aria-hidden="true" /> : <Store size={20} aria-hidden="true" />}
+                                    <span>{t('profileView.runs')} <Link to={listingPath(l)} className="pv-link">{l.name}</Link></span>
+                                </li>
+                            ))}
+                            {projects.map((p) => (
+                                <li key={p.id}>
+                                    <Rocket size={20} aria-hidden="true" />
+                                    <span>
+                                        {p.role ? `${p.role} · ` : `${t('profileView.workingOn')} `}
+                                        <Link to={`/project/${p.id}`} className="pv-link">{p.name}</Link>
+                                    </span>
+                                </li>
+                            ))}
+                            {profile.location && (
+                                <li><MapPin size={20} aria-hidden="true" /><span>{profile.location}</span></li>
+                            )}
+                            {links.map(({ key, Icon, href, label }) => (
+                                <li key={key}>
+                                    <Icon size={20} aria-hidden="true" />
+                                    <a href={href} target="_blank" rel="noopener noreferrer" className="pv-link">{label}</a>
+                                </li>
+                            ))}
+                        </ul>
+                        {profile.tags?.length > 0 && (
+                            <div className="pv-tags">
+                                {profile.tags.map((tag, i) => <ZappableTag key={`${tag}-${i}`} tag={tag} />)}
+                            </div>
                         )}
                     </section>
+                ) : isOwn && (
+                    <section className="pv-section">
+                        <h2 className="pv-h2">{t('profileView.details')}</h2>
+                        <p className="pv-muted">
+                            {t('profileView.addDetails')} <Link to="/profile/edit" className="pv-link">{t('profileView.editProfile')}</Link>
+                        </p>
+                    </section>
+                )}
 
-                    {experience.length > 0 && (
-                        <section className="pv-section">
-                            <h2 className="pv-h2">{t('publicProfile.experience', 'Experience')}</h2>
-                            <ul className="pv-details">
-                                {experience.map((e, i) => (
-                                    <li key={i}>
-                                        <Briefcase size={20} aria-hidden="true" />
-                                        <span>
-                                            <strong>{e.title}</strong>
-                                            {e.company && <> · {e.company}</>}
-                                            {e.date && <span className="pv-muted pv-block">{e.date}</span>}
-                                            {e.description && <span className="pv-block">{e.description}</span>}
+                <section className="pv-section">
+                    <div className="pv-section-head">
+                        <h2 className="pv-h2">
+                            {t('profileView.network')}
+                            {network.length > 0 && <span className="pv-h2-count">{network.length}</span>}
+                        </h2>
+                        {network.length > 0 && userId && (
+                            <Link to={`/members/${userId}/network`} className="pv-link pv-see-all">{t('profileView.seeAll')}</Link>
+                        )}
+                    </div>
+                    {network.length > 0 ? (
+                        <ul className="pv-network">
+                            {network.slice(0, NETWORK_SHOWN).map((p) => (
+                                <li key={p.id}>
+                                    <Link to={`/builder/${p.nostrPubkey || p.id}`} className="pv-person">
+                                        <span className="pv-person-photo">
+                                            {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <User size={26} />}
                                         </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </section>
+                                        <span className="pv-person-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="pv-muted">
+                            {isOwn
+                                ? <>{t('profileView.networkEmptyOwn')} <Link to="/members" className="pv-link">{t('profileView.findMembers')}</Link></>
+                                : t('profileView.networkEmpty')}
+                        </p>
                     )}
+                </section>
 
-                    {sections.map((section, i) => (
-                        <section key={i} className="pv-section pv-custom">
-                            <ProfileSection section={section} />
-                        </section>
-                    ))}
+                {experience.length > 0 && (
+                    <section className="pv-section">
+                        <h2 className="pv-h2">{t('publicProfile.experience', 'Experience')}</h2>
+                        <ul className="pv-details">
+                            {experience.map((e, i) => (
+                                <li key={i}>
+                                    <Briefcase size={20} aria-hidden="true" />
+                                    <span>
+                                        <strong>{e.title}</strong>
+                                        {e.company && <> · {e.company}</>}
+                                        {e.date && <span className="pv-muted pv-block">{e.date}</span>}
+                                        {e.description && <span className="pv-block">{e.description}</span>}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
-                    {Children.toArray(children).filter((child) => typeof child !== 'string' || child.trim()).map((child, i) => (
-                        <section key={i} className="pv-section">{child}</section>
-                    ))}
+                {sections.map((section, i) => (
+                    <section key={i} className="pv-section pv-custom">
+                        <ProfileSection section={section} />
+                    </section>
+                ))}
 
-                    {showPosts && (
-                        <section className="pv-section pv-posts">
-                            <NostrFeed
-                                npub={npub}
-                                mode={feedMode}
-                                feed={feed}
-                                title={t('profileView.posts')}
-                                emptyText={t('profileView.noPosts')}
-                                plain
-                            />
-                        </section>
-                    )}
-                </>
-            )}
+                {Children.toArray(children).filter((child) => typeof child !== 'string' || child.trim()).map((child, i) => (
+                    <section key={i} className="pv-section">{child}</section>
+                ))}
+
+                {showPosts && (
+                    <section className="pv-section pv-posts">
+                        <h2 className="pv-h2 pv-posts-title">{t('profileView.posts')}</h2>
+                        <Feed
+                            author={pubkey}
+                            showCompose={!!isOwn}
+                            emptyText={t('profileView.noPosts')}
+                            onPosts={(list, loading) => setPosts({ list, loading })}
+                        />
+                    </section>
+                )}
+            </div>
 
             <style jsx>{`
                 .pv {
@@ -343,7 +352,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 }
                 .pv-cover {
                     position: relative;
-                    height: 190px;
+                    height: 150px;
                     background: linear-gradient(120deg, #0047AB, #0a192f);
                     background-size: cover;
                     background-position: center;
@@ -434,8 +443,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
 
                 .pv-section { padding: 18px 16px; border-bottom: 8px solid var(--color-gray-100); }
                 .pv-section:last-child { border-bottom: none; }
-                .pv-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-                .pv-section-head .pv-h2 { margin-bottom: 2px; }
+                .pv-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+                .pv-section-head .pv-h2 { margin-bottom: 0; }
+                .pv-h2-count { margin-left: 8px; font-weight: 500; color: var(--color-gray-500); }
                 .pv-h2 { margin: 0 0 12px; font-family: var(--font-sans); font-size: 1.15rem; font-weight: 700; color: var(--color-gray-900); }
                 .pv-muted { margin: 0; color: var(--color-gray-500); font-size: 0.9rem; }
                 .pv-block { display: block; margin-top: 2px; }
@@ -446,7 +456,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 .pv-details li :global(svg) { flex-shrink: 0; color: var(--color-gray-500); margin-top: 1px; }
                 .pv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 
-                .pv-network { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 8px; }
+                .pv-network { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+                .pv-network li:nth-child(n + 5) { display: none; }
                 .pv-network :global(.pv-person) { display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: var(--color-gray-900); text-align: center; }
                 .pv-person-photo {
                     width: 72px; height: 72px; border-radius: 50%; overflow: hidden;
@@ -464,17 +475,20 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 .pv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
                 .pv-empty { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--color-gray-500); font-size: 0.92rem; }
 
-                .pv-posts { padding-left: 0; padding-right: 0; }
+                .pv-posts { padding-left: 0; padding-right: 0; padding-bottom: 0; }
+                .pv-posts-title { padding: 0 16px; }
 
                 @media (min-width: 769px) {
                     .pv { margin-top: 1rem; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); }
-                    .pv-cover { height: 280px; }
+                    .pv-cover { height: 220px; }
                     .pv-sheet { padding: 0 24px 4px; }
                     .pv-avatar { width: 148px; height: 148px; margin-top: -74px; }
                     .pv-title { padding-top: 18px; }
                     .pv-name { font-size: 1.9rem; }
                     .pv-section { padding: 22px 24px; }
                     .pv-network { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+                    .pv-network li:nth-child(n + 5) { display: list-item; }
+                    .pv-posts-title { padding: 0 24px; }
                     .pv-actions :global(.pv-btn) { flex: 0 1 auto; padding: 0 22px; }
                 }
             `}</style>

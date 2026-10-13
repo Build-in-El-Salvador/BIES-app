@@ -62,7 +62,15 @@ function sharedPostId(search) {
     return null;
 }
 
-const Feed = () => {
+/**
+ * The BIES feed. With `author` (a hex pubkey) it is one member's posts and
+ * reposts, embedded in their profile: no header or tabs, the same cards,
+ * likes, reposts, replies and menus. `showCompose` keeps the post box,
+ * `emptyText` replaces the empty message, and `onPosts(posts, loading)`
+ * hands the posts to the page (the profile's Photos tab).
+ */
+const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) => {
+    const embedded = !!author;
     const { user } = useAuth();
     // Members this member blocked: their posts and comments are hidden here.
     const blocks = useBlocks();
@@ -261,7 +269,7 @@ const Feed = () => {
 
             sub = nostrService.pool.subscribeMany(
                 [BIES_RELAY],
-                { kinds: [1, 6], limit: 50 },
+                { kinds: [1, 6], limit: 50, ...(author ? { authors: [author] } : {}) },
                 {
                     onevent: (event) => {
                         // Handle reposts (kind 6) — deduplicate by original note ID
@@ -398,7 +406,7 @@ const Feed = () => {
             clearTimeout(reconnectTimer);
             if (sub) sub.close();
         };
-    }, [feedMode, refreshKey]);
+    }, [feedMode, refreshKey, author]);
 
     // Fetch ALL reactions for private relay posts — builds stats counts + marks user's own likes/reposts
     const fetchedReactionIds = useRef(new Set());
@@ -558,7 +566,7 @@ const Feed = () => {
         setLoadingMore(true);
         try {
             const until = (olderUntil.current ?? Math.min(...posts.map(p => p.created_at))) - 1;
-            const events = await nostrService.pool.querySync([BIES_RELAY], { kinds: [1], until, limit: 40 }, { onauth: relayAuth });
+            const events = await nostrService.pool.querySync([BIES_RELAY], { kinds: [1], until, limit: 40, ...(author ? { authors: [author] } : {}) }, { onauth: relayAuth });
             if (!events.length) { setOlderDone(true); return; }
             olderUntil.current = Math.min(...events.map(e => e.created_at));
             const roots = events.filter(isRootNote);
@@ -1193,6 +1201,8 @@ const Feed = () => {
         return p._reposters?.length > 0 || !p.tags?.some(t => t[0] === 'e');
     }), [posts, isHidden]);
 
+    useEffect(() => { onPosts?.(rootPosts, loading); }, [rootPosts, loading]);
+
     const getStats = (noteId) => noteStats[noteId] || {};
 
     const loadComments = useCallback(async (postId) => {
@@ -1291,7 +1301,7 @@ const Feed = () => {
     // (/feed?post=note1…): load it (or the post a reply belongs to) if it
     // isn't in the feed yet, open its replies and scroll to it — as tapping a
     // notification does in any social app.
-    const focusTarget = location.state?.scrollToPost || sharedPostId(location.search);
+    const focusTarget = embedded ? null : (location.state?.scrollToPost || sharedPostId(location.search));
     const focusHandled = useRef(null);
     useEffect(() => {
         if (!focusTarget || loading || feedMode !== 'private' || focusHandled.current === focusTarget) return;
@@ -1380,242 +1390,246 @@ const Feed = () => {
     };
 
     return (
-        <div className="primal-feed-page">
+        <div className={embedded ? 'primal-feed-embedded' : 'primal-feed-page'}>
             {copyToast && <div className="primal-copy-toast">{copyToast}</div>}
-            <div className="primal-feed-container">
+            <div className={embedded ? undefined : 'primal-feed-container'}>
                 {/* Feed header */}
-                <div className="primal-feed-header">
-                    <div className="primal-feed-title">
-                        <NostrIcon size={22} />
-                        <span>{t('feed.biesFeed', 'BIES Feed')}</span>
-                    </div>
-                    <div className="primal-feed-tabs">
-                        <button
-                            className={`primal-feed-tab ${feedMode === 'private' ? 'active' : ''}`}
-                            onClick={() => setFeedMode('private')}
-                            data-testid="tab-private"
-                        >
-                            <Lock size={15} className="primal-feed-tab-icon" />
-                            <span>{t('feed.privateRelay', 'Private Relay')}</span>
-                        </button>
-                        {exploreAllowed && (
-                            <button
-                                className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
-                                onClick={() => setFeedMode('explore')}
-                                data-testid="tab-explore"
-                            >
-                                <Globe size={15} className="primal-feed-tab-icon" />
-                                <span>{t('feed.explore', 'Explore')}</span>
-                            </button>
-                        )}
-                        <button
-                            className={`primal-feed-refresh${refreshing ? ' spinning' : ''}`}
-                            onClick={handleRefreshFeed}
-                            disabled={loading || refreshing}
-                            title={t('feed.refresh', 'Refresh feed')}
-                        >
-                            <RefreshCw size={15} />
-                        </button>
-                    </div>
-
-                    {/* Explore dropdown */}
-                    {feedMode === 'explore' && (
-                        <div className="primal-explore-dropdown" ref={exploreDropdownRef} data-testid="explore-tabs">
-                            <button
-                                className="primal-explore-dropdown-trigger"
-                                onClick={() => setExploreDropdownOpen(o => !o)}
-                            >
-                                {(() => {
-                                    const active = EXPLORE_VIEWS.find(v => v.key === exploreView);
-                                    const Icon = EXPLORE_ICONS[exploreView];
-                                    return (
-                                        <>
-                                            <Icon size={14} />
-                                            <span>{active?.label}</span>
-                                            <ChevronDown size={14} className={`primal-explore-chevron${exploreDropdownOpen ? ' open' : ''}`} />
-                                        </>
-                                    );
-                                })()}
-                            </button>
-                            {exploreDropdownOpen && (
-                                <div className="primal-explore-dropdown-menu">
-                                    {EXPLORE_VIEWS.map(view => {
-                                        const Icon = EXPLORE_ICONS[view.key];
-                                        return (
-                                            <button
-                                                key={view.key}
-                                                className={`primal-explore-dropdown-item${exploreView === view.key ? ' active' : ''}`}
-                                                onClick={() => {
-                                                    setExploreView(view.key);
-                                                    setExploreDropdownOpen(false);
-                                                }}
-                                            >
-                                                <Icon size={14} />
-                                                <span>{view.label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                {!embedded && (
+                    <div className="primal-feed-header">
+                        <div className="primal-feed-title">
+                            <NostrIcon size={22} />
+                            <span>{t('feed.biesFeed', 'BIES Feed')}</span>
                         </div>
-                    )}
-                </div>
+                        <div className="primal-feed-tabs">
+                            <button
+                                className={`primal-feed-tab ${feedMode === 'private' ? 'active' : ''}`}
+                                onClick={() => setFeedMode('private')}
+                                data-testid="tab-private"
+                            >
+                                <Lock size={15} className="primal-feed-tab-icon" />
+                                <span>{t('feed.privateRelay', 'Private Relay')}</span>
+                            </button>
+                            {exploreAllowed && (
+                                <button
+                                    className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
+                                    onClick={() => setFeedMode('explore')}
+                                    data-testid="tab-explore"
+                                >
+                                    <Globe size={15} className="primal-feed-tab-icon" />
+                                    <span>{t('feed.explore', 'Explore')}</span>
+                                </button>
+                            )}
+                            <button
+                                className={`primal-feed-refresh${refreshing ? ' spinning' : ''}`}
+                                onClick={handleRefreshFeed}
+                                disabled={loading || refreshing}
+                                title={t('feed.refresh', 'Refresh feed')}
+                            >
+                                <RefreshCw size={15} />
+                            </button>
+                        </div>
+
+                        {/* Explore dropdown */}
+                        {feedMode === 'explore' && (
+                            <div className="primal-explore-dropdown" ref={exploreDropdownRef} data-testid="explore-tabs">
+                                <button
+                                    className="primal-explore-dropdown-trigger"
+                                    onClick={() => setExploreDropdownOpen(o => !o)}
+                                >
+                                    {(() => {
+                                        const active = EXPLORE_VIEWS.find(v => v.key === exploreView);
+                                        const Icon = EXPLORE_ICONS[exploreView];
+                                        return (
+                                            <>
+                                                <Icon size={14} />
+                                                <span>{active?.label}</span>
+                                                <ChevronDown size={14} className={`primal-explore-chevron${exploreDropdownOpen ? ' open' : ''}`} />
+                                            </>
+                                        );
+                                    })()}
+                                </button>
+                                {exploreDropdownOpen && (
+                                    <div className="primal-explore-dropdown-menu">
+                                        {EXPLORE_VIEWS.map(view => {
+                                            const Icon = EXPLORE_ICONS[view.key];
+                                            return (
+                                                <button
+                                                    key={view.key}
+                                                    className={`primal-explore-dropdown-item${exploreView === view.key ? ' active' : ''}`}
+                                                    onClick={() => {
+                                                        setExploreView(view.key);
+                                                        setExploreDropdownOpen(false);
+                                                    }}
+                                                >
+                                                    <Icon size={14} />
+                                                    <span>{view.label}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Compose box */}
-                <div className="primal-compose">
-                    <div className="primal-compose-row">
-                        <div className="primal-compose-avatar">
-                            {user?.profile?.avatar ? (
-                                <img src={user.profile.avatar} alt="" />
-                            ) : (
-                                <NostrIcon size={18} />
-                            )}
-                        </div>
-                        <textarea
-                            ref={composeInputRef}
-                            className="primal-compose-input"
-                            placeholder={t('feed.whatsHappening', "What's on your mind?")}
-                            value={composeText}
-                            onChange={(e) => {
-                                setComposeText(e.target.value);
-                                handleMentionInput(e.target.value, e.target.selectionStart, 'compose');
-                            }}
-                            onKeyDown={handleKeyDown}
-                            onBlur={() => setTimeout(() => setMentionAnchor(null), 150)}
-                            rows={2}
-                            data-testid="compose-input"
-                        />
-                    </div>
-
-                    {/* Mention dropdown */}
-                    {mentionAnchor?.field === 'compose' && (mentionResults.length > 0 || mentionLoading) && (
-                        <div className="primal-mention-dropdown">
-                            {mentionLoading && mentionResults.length === 0 && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', color: 'var(--feed-text-tertiary)', fontSize: 13 }}>
-                                    <Loader2 size={12} className="spin" /> {t('feed.searching', 'Searching...')}
-                                </div>
-                            )}
-                            {mentionResults.map(p => (
-                                <button key={p.pubkey} className="primal-mention-item" onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(p); }}>
-                                    {p.picture ? (
-                                        <img src={p.picture} className="primal-mention-avatar" alt="" />
-                                    ) : (
-                                        <div className="primal-mention-avatar-placeholder"><NostrIcon size={12} /></div>
-                                    )}
-                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                        <span className="primal-mention-name">{p.display_name || p.name || p.pubkey.slice(0, 10)}</span>
-                                        {p.nip05 && <span className="primal-mention-nip05">{p.nip05}</span>}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Media preview */}
-                    {attachedFiles.length > 0 && (
-                        <div className="primal-compose-media-preview">
-                            {attachedFiles.map((item, i) => (
-                                <div key={i} className="primal-compose-media-item">
-                                    {item.type.startsWith('image/') ? (
-                                        <img src={item.previewUrl} alt="" />
-                                    ) : (
-                                        <video src={item.previewUrl} muted />
-                                    )}
-                                    <button className="primal-compose-media-remove" onClick={() => removeAttachment(i)}>
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {postError && <div className="primal-compose-error">{postError}</div>}
-
-                    <div className="primal-compose-bottom">
-                        {/* In the app, posts go to the BIES feed (like a group's posts); no public option */}
-                        {exploreAllowed && <button
-                            className={`primal-compose-relay-toggle ${broadcastPublic ? 'public' : 'private'}`}
-                            onClick={() => { manualRelayToggle.current = true; setBroadcastPublic(!broadcastPublic); }}
-                            title={broadcastPublic ? t('feed.broadcastingPublic', 'Broadcasting to all relays') : t('feed.privateRelayOnly', 'Private relay only')}
-                        >
-                            {broadcastPublic ? <Globe size={13} /> : <Lock size={13} />}
-                            <span>{broadcastPublic ? t('feed.public', 'Public') : t('feed.private', 'Private')}</span>
-                        </button>}
-
-                        <div className="primal-compose-actions">
-                            <button
-                                className="primal-compose-btn"
-                                onClick={() => fileInputRef.current?.click()}
-                                title="Attach image or video"
-                                disabled={attachedFiles.length >= blossomService.MAX_ATTACHMENTS || posting || uploading}
-                            >
-                                <ImagePlus size={18} />
-                            </button>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*,video/*"
-                                multiple
-                                style={{ display: 'none' }}
-                                onChange={handleFileSelect}
+                {showCompose && (
+                    <div className="primal-compose">
+                        <div className="primal-compose-row">
+                            <div className="primal-compose-avatar">
+                                {user?.profile?.avatar ? (
+                                    <img src={user.profile.avatar} alt="" />
+                                ) : (
+                                    <NostrIcon size={18} />
+                                )}
+                            </div>
+                            <textarea
+                                ref={composeInputRef}
+                                className="primal-compose-input"
+                                placeholder={t('feed.whatsHappening', "What's on your mind?")}
+                                value={composeText}
+                                onChange={(e) => {
+                                    setComposeText(e.target.value);
+                                    handleMentionInput(e.target.value, e.target.selectionStart, 'compose');
+                                }}
+                                onKeyDown={handleKeyDown}
+                                onBlur={() => setTimeout(() => setMentionAnchor(null), 150)}
+                                rows={2}
+                                data-testid="compose-input"
                             />
-                            <div className="picker-anchor">
-                                <button
-                                    className="primal-compose-btn"
-                                    onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
-                                    title="Emoji"
-                                >
-                                    <Smile size={18} />
-                                </button>
-                                {showEmojiPicker && (
-                                    <EmojiPicker
-                                        onSelect={(emoji) => handleComposeEmoji(emoji)}
-                                        onClose={() => setShowEmojiPicker(false)}
-                                    />
+                        </div>
+
+                        {/* Mention dropdown */}
+                        {mentionAnchor?.field === 'compose' && (mentionResults.length > 0 || mentionLoading) && (
+                            <div className="primal-mention-dropdown">
+                                {mentionLoading && mentionResults.length === 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', color: 'var(--feed-text-tertiary)', fontSize: 13 }}>
+                                        <Loader2 size={12} className="spin" /> {t('feed.searching', 'Searching...')}
+                                    </div>
                                 )}
+                                {mentionResults.map(p => (
+                                    <button key={p.pubkey} className="primal-mention-item" onMouseDown={(e) => { e.preventDefault(); handleMentionSelect(p); }}>
+                                        {p.picture ? (
+                                            <img src={p.picture} className="primal-mention-avatar" alt="" />
+                                        ) : (
+                                            <div className="primal-mention-avatar-placeholder"><NostrIcon size={12} /></div>
+                                        )}
+                                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                            <span className="primal-mention-name">{p.display_name || p.name || p.pubkey.slice(0, 10)}</span>
+                                            {p.nip05 && <span className="primal-mention-nip05">{p.nip05}</span>}
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
-                            <div className="picker-anchor">
-                                <button
-                                    className="primal-compose-btn"
-                                    onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
-                                    title="GIF"
-                                >
-                                    <span className="gif-label">GIF</span>
-                                </button>
-                                {showGifPicker && (
-                                    <NostrGifPicker
-                                        onSelect={handleComposeGif}
-                                        onClose={() => setShowGifPicker(false)}
-                                        dropDown
-                                    />
-                                )}
+                        )}
+
+                        {/* Media preview */}
+                        {attachedFiles.length > 0 && (
+                            <div className="primal-compose-media-preview">
+                                {attachedFiles.map((item, i) => (
+                                    <div key={i} className="primal-compose-media-item">
+                                        {item.type.startsWith('image/') ? (
+                                            <img src={item.previewUrl} alt="" />
+                                        ) : (
+                                            <video src={item.previewUrl} muted />
+                                        )}
+                                        <button className="primal-compose-media-remove" onClick={() => removeAttachment(i)}>
+                                            <X size={10} />
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
-                            <button
-                                className="primal-compose-post-btn"
-                                onClick={handlePost}
-                                disabled={(!composeText.trim() && attachedFiles.length === 0) || posting || uploading}
-                                data-testid="post-btn"
+                        )}
+
+                        {postError && <div className="primal-compose-error">{postError}</div>}
+
+                        <div className="primal-compose-bottom">
+                            {/* In the app, posts go to the BIES feed (like a group's posts); no public option */}
+                            {exploreAllowed && <button
+                                className={`primal-compose-relay-toggle ${broadcastPublic ? 'public' : 'private'}`}
+                                onClick={() => { manualRelayToggle.current = true; setBroadcastPublic(!broadcastPublic); }}
+                                title={broadcastPublic ? t('feed.broadcastingPublic', 'Broadcasting to all relays') : t('feed.privateRelayOnly', 'Private relay only')}
                             >
-                                {(posting || uploading) ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
-                                <span>{uploading ? t('feed.uploading', 'Uploading...') : posting ? t('feed.posting', 'Posting...') : t('feed.post', 'Post')}</span>
-                            </button>
+                                {broadcastPublic ? <Globe size={13} /> : <Lock size={13} />}
+                                <span>{broadcastPublic ? t('feed.public', 'Public') : t('feed.private', 'Private')}</span>
+                            </button>}
+
+                            <div className="primal-compose-actions">
+                                <button
+                                    className="primal-compose-btn"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Attach image or video"
+                                    disabled={attachedFiles.length >= blossomService.MAX_ATTACHMENTS || posting || uploading}
+                                >
+                                    <ImagePlus size={18} />
+                                </button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*,video/*"
+                                    multiple
+                                    style={{ display: 'none' }}
+                                    onChange={handleFileSelect}
+                                />
+                                <div className="picker-anchor">
+                                    <button
+                                        className="primal-compose-btn"
+                                        onClick={() => { setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false); }}
+                                        title="Emoji"
+                                    >
+                                        <Smile size={18} />
+                                    </button>
+                                    {showEmojiPicker && (
+                                        <EmojiPicker
+                                            onSelect={(emoji) => handleComposeEmoji(emoji)}
+                                            onClose={() => setShowEmojiPicker(false)}
+                                        />
+                                    )}
+                                </div>
+                                <div className="picker-anchor">
+                                    <button
+                                        className="primal-compose-btn"
+                                        onClick={() => { setShowGifPicker(!showGifPicker); setShowEmojiPicker(false); }}
+                                        title="GIF"
+                                    >
+                                        <span className="gif-label">GIF</span>
+                                    </button>
+                                    {showGifPicker && (
+                                        <NostrGifPicker
+                                            onSelect={handleComposeGif}
+                                            onClose={() => setShowGifPicker(false)}
+                                            dropDown
+                                        />
+                                    )}
+                                </div>
+                                <button
+                                    className="primal-compose-post-btn"
+                                    onClick={handlePost}
+                                    disabled={(!composeText.trim() && attachedFiles.length === 0) || posting || uploading}
+                                    data-testid="post-btn"
+                                >
+                                    {(posting || uploading) ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
+                                    <span>{uploading ? t('feed.uploading', 'Uploading...') : posting ? t('feed.posting', 'Posting...') : t('feed.post', 'Post')}</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Feed content */}
                 {loading && rootPosts.length === 0 ? (
-                    <FeedSkeleton count={5} />
+                    <FeedSkeleton count={embedded ? 2 : 5} />
                 ) : rootPosts.length === 0 ? (
                     <div className="primal-feed-empty" data-testid="feed-empty">
                         <NostrIcon size={40} />
                         <h3>{t('feed.noPostsTitle', 'No posts yet')}</h3>
                         <p>
-                            {feedMode === 'private'
+                            {emptyText || (feedMode === 'private'
                                 ? t('feed.noPostsPrivate', 'Be the first to post on the private relay!')
-                                : t('feed.noPostsExplore', 'Nothing to show right now.')}
+                                : t('feed.noPostsExplore', 'Nothing to show right now.'))}
                         </p>
-                        {feedMode === 'private' && exploreAllowed && (
+                        {!embedded && feedMode === 'private' && exploreAllowed && (
                             <button className="primal-try-public-btn" onClick={() => setFeedMode('explore')}>
                                 <Globe size={14} /> {t('feed.exploreNostr', 'Explore Nostr')}
                             </button>

@@ -56,6 +56,16 @@
   }
 }
 
+/* A member's posts in their profile (Feed with `author`): white, as the
+   profile is, and no page-height minimum. */
+.primal-feed-embedded .primal-note,
+.primal-feed-embedded .primal-compose {
+  background: var(--feed-card-bg);
+}
+.primal-feed-embedded .primal-feed-empty {
+  padding: 28px 20px 12px;
+}
+
 /* ---------- Feed header / tabs ------------------------------------------ */
 .primal-feed-header {
   background: var(--feed-bg);
@@ -161,15 +171,6 @@
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-/* A profile's Posts section (NostrFeed plain): no card, the page scrolls. */
-.nostr-profile-feed-plain .nostr-profile-feed-header {
-  padding: 0 16px 10px;
-}
-.nostr-profile-feed-plain .nostr-profile-feed-title {
-  font-family: var(--font-sans);
-  font-size: 1.15rem;
 }
 
 .nostr-profile-feed-scroll {
@@ -1218,6 +1219,7 @@
 
 .primal-comment-input-row {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1228,6 +1230,8 @@
 
 .primal-comment-input {
   flex: 1;
+  /* A textarea's own width (its cols) would push Send off a phone screen. */
+  min-width: 0;
   border: none;
   outline: none;
   resize: none;

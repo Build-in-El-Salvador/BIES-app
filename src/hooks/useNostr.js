@@ -8,7 +8,7 @@ import { nip19 } from 'nostr-tools';
  * @param {string[]} npubs - npub or hex pubkeys to follow
  * @param {'public'|'private'|'combined'} relayMode - which relays to query
  */
-export const useNostrFeed = (npubs, relayMode = 'combined', limit = 20) => {
+export const useNostrFeed = (npubs, relayMode = 'combined') => {
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [profiles, setProfiles] = useState({});
@@ -82,7 +82,7 @@ export const useNostrFeed = (npubs, relayMode = 'combined', limit = 20) => {
 
             sub = nostrService.pool.subscribeMany(
                 relays,
-                { kinds: [1], authors: authorsHex, limit },
+                { kinds: [1], authors: authorsHex, limit: 20 },
                 {
                     onevent: (event) => {
                         if (cancelled) return;
@@ -159,7 +159,7 @@ export const useNostrFeed = (npubs, relayMode = 'combined', limit = 20) => {
             clearTimeout(debounceTimer);
             if (sub) sub.close();
         };
-    }, [JSON.stringify(npubs), relayMode, limit]);
+    }, [JSON.stringify(npubs), relayMode]);
 
     return { posts, loading, profiles };
 };
