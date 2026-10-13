@@ -13,6 +13,8 @@ import {
     endorseListing,
     endorseSchema,
     removeEndorsement,
+    saveListing,
+    unsaveListing,
 } from '../controllers/directory.controller';
 
 const router = Router();
@@ -29,5 +31,7 @@ router.put('/:id', authenticate, requireTerms, validate(updateDirectoryListingSc
 router.delete('/:id', authenticate, deleteListing);
 router.post('/:id/endorse', authenticate, requireTerms, validate(endorseSchema), screenContent(['comment']), endorseListing);
 router.delete('/:id/endorse', authenticate, removeEndorsement);
+router.post('/:id/save', authenticate, saveListing);
+router.delete('/:id/save', authenticate, unsaveListing);
 
 export default router;

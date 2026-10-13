@@ -473,6 +473,39 @@ class NostrService {
     }
 
     /**
+     * Publish an event that's already signed (so the caller keeps its id):
+     * to the BIES relay only, or to every relay.
+     */
+    async publishSigned(signedEvent, { biesOnly = false } = {}) {
+        const relays = biesOnly ? [this.biesRelay] : this.relays;
+        return Promise.any(this.pool.publish(relays, signedEvent, { onauth: handleRelayAuth }));
+    }
+
+    /**
+     * Undo my like: a NIP-09 deletion of my kind:7 reactions to an event.
+     * Uses the reaction ids when known, else looks them up on the relays.
+     * @returns {Promise<boolean>} false when there was nothing to undo
+     */
+    async unreact(targetId, { biesOnly = false, knownIds = [] } = {}) {
+        let ids = knownIds.filter(Boolean);
+        if (!ids.length) {
+            const me = await nostrSigner.getPublicKey();
+            const relays = biesOnly ? [this.biesRelay] : this.relays;
+            const events = await this.pool.querySync(relays, { kinds: [7], authors: [me], '#e': [targetId] }, { onauth: handleRelayAuth });
+            ids = events.map((e) => e.id);
+        }
+        if (!ids.length) return false;
+        const deletion = await nostrSigner.signEvent({
+            kind: 5,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [...ids.map((id) => ['e', id]), ['k', '7']],
+            content: '',
+        });
+        await this.publishSigned(deletion, { biesOnly });
+        return true;
+    }
+
+    /**
      * Publish a signed event to the private BIES relay only.
      */
     async publishToBiesRelay(event) {

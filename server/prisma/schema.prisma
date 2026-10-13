@@ -65,6 +65,7 @@ model User {
   directoryListings     DirectoryListing[]     @relation("DirectoryListingsOwned")
   directoryMemberships  DirectoryListing[]     @relation("DirectoryListingsAsMember")
   directoryEndorsements DirectoryEndorsement[]
+  savedListings         SavedListing[]
   courses               Course[]
   enrollments           Enrollment[]
   coursePurchases       CoursePurchase[]
@@ -912,6 +913,9 @@ model DirectoryListing {
   bestFor   String @default("") @map("best_for")
   pricing   String @default("")            // free text (decision)
   comment   String @default("")
+  // A Google/Apple Maps link to the exact place, for Directions (optional:
+  // a business that comes to you needs no public address).
+  mapUrl    String @default("") @map("map_url")
   // The member who added it runs the business, or works there: their own
   // vote doesn't count, and the listing says it was added by the business.
   isOwnBusiness Boolean @default(false) @map("is_own_business")
@@ -936,8 +940,22 @@ model DirectoryListing {
   owner        User @relation("DirectoryListingsOwned", fields: [ownerId], references: [id], onDelete: Cascade)
   memberUser   User? @relation("DirectoryListingsAsMember", fields: [memberUserId], references: [id], onDelete: SetNull)
   endorsements DirectoryEndorsement[]
+  saves        SavedListing[]
   @@index([type, status])
   @@map("directory_listings")
+}
+
+// A member saved a listing for later (Google Maps "Save", Yelp bookmarks).
+model SavedListing {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  listingId String   @map("listing_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing DirectoryListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  @@unique([userId, listingId])
+  @@index([listingId])
+  @@map("saved_listings")
 }
 
 // A member's review of a listing: a vouch (+1) or a downvote (-1). A

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useNostrFeed } from '../hooks/useNostr';
 import { useLightbox } from '../context/LightboxContext';
@@ -8,6 +8,10 @@ import NostrIcon from './NostrIcon';
 import './feed/Feed.css';
 
 const NostrFeed = ({ npub, mode = 'combined' }) => {
+    const navigate = useNavigate();
+    // BIES posts open in the Feed with their replies, as a profile's activity
+    // does on LinkedIn; public ones live outside BIES, so they don't.
+    const openPost = mode === 'private' ? (id) => navigate('/feed', { state: { scrollToPost: id } }) : null;
     const { t } = useTranslation();
     const { posts, loading, profiles } = useNostrFeed(npub ? [npub] : [], mode);
     const lightbox = useLightbox();
@@ -102,7 +106,16 @@ const NostrFeed = ({ npub, mode = 'combined' }) => {
                                         </div>
                                     </Link>
                                 </div>
-                                <div className="primal-note-right">
+                                <div
+                                    className="primal-note-right"
+                                    {...(openPost ? {
+                                        role: 'link',
+                                        tabIndex: 0,
+                                        style: { cursor: 'pointer' },
+                                        onClick: (e) => { if (!e.target.closest('a, button, img')) openPost(post.id); },
+                                        onKeyDown: (e) => { if (e.key === 'Enter') openPost(post.id); },
+                                    } : {})}
+                                >
                                     <NoteHeader
                                         pubkey={post.pubkey}
                                         profile={profile}

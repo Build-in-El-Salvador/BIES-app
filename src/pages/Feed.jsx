@@ -118,6 +118,8 @@ const Feed = () => {
 
     // Interaction state
     const [likedNotes, setLikedNotes] = useState(new Set());
+    // My like's event id per note or comment, so a second tap can undo it.
+    const myReactionIds = useRef(new Map());
     const [repostedNotes, setRepostedNotes] = useState(new Set());
     const [replyTarget, setReplyTarget] = useState(null);
     const [replyText, setReplyText] = useState('');
@@ -165,23 +167,6 @@ const Feed = () => {
             }
         }).catch(() => {});
     }, []);
-
-    // Scroll to a specific post when navigated from notifications
-    useEffect(() => {
-        const scrollToPost = location.state?.scrollToPost;
-        if (!scrollToPost || loading || feedMode !== 'private') return;
-        // Wait a tick for posts to render
-        const timer = setTimeout(() => {
-            const el = document.querySelector(`[data-post-id="${CSS.escape(scrollToPost)}"]`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                el.style.transition = 'box-shadow 0.3s';
-                el.style.boxShadow = '0 0 0 2px var(--color-secondary)';
-                setTimeout(() => { el.style.boxShadow = ''; }, 2000);
-            }
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [location.state?.scrollToPost, loading, feedMode]);
 
     // Sort notes based on the current explore view
     const sortNotes = useCallback((notes, stats, viewKey) => {
@@ -527,8 +512,54 @@ const Feed = () => {
         return () => { cancelled = true; };
     }, [feedMode, exploreView, currentView, sortNotes, refreshKey]);
 
-    // Load more for explore feed
+    // A root note of the BIES feed (not a reply, not machine-generated JSON).
+    const isRootNote = (ev) => {
+        const c = (ev.content || '').trimStart();
+        return ev.kind === 1 && !c.startsWith('{') && !c.startsWith('xitchat-') && !c.startsWith('[')
+            && !ev.tags.some(t => t[0] === 'e');
+    };
+    const byFeedTime = (a, b) => (b._repostTime || b.created_at) - (a._repostTime || a.created_at);
+    const mergePosts = (events) => setPosts(prev => {
+        const have = new Set(prev.map(p => p.id));
+        const add = events.filter(e => !have.has(e.id));
+        return add.length ? [...prev, ...add].sort(byFeedTime) : prev;
+    });
+    const relayAuth = async (evt) => { try { return await nostrSigner.signEvent(evt); } catch { return undefined; } };
+    const ensureProfiles = useCallback(async (pubkeys) => {
+        const toFetch = [...new Set(pubkeys)].filter(pk => pk && !fetchedProfiles.current.has(pk));
+        if (!toFetch.length) return;
+        toFetch.forEach(pk => fetchedProfiles.current.add(pk));
+        const map = await nostrService.getProfiles(toFetch, [BIES_RELAY]).catch(() => new Map());
+        if (map.size) setProfiles(prev => { const next = { ...prev }; for (const [pk, pr] of map) next[pk] = pr; return next; });
+    }, []);
+
+
+    // Older posts in the BIES feed, page by page (the feed opens with the
+    // newest 50). olderUntil walks back even when a page is all replies.
+    const olderUntil = useRef(null);
+    const [olderDone, setOlderDone] = useState(false);
+    useEffect(() => { olderUntil.current = null; setOlderDone(false); }, [feedMode, refreshKey]);
+    const loadOlderPrivate = async () => {
+        if (olderDone || posts.length === 0) return;
+        setLoadingMore(true);
+        try {
+            const until = (olderUntil.current ?? Math.min(...posts.map(p => p.created_at))) - 1;
+            const events = await nostrService.pool.querySync([BIES_RELAY], { kinds: [1], until, limit: 40 }, { onauth: relayAuth });
+            if (!events.length) { setOlderDone(true); return; }
+            olderUntil.current = Math.min(...events.map(e => e.created_at));
+            const roots = events.filter(isRootNote);
+            mergePosts(roots);
+            ensureProfiles(roots.map(e => e.pubkey));
+        } catch (err) {
+            console.error('[Feed] Loading older posts failed:', err);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
+
+    // Load more: older BIES posts, or more of the explore feed
     const handleLoadMore = async () => {
+        if (feedMode === 'private') { if (!loadingMore) await loadOlderPrivate(); return; }
         if (loadingMore || feedMode !== 'explore' || posts.length === 0) return;
         setLoadingMore(true);
         try {
@@ -734,13 +765,33 @@ const Feed = () => {
         setCommentGifPicker(null);
     };
 
-    // Like a note (kind:7 reaction)
+    const bumpLikes = (id, by) => setNoteStats(prev => ({
+        ...prev,
+        [id]: { ...prev[id], likes: Math.max(0, (prev[id]?.likes || 0) + by) },
+    }));
+
+    // Like a note (kind:7 reaction); tapping again undoes it (a NIP-09
+    // deletion of the reaction), as in every social app.
     const handleLike = async (post) => {
-        if (likedNotes.has(post.id)) return;
         if (!nostrSigner.hasKey && nostrSigner.mode !== 'extension' && !nostrSigner.storedMethod && !window.nostr) return;
+        const biesOnly = feedMode === 'private';
+
+        if (likedNotes.has(post.id)) {
+            setLikedNotes(prev => { const next = new Set(prev); next.delete(post.id); return next; });
+            bumpLikes(post.id, -1);
+            try {
+                await nostrService.unreact(post.id, { biesOnly, knownIds: [myReactionIds.current.get(post.id)] });
+                myReactionIds.current.delete(post.id);
+            } catch (err) {
+                console.error('[Feed] Unlike failed:', err);
+                setLikedNotes(prev => new Set(prev).add(post.id));
+                bumpLikes(post.id, 1);
+            }
+            return;
+        }
 
         try {
-            const event = {
+            const signed = await nostrSigner.signEvent({
                 kind: 7,
                 created_at: Math.floor(Date.now() / 1000),
                 tags: [
@@ -748,12 +799,9 @@ const Feed = () => {
                     ['p', post.pubkey],
                 ],
                 content: '+',
-            };
-            if (feedMode === 'private') {
-                await nostrService.publishToBiesRelay(event);
-            } else {
-                await nostrService.publishEvent(event);
-            }
+            });
+            await nostrService.publishSigned(signed, { biesOnly });
+            myReactionIds.current.set(post.id, signed.id);
             setLikedNotes(prev => new Set(prev).add(post.id));
             setNoteStats(prev => ({
                 ...prev,
@@ -871,13 +919,25 @@ const Feed = () => {
         }
     };
 
-    // Like a comment (kind:7 reaction targeting the comment event)
+    // Like a comment (kind:7 reaction targeting the comment event); again to undo
     const handleCommentLike = async (comment) => {
-        if (likedComments.has(comment.id)) return;
         if (!nostrSigner.hasKey && nostrSigner.mode !== 'extension' && !nostrSigner.storedMethod && !window.nostr) return;
+        const biesOnly = feedMode === 'private';
+
+        if (likedComments.has(comment.id)) {
+            setLikedComments(prev => { const next = new Set(prev); next.delete(comment.id); return next; });
+            try {
+                await nostrService.unreact(comment.id, { biesOnly, knownIds: [myReactionIds.current.get(comment.id)] });
+                myReactionIds.current.delete(comment.id);
+            } catch (err) {
+                console.error('[Feed] Comment unlike failed:', err);
+                setLikedComments(prev => new Set(prev).add(comment.id));
+            }
+            return;
+        }
 
         try {
-            const event = {
+            const signed = await nostrSigner.signEvent({
                 kind: 7,
                 created_at: Math.floor(Date.now() / 1000),
                 tags: [
@@ -885,12 +945,9 @@ const Feed = () => {
                     ['p', comment.pubkey],
                 ],
                 content: '+',
-            };
-            if (feedMode === 'private') {
-                await nostrService.publishToBiesRelay(event);
-            } else {
-                await nostrService.publishEvent(event);
-            }
+            });
+            await nostrService.publishSigned(signed, { biesOnly });
+            myReactionIds.current.set(comment.id, signed.id);
             setLikedComments(prev => new Set(prev).add(comment.id));
             // Notify the comment author (fire-and-forget)
             if (user) {
@@ -954,15 +1011,41 @@ const Feed = () => {
                 tags: [['e', post.id]],
                 content: 'Request delete',
             };
-            // Publish delete request to both private and public relays
-            await nostrService.publishEvent(event);
-            try { await nostrService.publishToBiesRelay(event); } catch { /* best-effort */ }
+            // A private post's deletion stays on the BIES relay; a public one
+            // goes to every relay.
+            if (feedMode === 'private') {
+                await nostrService.publishToBiesRelay(event);
+            } else {
+                await nostrService.publishEvent(event);
+                try { await nostrService.publishToBiesRelay(event); } catch { /* best-effort */ }
+            }
             // Remove from local feed
             setPosts(prev => prev.filter(p => p.id !== post.id));
         } catch (err) {
             console.error('[Feed] Delete request failed:', err);
         } finally {
             setDeletingPost(null);
+        }
+    };
+
+    // Delete my own reply (NIP-09), as Facebook and LinkedIn let you.
+    const handleDeleteComment = async (postId, comment) => {
+        if (!window.confirm(t('feed.deleteReplyConfirm', 'Delete this reply?'))) return;
+        try {
+            const deletion = await nostrSigner.signEvent({
+                kind: 5,
+                created_at: Math.floor(Date.now() / 1000),
+                tags: [['e', comment.id], ['k', '1']],
+                content: '',
+            });
+            await nostrService.publishSigned(deletion, { biesOnly: feedMode === 'private' });
+            setComments(prev => ({ ...prev, [postId]: (prev[postId] || []).filter(c => c.id !== comment.id) }));
+            setNoteStats(prev => ({
+                ...prev,
+                [postId]: { ...prev[postId], replies: Math.max(0, (prev[postId]?.replies || 0) - 1) },
+            }));
+        } catch (err) {
+            console.error('[Feed] Delete reply failed:', err);
         }
     };
 
@@ -1182,6 +1265,46 @@ const Feed = () => {
             return next;
         });
     };
+
+    // Open a post from a notification or a profile: load it (or the post a
+    // reply belongs to) if it isn't in the feed yet, open its replies and
+    // scroll to it — as tapping a notification does in any social app.
+    const focusTarget = location.state?.scrollToPost;
+    const focusHandled = useRef(null);
+    useEffect(() => {
+        if (!focusTarget || loading || feedMode !== 'private' || focusHandled.current === focusTarget) return;
+        focusHandled.current = focusTarget;
+        (async () => {
+            let id = focusTarget;
+            if (!posts.some(p => p.id === id)) {
+                try {
+                    const [ev] = await nostrService.pool.querySync([BIES_RELAY], { ids: [id] }, { onauth: relayAuth });
+                    if (ev) {
+                        const eTags = ev.tags.filter(t => t[0] === 'e');
+                        const rootId = (eTags.find(t => t[3] === 'root') || eTags[0])?.[1];
+                        let root = ev;
+                        if (rootId) {
+                            const [r] = await nostrService.pool.querySync([BIES_RELAY], { ids: [rootId] }, { onauth: relayAuth });
+                            if (r) root = r;
+                        }
+                        id = root.id;
+                        mergePosts([root]);
+                        ensureProfiles([root.pubkey]);
+                    }
+                } catch { /* not found: just show the feed */ }
+            }
+            setOpenComments(prev => new Set(prev).add(id));
+            loadComments(id);
+            setTimeout(() => {
+                const el = document.querySelector(`[data-post-id="${CSS.escape(id)}"]`);
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                el.style.transition = 'box-shadow 0.3s';
+                el.style.boxShadow = '0 0 0 2px var(--color-secondary)';
+                setTimeout(() => { el.style.boxShadow = ''; }, 2000);
+            }, 400);
+        })();
+    }, [focusTarget, loading, feedMode, posts, loadComments, ensureProfiles]);
 
     // Close repost menu and post menu on outside click
     useEffect(() => {
@@ -1677,9 +1800,13 @@ const Feed = () => {
                                                                             <button className="primal-comment-action" onClick={() => handleCommentReply(post.id, comment)}>
                                                                                 Reply
                                                                             </button>
-                                                                            {comment.pubkey !== myPubkey && (
+                                                                            {comment.pubkey !== myPubkey ? (
                                                                                 <button className="primal-comment-action" onClick={() => handleReport(comment)}>
                                                                                     {t('moderation.menu.report')}
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button className="primal-comment-action" onClick={() => handleDeleteComment(post.id, comment)}>
+                                                                                    {t('feed.deleteReply', 'Delete')}
                                                                                 </button>
                                                                             )}
                                                                             <button
@@ -1688,17 +1815,19 @@ const Feed = () => {
                                                                             >
                                                                                 Like
                                                                             </button>
-                                                                            <button
-                                                                                className="primal-comment-action"
-                                                                                onClick={() => setZapTarget({
-                                                                                    pubkey: comment.pubkey,
-                                                                                    name: getDisplayName(comment.pubkey),
-                                                                                    avatar: getAvatar(comment.pubkey),
-                                                                                    eventId: comment.id,
-                                                                                })}
-                                                                            >
-                                                                                Zap
-                                                                            </button>
+                                                                            {zapsOn && (
+                                                                                <button
+                                                                                    className="primal-comment-action"
+                                                                                    onClick={() => setZapTarget({
+                                                                                        pubkey: comment.pubkey,
+                                                                                        name: getDisplayName(comment.pubkey),
+                                                                                        avatar: getAvatar(comment.pubkey),
+                                                                                        eventId: comment.id,
+                                                                                    })}
+                                                                                >
+                                                                                    Zap
+                                                                                </button>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1730,7 +1859,7 @@ const Feed = () => {
                         })}
 
                         {/* Infinite scroll / load more */}
-                        {feedMode === 'explore' && rootPosts.length >= 10 && (
+                        {(feedMode === 'explore' || (feedMode === 'private' && !olderDone)) && rootPosts.length >= 10 && (
                             <>
                                 <Paginator onIntersect={handleLoadMore} disabled={loadingMore} />
                                 {loadingMore && (

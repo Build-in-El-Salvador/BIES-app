@@ -738,7 +738,9 @@
     "showMoreComments_plural": "Mostrar {{count}} comentarios mas",
     "loadMore": "Cargar Mas",
     "loading": "Cargando...",
-    "searching": "Buscando..."
+    "searching": "Buscando...",
+    "deleteReply": "Eliminar",
+    "deleteReplyConfirm": "¿Eliminar esta respuesta?"
   },
   "nostrFeed": {
     "publicTab": "Publico",
@@ -1846,14 +1848,22 @@
       "directions": "Cómo llegar",
       "website": "Sitio web",
       "share": "Compartir",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "save": "Guardar",
+      "saved": "Guardados"
     },
     "moreDetails": "Más detalles (opcional)",
     "moreDetailsHint": "Fotos, descripción, horario, teléfono, WhatsApp, sitio web…",
-    "aboutHeading": "Descripción y horario",
+    "aboutHeading": "Descripción, horario y mapa",
     "addMyFarm": "Agregar mi finca",
     "addMyBusiness": "Agregar mi negocio",
-    "postRecommendation": "Publicar recomendación"
+    "postRecommendation": "Publicar recomendación",
+    "noSaved": "Aún no has guardado nada. Toca Guardar en una finca o negocio para tenerlo aquí.",
+    "mapUrlLabel": "Enlace del mapa",
+    "mapUrlHint": "Para indicaciones exactas, pega el enlace del lugar en Google Maps o Apple Maps (Compartir → Copiar enlace).",
+    "alreadyListed": "¿Ya está en BIES? Recomiéndalo en vez de agregarlo otra vez:",
+    "recommendThisOne": "Recomendar este",
+    "viewListing": "Ver"
   },
   "marketplace": {
     "entryLabel": "Mercado",
@@ -2444,5 +2454,9 @@
       "mutedIntro": "Cuentas fuera de BIES cuyas publicaciones y mensajes están ocultos en este dispositivo."
     },
     "unmute": "Dejar de silenciar"
+  },
+  "follow": {
+    "noFollowers": "Aún no tiene seguidores.",
+    "noFollowing": "Aún no sigue a nadie."
   }
 }

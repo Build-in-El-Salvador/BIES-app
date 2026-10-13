@@ -357,6 +357,52 @@ describe('the farm directory', () => {
     });
 });
 
+// ─── Saving and maps ──────────────────────────────────────────────────────────
+
+describe('saving a listing', () => {
+    it('saves and forgets, shows savedByMe, and filters the list to my saved ones', async () => {
+        const id = await liveListing(await member());
+        const otherId = await liveListing(await member());
+        const me = await member();
+
+        expect((await call('GET', `/api/directory/${id}`, { token: me.token })).body.savedByMe).toBe(false);
+        const saved = await call('POST', `/api/directory/${id}/save`, { token: me.token });
+        expect(saved.body).toEqual({ saved: true });
+        // Twice is fine.
+        expect((await call('POST', `/api/directory/${id}/save`, { token: me.token })).status).toBe(200);
+        expect((await call('GET', `/api/directory/${id}`, { token: me.token })).body.savedByMe).toBe(true);
+
+        const mine = await call('GET', '/api/directory?type=PROVIDER&saved=true&limit=50', { token: me.token });
+        expect(mine.body.data.map((l: any) => l.id)).toEqual([id]);
+        expect(mine.body.data.map((l: any) => l.id)).not.toContain(otherId);
+        // Signed out, or someone else: nothing saved.
+        expect((await call('GET', '/api/directory?type=PROVIDER&saved=true')).body.data).toHaveLength(0);
+        expect((await call('GET', '/api/directory?type=PROVIDER&saved=true', { token: (await member()).token })).body.data).toHaveLength(0);
+
+        expect((await call('DELETE', `/api/directory/${id}/save`, { token: me.token })).body).toEqual({ saved: false });
+        expect((await call('GET', `/api/directory/${id}`, { token: me.token })).body.savedByMe).toBe(false);
+        expect((await call('POST', '/api/directory/nope/save', { token: me.token })).status).toBe(404);
+        expect((await call('POST', `/api/directory/${id}/save`)).status).toBe(401);
+    });
+
+    it('takes a map-app link for Directions, and nothing else', async () => {
+        const poster = await member();
+        for (const mapUrl of ['https://maps.app.goo.gl/AbC123', 'https://www.google.com/maps/place/El+Tunco', 'https://maps.apple.com/?q=El+Tunco']) {
+            const res = await call('POST', '/api/directory', {
+                token: poster.token, body: { type: 'FARM', name: `Map ${++counter}`, isOwnBusiness: true, mapUrl },
+            });
+            expect(res.status).toBe(201);
+            expect(res.body.mapUrl).toBe(mapUrl);
+        }
+        for (const mapUrl of ['https://evil.example/maps', 'javascript:alert(1)', 'http://maps.app.goo.gl/x']) {
+            const res = await call('POST', '/api/directory', {
+                token: poster.token, body: { type: 'FARM', name: 'Bad map', isOwnBusiness: true, mapUrl },
+            });
+            expect(res.status).toBe(400);
+        }
+    });
+});
+
 // ─── Reading ──────────────────────────────────────────────────────────────────
 
 describe('reading a listing', () => {

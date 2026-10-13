@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useLocation, Link } from 'react-router-dom';
+import { useParams, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     ArrowLeft, MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
     Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
-    Building2, MessageCircle, Navigation, Share2, Check,
+    Building2, MessageCircle, Navigation, Share2, Check, Bookmark, BookmarkCheck,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -54,6 +54,16 @@ const ListingDetail = () => {
     const [showMenu, setShowMenu] = useState(false);
     const [reviewRequest, setReviewRequest] = useState(null); // { vote, n }: open the review form
     const [linkCopied, setLinkCopied] = useState(false);
+    const [searchParams] = useSearchParams();
+    const [saved, setSaved] = useState(null); // null until the listing says
+    useEffect(() => { setSaved(null); }, [id]);
+    // From "Recommend this one" in the add form (?recommend=1): open the
+    // vouch form once the listing is here, if this member can vouch.
+    useEffect(() => {
+        if (!listing || searchParams.get('recommend') !== '1') return;
+        const { mine, canReview: can } = reviewState(listing, user);
+        if (can && !mine) setReviewRequest((r) => r || { vote: 1, n: 1 });
+    }, [listing, user, searchParams]);
     // Focus goes back to the menu button when a Report or Block sheet closes.
     const menuButtonRef = useRef(null);
 
@@ -225,18 +235,34 @@ const ListingDetail = () => {
         } catch { /* cancelled */ }
     };
     const mapsQuery = encodeURIComponent(`${listing.name}, ${listing.location || ''}`);
+    const isSaved = saved ?? !!listing.savedByMe;
+    const toggleSave = async () => {
+        const next = !isSaved;
+        setSaved(next);
+        try {
+            await (next ? directoryApi.save(listing.id) : directoryApi.unsave(listing.id));
+        } catch {
+            setSaved(!next);
+        }
+    };
     const actions = [
         telNumber && { key: 'call', Icon: Phone, label: t('directory.actions.call'), href: `tel:${telNumber}` },
         waDigits && { key: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp', onClick: () => openExternal(`https://wa.me/${waDigits}`) },
-        listing.location && {
+        (listing.mapUrl || listing.location) && {
             key: 'directions', Icon: Navigation, label: t('directory.actions.directions'),
-            onClick: () => openExternal(isAppleDevice()
+            // The exact place when the listing has a map link; else a search
+            onClick: () => openExternal(listing.mapUrl || (isAppleDevice()
                 ? `https://maps.apple.com/?q=${mapsQuery}`
-                : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`),
+                : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`)),
         },
         websiteValue && {
             key: 'website', Icon: Globe, label: t('directory.actions.website'),
             onClick: () => openExternal(/^https?:\/\//i.test(websiteValue) ? websiteValue : `https://${websiteValue}`),
+        },
+        user && {
+            key: 'save', Icon: isSaved ? BookmarkCheck : Bookmark,
+            label: isSaved ? t('directory.actions.saved') : t('directory.actions.save'),
+            onClick: toggleSave, pressed: isSaved,
         },
         { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
     ].filter(Boolean);
@@ -381,14 +407,14 @@ const ListingDetail = () => {
                     </div>
 
                     <div className="dir-actions" role="group" aria-label={t('directory.actions.label')}>
-                        {actions.map(({ key, Icon, label, href, onClick }) => (
+                        {actions.map(({ key, Icon, label, href, onClick, pressed }) => (
                             href ? (
                                 <a key={key} className="dir-action" href={href}>
                                     <span className="dir-action-icon"><Icon size={20} /></span>
                                     <span className="dir-action-label">{label}</span>
                                 </a>
                             ) : (
-                                <button key={key} type="button" className="dir-action" onClick={onClick}>
+                                <button key={key} type="button" className="dir-action" onClick={onClick} aria-pressed={pressed}>
                                     <span className="dir-action-icon"><Icon size={20} /></span>
                                     <span className="dir-action-label">{label}</span>
                                 </button>

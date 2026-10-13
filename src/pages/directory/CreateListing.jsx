@@ -45,6 +45,7 @@ const emptyForm = {
     pricing: '',
     category: '',
     hours: '',
+    mapUrl: '',
     review: '',
 };
 
@@ -86,6 +87,24 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | 'gallery' | null
     const [cropImage, setCropImage] = useState(null); // { src, target }
     const [submitted, setSubmitted] = useState(false);
+    // Listings already on BIES with a name like this one: recommend one of
+    // those instead of adding it twice (Nextdoor starts by finding the place).
+    const [matches, setMatches] = useState([]);
+    useEffect(() => {
+        const name = form.name.trim();
+        if (editMode || name.length < 3) { setMatches([]); return; }
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            try {
+                const result = await directoryApi.list({ type, search: name, limit: 4 });
+                if (!cancelled) setMatches((result?.data || []).slice(0, 4));
+            } catch {
+                if (!cancelled) setMatches([]);
+            }
+        }, 350);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [form.name, type, editMode]);
+
     // Photos, about, hours, contact and the rest: folded away when adding,
     // open when editing.
     const [showDetails, setShowDetails] = useState(editMode);
@@ -119,6 +138,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     pricing: listing.pricing || '',
                     category: listing.category || '',
                     hours: listing.hours || '',
+                    mapUrl: listing.mapUrl || '',
                     review: '',
                 });
                 setIsOwnBusiness(!!listing.isOwnBusiness);
@@ -230,6 +250,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             btcAccepted: form.btcAccepted,
             photos,
             hours: form.hours.trim(),
+            mapUrl: form.mapUrl.trim(),
             isOwnBusiness,
             ...(!editMode && !isOwnBusiness ? { review: form.review.trim() } : {}),
         };
@@ -438,6 +459,22 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 required
                             />
                             {fieldError?.id === 'dir-name' && <p className="dir-field-error" id="dir-name-error">{fieldError.message}</p>}
+                            {matches.length > 0 && (
+                                <div className="dir-matches" role="region" aria-label={t('directory.alreadyListed')}>
+                                    <p className="dir-matches-title">{t('directory.alreadyListed')}</p>
+                                    {matches.map((m) => (
+                                        <Link
+                                            key={m.id}
+                                            to={`${isFarm ? '/farms' : '/trusted'}/${m.id}${isOwnBusiness ? '' : '?recommend=1'}`}
+                                            className="dir-match"
+                                        >
+                                            <span className="dir-match-name">{m.name}</span>
+                                            {m.location && <span className="dir-match-place">{m.location}</span>}
+                                            <span className="dir-match-cta">{isOwnBusiness ? t('directory.viewListing') : t('directory.recommendThisOne')}</span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {!isFarm && (
@@ -683,6 +720,21 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                         maxLength={200}
                                         placeholder={t('directory.hoursPlaceholder')}
                                     />
+                                </div>
+                                <div className="dir-form-group" style={{ marginBottom: 0, marginTop: '1rem' }}>
+                                    <label className="dir-label" htmlFor="dir-map-url">{t('directory.mapUrlLabel')}</label>
+                                    <input
+                                        id="dir-map-url"
+                                        type="url"
+                                        name="mapUrl"
+                                        value={form.mapUrl}
+                                        onChange={handleChange}
+                                        className="dir-input"
+                                        maxLength={500}
+                                        placeholder="https://maps.app.goo.gl/…"
+                                        aria-describedby="dir-map-url-hint"
+                                    />
+                                    <p className="dir-field-hint" id="dir-map-url-hint">{t('directory.mapUrlHint')}</p>
                                 </div>
                             </div>
 
@@ -1111,6 +1163,41 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 textarea.dir-input { resize: vertical; }
                 select.dir-input { appearance: auto; cursor: pointer; }
 
+                .dir-matches {
+                    margin-top: 0.6rem;
+                    padding: 0.75rem;
+                    border-radius: var(--radius-md);
+                    background: var(--color-blue-tint);
+                }
+                .dir-matches-title {
+                    margin: 0 0 0.4rem;
+                    font-size: 0.82rem;
+                    font-weight: 700;
+                    color: var(--color-primary);
+                }
+                .dir-matches :global(.dir-match) {
+                    display: grid;
+                    grid-template-columns: 1fr auto;
+                    align-items: center;
+                    column-gap: 8px;
+                    min-height: 44px;
+                    padding: 0.4rem 0.6rem;
+                    margin-top: 4px;
+                    border-radius: var(--radius-sm);
+                    background: var(--color-surface);
+                    text-decoration: none;
+                    color: inherit;
+                }
+                .dir-matches :global(.dir-match-name) { font-weight: 600; font-size: 0.9rem; }
+                .dir-matches :global(.dir-match-place) { grid-column: 1; font-size: 0.78rem; color: var(--color-gray-500); }
+                .dir-matches :global(.dir-match-cta) {
+                    grid-column: 2;
+                    grid-row: 1 / span 2;
+                    font-size: 0.8rem;
+                    font-weight: 700;
+                    color: var(--color-primary);
+                    white-space: nowrap;
+                }
                 .dir-more-toggle {
                     width: 100%;
                     display: flex;
