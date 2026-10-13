@@ -273,7 +273,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     display: flex;
                     align-items: center;
                     gap: 0.75rem;
-                    margin-bottom: 1.5rem;
+                    margin-bottom: 0.75rem;
                 }
 
                 .dir-search-bar {
