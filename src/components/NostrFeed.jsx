@@ -7,13 +7,19 @@ import { NoteHeader, ParsedNote, NoteImage, FeedSkeleton } from './feed';
 import NostrIcon from './NostrIcon';
 import './feed/Feed.css';
 
-const NostrFeed = ({ npub, mode = 'combined' }) => {
+/**
+ * A member's posts. `feed` ({ posts, loading, profiles } from useNostrFeed)
+ * when the page already loads them; `plain` drops the card, the
+ * "Nostr Feed" badge and the inner scroll, for a profile's Posts section.
+ */
+const NostrFeed = ({ npub, mode = 'combined', feed, title, emptyText, plain = false }) => {
     const navigate = useNavigate();
     // BIES posts open in the Feed with their replies, as a profile's activity
     // does on LinkedIn; public ones live outside BIES, so they don't.
     const openPost = mode === 'private' ? (id) => navigate('/feed', { state: { scrollToPost: id } }) : null;
     const { t } = useTranslation();
-    const { posts, loading, profiles } = useNostrFeed(npub ? [npub] : [], mode);
+    const own = useNostrFeed(feed || !npub ? [] : [npub], mode);
+    const { posts, loading, profiles } = feed || own;
     const lightbox = useLightbox();
 
     const handleImageClick = (src, allImages) => {
@@ -55,25 +61,27 @@ const NostrFeed = ({ npub, mode = 'combined' }) => {
         mode === 'public'   ? t('nostrFeed.publicTab', 'Public') :
         t('nostrFeed.combined', 'Combined');
 
-    const emptyMessage =
+    const emptyMessage = emptyText || (
         mode === 'private'  ? t('nostrFeed.emptyPrivate', 'No private BIES notes found.') :
         mode === 'public'   ? t('nostrFeed.emptyPublic', 'No public Nostr activity found.') :
-        t('nostrFeed.emptyCombined', 'No recent notes found.');
+        t('nostrFeed.emptyCombined', 'No recent notes found.'));
 
     return (
-        <div className="nostr-profile-feed-wrapper">
+        <div className={plain ? 'nostr-profile-feed-plain' : 'nostr-profile-feed-wrapper'}>
             {/* Header */}
             <div className="nostr-profile-feed-header">
                 <h3 className="nostr-profile-feed-title">
-                    {t('profileEdit.nostrFeed', 'Nostr Feed')}
+                    {title || t('profileEdit.nostrFeed', 'Nostr Feed')}
                 </h3>
-                <span className="nostr-profile-feed-badge">
-                    <NostrIcon size={12} /> {modeLabel}
-                </span>
+                {!plain && (
+                    <span className="nostr-profile-feed-badge">
+                        <NostrIcon size={12} /> {modeLabel}
+                    </span>
+                )}
             </div>
 
             {/* Scrollable feed container */}
-            <div className="nostr-profile-feed-scroll">
+            <div className={plain ? undefined : 'nostr-profile-feed-scroll'}>
                 {/* Loading state */}
                 {loading && posts.length === 0 && <FeedSkeleton count={3} />}
 

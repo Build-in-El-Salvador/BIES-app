@@ -2508,5 +2508,32 @@
         "desc": "Explore jobs, partnerships, events, and more."
       }
     }
+  },
+  "profileView": {
+    "followers_one": "{{count}} follower",
+    "followers_other": "{{count}} followers",
+    "following": "{{count}} following",
+    "editProfile": "Edit profile",
+    "message": "Message",
+    "tabs": {
+      "all": "All",
+      "photos": "Photos"
+    },
+    "details": "Details",
+    "at": "at",
+    "runs": "Runs",
+    "workingOn": "Working on",
+    "addDetails": "Add your role, your business and where you are, so members know what you do.",
+    "network": "Network",
+    "people_one": "{{count}} person",
+    "people_other": "{{count}} people",
+    "seeAll": "See all",
+    "networkEmpty": "No connections yet.",
+    "networkEmptyOwn": "Follow members to build your network.",
+    "findMembers": "Find members",
+    "posts": "Posts",
+    "noPosts": "No posts yet.",
+    "noPhotos": "No photos yet.",
+    "newMember": "New member"
   }
 }

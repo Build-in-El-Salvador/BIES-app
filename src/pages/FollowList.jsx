@@ -5,13 +5,16 @@ import { ArrowLeft, Loader2, User } from 'lucide-react';
 import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
+import { isPlaceholderName } from '../utils/profileComplete';
 
 /**
- * A member's followers, or who they follow (/members/:userId/followers,
- * /members/:userId/following) — the lists a profile's counts open, as on
- * LinkedIn and Instagram. Each row links to the member and has Follow.
+ * A member's followers, who they follow, or their whole network (both,
+ * people who follow each other first) — /members/:userId/followers,
+ * /following and /network: the lists a profile's counts and its Network
+ * "See all" open, as on Facebook and Instagram. Each row links to the
+ * member and has Follow.
  *
- * @param {'followers'|'following'} kind
+ * @param {'followers'|'following'|'network'} kind
  */
 const FollowList = ({ kind }) => {
     const { t } = useTranslation();
@@ -24,8 +27,17 @@ const FollowList = ({ kind }) => {
     useEffect(() => {
         let cancelled = false;
         setPeople(null);
-        const load = kind === 'followers' ? profilesApi.getFollowers : profilesApi.getFollowing;
-        load(userId, { limit: 50 })
+        const load = kind === 'network'
+            ? Promise.all([profilesApi.getFollowing(userId, { limit: 100 }), profilesApi.getFollowers(userId, { limit: 100 })])
+                .then(([out, inc]) => {
+                    const followerIds = new Set((inc?.data || []).map((p) => p.id));
+                    const people = new Map();
+                    for (const p of out?.data || []) people.set(p.id, { ...p, mutual: followerIds.has(p.id) });
+                    for (const p of inc?.data || []) if (!people.has(p.id)) people.set(p.id, p);
+                    return { data: [...people.values()].sort((a, b) => Number(!!b.mutual) - Number(!!a.mutual)) };
+                })
+            : (kind === 'followers' ? profilesApi.getFollowers : profilesApi.getFollowing)(userId, { limit: 50 });
+        load
             .then((res) => { if (!cancelled) setPeople(res?.data || []); })
             .catch(() => { if (!cancelled) setPeople([]); });
         return () => { cancelled = true; };
@@ -39,7 +51,8 @@ const FollowList = ({ kind }) => {
             .catch(() => {});
     }, [user?.id]);
 
-    const title = kind === 'followers' ? t('publicProfile.followers', 'Followers') : t('publicProfile.following', 'Following');
+    const title = kind === 'network' ? t('profileView.network')
+        : kind === 'followers' ? t('publicProfile.followers', 'Followers') : t('publicProfile.following', 'Following');
 
     return (
         <div className="follow-list-page container">
@@ -53,7 +66,8 @@ const FollowList = ({ kind }) => {
                     <div className="follow-empty"><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
                 ) : people.length === 0 ? (
                     <p className="follow-empty">
-                        {kind === 'followers' ? t('follow.noFollowers', 'No followers yet.') : t('follow.noFollowing', 'Not following anyone yet.')}
+                        {kind === 'network' ? t('profileView.networkEmpty')
+                            : kind === 'followers' ? t('follow.noFollowers', 'No followers yet.') : t('follow.noFollowing', 'Not following anyone yet.')}
                     </p>
                 ) : (
                     <ul className="follow-rows">
@@ -64,7 +78,7 @@ const FollowList = ({ kind }) => {
                                         {p.profile?.avatar ? <img src={p.profile.avatar} alt="" /> : <User size={20} />}
                                     </span>
                                     <span className="follow-text">
-                                        <span className="follow-name">{p.profile?.name || t('common.unnamed', 'Unnamed')}</span>
+                                        <span className="follow-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>
                                         {(p.profile?.company || p.profile?.bio) && (
                                             <span className="follow-sub">{p.profile.company || p.profile.bio}</span>
                                         )}

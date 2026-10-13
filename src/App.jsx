@@ -258,6 +258,7 @@ const AppContent = () => {
                     <Route path="/members" element={<ProtectedRoute><Discover key="members" membersOnly /></ProtectedRoute>} />
                     <Route path="/members/:userId/followers" element={<ProtectedRoute><FollowList key="followers" kind="followers" /></ProtectedRoute>} />
                     <Route path="/members/:userId/following" element={<ProtectedRoute><FollowList key="following" kind="following" /></ProtectedRoute>} />
+                    <Route path="/members/:userId/network" element={<ProtectedRoute><FollowList key="network" kind="network" /></ProtectedRoute>} />
                     <Route path="/builders" element={<Navigate to="/discover" replace />} />
                     <Route path="/builder/:id" element={<ProtectedRoute><PublicProfile type="builder" /></ProtectedRoute>} />
                     <Route path="/investors" element={<Navigate to="/discover" replace />} />

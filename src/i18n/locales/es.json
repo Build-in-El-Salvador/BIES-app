@@ -2509,5 +2509,32 @@
         "desc": "Explora empleos, alianzas, eventos y más."
       }
     }
+  },
+  "profileView": {
+    "followers_one": "{{count}} seguidor",
+    "followers_other": "{{count}} seguidores",
+    "following": "{{count}} siguiendo",
+    "editProfile": "Editar perfil",
+    "message": "Mensaje",
+    "tabs": {
+      "all": "Todo",
+      "photos": "Fotos"
+    },
+    "details": "Detalles",
+    "at": "en",
+    "runs": "Dirige",
+    "workingOn": "Trabaja en",
+    "addDetails": "Agrega tu cargo, tu negocio y dónde estás, para que los miembros sepan a qué te dedicas.",
+    "network": "Red",
+    "people_one": "{{count}} persona",
+    "people_other": "{{count}} personas",
+    "seeAll": "Ver todo",
+    "networkEmpty": "Aún no tiene conexiones.",
+    "networkEmptyOwn": "Sigue a miembros para crear tu red.",
+    "findMembers": "Buscar miembros",
+    "posts": "Publicaciones",
+    "noPosts": "Aún no hay publicaciones.",
+    "noPhotos": "Aún no hay fotos.",
+    "newMember": "Miembro nuevo"
   }
 }

@@ -163,6 +163,15 @@
   gap: 4px;
 }
 
+/* A profile's Posts section (NostrFeed plain): no card, the page scrolls. */
+.nostr-profile-feed-plain .nostr-profile-feed-header {
+  padding: 0 16px 10px;
+}
+.nostr-profile-feed-plain .nostr-profile-feed-title {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+}
+
 .nostr-profile-feed-scroll {
   max-height: 600px;
   overflow-y: auto;
