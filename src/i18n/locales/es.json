@@ -1701,7 +1701,7 @@
       "noGmoFeed": "Sin Alimento Transgenico",
       "animalWelfare": "Bienestar Animal"
     },
-    "learnMore": "Conoce Mas",
+    "learnMore": "Contacto",
     "notFound": "Listado no encontrado",
     "notFoundDesc": "Este listado no existe o fue eliminado.",
     "backToDirectory": "Volver al Directorio",
@@ -1745,7 +1745,7 @@
     "acceptsBitcoin": "Acepta Bitcoin",
     "endorse": "Recomendar",
     "endorsed": "Lo recomendaste",
-    "endorsements": "Reseñas",
+    "endorsements": "Recomendaciones",
     "noEndorsements": "Aún no hay reseñas. Sé el primero.",
     "endorsePlaceholder": "¿Cómo fue tu experiencia? (opcional)",
     "linkMember": "Vincular Miembro BIES",
@@ -1839,7 +1839,21 @@
     "yourReviewPlaceholder": "¿Qué hicieron por ti, cómo te fue, volverías?",
     "yourReviewPlaceholder_farm": "¿Qué compraste, cómo era, volverías a comprar?",
     "reviewMinCount": "{{count}} de al menos {{min}} caracteres",
-    "whatsappRow": "WhatsApp {{number}}"
+    "whatsappRow": "WhatsApp {{number}}",
+    "actions": {
+      "label": "Contactar y compartir",
+      "call": "Llamar",
+      "directions": "Cómo llegar",
+      "website": "Sitio web",
+      "share": "Compartir",
+      "copied": "Copiado"
+    },
+    "moreDetails": "Más detalles (opcional)",
+    "moreDetailsHint": "Fotos, descripción, horario, teléfono, WhatsApp, sitio web…",
+    "aboutHeading": "Descripción y horario",
+    "addMyFarm": "Agregar mi finca",
+    "addMyBusiness": "Agregar mi negocio",
+    "postRecommendation": "Publicar recomendación"
   },
   "marketplace": {
     "entryLabel": "Mercado",

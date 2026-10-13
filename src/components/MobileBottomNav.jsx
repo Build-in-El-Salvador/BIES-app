@@ -7,6 +7,8 @@ import { useBottomNav } from '../context/BottomNavContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { visibleTabs } from '../config/navPages';
 
+// The active tab: a solid orange pill behind a white icon, and a bold white
+// label (orange text on the blue bar is only 2.7:1; white is 8.4:1).
 const itemStyle = (active) => ({
   display: 'flex',
   flexDirection: 'column',
@@ -14,7 +16,8 @@ const itemStyle = (active) => ({
   justifyContent: 'center',
   gap: '3px',
   flex: 1,
-  color: active ? '#FF5B00' : 'white',
+  minHeight: '48px',
+  color: active ? 'white' : 'rgba(255, 255, 255, 0.85)',
   textDecoration: 'none',
   fontSize: '0.68rem',
   fontWeight: active ? 700 : 500,
@@ -26,10 +29,10 @@ const iconWrapStyle = (active) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: '40px',
-  height: '32px',
-  borderRadius: '16px',
-  background: active ? 'rgba(255, 91, 0, 0.15)' : 'none',
+  width: '52px',
+  height: '30px',
+  borderRadius: '15px',
+  background: active ? '#FF5B00' : 'none',
 });
 
 const MobileBottomNav = () => {

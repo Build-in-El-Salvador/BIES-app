@@ -10,6 +10,7 @@ const NoteFooter = ({
   onRepost,
   onZap,
   onShare,
+  allowPublicRepost = true,
   repostMenuOpen,
   onRepostMenuToggle,
   formatCount,
@@ -28,15 +29,17 @@ const NoteFooter = ({
         <span className="primal-action-count">{stats.replies ? formatCount(stats.replies) : ''}</span>
       </button>
 
-      {/* Zap */}
-      <button
-        className="primal-action-btn"
-        onClick={onZap}
-        title="Zap"
-      >
-        <Zap size={16} className="primal-action-icon-zap" />
-        <span className="primal-action-count">{stats.satszapped ? formatSats(stats.satszapped) : ''}</span>
-      </button>
+      {/* Zap — only where the wallet feature is on */}
+      {onZap && (
+        <button
+          className="primal-action-btn"
+          onClick={onZap}
+          title="Zap"
+        >
+          <Zap size={16} className="primal-action-icon-zap" />
+          <span className="primal-action-count">{stats.satszapped ? formatSats(stats.satszapped) : ''}</span>
+        </button>
+      )}
 
       {/* Like */}
       <button
@@ -64,22 +67,27 @@ const NoteFooter = ({
               <Lock size={14} />
               <span>{t('feed.repostPrivate', 'Private Relay')}</span>
             </button>
-            <button className="primal-repost-menu-item" onClick={() => onRepost('public')}>
-              <Globe size={14} />
-              <span>{t('feed.repostPublic', 'Public')}</span>
-            </button>
+            {allowPublicRepost && (
+              <button className="primal-repost-menu-item" onClick={() => onRepost('public')}>
+                <Globe size={14} />
+                <span>{t('feed.repostPublic', 'Public')}</span>
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Share */}
-      <button
-        className="primal-action-btn primal-action-share"
-        onClick={onShare}
-        title="Share"
-      >
-        <Share size={16} />
-      </button>
+      {/* Share — public posts only */}
+      {onShare && (
+        <button
+          className="primal-action-btn primal-action-share"
+          onClick={onShare}
+          title="Share"
+          aria-label="Share"
+        >
+          <Share size={16} />
+        </button>
+      )}
     </div>
   );
 };

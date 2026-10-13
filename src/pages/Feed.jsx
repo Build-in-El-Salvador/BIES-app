@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { isNativePlatform } from '../utils/platform';
+import { useFeature } from '../context/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
@@ -62,6 +63,7 @@ const Feed = () => {
     // The store app shows only the BIES private feed: Explore is the open
     // Nostr network, which BIES doesn't moderate (App Review guideline 1.2).
     const exploreAllowed = !isNativePlatform();
+    const zapsOn = useFeature('zaps');
     const [exploreView, setExploreView] = useState('trending_24h');
     const [exploreDropdownOpen, setExploreDropdownOpen] = useState(false);
     const exploreDropdownRef = useRef(null);
@@ -1385,14 +1387,15 @@ const Feed = () => {
                     {postError && <div className="primal-compose-error">{postError}</div>}
 
                     <div className="primal-compose-bottom">
-                        <button
+                        {/* In the app, posts go to the BIES feed (like a group's posts); no public option */}
+                        {exploreAllowed && <button
                             className={`primal-compose-relay-toggle ${broadcastPublic ? 'public' : 'private'}`}
                             onClick={() => { manualRelayToggle.current = true; setBroadcastPublic(!broadcastPublic); }}
                             title={broadcastPublic ? t('feed.broadcastingPublic', 'Broadcasting to all relays') : t('feed.privateRelayOnly', 'Private relay only')}
                         >
                             {broadcastPublic ? <Globe size={13} /> : <Lock size={13} />}
                             <span>{broadcastPublic ? t('feed.public', 'Public') : t('feed.private', 'Private')}</span>
-                        </button>
+                        </button>}
 
                         <div className="primal-compose-actions">
                             <button
@@ -1508,14 +1511,16 @@ const Feed = () => {
                                         setRepostMenu(repostMenu === post.id ? null : post.id);
                                     }}
                                     onRepost={(relay) => handleRepost(post, relay)}
-                                    onZap={() => setZapTarget({
+                                    allowPublicRepost={exploreAllowed}
+                                    onZap={zapsOn ? () => setZapTarget({
                                         pubkey: post.pubkey,
                                         name: getDisplayName(post.pubkey),
                                         avatar: getAvatar(post.pubkey),
                                         lud16: profiles[post.pubkey]?.lud16,
                                         eventId: post.id,
-                                    })}
-                                    onShare={() => handleShare(post)}
+                                    }) : undefined}
+                                    // njump.me links only open public posts
+                                    onShare={feedMode === 'explore' ? () => handleShare(post) : undefined}
                                     onPostMenuToggle={() => {
                                         setPostMenu(postMenu === post.id ? null : post.id);
                                     }}
@@ -1523,7 +1528,7 @@ const Feed = () => {
                                     onMuteUser={() => { handleMuteUser(post.pubkey); setPostMenu(null); }}
                                     onBlockUser={() => handleBlockUser(post.pubkey)}
                                     onReport={() => { handleReport(post); setPostMenu(null); }}
-                                    onCopyLink={() => { navigator.clipboard.writeText(`https://njump.me/${nip19.noteEncode(post.id)}`); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); }}
+                                    onCopyLink={feedMode === 'explore' ? () => { navigator.clipboard.writeText(`https://njump.me/${nip19.noteEncode(post.id)}`); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); } : undefined}
                                     onCopyText={() => { navigator.clipboard.writeText(post.content || ''); setPostMenu(null); showToast(t('feed.textCopied', 'Text copied')); }}
                                     onCopyId={() => { navigator.clipboard.writeText(post.id); setPostMenu(null); showToast(t('feed.idCopied', 'Note ID copied')); }}
                                     onCopyRaw={() => { navigator.clipboard.writeText(JSON.stringify(post, null, 2)); setPostMenu(null); showToast(t('feed.rawCopied', 'Raw data copied')); }}

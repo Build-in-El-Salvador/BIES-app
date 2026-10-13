@@ -96,7 +96,7 @@ test.describe('Directories', () => {
         const nameInput = page.locator('input[name="name"]');
         await expect(nameInput).toBeVisible();
         await nameInput.fill(listingName);
-        await page.getByRole('button', { name: 'Submit Listing' }).click();
+        await page.getByRole('button', { name: 'Add my farm' }).click();
 
         // Lands on the live listing
         await expect(page).toHaveURL(/\/farms\/[a-z0-9]+$/, { timeout: 10_000 });

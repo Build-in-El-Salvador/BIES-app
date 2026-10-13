@@ -3,7 +3,8 @@ import { UserPlus, UserCheck, Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
 
 /**
- * A reusable icon-only follow button for profiles.
+ * A follow button for profiles: icon and label, "Follow" / "Following"
+ * (as LinkedIn labels it), so it can't be mistaken for "add contact".
  * 
  * @param {Object} props
  * @param {string} props.targetUserId - The ID of the user to follow/unfollow
@@ -57,6 +58,7 @@ const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onTog
             onClick={handleToggleFollow}
             disabled={loading}
             title={following ? 'Unfollow' : 'Follow'}
+            aria-pressed={following}
         >
             {loading ? (
                 <Loader2 size={iconSize} style={{ animation: 'spin 1s linear infinite' }} />
@@ -65,17 +67,23 @@ const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onTog
             ) : (
                 <UserPlus size={iconSize} />
             )}
+            <span className="follow-label">{following ? 'Following' : 'Follow'}</span>
 
             <style jsx>{`
                 .icon-btn {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 8px;
+                    min-width: 44px;
+                    height: 44px;
+                    padding: 0 12px;
+                    gap: 6px;
+                    border-radius: 22px;
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    white-space: nowrap;
                     border: 1px solid var(--color-gray-200);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: var(--color-gray-400);
+                    color: var(--color-primary);
                     background: transparent;
                     transition: all 0.2s;
                     flex-shrink: 0;

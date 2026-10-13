@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flag, Loader2, Pencil, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
@@ -11,10 +11,24 @@ import { objectionableMessage } from '../moderation/objectionable';
 const REASON_MIN = 20;
 
 /**
- * The BIES Trust Score of a listing: vouches minus downvotes, how far it is
- * from BIES Trusted, and how the score works.
+ * Where a member stands with a listing: their own review, whether they run
+ * it (and so can't review it), and whether they can review it now.
  */
-export function TrustPanel({ listing }) {
+export function reviewState(listing, user) {
+    const reviews = Array.isArray(listing.endorsements) ? listing.endorsements : [];
+    const mine = user?.id ? reviews.find((r) => r.userId === user.id) || null : null;
+    const runsIt = !!user?.id && (listing.memberUserId === user.id || (listing.isOwnBusiness && listing.ownerId === user.id));
+    const live = listing.status === 'active';
+    return { reviews, mine, runsIt, live, canReview: !!user?.id && !runsIt && live };
+}
+
+/**
+ * The BIES Trust Score of a listing: vouches minus downvotes, how far it is
+ * from BIES Trusted, and how the score works. `onRecommend(vote)` adds the
+ * Vouch / Don't recommend buttons, right where members look at the score
+ * (as Google Maps and Yelp put "Write a review" by the rating).
+ */
+export function TrustPanel({ listing, onRecommend }) {
     const { t } = useTranslation();
     const threshold = listing.trustedThreshold || 5;
     const score = listing.reputationScore ?? 0;
@@ -54,9 +68,46 @@ export function TrustPanel({ listing }) {
                     <p className="dir-trust-note">{t('directory.trust.toGo', { count: Math.max(1, threshold - score) })}</p>
                 </>
             )}
+            {onRecommend && (
+                <div className="dir-trust-actions">
+                    <button type="button" className="dir-trust-btn up" onClick={() => onRecommend(1)}>
+                        <ThumbsUp size={17} /> {t('directory.review.vouch')}
+                    </button>
+                    <button type="button" className="dir-trust-btn down" onClick={() => onRecommend(-1)}>
+                        <ThumbsDown size={17} /> {t('directory.review.downvote')}
+                    </button>
+                </div>
+            )}
             <p className="dir-trust-how">{t('directory.trust.how', { threshold })}</p>
 
             <style jsx>{`
+                .dir-trust-actions {
+                    display: flex;
+                    gap: 10px;
+                    margin-top: 1rem;
+                }
+                .dir-trust-btn {
+                    flex: 1;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    min-height: 44px;
+                    border-radius: var(--radius-full);
+                    font-size: 0.95rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                }
+                .dir-trust-btn.up {
+                    background: var(--color-primary);
+                    border: 1px solid var(--color-primary);
+                    color: white;
+                }
+                .dir-trust-btn.down {
+                    background: var(--color-surface);
+                    border: 1px solid var(--color-gray-300);
+                    color: var(--color-gray-700);
+                }
                 .dir-trust {
                     margin: 0 0 1.75rem;
                     padding: 1rem 1.1rem;
@@ -105,7 +156,7 @@ export function TrustPanel({ listing }) {
                     align-items: center;
                     gap: 5px;
                 }
-                .dir-trust-counts .up { color: var(--color-success, #15803d); }
+                .dir-trust-counts .up { color: var(--color-success-text, #047857); }
                 .dir-trust-counts .down { color: var(--color-gray-600); }
                 .dir-trust-trusted {
                     display: flex;
@@ -154,24 +205,25 @@ export function TrustPanel({ listing }) {
  * @param {() => void} onChanged  refresh the listing (scores and reviews)
  * @param {(target, opts) => void} openReport  the page's Report dialog
  */
-export default function ListingReviews({ listing, user, onChanged, openReport, titleStyle }) {
+/**
+ * `request` ({ vote, n }) opens the vouch or downvote form from outside, e.g.
+ * the Trust Score's buttons; `n` changes on every tap.
+ */
+export default function ListingReviews({ listing, user, onChanged, openReport, titleStyle, request }) {
     const { t, i18n } = useTranslation();
     const [mode, setMode] = useState(null); // 1 (vouch) | -1 (downvote) | null
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
-    const reviews = Array.isArray(listing.endorsements) ? listing.endorsements : [];
-    const mine = user?.id ? reviews.find((r) => r.userId === user.id) : null;
+    const { reviews, mine, runsIt, live, canReview } = reviewState(listing, user);
+    const sectionRef = useRef(null);
     // Mine first, then the member who added it, then newest.
     const ordered = [...reviews].sort((a, b) => {
         const rank = (r) => (r === mine ? 0 : r.userId === listing.ownerId ? 1 : 2);
         return rank(a) - rank(b) || new Date(b.createdAt) - new Date(a.createdAt);
     });
 
-    const runsIt = !!user?.id && (listing.memberUserId === user.id || (listing.isOwnBusiness && listing.ownerId === user.id));
-    const live = listing.status === 'active';
-    const canReview = !!user?.id && !runsIt && live;
     const name = listing.name;
 
     const start = (vote) => {
@@ -180,6 +232,12 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
         setError('');
     };
     const cancel = () => { setMode(null); setText(''); setError(''); };
+
+    useEffect(() => {
+        if (!request || !canReview) return;
+        start(request.vote);
+        sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, [request?.n]);
 
     const reasonShort = mode === -1 && text.trim().length < REASON_MIN;
 
@@ -224,22 +282,13 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
     const edited = (r) => r.updatedAt && new Date(r.updatedAt) - new Date(r.createdAt) > 60_000;
 
     return (
-        <section className="dir-detail-section dir-reviews">
+        <section className="dir-detail-section dir-reviews" id="recommendations" ref={sectionRef}>
             <h2 style={titleStyle}>{t('directory.endorsements')} ({reviews.length})</h2>
 
             {runsIt && <p className="dir-review-note">{t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })}</p>}
             {!runsIt && !live && <p className="dir-review-note">{t('directory.review.notLive')}</p>}
 
-            {canReview && !mine && mode === null && (
-                <div className="dir-review-choice">
-                    <button type="button" className="dir-vote-btn up" onClick={() => start(1)}>
-                        <ThumbsUp size={16} /> {t('directory.review.vouch')}
-                    </button>
-                    <button type="button" className="dir-vote-btn down" onClick={() => start(-1)}>
-                        <ThumbsDown size={16} /> {t('directory.review.downvote')}
-                    </button>
-                </div>
-            )}
+            {/* Vouch / Don't recommend live in the Trust Score panel (TrustPanel onRecommend). */}
 
             {mode !== null && (
                 <div className={`dir-review-form ${mode === 1 ? 'up' : 'down'}`}>
@@ -348,34 +397,6 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                     font-size: 0.88rem;
                     color: var(--color-gray-500);
                 }
-                .dir-review-choice {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 0.6rem;
-                    margin-bottom: 1rem;
-                }
-                .dir-vote-btn {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 7px;
-                    padding: 0.7rem 0.8rem;
-                    border-radius: 999px;
-                    font-size: 0.92rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    background: var(--color-surface);
-                }
-                .dir-vote-btn.up {
-                    border: 1px solid var(--color-primary);
-                    color: var(--color-primary);
-                }
-                .dir-vote-btn.up:hover { background: var(--color-blue-tint); }
-                .dir-vote-btn.down {
-                    border: 1px solid var(--color-gray-300);
-                    color: var(--color-gray-700);
-                }
-                .dir-vote-btn.down:hover { background: var(--color-gray-50); }
                 .dir-review-form {
                     margin-bottom: 1.1rem;
                     padding: 0.9rem;

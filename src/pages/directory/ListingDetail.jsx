@@ -6,14 +6,17 @@ import {
     Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
-    Building2, MessageCircle,
+    Building2, MessageCircle, Navigation, Share2, Check,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
-import ListingReviews, { TrustPanel } from '../../components/directory/ListingReviews';
+import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
+import { openExternal } from '../../utils/openExternal';
+import { isAppleDevice } from '../../utils/mapApps';
+import { publicUrl } from '../../utils/publicUrl';
 import { useLightbox } from '../../context/LightboxContext';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
@@ -49,6 +52,8 @@ const ListingDetail = () => {
     // The member who runs it is one this member blocked.
     const [blockedOwner, setBlockedOwner] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [reviewRequest, setReviewRequest] = useState(null); // { vote, n }: open the review form
+    const [linkCopied, setLinkCopied] = useState(false);
     // Focus goes back to the menu button when a Report or Block sheet closes.
     const menuButtonRef = useRef(null);
 
@@ -165,6 +170,20 @@ const ListingDetail = () => {
     const websiteValue = (listing.website || '').trim();
     const emailValue = (listing.email || '').trim();
     const learnMoreRows = [
+        telNumber && {
+            key: 'phone',
+            Icon: Phone,
+            label: listing.phone,
+            href: `tel:${telNumber}`,
+            external: false,
+        },
+        waDigits && {
+            key: 'whatsapp',
+            Icon: MessageCircle,
+            label: t('directory.whatsappRow', { number: listing.whatsapp }),
+            href: `https://wa.me/${waDigits}`,
+            external: true,
+        },
         instagramValue && {
             key: 'instagram',
             Icon: Instagram,
@@ -191,6 +210,38 @@ const ListingDetail = () => {
             external: false,
         },
     ].filter(Boolean);
+
+    // The place-page action row (as on Google Maps): only what this listing has.
+    const share = async () => {
+        const url = publicUrl(`${backPath}/${listing.id}`);
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: listing.name, url });
+                return;
+            }
+            await navigator.clipboard.writeText(url);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+        } catch { /* cancelled */ }
+    };
+    const mapsQuery = encodeURIComponent(`${listing.name}, ${listing.location || ''}`);
+    const actions = [
+        telNumber && { key: 'call', Icon: Phone, label: t('directory.actions.call'), href: `tel:${telNumber}` },
+        waDigits && { key: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp', onClick: () => openExternal(`https://wa.me/${waDigits}`) },
+        listing.location && {
+            key: 'directions', Icon: Navigation, label: t('directory.actions.directions'),
+            onClick: () => openExternal(isAppleDevice()
+                ? `https://maps.apple.com/?q=${mapsQuery}`
+                : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`),
+        },
+        websiteValue && {
+            key: 'website', Icon: Globe, label: t('directory.actions.website'),
+            onClick: () => openExternal(/^https?:\/\//i.test(websiteValue) ? websiteValue : `https://${websiteValue}`),
+        },
+        { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
+    ].filter(Boolean);
+
+    const { mine: myReview, canReview } = reviewState(listing, user);
 
     return (
         <div className="listing-detail-page">
@@ -318,23 +369,6 @@ const ListingDetail = () => {
                                 <span>{listing.location}</span>
                             </div>
                         )}
-                        {telNumber && (
-                            <a className="dir-detail-meta dir-detail-wa" href={`tel:${telNumber}`}>
-                                <Phone size={17} />
-                                <span>{listing.phone}</span>
-                            </a>
-                        )}
-                        {waDigits && (
-                            <a
-                                className="dir-detail-meta dir-detail-wa"
-                                href={`https://wa.me/${waDigits}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                <MessageCircle size={17} />
-                                <span>{t('directory.whatsappRow', { number: listing.whatsapp })}</span>
-                            </a>
-                        )}
                         {listing.hours && (
                             <div className="dir-detail-meta">
                                 <Clock size={17} />
@@ -346,7 +380,26 @@ const ListingDetail = () => {
                         )}
                     </div>
 
-                    <TrustPanel listing={listing} />
+                    <div className="dir-actions" role="group" aria-label={t('directory.actions.label')}>
+                        {actions.map(({ key, Icon, label, href, onClick }) => (
+                            href ? (
+                                <a key={key} className="dir-action" href={href}>
+                                    <span className="dir-action-icon"><Icon size={20} /></span>
+                                    <span className="dir-action-label">{label}</span>
+                                </a>
+                            ) : (
+                                <button key={key} type="button" className="dir-action" onClick={onClick}>
+                                    <span className="dir-action-icon"><Icon size={20} /></span>
+                                    <span className="dir-action-label">{label}</span>
+                                </button>
+                            )
+                        ))}
+                    </div>
+
+                    <TrustPanel
+                        listing={listing}
+                        onRecommend={canReview && !myReview ? (vote) => setReviewRequest((r) => ({ vote, n: (r?.n || 0) + 1 })) : undefined}
+                    />
 
                     {photos.length > 0 && (
                         <section className="dir-detail-section">
@@ -496,6 +549,7 @@ const ListingDetail = () => {
                         onChanged={() => fetchListing({ silent: true })}
                         openReport={openReport}
                         titleStyle={sectionTitleStyle}
+                        request={reviewRequest}
                     />
 
                     {/* Learn More */}
@@ -609,7 +663,7 @@ const ListingDetail = () => {
                 }
 
                 .dir-more-btn {
-                    width: 34px; height: 34px; border-radius: 50%;
+                    width: 44px; height: 44px; border-radius: 50%;
                     display: inline-flex; align-items: center; justify-content: center;
                     border: 1px solid var(--color-gray-300); background: var(--color-surface);
                     color: var(--color-gray-700); cursor: pointer; padding: 0;
@@ -650,14 +704,49 @@ const ListingDetail = () => {
                     text-overflow: ellipsis;
                 }
 
-                .dir-detail-wa {
-                    color: var(--color-primary);
-                    text-decoration: none;
-                    font-weight: 500;
-                    width: fit-content;
+                /* Place-page actions (Call, WhatsApp, Directions, Website, Share) */
+                .dir-actions {
+                    display: flex;
+                    gap: 6px;
+                    margin: 1.1rem 0 0.25rem;
+                    overflow-x: auto;
+                    scrollbar-width: none;
                 }
-                .dir-detail-wa:hover {
-                    text-decoration: underline;
+                .dir-actions::-webkit-scrollbar { display: none; }
+                .dir-action {
+                    flex: 1 0 64px;
+                    max-width: 96px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 2px 0;
+                    background: none;
+                    border: none;
+                    text-decoration: none;
+                    font: inherit;
+                    cursor: pointer;
+                }
+                .dir-action-icon {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 50%;
+                    background: var(--color-blue-tint);
+                    color: var(--color-primary);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .dir-action:hover .dir-action-icon,
+                .dir-action:focus-visible .dir-action-icon {
+                    background: var(--color-primary);
+                    color: white;
+                }
+                .dir-action-label {
+                    font-size: 0.78rem;
+                    font-weight: 600;
+                    color: var(--color-gray-700);
+                    white-space: nowrap;
                 }
 
                 .dir-detail-section {

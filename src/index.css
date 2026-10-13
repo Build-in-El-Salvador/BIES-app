@@ -56,7 +56,7 @@
   --color-gray-200: #E2E8F0;
   --color-gray-300: #CBD5E1;
   --color-gray-400: #94A3B8;
-  --color-gray-500: #64748B;
+  --color-gray-500: #5E6B7F; /* secondary text: 5:1 on the page background (WCAG AA) */
   --color-gray-600: #475569;
   --color-gray-700: #334155;
   --color-gray-800: #1E293B;
@@ -64,6 +64,8 @@
 
   /* Semantic */
   --color-success: #10B981;
+  --color-success-text: #047857; /* green text on white: 5.5:1 */
+  --color-orange-text: #C2410C; /* orange text on the orange tint: 4.9:1 */
   --color-error: #EF4444;
   --color-warning: #F59E0B;
 
@@ -118,6 +120,8 @@
 
 /* Dark Mode Overrides */
 [data-theme="dark"] {
+  --color-success-text: #34D399;
+  --color-orange-text: #FB923C;
   --color-primary: #5b9cf6;
   --color-primary-dark: #3b82f6;
   --color-primary-nav: #00004E;
@@ -216,7 +220,7 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--color-gray-400);
+  color: var(--color-gray-500);
 }
 
 h1,

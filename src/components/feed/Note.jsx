@@ -30,6 +30,7 @@ const Note = ({
   onRepost,
   onZap,
   onShare,
+  allowPublicRepost,
   onPostMenuToggle,
   onDeletePost,
   onMuteUser,
@@ -63,12 +64,17 @@ const Note = ({
         </button>
         {postMenuOpen && (
           <div className="primal-note-menu">
-            <button className="primal-note-menu-item" onClick={() => { onShare(); onPostMenuToggle(); }}>
-              <Share size={14} /> {t('feed.shareNote', 'Share')}
-            </button>
-            <button className="primal-note-menu-item" onClick={onCopyLink}>
-              <LinkIcon size={14} /> {t('feed.copyNoteLink', 'Copy Link')}
-            </button>
+            {/* Public links only: a private BIES post can't be opened outside the app */}
+            {onShare && (
+              <button className="primal-note-menu-item" onClick={() => { onShare(); onPostMenuToggle(); }}>
+                <Share size={14} /> {t('feed.shareNote', 'Share')}
+              </button>
+            )}
+            {onCopyLink && (
+              <button className="primal-note-menu-item" onClick={onCopyLink}>
+                <LinkIcon size={14} /> {t('feed.copyNoteLink', 'Copy Link')}
+              </button>
+            )}
             <button className="primal-note-menu-item" onClick={onCopyText}>
               <Type size={14} /> {t('feed.copyNoteText', 'Copy Text')}
             </button>
@@ -170,6 +176,7 @@ const Note = ({
         onRepost={onRepost}
         onZap={onZap}
         onShare={onShare}
+        allowPublicRepost={allowPublicRepost}
         repostMenuOpen={repostMenuOpen}
         onRepostMenuToggle={onRepostMenuToggle}
         formatCount={formatCount}

@@ -1700,7 +1700,7 @@
       "noGmoFeed": "No GMO Feed",
       "animalWelfare": "Animal Welfare"
     },
-    "learnMore": "Learn More",
+    "learnMore": "Contact",
     "notFound": "Listing not found",
     "notFoundDesc": "This listing doesn't exist or has been removed.",
     "backToDirectory": "Back to Directory",
@@ -1744,7 +1744,7 @@
     "acceptsBitcoin": "Accepts Bitcoin",
     "endorse": "Vouch",
     "endorsed": "You vouched",
-    "endorsements": "Reviews",
+    "endorsements": "Recommendations",
     "noEndorsements": "No reviews yet. Be the first.",
     "endorsePlaceholder": "What was your experience? (optional)",
     "linkMember": "Link BIES Member",
@@ -1838,7 +1838,21 @@
     "yourReviewPlaceholder": "What did they do for you, how did it go, would you go back?",
     "yourReviewPlaceholder_farm": "What did you buy, how was it, would you buy again?",
     "reviewMinCount": "{{count}} of at least {{min}} characters",
-    "whatsappRow": "WhatsApp {{number}}"
+    "whatsappRow": "WhatsApp {{number}}",
+    "actions": {
+      "label": "Contact and share",
+      "call": "Call",
+      "directions": "Directions",
+      "website": "Website",
+      "share": "Share",
+      "copied": "Copied"
+    },
+    "moreDetails": "More details (optional)",
+    "moreDetailsHint": "Photos, about, opening hours, phone, WhatsApp, website…",
+    "aboutHeading": "About and hours",
+    "addMyFarm": "Add my farm",
+    "addMyBusiness": "Add my business",
+    "postRecommendation": "Post recommendation"
   },
   "marketplace": {
     "entryLabel": "Marketplace",
