@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronLeft, Save, Loader2, Plus, Trash2, X, Video, FileText, HelpCircle,
+  Save, Loader2, Plus, Trash2, X, Video, FileText, HelpCircle,
 } from 'lucide-react';
 import { coursesApi } from '../../services/api';
 import VideoEmbed from '../../components/courses/VideoEmbed';
 import MarkdownEditor from '../../components/courses/MarkdownEditor';
+import BackButton from '../../components/BackButton';
 
 const VALID_TYPES = ['VIDEO', 'TEXT', 'QUIZ'];
 const MAX_QUESTIONS = 50;
@@ -253,26 +254,7 @@ const LessonEditor = () => {
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => navigate(`/dashboard/builder/course/${courseId}`)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '0.5rem 0.875rem',
-            border: '1px solid var(--color-gray-200)',
-            borderRadius: 'var(--radius-md)',
-            background: 'none',
-            color: 'var(--color-gray-600)',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <ChevronLeft size={16} /> {t('dashboard.back')}
-        </button>
+        <BackButton to={`/dashboard/builder/course/${courseId}`} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-gray-800)' }}>
             {isEdit ? t('courses.builder.editLesson') : t('courses.builder.addLesson')}

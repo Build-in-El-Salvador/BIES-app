@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, ChevronsUpDown, ExternalLink } from 'lucide-react';
+import { ChevronRight, ChevronsUpDown, ExternalLink } from 'lucide-react';
 import { openExternal } from '../../utils/openExternal';
+import BackButton from '../BackButton';
 import './SettingsUI.css';
 
 /**
@@ -12,15 +12,10 @@ import './SettingsUI.css';
 
 /** A settings page: a title, and a back chevron on a sub-page. */
 export function SettingsPage({ title, back, children }) {
-    const { t } = useTranslation();
     return (
         <div className="set-page">
-            <div className={`set-head${back ? '' : ' main'}`}>
-                {back && (
-                    <Link to={back} className="set-back" aria-label={t('common.back', 'Back')}>
-                        <ChevronLeft size={26} />
-                    </Link>
-                )}
+            <div className={`set-head back-head${back ? '' : ' main'}`}>
+                {back && <BackButton to={back} />}
                 <h1 className="set-title">{title}</h1>
             </div>
             {children}

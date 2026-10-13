@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Target, Zap, Trophy, Loader2, AlertCircle, Info } from 'lucide-react';
+import { Target, Zap, Trophy, Loader2, AlertCircle, Info } from 'lucide-react';
 import { getEventHash } from 'nostr-tools';
 import { bountiesApi, pointsApi } from '../services/api';
 import { nostrService } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
+import BackButton from '../components/BackButton';
 
 const LIMITS = {
     SATS: { min: 100, max: 1000000 },
@@ -131,13 +132,13 @@ const CreateBounty = () => {
 
                     {/* Header */}
                     <div className="create-bounty-header">
-                        <button onClick={() => navigate(-1)} className="create-bounty-back" type="button">
-                            <ArrowLeft size={18} /> {t('common.back')}
-                        </button>
-                        <h1 className="create-bounty-title">
-                            <Target size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                            {t('bounties.createTitle')}
-                        </h1>
+                        <div className="back-head">
+                            <BackButton fallback="/bounties" />
+                            <h1 className="create-bounty-title">
+                                <Target size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                {t('bounties.createTitle')}
+                            </h1>
+                        </div>
                         <p className="create-bounty-subtitle">{t('bounties.createSubtitle')}</p>
                     </div>
 
@@ -281,20 +282,6 @@ const CreateBounty = () => {
                     margin-bottom: 1.25rem;
                 }
 
-                .create-bounty-back {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    color: var(--color-gray-500);
-                    font-weight: 500;
-                    font-size: 0.9rem;
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    padding: 0;
-                    margin-bottom: 0.75rem;
-                }
-                .create-bounty-back:hover { color: var(--color-primary); }
 
                 .create-bounty-title {
                     display: flex;

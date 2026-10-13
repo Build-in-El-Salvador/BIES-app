@@ -5,15 +5,10 @@
   margin: 0 auto;
   padding: var(--page-top, 1.5rem) 16px calc(2.5rem + env(safe-area-inset-bottom, 0px));
 }
-.set-head { display: flex; align-items: center; gap: 2px; margin: 0 0 16px; }
+.set-head { margin: 0 0 16px; }
 /* On a phone the top bar already says "Settings". */
 @media (max-width: 768px) {
   .set-head.main { display: none; }
-}
-.set-back {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; margin-left: -10px;
-  border-radius: 50%; color: var(--color-gray-700);
 }
 .set-title {
   margin: 0;

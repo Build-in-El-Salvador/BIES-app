@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import { QRCodeSVG } from 'qrcode.react';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, Copy, Download, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle, Copy, Download, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+import BackButton from '../../components/BackButton';
 import { useAuth } from '../../context/AuthContext';
 import { accountApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
@@ -337,15 +338,17 @@ const TakeYourKey = () => {
         );
     }
 
-    const backLink = step !== 'finishing' && (
-        <Link to="/settings" className="acct-back"><ArrowLeft size={16} /> {t('account.backToSettings')}</Link>
+    const head = (
+        <div className="back-head acct-head">
+            {step !== 'finishing' && <BackButton to="/settings" label={t('account.backToSettings')} />}
+            <h1 className="acct-title">{t('account.key.title')}</h1>
+        </div>
     );
 
     if (!user?.hostedKey && step !== 'finishing') {
         return (
             <div className="acct-page">
-                {backLink}
-                <h1 className="acct-title">{t('account.key.title')}</h1>
+                {head}
                 <div className="acct-card"><p className="acct-muted">{t('account.key.notHosted')}</p></div>
             </div>
         );
@@ -353,8 +356,7 @@ const TakeYourKey = () => {
 
     return (
         <div className="acct-page">
-            {backLink}
-            <h1 className="acct-title">{t('account.key.title')}</h1>
+            {head}
 
             {step === 'intro' && (
                 <div className="acct-card" ref={stepRef} tabIndex={-1}>

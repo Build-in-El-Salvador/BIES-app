@@ -1,9 +1,9 @@
 import { Children, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import {
-    ArrowLeft, Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff,
+    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff,
 } from 'lucide-react';
 import { profilesApi, directoryApi } from '../../services/api';
 import { useFeature } from '../../context/FeatureFlagsContext';
@@ -14,6 +14,7 @@ import { isPlaceholderName } from '../../utils/profileComplete';
 import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
+import BackButton from '../BackButton';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -49,7 +50,6 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
  */
 const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, children }) => {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const lightbox = useLightbox();
     const projectsEnabled = useFeature('projects');
     const [tab, setTab] = useState('all');
@@ -134,16 +134,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     onKeyDown: (e) => { if (e.key === 'Enter') lightbox?.open(getAssetUrl(banner)); },
                 } : {})}
             >
-                {showBack && (
-                    <button
-                        type="button"
-                        className="pv-back"
-                        aria-label={t('common.back', 'Back')}
-                        onClick={(e) => { e.stopPropagation(); navigate(-1); }}
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                )}
+                {showBack && <BackButton overlay fallback="/members" />}
             </div>
 
             <div className="pv-sheet">
@@ -358,12 +349,6 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     background-position: center;
                 }
                 .pv-cover.has-image { cursor: zoom-in; }
-                .pv-back {
-                    position: absolute; top: 12px; left: 12px;
-                    width: 40px; height: 40px; border-radius: 50%;
-                    display: flex; align-items: center; justify-content: center;
-                    border: none; background: rgba(15, 23, 42, 0.45); color: #fff; cursor: pointer;
-                }
                 .pv-sheet {
                     position: relative;
                     margin-top: -18px;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, BookOpen, Play, FileText, ListChecks, CheckCircle, Lock,
+    BookOpen, Play, FileText, ListChecks, CheckCircle, Lock,
     Loader2, Users, Award, Settings,
 } from 'lucide-react';
 import { coursesApi } from '../../services/api';
@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import MarkdownView from '../../components/courses/MarkdownView';
 import CertificateCard from '../../components/courses/CertificateCard';
 import CourseUnlockModal from '../../components/courses/CourseUnlockModal';
+import BackButton from '../../components/BackButton';
 
 const titleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : '');
 
@@ -121,7 +122,7 @@ const CourseDetail = () => {
                             textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)',
                         }}
                     >
-                        <ArrowLeft size={16} /> {t('courses.catalogTitle')}
+                        {t('courses.catalogTitle')}
                     </Link>
                 </div>
             </div>
@@ -243,9 +244,7 @@ const CourseDetail = () => {
                             <BookOpen size={48} />
                         </div>
                     )}
-                    <Link to="/courses" className="hero-back" aria-label={t('common.back')}>
-                        <ArrowLeft size={20} />
-                    </Link>
+                    <BackButton to="/courses" overlay />
                 </div>
 
                 <div className="detail-grid">
@@ -407,23 +406,6 @@ const CourseDetail = () => {
                     align-items: center;
                     justify-content: center;
                     color: rgba(255, 255, 255, 0.7);
-                }
-                .hero-back {
-                    position: absolute;
-                    top: 20px;
-                    left: 20px;
-                    border-radius: 50%;
-                    background: var(--color-surface);
-                    border: 1px solid var(--color-gray-200);
-                    width: 42px;
-                    height: 42px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    text-decoration: none;
-                    color: var(--color-gray-700);
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-                    z-index: 10;
                 }
 
                 .detail-grid {

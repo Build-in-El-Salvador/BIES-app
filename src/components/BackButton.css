@@ -1,0 +1,56 @@
+/* The back button (BackButton.jsx), the same on every page. */
+.bies-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  /* The chevron lines up with the page's left edge. */
+  margin-left: -10px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-gray-800);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease;
+}
+.bies-back:active { background: var(--color-gray-100); }
+@media (hover: hover) {
+  .bies-back:hover { background: var(--color-gray-100); }
+}
+.bies-back:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* On a photo: a white circle, so the chevron shows on any picture. */
+.bies-back.overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  margin-left: 0;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a; /* fixed: the circle is white in dark mode too */
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+  z-index: 5;
+}
+.bies-back.overlay:active { background: #ffffff; }
+@media (hover: hover) {
+  .bies-back.overlay:hover { background: #ffffff; }
+}
+
+/* A back button and the page title, on one line. */
+.back-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.back-head > h1,
+.back-head > h2 {
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, MapPin, Loader2, Package, ExternalLink, MessageCircle,
+    MapPin, Loader2, Package, ExternalLink, MessageCircle,
     Edit3, Trash2, Tag, CheckCircle, RefreshCw, EyeOff, Ban, ShieldOff, User,
 } from 'lucide-react';
 import { nostrService } from '../../services/nostrService';
@@ -16,6 +16,7 @@ import {
     formatListingPrice,
     isSensitiveListing,
 } from '../../components/marketplace/MarketListingCard';
+import BackButton from '../../components/BackButton';
 
 /**
  * Marketplace listing detail page, modeled on directory/ListingDetail.jsx:
@@ -97,7 +98,7 @@ const MarketListingDetail = () => {
                                 textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)',
                             }}
                         >
-                            <ArrowLeft size={16} /> {t('marketplace.title')}
+                            {t('marketplace.title')}
                         </Link>
                     </div>
                 </div>
@@ -203,20 +204,7 @@ const MarketListingDetail = () => {
                         </div>
                     )}
                     {isSold && <span className="mk-detail-sold">{t('marketplace.sold')}</span>}
-                    <Link
-                        to="/market"
-                        aria-label={t('marketplace.title')}
-                        style={{
-                            position: 'absolute', top: 16, left: 16,
-                            width: 42, height: 42, borderRadius: '50%',
-                            background: 'var(--color-surface)', border: '1px solid var(--color-gray-200)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            textDecoration: 'none', color: 'var(--color-gray-700)',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.15)', zIndex: 5,
-                        }}
-                    >
-                        <ArrowLeft size={20} />
-                    </Link>
+                    <BackButton to="/market" overlay label={t('marketplace.title')} />
                 </div>
                 {images.length > 1 && (
                     <div className="mk-thumbs">

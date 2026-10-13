@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../../context/AuthContext';
 import { useBlocks, useMuted } from '../../hooks/useBlocks';
 import { loadBlocks, unblock } from '../../services/blockStore';
 import { unmute } from '../../services/muteStore';
 import { getAssetUrl } from '../../utils/assets';
+import BackButton from '../../components/BackButton';
 import './AccountFlows.css';
 
 const shortNpub = (pubkey) => {
@@ -53,8 +54,10 @@ const BlockedMembers = () => {
 
     return (
         <div className="acct-page">
-            <Link to="/settings" className="acct-back"><ArrowLeft size={16} /> {t('account.backToSettings')}</Link>
-            <h1 className="acct-title">{t('moderation.blocked.title')}</h1>
+            <div className="back-head acct-head">
+                <BackButton to="/settings" label={t('account.backToSettings')} />
+                <h1 className="acct-title">{t('moderation.blocked.title')}</h1>
+            </div>
             <div className="acct-card">
                 <p className="acct-muted">{t('moderation.blocked.intro')}</p>
                 {error && (

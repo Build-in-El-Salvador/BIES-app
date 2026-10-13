@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronLeft, ChevronUp, ChevronDown, Pencil, Trash2, Plus, Send, Loader2,
+  ChevronUp, ChevronDown, Pencil, Trash2, Plus, Send, Loader2,
   CheckCircle, Video, FileText, HelpCircle, BookOpen, AlertCircle, X,
 } from 'lucide-react';
 import { coursesApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { nostrService } from '../../services/nostrService';
 import { nostrSigner } from '../../services/nostrSigner';
+import BackButton from '../../components/BackButton';
 
 const STATUS_CFG = {
   'draft': { tKey: 'courses.status.draft', color: 'var(--badge-draft-text)', bg: 'var(--badge-draft-bg)' },
@@ -218,9 +219,7 @@ const CourseBuilder = () => {
     <div>
       {/* Header */}
       <div className="cb-header">
-        <button onClick={() => navigate('/dashboard/courses')} className="cb-back-btn">
-          <ChevronLeft size={16} /> {t('dashboard.back')}
-        </button>
+        <BackButton to="/dashboard/courses" />
         <div className="cb-header-main">
           <div className="cb-title-row">
             <h1 className="cb-title">{course.title}</h1>
@@ -381,21 +380,6 @@ const CourseBuilder = () => {
           flex-wrap: wrap;
         }
 
-        .cb-back-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 0.5rem 0.875rem;
-          border: 1px solid var(--color-gray-200);
-          border-radius: var(--radius-md);
-          background: none;
-          color: var(--color-gray-600);
-          cursor: pointer;
-          font-size: 0.875rem;
-          font-weight: 500;
-          flex-shrink: 0;
-          white-space: nowrap;
-        }
 
         .cb-header-main { flex: 1; min-width: 200px; }
 

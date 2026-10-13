@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle, HelpCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle, HelpCircle, Loader2 } from 'lucide-react';
+import BackButton from '../../components/BackButton';
 import { useAuth } from '../../context/AuthContext';
 import { accountApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
@@ -163,8 +164,10 @@ const DeleteAccount = () => {
 
     return (
         <div className="acct-page">
-            {!deleting && <Link to="/settings" className="acct-back"><ArrowLeft size={16} /> {t('account.backToSettings')}</Link>}
-            <h1 className="acct-title">{t('account.delete.title')}</h1>
+            <div className="back-head acct-head">
+                {!deleting && <BackButton to="/settings" label={t('account.backToSettings')} />}
+                <h1 className="acct-title">{t('account.delete.title')}</h1>
+            </div>
 
             {step === 'intro' && (
                 <div className="acct-card" ref={stepRef} tabIndex={-1}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Send, MoreVertical, Lock, MessageCircle, Loader2, AlertTriangle, X, ArrowLeft, Bell, BellOff } from 'lucide-react';
+import { Search, Send, MoreVertical, Lock, MessageCircle, Loader2, AlertTriangle, X, Bell, BellOff } from 'lucide-react';
 import { useNostrDMs } from '../hooks/useNostr';
 import { nostrService } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
@@ -9,6 +9,7 @@ import { searchApi, notificationsApi } from '../services/api';
 import { nip19 } from 'nostr-tools';
 import { notifyIncomingMessage, requestNotificationPermission, getNotificationPermission, subscribeToPush } from '../utils/notificationManager';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
+import BackButton from '../components/BackButton';
 
 const Messages = () => {
     const { t } = useTranslation();
@@ -475,9 +476,7 @@ const Messages = () => {
                         <>
                             <div className="chat-header">
                                 <div className="flex items-center gap-3">
-                                    <button className="icon-btn back-btn" onClick={() => setMobileView('sidebar')} aria-label="Back to conversations">
-                                        <ArrowLeft size={20} />
-                                    </button>
+                                    <BackButton onClick={() => setMobileView('sidebar')} label="Back to conversations" className="msg-back" />
                                     <div className="chat-avatar small">
                                         {getAvatar(activeChatPubkey) ? (
                                             <img src={getAvatar(activeChatPubkey)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -690,7 +689,7 @@ const sharedStyles = `
     /* ── Utility ── */
     .icon-btn { padding: 8px; border-radius: 50%; color: var(--color-gray-500); border: none; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .icon-btn:hover { background: var(--color-gray-100); }
-    .back-btn { display: none; }
+    .msg-back { display: none; }
     .flex { display: flex; }
     .items-center { align-items: center; }
     .justify-between { justify-content: space-between; }
@@ -725,8 +724,8 @@ const sharedStyles = `
         .mobile-hidden {
             display: none !important;
         }
-        .back-btn {
-            display: flex;
+        .msg-back {
+            display: inline-flex;
         }
         .msg {
             max-width: 82%;

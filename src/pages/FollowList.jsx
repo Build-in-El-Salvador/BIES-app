@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Loader2, User } from 'lucide-react';
+import { Loader2, User } from 'lucide-react';
 import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
 import { isPlaceholderName } from '../utils/profileComplete';
+import BackButton from '../components/BackButton';
 
 /**
  * A member's followers, who they follow, or their whole network (both,
@@ -19,7 +20,6 @@ import { isPlaceholderName } from '../utils/profileComplete';
 const FollowList = ({ kind }) => {
     const { t } = useTranslation();
     const { userId } = useParams();
-    const navigate = useNavigate();
     const { user } = useAuth();
     const [people, setPeople] = useState(null); // null while loading
     const [myFollowing, setMyFollowing] = useState(new Set());
@@ -57,10 +57,10 @@ const FollowList = ({ kind }) => {
     return (
         <div className="follow-list-page container">
             <div className="follow-list">
-                <button type="button" className="follow-back" onClick={() => navigate(-1)}>
-                    <ArrowLeft size={18} /> {t('common.back')}
-                </button>
-                <h1 className="follow-title">{title}</h1>
+                <div className="back-head">
+                    <BackButton fallback={userId ? `/builder/${userId}` : '/members'} />
+                    <h1 className="follow-title">{title}</h1>
+                </div>
 
                 {people === null ? (
                     <div className="follow-empty"><Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
@@ -104,12 +104,8 @@ const FollowList = ({ kind }) => {
             <style jsx>{`
                 .follow-list-page { padding-top: var(--page-top, 1.5rem); padding-bottom: 4rem; }
                 .follow-list { max-width: 640px; margin: 0 auto; }
-                .follow-back {
-                    display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
-                    background: none; border: none; padding: 0; cursor: pointer;
-                    color: var(--color-gray-600); font-weight: 600; font-size: 0.9rem;
-                }
-                .follow-title { font-size: 1.5rem; font-weight: 700; margin: 0.25rem 0 1rem; }
+                .back-head { margin: 0.25rem 0 1rem; }
+                .follow-title { font-size: 1.5rem; font-weight: 700; margin: 0; }
                 .follow-empty { text-align: center; padding: 3rem 1rem; color: var(--color-gray-500); display: flex; justify-content: center; }
                 .follow-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
                 .follow-row {

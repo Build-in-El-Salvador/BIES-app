@@ -1,12 +1,12 @@
 import React, { useState, useRef, useLayoutEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useBottomNav } from '../context/BottomNavContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import usePointerDrag from '../hooks/usePointerDrag';
 import useFlipLayout from '../hooks/useFlipLayout';
 import { NAV_PAGES, NAV_PAGES_BY_ID, MAX_TABS, MIN_TABS } from '../config/navPages';
+import BackButton from '../components/BackButton';
 
 const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
 const sameOrder = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -22,7 +22,6 @@ const sameOrder = (a, b) => a.length === b.length && a.every((v, i) => v === b[i
  */
 const CustomizeNavbar = () => {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const { tabs, updateTabs, resetTabs, isCustomized, saveError } = useBottomNav();
 
     const dockRef = useRef(null);
@@ -177,9 +176,7 @@ const CustomizeNavbar = () => {
     return (
         <div className="container customize-page" style={{ paddingTop: 'var(--page-top, 1.5rem)' }}>
             <div className="customize-header">
-                <button type="button" className="back-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
-                    <ChevronLeft size={22} />
-                </button>
+                <BackButton fallback="/settings" />
                 <h1>{t('customNav.title')}</h1>
                 <button type="button" className="reset-btn" data-testid="nav-reset" onClick={handleReset}>
                     <RotateCcw size={15} />
@@ -294,8 +291,6 @@ const CustomizeNavbar = () => {
 
                 .customize-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
                 .customize-header h1 { flex: 1; font-size: 1.5rem; margin: 0; }
-                .back-btn { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-full); border: 1px solid var(--color-gray-200); background: var(--color-surface); color: var(--color-gray-700); cursor: pointer; flex-shrink: 0; }
-                .back-btn:hover { background: var(--color-gray-100); }
                 .reset-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-full); border: 1px solid var(--color-gray-300); background: var(--color-surface); color: var(--color-gray-600); font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
                 .reset-btn:hover { border-color: var(--color-secondary); color: var(--color-secondary); }
 

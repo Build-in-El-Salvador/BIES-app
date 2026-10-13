@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, Play, FileText, ListChecks, CheckCircle, Lock, Loader2,
+    Play, FileText, ListChecks, CheckCircle, Lock, Loader2,
     ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Award, X,
 } from 'lucide-react';
 import { coursesApi } from '../../services/api';
@@ -10,6 +10,7 @@ import MarkdownView from '../../components/courses/MarkdownView';
 import VideoEmbed from '../../components/courses/VideoEmbed';
 import QuizRunner from '../../components/courses/QuizRunner';
 import CertificateCard from '../../components/courses/CertificateCard';
+import BackButton from '../../components/BackButton';
 
 const LESSON_TYPE_ICONS = {
     VIDEO: Play,
@@ -175,7 +176,7 @@ const LessonPlayer = () => {
                             textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)',
                         }}
                     >
-                        <ArrowLeft size={16} /> {t('courses.catalogTitle')}
+                        {t('courses.catalogTitle')}
                     </Link>
                 </div>
             </div>
@@ -223,7 +224,7 @@ const LessonPlayer = () => {
                     <h2>{t('courses.locked')}</h2>
                     <p>{t('courses.lockedHint')}</p>
                     <Link to={`/courses/${id}`} className="locked-back-btn">
-                        <ArrowLeft size={16} /> {t('common.back')}
+                        {t('common.back')}
                     </Link>
                 </div>
             );
@@ -254,9 +255,7 @@ const LessonPlayer = () => {
             <div className="lp-container">
                 {/* Header */}
                 <div className="lp-header">
-                    <Link to={`/courses/${id}`} className="lp-back" aria-label={t('common.back')}>
-                        <ArrowLeft size={18} />
-                    </Link>
+                    <BackButton to={`/courses/${id}`} />
                     <div className="lp-header-text">
                         <span className="lp-course-title">{course.title}</span>
                         <h1 className="lp-lesson-title">
@@ -380,20 +379,6 @@ const LessonPlayer = () => {
                     align-items: center;
                     gap: 0.85rem;
                     margin-bottom: 1.25rem;
-                }
-                .lp-back {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 50%;
-                    background: var(--color-surface);
-                    border: 1px solid var(--color-gray-200);
-                    color: var(--color-gray-700);
-                    text-decoration: none;
-                    flex-shrink: 0;
-                    box-shadow: var(--shadow-sm);
                 }
                 .lp-header-text {
                     min-width: 0;
