@@ -60,7 +60,7 @@ const Navbar = () => {
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/' || path === '/feed') return t('pageTitles.biesFeed');
-    if (path.startsWith('/farms')) return t('pageTitles.farmDirectory');
+    if (path.startsWith('/farms')) return t('mobileNav.farms');
     if (path.startsWith('/trusted')) return t('pageTitles.certifiedDirectory');
     if (path.startsWith('/market')) return t('marketplace.title');
     if (path.startsWith('/discover')) return t('pageTitles.discover', 'Discover');

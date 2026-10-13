@@ -113,7 +113,7 @@ const AdminDirectory = () => {
             <div className="header">
                 <div>
                     <h1>Directory Management</h1>
-                    <p className="subtitle">Review and manage farm & BIES Trusted listings</p>
+                    <p className="subtitle">Review and manage farm and business listings</p>
                 </div>
                 <button className="recompute-btn" onClick={handleRecompute} disabled={recomputing}>
                     {recomputing

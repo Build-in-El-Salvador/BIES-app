@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     ArrowLeft, Loader2, AlertCircle, Camera, X, Plus, Trash2,
-    CheckCircle, Bitcoin, Leaf, ShieldCheck, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp,
+    CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { directoryApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -412,7 +412,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <h1 className="dir-form-title">
                             {isFarm
                                 ? <Leaf size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                                : <ShieldCheck size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
+                                : <Building2 size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
                             {pageTitle}
                         </h1>
                         {!editMode && <p className="dir-form-subtitle">{t('directory.createSubtitle')}</p>}

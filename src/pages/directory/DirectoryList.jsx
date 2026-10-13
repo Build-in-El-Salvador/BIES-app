@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, SlidersHorizontal, Plus, Leaf, ShieldCheck, Loader2, Bookmark } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, Leaf, Building2, Loader2, Bookmark } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import DirectoryListingCard from '../../components/directory/DirectoryListingCard';
 import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
@@ -39,7 +39,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const [category, setCategory] = useState('');
     const [produce, setProduce] = useState(''); // FARM: a PRODUCE_KINDS key
     const [savedOnly, setSavedOnly] = useState(false); // the member's saved listings
-    const [threshold, setThreshold] = useState(5);
 
     // Reset state when switching between /farms and /trusted
     useEffect(() => {
@@ -65,7 +64,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
                 const result = await directoryApi.list(params);
                 const list = result?.data || result || [];
                 setListings(Array.isArray(list) ? list : []);
-                if (result?.trustedThreshold) setThreshold(result.trustedThreshold);
             } catch {
                 setListings([]);
             } finally {
@@ -236,14 +234,13 @@ const DirectoryList = ({ type = 'FARM' }) => {
                 {/* Section header */}
                 <div className="dir-section-header">
                     <div className="dir-section-icon">
-                        {isFarm ? <Leaf size={20} /> : <ShieldCheck size={20} />}
+                        {isFarm ? <Leaf size={20} /> : <Building2 size={20} />}
                     </div>
                     <div className="dir-section-text">
                         <h2>{isFarm ? t('directory.sectionFarms') : t('directory.sectionCertified')}</h2>
                         <p>{isFarm ? t('directory.sectionFarmsSub') : t('directory.sectionCertifiedSub')}</p>
                     </div>
                 </div>
-                <p className="dir-trust-how">{t('directory.trust.how', { threshold })}</p>
 
                 {/* Listing cards */}
                 {loading ? (
@@ -384,12 +381,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     background: var(--color-primary);
                     border-color: var(--color-primary);
                     color: white;
-                }
-                .dir-trust-how {
-                    margin: -0.5rem 0 1rem;
-                    font-size: 0.8rem;
-                    color: var(--color-gray-500);
-                    line-height: 1.5;
                 }
                 .dir-empty :global(.dir-empty-cta) {
                     display: flex;

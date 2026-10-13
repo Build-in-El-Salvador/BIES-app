@@ -10,7 +10,7 @@
  *  - links from before the move (/discover/farms, /discover/certified) redirect
  *  - /discover no longer carries the directory cards, and keeps its 2 tabs
  *  - a member's listing goes live at once and lands on its own page
- *  - desktop /trusted renders the BIES Trusted section header
+ *  - desktop /trusted renders the Businesses section header
  */
 
 import { test, expect } from '@playwright/test';
@@ -112,7 +112,7 @@ test.describe('Directories', () => {
         expect(live.ownerId).toBe(user.id);
     });
 
-    test('desktop: BIES Trusted renders its section header', async ({ page }) => {
+    test('desktop: Businesses renders its section header', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 800 });
         await loginAs(page, token);
         await page.goto('/trusted');
@@ -120,7 +120,7 @@ test.describe('Directories', () => {
 
         const header = page.locator('.dir-section-header');
         await expect(header).toBeVisible();
-        await expect(header).toContainText('BIES Trusted');
+        await expect(header).toContainText('Businesses');
 
         await page.screenshot({ path: 'e2e/screenshots/directory-trusted-desktop.png', fullPage: false });
     });
