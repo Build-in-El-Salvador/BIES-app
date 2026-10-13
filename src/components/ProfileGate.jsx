@@ -27,9 +27,11 @@ async function uploadPhoto(file) {
 /**
  * A member's BIES name, asked for before anything else (after the terms of
  * use) until there is one: new accounts, and Nostr sign-ins that only have a
- * "nostr:1a2b3c4d" placeholder. A photo is offered too, but optional. It
- * can't be dismissed, only finished or signed out of. A Nostr sign-in starts
- * from their Nostr name and picture, but still chooses the name BIES shows.
+ * "nostr:1a2b3c4d" placeholder. A photo is offered too; only the name is
+ * needed to continue. It can't be dismissed, only finished or signed out of.
+ * A Nostr sign-in starts from their Nostr name and picture, and can change
+ * either for BIES: the new ones go to the BIES relay, never their public
+ * Nostr profile.
  */
 const ProfileGate = ({ user, onDone, onSignOut }) => {
     const { t } = useTranslation();
@@ -38,6 +40,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
     const [name, setName] = useState(isNew ? '' : current.name);
     const [avatar, setAvatar] = useState(current.avatar || '');
     const [nostrProfile, setNostrProfile] = useState(null);
+    const [fromNostr, setFromNostr] = useState(false); // filled in from their Nostr profile
     const [crop, setCrop] = useState(null); // object URL of the photo being cropped
     const [uploading, setUploading] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -53,8 +56,11 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
             if (cancelled || !found) return;
             setNostrProfile(found);
             const nostrName = (found.display_name || found.name || '').trim().slice(0, NAME_MAX);
-            if (isNew && nostrName && !touched.current.name) setName(nostrName);
-            if (!current.avatar && found.picture && !touched.current.avatar) setAvatar(found.picture);
+            const useName = isNew && nostrName && !touched.current.name;
+            const usePicture = !current.avatar && /^https:\/\//.test(found.picture || '') && !touched.current.avatar;
+            if (useName) setName(nostrName);
+            if (usePicture) setAvatar(found.picture);
+            if (useName || usePicture) setFromNostr(true);
         }).catch(() => {});
         return () => { cancelled = true; };
     }, [user.nostrPubkey, isNew, current.avatar]);
@@ -137,6 +143,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
     return (
         <ModerationSheet title={t('profileGate.title')} className="profile-gate">
             <p className="mod-muted">{t('profileGate.intro')}</p>
+            {fromNostr && <p className="mod-hint pg-from-nostr">{t('profileGate.fromNostr')}</p>}
             <form className="pg-form" onSubmit={save} noValidate>
                 <div className="pg-photo">
                     <button

@@ -2475,9 +2475,10 @@
   },
   "profileGate": {
     "title": "Set up your profile",
-    "intro": "Members see your name on your posts, reviews and listings. A photo is optional, but it helps people recognise you.",
-    "addPhoto": "Add a photo (optional)",
+    "intro": "Members see your name and photo on your posts, reviews and listings.",
+    "addPhoto": "Add a photo",
     "changePhoto": "Change photo",
+    "fromNostr": "We filled these in from your Nostr profile. Change them here to use a different name or photo on BIES; your Nostr profile stays as it is.",
     "uploading": "Uploading…",
     "nameLabel": "Your name",
     "namePlaceholder": "First and last name",

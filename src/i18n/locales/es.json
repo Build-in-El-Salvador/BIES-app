@@ -2476,9 +2476,10 @@
   },
   "profileGate": {
     "title": "Configura tu perfil",
-    "intro": "Los miembros ven tu nombre en tus publicaciones, reseñas y listados. La foto es opcional, pero ayuda a que te reconozcan.",
-    "addPhoto": "Agregar una foto (opcional)",
+    "intro": "Los miembros ven tu nombre y tu foto en tus publicaciones, reseñas y listados.",
+    "addPhoto": "Agregar una foto",
     "changePhoto": "Cambiar foto",
+    "fromNostr": "Los tomamos de tu perfil de Nostr. Cámbialos aquí si quieres otro nombre u otra foto en BIES; tu perfil de Nostr no cambia.",
     "uploading": "Subiendo…",
     "nameLabel": "Tu nombre",
     "namePlaceholder": "Nombre y apellido",

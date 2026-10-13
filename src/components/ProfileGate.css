@@ -10,6 +10,7 @@
 .pg-input { width: 100%; box-sizing: border-box; min-height: 48px; padding: 0.65rem 0.8rem; border: 1px solid #d1d5db; border-radius: 0.65rem; font: inherit; font-size: 1rem; color: inherit; background: #ffffff; outline: none; }
 .pg-input:focus { border-color: var(--mod-primary); }
 .pg-missing { text-align: center; }
+.pg-from-nostr { margin-top: -0.4rem; }
 .profile-gate .mod-actions { margin-top: 0.5rem; }
 /* The crop step opens over the sheet (z-index 10100). */
 .pg-crop-layer { position: fixed; inset: 0; z-index: 10200; }
