@@ -3,6 +3,7 @@ import { isNativePlatform } from '../utils/platform';
 import { useFeature } from '../context/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
+import { publicUrl } from '../utils/publicUrl';
 import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
 import { nostrService, BIES_RELAY, profileCache } from '../services/nostrService';
 import { primalService, EXPLORE_VIEWS } from '../services/primalService';
@@ -46,6 +47,19 @@ function formatSats(n) {
     if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
     if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
     return String(n);
+}
+
+/** The post a shared link names (?post=note1…, or a hex id), as a hex id. */
+function sharedPostId(search) {
+    const value = new URLSearchParams(search).get('post');
+    if (!value) return null;
+    if (/^[0-9a-f]{64}$/i.test(value)) return value.toLowerCase();
+    try {
+        const decoded = nip19.decode(value);
+        if (decoded.type === 'note') return decoded.data;
+        if (decoded.type === 'nevent') return decoded.data.id;
+    } catch { /* not a post id */ }
+    return null;
 }
 
 const Feed = () => {
@@ -985,10 +999,17 @@ const Feed = () => {
         setTimeout(() => setCopyToast(null), 2000);
     };
 
+    // A post's link: a BIES post opens in the BIES Feed (for members; others
+    // sign in first), a public one on njump.me. Only the link is shared, not
+    // the text of a members-only post.
+    const postUrl = (post) => {
+        const noteId = nip19.noteEncode(post.id);
+        return feedMode === 'explore' ? `https://njump.me/${noteId}` : publicUrl(`/feed?post=${noteId}`);
+    };
+
     // Share a note
     const handleShare = async (post) => {
-        const noteId = nip19.noteEncode(post.id);
-        const url = `https://njump.me/${noteId}`;
+        const url = postUrl(post);
         if (navigator.share) {
             try {
                 await navigator.share({ url });
@@ -1266,10 +1287,11 @@ const Feed = () => {
         });
     };
 
-    // Open a post from a notification or a profile: load it (or the post a
-    // reply belongs to) if it isn't in the feed yet, open its replies and
-    // scroll to it — as tapping a notification does in any social app.
-    const focusTarget = location.state?.scrollToPost;
+    // Open a post from a notification, a profile or a shared link
+    // (/feed?post=note1…): load it (or the post a reply belongs to) if it
+    // isn't in the feed yet, open its replies and scroll to it — as tapping a
+    // notification does in any social app.
+    const focusTarget = location.state?.scrollToPost || sharedPostId(location.search);
     const focusHandled = useRef(null);
     useEffect(() => {
         if (!focusTarget || loading || feedMode !== 'private' || focusHandled.current === focusTarget) return;
@@ -1642,8 +1664,7 @@ const Feed = () => {
                                         lud16: profiles[post.pubkey]?.lud16,
                                         eventId: post.id,
                                     }) : undefined}
-                                    // njump.me links only open public posts
-                                    onShare={feedMode === 'explore' ? () => handleShare(post) : undefined}
+                                    onShare={() => handleShare(post)}
                                     onPostMenuToggle={() => {
                                         setPostMenu(postMenu === post.id ? null : post.id);
                                     }}
@@ -1651,7 +1672,7 @@ const Feed = () => {
                                     onMuteUser={() => { handleMuteUser(post.pubkey); setPostMenu(null); }}
                                     onBlockUser={() => handleBlockUser(post.pubkey)}
                                     onReport={() => { handleReport(post); setPostMenu(null); }}
-                                    onCopyLink={feedMode === 'explore' ? () => { navigator.clipboard.writeText(`https://njump.me/${nip19.noteEncode(post.id)}`); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); } : undefined}
+                                    onCopyLink={() => { navigator.clipboard.writeText(postUrl(post)); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); }}
                                     onCopyText={() => { navigator.clipboard.writeText(post.content || ''); setPostMenu(null); showToast(t('feed.textCopied', 'Text copied')); }}
                                     onCopyId={() => { navigator.clipboard.writeText(post.id); setPostMenu(null); showToast(t('feed.idCopied', 'Note ID copied')); }}
                                     onCopyRaw={() => { navigator.clipboard.writeText(JSON.stringify(post, null, 2)); setPostMenu(null); showToast(t('feed.rawCopied', 'Raw data copied')); }}

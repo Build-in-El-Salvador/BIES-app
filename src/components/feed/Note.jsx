@@ -59,12 +59,18 @@ const Note = ({
     <div className="primal-note" data-post-id={post.id}>
       {/* Context menu (three-dot) */}
       <div className="primal-note-context note-menu-wrapper">
-        <button className="primal-note-context-btn" onClick={onPostMenuToggle}>
+        <button
+          type="button"
+          className="primal-note-context-btn"
+          onClick={onPostMenuToggle}
+          aria-label={t('moderation.menu.more', 'More options')}
+          aria-expanded={!!postMenuOpen}
+        >
           <MoreHorizontal size={18} />
         </button>
         {postMenuOpen && (
           <div className="primal-note-menu">
-            {/* Public links only: a private BIES post can't be opened outside the app */}
+            {/* A BIES post's link opens in BIES (members only); a public post's on njump.me */}
             {onShare && (
               <button className="primal-note-menu-item" onClick={() => { onShare(); onPostMenuToggle(); }}>
                 <Share size={14} /> {t('feed.shareNote', 'Share')}

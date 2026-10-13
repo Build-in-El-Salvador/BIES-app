@@ -56,7 +56,12 @@ const Login = ({ nostr = false }) => {
     const [offerBusy, setOfferBusy] = useState(false);
     const [offerNote, setOfferNote] = useState('');
 
-    const openNostr = () => navigate('/login/nostr', { state: { fromEmail: true } });
+    // Back to the page that asked for sign-in (a shared post), or Home.
+    const from = location.state?.from;
+    const afterSignIn = from?.pathname && !from.pathname.startsWith('/login')
+        ? `${from.pathname}${from.search || ''}`
+        : '/home';
+    const openNostr = () => navigate('/login/nostr', { state: { fromEmail: true, from } });
     // Back through history when the email screen is behind this one, so the
     // device's own back button agrees; arriving by a link replaces instead.
     const backToEmail = () => {
@@ -93,14 +98,14 @@ const Login = ({ nostr = false }) => {
     // Redirect to dashboard if already logged in
     useEffect(() => {
         if (!authLoading && authedUser && !offering.current) {
-            navigate('/home', { replace: true });
+            navigate(afterSignIn, { replace: true });
         }
     }, [authLoading, authedUser, navigate]);
 
     const handleResult = (result) => {
         offering.current = false;
         if (result.success) {
-            navigate('/home');
+            navigate(afterSignIn);
         } else {
             setError(result.error || 'Login failed. Please try again.');
         }
