@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
-import { BiesWebSocket, notificationsApi, profilesApi } from '../services/api';
-import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
+import { BiesWebSocket, notificationsApi } from '../services/api';
 import { notifyIncomingMessage, subscribeToPush } from '../utils/notificationManager';
 import { isNativePlatform } from '../utils/platform';
 import { initNativePush, nativePushToken } from '../services/pushService';
@@ -12,6 +11,8 @@ import PasskeySavePrompt from '../components/PasskeySavePrompt';
 import PasskeyMigratePrompt from '../components/PasskeyMigratePrompt';
 import PushPermissionPrompt from '../components/PushPermissionPrompt';
 import TermsGate from '../components/moderation/TermsGate';
+import ProfileGate from '../components/ProfileGate';
+import { needsProfile } from '../utils/profileComplete';
 
 const AuthContext = createContext();
 
@@ -30,8 +31,10 @@ export const AuthProvider = ({ children }) => {
     const [showMigratePrompt, setShowMigratePrompt] = useState(false);
     const [showPushPrompt, setShowPushPrompt] = useState(false);
 
-    // The terms of use come before everything else, once per version.
+    // The terms of use come before everything else, once per version; then
+    // a name and photo, for members who don't have both yet.
     const termsPending = !!user && user.termsAccepted === false;
+    const profilePending = !termsPending && needsProfile(user);
     useEffect(() => {
         // A request refused for want of the current terms (api.js).
         const onTermsRequired = (e) => setUser((prev) => (prev
@@ -288,7 +291,7 @@ export const AuthProvider = ({ children }) => {
             const { user, isNewUser } = await authService.loginWithEmailCode(email, code);
             setUser(user);
             initWebSocket(user);
-            return { success: true, user, isNewUser, needsProfileSetup: isNewUser || !user.profile?.name };
+            return { success: true, user, isNewUser };
         } catch (error) {
             return { success: false, ...(error.data || {}), error: error.message };
         }
@@ -318,27 +321,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const loginWithSeedPhraseAndCheckNew = async (mnemonic) => {
-        const result = await loginWithSeedPhrase(mnemonic);
-        if (!result.success) return result;
 
-        const isNew = result.user?.profile?.name?.startsWith('nostr:');
-        if (isNew && result.user?.nostrPubkey) {
-            seedAfterTerms(result.user);
-        }
-        return { ...result, needsProfileSetup: isNew };
-    };
-
-    const loginWithNsecAndCheckNew = async (nsec) => {
-        const result = await loginWithNsec(nsec);
-        if (!result.success) return result;
-
-        const isNew = result.user?.profile?.name?.startsWith('nostr:');
-        if (isNew && result.user?.nostrPubkey) {
-            seedAfterTerms(result.user);
-        }
-        return { ...result, needsProfileSetup: isNew };
-    };
 
     const loginWithBunker = async (bunkerInput) => {
         try {
@@ -351,16 +334,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const loginWithBunkerAndCheckNew = async (bunkerInput) => {
-        const result = await loginWithBunker(bunkerInput);
-        if (!result.success) return result;
-
-        const isNew = result.user?.profile?.name?.startsWith('nostr:');
-        if (isNew && result.user?.nostrPubkey) {
-            seedAfterTerms(result.user);
-        }
-        return { ...result, needsProfileSetup: isNew };
-    };
 
     /**
      * Adopt a user whose JWT was already established outside AuthContext
@@ -370,29 +343,19 @@ export const AuthProvider = ({ children }) => {
     const completeExternalLogin = (user) => {
         setUser(user);
         initWebSocket(user);
-
-        const isNew = user?.profile?.name?.startsWith('nostr:');
-        if (isNew && user?.nostrPubkey) {
-            seedAfterTerms(user);
-        }
-        return isNew ? '/profile-setup' : '/feed';
+        return '/feed';
     };
 
     /**
      * Login with an already-paired BunkerSigner (nostrconnect:// QR flow).
-     * Same pipeline as loginWithBunkerAndCheckNew, minus the pairing step.
+     * Same pipeline as loginWithBunker, minus the pairing step.
      */
     const loginWithNostrConnect = async (signer) => {
         try {
             const user = await authService.loginWithConnectedBunker(signer);
             setUser(user);
             initWebSocket(user);
-
-            const isNew = user?.profile?.name?.startsWith('nostr:');
-            if (isNew && user?.nostrPubkey) {
-                seedAfterTerms(user);
-            }
-            return { success: true, user, needsProfileSetup: isNew };
+            return { success: true, user };
         } catch (error) {
             return { success: false, error: error.message };
         }
@@ -408,84 +371,6 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
             if (error.cancelled) return { success: false, cancelled: true };
             return { success: false, error: error.message };
-        }
-    };
-
-    const loginWithPasskeyAndCheckNew = async () => {
-        const result = await loginWithPasskey();
-        if (!result.success) return result;
-
-        const isNew = result.user?.profile?.name?.startsWith('nostr:');
-        if (isNew && result.user?.nostrPubkey) {
-            seedAfterTerms(result.user);
-        }
-        return { ...result, needsProfileSetup: isNew };
-    };
-
-
-    /**
-     * For Nostr users who need to complete profile setup after first login.
-     * In the old flow, Signup.jsx was standalone.
-     * Now: loginWithNostr() → returns user with needsProfileSetup=true if new.
-     */
-    const loginWithNostrAndCheckNew = async () => {
-        const result = await loginWithNostr();
-        if (!result.success) return result;
-
-        // New users have a generated placeholder name like "nostr:abc12345"
-        const isNew = result.user?.profile?.name?.startsWith('nostr:');
-
-        // Auto-seed BIES profile from Nostr Kind 0 for new users
-        if (isNew && result.user?.nostrPubkey) {
-            seedAfterTerms(result.user);
-        }
-
-        return { ...result, needsProfileSetup: isNew };
-    };
-
-    /**
-     * Fetch the user's Kind 0 profile from public Nostr relays (Primal, Damus, etc.)
-     * and apply it to both the BIES API profile and the BIES relay (kind:0).
-     * This ensures the user's name/avatar from their existing Nostr identity
-     * shows up on BIES before they manually set it.
-     */
-    /** A new Nostr member's Nostr profile, copied in once they accept the terms. */
-    const seedAfterTerms = (newUser) => {
-        whenTermsAccepted(newUser)
-            .then((accepted) => accepted && seedProfileFromNostr(newUser.nostrPubkey))
-            .catch(() => {});
-    };
-
-    const seedProfileFromNostr = async (pubkey) => {
-        try {
-            // Explicitly fetch from public relays (Primal, Damus, etc.) since
-            // this is a new user whose profile won't be on the BIES relay yet
-            const nostrProfile = await nostrService.getProfile(pubkey, PUBLIC_RELAYS);
-            if (!nostrProfile) return;
-
-            const updates = {};
-            if (nostrProfile.display_name || nostrProfile.name) {
-                updates.name = nostrProfile.display_name || nostrProfile.name;
-            }
-            if (nostrProfile.about) updates.bio = nostrProfile.about;
-            if (nostrProfile.picture) updates.avatar = nostrProfile.picture;
-            if (nostrProfile.banner) updates.banner = nostrProfile.banner;
-            if (nostrProfile.website) updates.website = nostrProfile.website;
-
-            if (Object.keys(updates).length > 0) {
-                // Update the BIES backend profile (API)
-                await profilesApi.update(updates);
-
-                // Publish the kind:0 to the BIES relay so the name is visible
-                // to other users on the relay before the user edits their profile
-                try {
-                    await nostrService.updateProfileToBiesRelay(nostrProfile);
-                } catch (relayErr) {
-                    console.warn('[Auth] Failed to publish profile to BIES relay:', relayErr);
-                }
-            }
-        } catch (err) {
-            console.error('[Auth] Failed to seed profile from Nostr:', err);
         }
     };
 
@@ -536,17 +421,12 @@ export const AuthProvider = ({ children }) => {
             clearNotificationCount,
             refreshNotifications: fetchInitialNotifications,
             loginWithNostr,
-            loginWithNostrAndCheckNew,
             loginWithNsec,
-            loginWithNsecAndCheckNew,
             loginWithSeedPhrase,
-            loginWithSeedPhraseAndCheckNew,
             loginWithBunker,
-            loginWithBunkerAndCheckNew,
             loginWithNostrConnect,
             completeExternalLogin,
             loginWithPasskey,
-            loginWithPasskeyAndCheckNew,
             requestEmailCode,
             loginWithEmailCode,
             logout,
@@ -564,19 +444,22 @@ export const AuthProvider = ({ children }) => {
             {termsPending && (
                 <TermsGate user={user} onAccepted={handleTermsAccepted} onSignOut={logout} />
             )}
-            {showPasskeyPrompt && !termsPending && (
+            {profilePending && (
+                <ProfileGate key={user.id} user={user} onDone={refreshUser} onSignOut={logout} />
+            )}
+            {showPasskeyPrompt && !termsPending && !profilePending && (
                 <PasskeySavePrompt
                     onClose={dismissPasskeyPrompt}
                     onSaved={handlePasskeySaved}
                 />
             )}
-            {showMigratePrompt && !showPasskeyPrompt && !termsPending && (
+            {showMigratePrompt && !showPasskeyPrompt && !termsPending && !profilePending && (
                 <PasskeyMigratePrompt
                     onClose={dismissMigratePrompt}
                     onMigrated={handleMigrated}
                 />
             )}
-            {showPushPrompt && !showPasskeyPrompt && !showMigratePrompt && !termsPending && (
+            {showPushPrompt && !showPasskeyPrompt && !showMigratePrompt && !termsPending && !profilePending && (
                 <PushPermissionPrompt onClose={dismissPushPrompt} />
             )}
         </AuthContext.Provider>

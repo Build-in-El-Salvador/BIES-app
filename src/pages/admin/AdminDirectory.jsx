@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, XCircle, Star, ExternalLink, Trash2, Loader2, Search, RefreshCw, ShieldCheck } from 'lucide-react';
-import { adminApi } from '../../services/api';
+import { adminApi, directoryApi } from '../../services/api';
 
 // Members' listings go live at once (pending only while the server's
 // DIRECTORY_REQUIRE_APPROVAL is on), so staff mostly take listings down.
@@ -27,6 +27,38 @@ const AdminDirectory = () => {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
     const [recomputing, setRecomputing] = useState(false);
+    // Members who say they run a listing someone else added.
+    const [transfers, setTransfers] = useState([]);
+    const [answering, setAnswering] = useState(null);
+
+    const fetchTransfers = useCallback(async () => {
+        try {
+            const res = await adminApi.listDirectoryTransfers();
+            setTransfers(Array.isArray(res?.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to fetch ownership requests:', err);
+        }
+    }, []);
+    useEffect(() => { fetchTransfers(); }, [fetchTransfers]);
+
+    const answerTransfer = async (tr, accept) => {
+        const who = tr.toUser?.profile?.name || 'this member';
+        const question = accept
+            ? `Hand "${tr.listing.name}" over to ${who}? It becomes theirs straight away, and both members are told.`
+            : `Decline ${who}'s request for "${tr.listing.name}"? The listing stays with its owner.`;
+        if (!window.confirm(question)) return;
+        setAnswering(tr.id);
+        try {
+            await (accept ? directoryApi.acceptTransfer(tr.id) : directoryApi.declineTransfer(tr.id));
+            fetchTransfers();
+            fetchListings(pagination.page);
+        } catch (err) {
+            alert(err?.message || 'That didn\'t work');
+            fetchTransfers();
+        } finally {
+            setAnswering(null);
+        }
+    };
 
     const fetchListings = useCallback(async (page = 1) => {
         setLoading(true);
@@ -122,6 +154,37 @@ const AdminDirectory = () => {
                     Recompute Scores
                 </button>
             </div>
+
+            {transfers.length > 0 && (
+                <section className="ownership">
+                    <h2>Ownership requests</h2>
+                    <p className="subtitle">
+                        Members who say they run a listing someone else added. Its owner is asked first;
+                        step in when they can't or won't. To move any listing yourself, use Change owner in its ⋯ menu.
+                    </p>
+                    <ul className="ownership-list">
+                        {transfers.map((tr) => (
+                            <li key={tr.id} className="ownership-row">
+                                <div className="ownership-text">
+                                    <Link to={`/${tr.listing.type === 'FARM' ? 'farms' : 'trusted'}/${tr.listing.id}`} className="ownership-name">
+                                        {tr.listing.name}
+                                    </Link>
+                                    <div className="ownership-meta">
+                                        {tr.toUser?.profile?.name || 'A member'} asked on {new Date(tr.createdAt).toLocaleDateString()}
+                                        {' · '}owner: {tr.fromUser?.profile?.name || 'a member'}
+                                        {tr.ownerDeclinedAt && <strong> · the owner said no</strong>}
+                                    </div>
+                                    {tr.message && <div className="ownership-message">“{tr.message}”</div>}
+                                </div>
+                                <div className="ownership-actions">
+                                    <button className="own-btn" onClick={() => answerTransfer(tr, true)} disabled={answering === tr.id}>Hand over</button>
+                                    <button className="own-btn secondary" onClick={() => answerTransfer(tr, false)} disabled={answering === tr.id}>Decline</button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
 
             <div className="toolbar">
                 <div className="tabs">
@@ -277,6 +340,28 @@ const AdminDirectory = () => {
                     flex-wrap: wrap;
                 }
                 .subtitle { color: var(--color-gray-500); }
+                .ownership {
+                    margin-bottom: 1.5rem; padding: 1rem 1.25rem;
+                    border: 1px solid #bfdbfe; background: #eff6ff; border-radius: var(--radius-lg);
+                }
+                .ownership h2 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+                .ownership .subtitle { font-size: 0.875rem; margin: 0 0 0.75rem; }
+                .ownership-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+                .ownership-row {
+                    display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+                    padding: 0.75rem 1rem; background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: var(--radius-md);
+                }
+                .ownership-text { min-width: 0; flex: 1; }
+                .ownership-row :global(.ownership-name) { font-weight: 600; color: var(--color-primary); text-decoration: none; }
+                .ownership-meta { font-size: 0.85rem; color: var(--color-gray-600); margin-top: 2px; }
+                .ownership-message { font-size: 0.85rem; font-style: italic; color: var(--color-gray-700); margin-top: 4px; }
+                .ownership-actions { display: flex; gap: 0.5rem; }
+                .own-btn {
+                    padding: 0.45rem 0.9rem; border-radius: var(--radius-md); border: 1px solid var(--color-primary);
+                    background: var(--color-primary); color: white; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+                }
+                .own-btn.secondary { background: var(--color-surface); color: var(--color-primary); }
+                .own-btn:disabled { opacity: 0.6; cursor: not-allowed; }
                 .recompute-btn {
                     display: inline-flex;
                     align-items: center;

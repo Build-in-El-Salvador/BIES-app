@@ -1,14 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Heart, Repeat, MessageCircle } from 'lucide-react';
+import { Bell, Heart, Repeat, MessageCircle, Info } from 'lucide-react';
 import { nostrService, BIES_RELAY } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
+import { notificationsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { nip19 } from 'nostr-tools';
+
+// The app's own notices that belong in the bell beside the Feed activity:
+// a listing approved or taken down, a request to hand a listing over.
+const APP_TYPES = new Set(['SYSTEM']);
+const appData = (n) => {
+    if (n.data && typeof n.data === 'object') return n.data;
+    try { return JSON.parse(n.data || '{}'); } catch { return {}; }
+};
+// Only links inside the app.
+const appLink = (n) => {
+    const link = appData(n).link;
+    return typeof link === 'string' && /^\/(?!\/)/.test(link) ? link : null;
+};
 
 /**
  * NostrNotifications — subscribes to the BIES private relay for reactions,
  * reposts, and replies targeting the current user's posts.  Renders a bell
- * icon with unread count badge and a dropdown list of clickable notifications.
+ * icon with unread count badge and a dropdown list of clickable notifications,
+ * with the app's own notices (APP_TYPES) mixed in by time.
  */
 const NostrNotifications = ({ mobile = false }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -26,14 +42,24 @@ const NostrNotifications = ({ mobile = false }) => {
     const subRef = useRef(null);
     const postsSubRef = useRef(null);
 
-    const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
+    const { notifications: appNotifications, refreshNotifications } = useAuth();
+    useEffect(() => { refreshNotifications?.(); }, []);
+    const appItems = (appNotifications || [])
+        .filter((n) => APP_TYPES.has(n.type))
+        .map((n) => ({ id: `app:${n.id}`, app: n, createdAt: Math.floor(new Date(n.createdAt).getTime() / 1000) }));
+    const items = [...notifications, ...appItems].sort((a, b) => b.createdAt - a.createdAt);
+    const isUnread = (item) => (item.app ? !item.app.isRead : !readIds.has(item.id));
+    const unreadCount = items.filter(isUnread).length;
 
     // Persist read IDs
     const markAllRead = useCallback(() => {
         const allIds = new Set(notifications.map(n => n.id));
         setReadIds(allIds);
         localStorage.setItem('bies_notif_read', JSON.stringify([...allIds]));
-    }, [notifications]);
+        if (appItems.some(isUnread)) {
+            notificationsApi.markAllRead().then(() => refreshNotifications?.()).catch(() => {});
+        }
+    }, [notifications, appItems]);
 
     const markRead = useCallback((id) => {
         setReadIds(prev => {
@@ -200,8 +226,15 @@ const NostrNotifications = ({ mobile = false }) => {
     };
 
     const handleNotificationClick = (notif) => {
-        markRead(notif.id);
         setIsOpen(false);
+        if (notif.app) {
+            if (!notif.app.isRead) {
+                notificationsApi.markRead(notif.app.id).then(() => refreshNotifications?.()).catch(() => {});
+            }
+            navigate(appLink(notif.app) || '/notifications');
+            return;
+        }
+        markRead(notif.id);
         // Navigate to feed — the post should be visible in the private relay feed
         navigate('/feed', { state: { scrollToPost: notif.targetPostId } });
     };
@@ -234,7 +267,7 @@ const NostrNotifications = ({ mobile = false }) => {
                             )}
                         </div>
                         <div className="nostr-notif-list">
-                            {notifications.length === 0 ? (
+                            {items.length === 0 ? (
                                 <div className="nostr-notif-empty">
                                     <Bell size={24} style={{ opacity: 0.3, marginBottom: '8px' }} />
                                     <p>No notifications yet</p>
@@ -243,7 +276,23 @@ const NostrNotifications = ({ mobile = false }) => {
                                     </p>
                                 </div>
                             ) : (
-                                notifications.map(notif => (
+                                items.map(notif => notif.app ? (
+                                    <button
+                                        key={notif.id}
+                                        className={`nostr-notif-item ${isUnread(notif) ? 'unread' : ''}`}
+                                        onClick={() => handleNotificationClick(notif)}
+                                    >
+                                        <div className="nostr-notif-item-avatar">
+                                            <div className="nostr-notif-item-avatar-placeholder nostr-notif-app-icon"><Info size={18} /></div>
+                                        </div>
+                                        <div className="nostr-notif-item-body">
+                                            <p><strong>{notif.app.title}</strong></p>
+                                            {notif.app.body && <p className="nostr-notif-item-preview">{notif.app.body}</p>}
+                                            <span className="nostr-notif-item-time">{timeAgo(notif.createdAt)}</span>
+                                        </div>
+                                        {isUnread(notif) && <div className="nostr-notif-dot" />}
+                                    </button>
+                                ) : (
                                     <button
                                         key={notif.id}
                                         className={`nostr-notif-item ${!readIds.has(notif.id) ? 'unread' : ''}`}
@@ -434,6 +483,10 @@ const NostrNotifications = ({ mobile = false }) => {
                     height: 30px;
                     border-radius: 50%;
                     background: var(--color-gray-200, #e5e7eb);
+                }
+                .nostr-notif-app-icon {
+                    display: flex; align-items: center; justify-content: center;
+                    background: #e8eefb; color: var(--color-primary, #0047AB);
                 }
                 .nostr-notif-item-icon {
                     position: absolute;

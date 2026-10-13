@@ -497,3 +497,18 @@ describe('blocking a member', () => {
         expect((await call('POST', '/api/blocks', { token: vic.token, body: { userId: wes.id, pubkey: wes.pubkey } })).status).toBe(400);
     });
 });
+
+// ─── The members list ─────────────────────────────────────────────────────────
+
+describe('the members list', () => {
+    it("leaves out members who haven't chosen a BIES name yet", async () => {
+        const viewer = await member('Rosa Finished');
+        await member('nostr:ab12cd34');
+        const unnamed = await member('');
+        await prisma.profile.update({ where: { userId: unnamed.id }, data: { bio: 'zzunnamedtester' } });
+
+        expect(names((await call('GET', '/api/profiles?search=Rosa', { token: viewer.token })).body.data)).toContain('Rosa Finished');
+        expect((await call('GET', '/api/profiles?search=nostr:ab12', { token: viewer.token })).body.data).toEqual([]);
+        expect((await call('GET', '/api/profiles?search=zzunnamedtester', { token: viewer.token })).body.data).toEqual([]);
+    });
+});

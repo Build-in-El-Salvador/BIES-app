@@ -12,7 +12,7 @@ const CODE_LENGTH = 6;
  * creates the account, with a Nostr key BIES holds for the member. Used by
  * both Login and Signup.
  *
- * @param {(result: { user, isNewUser, needsProfileSetup }) => void} onSuccess
+ * @param {(result: { user, isNewUser }) => void} onSuccess
  */
 const EmailSignIn = ({ onSuccess }) => {
     const { t, i18n } = useTranslation();

@@ -422,3 +422,173 @@ describe('reading a listing', () => {
         expect(signedOut.body).toMatchObject({ vouchCount: 1, downvoteCount: 1 });
     });
 });
+
+// ─── Handing a listing to the member who runs it ─────────────────────────────
+
+describe('handing a listing over', () => {
+    const notes = (userId: string) => prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } });
+
+    it('a claim: the poster hands it over; it becomes the new owner’s own business', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const runner = await member();
+        const fan = await member();
+        await vote(runner, id, 1); // their vouch can't count once it's theirs
+        await vote(fan, id, 1);
+        expect((await row(id)).vouchCount).toBe(3);
+
+        const claim = await call('POST', `/api/directory/${id}/claim`, { token: runner.token, body: { message: 'I run it with my brother.' } });
+        expect(claim.status).toBe(201);
+        expect(claim.body).toMatchObject({ kind: 'claim', status: 'pending', fromUserId: poster.id, toUserId: runner.id });
+        // Asking twice doesn't open a second request.
+        const again = await call('POST', `/api/directory/${id}/claim`, { token: runner.token, body: {} });
+        expect(again.body.id).toBe(claim.body.id);
+        // The poster hears about it, with a link to the listing.
+        const [note] = await notes(poster.id);
+        expect(JSON.parse(note.data)).toMatchObject({ link: `/trusted/${id}`, transferId: claim.body.id });
+
+        // The poster sees the request on the listing; someone else doesn't.
+        expect((await call('GET', `/api/directory/${id}`, { token: poster.token })).body.transfers).toHaveLength(1);
+        expect((await call('GET', `/api/directory/${id}`, { token: fan.token })).body.transfers).toEqual([]);
+
+        // Only the poster (or staff) can grant it.
+        expect((await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: fan.token })).status).toBe(403);
+        expect((await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: runner.token })).status).toBe(403);
+        const granted = await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: poster.token });
+        expect(granted.status).toBe(200);
+
+        expect(await row(id)).toMatchObject({ ownerId: runner.id, isOwnBusiness: true, memberUserId: null, vouchCount: 2 });
+        expect(await prisma.directoryEndorsement.count({ where: { listingId: id, userId: runner.id } })).toBe(0);
+        // The poster's own recommendation stays and still counts.
+        expect(await prisma.directoryEndorsement.count({ where: { listingId: id, userId: poster.id } })).toBe(1);
+        // The new owner edits it now; the old one can't.
+        expect((await call('PUT', `/api/directory/${id}`, { token: runner.token, body: { hours: 'Mon–Fri' } })).status).toBe(200);
+        expect((await call('PUT', `/api/directory/${id}`, { token: poster.token, body: { hours: 'Never' } })).status).toBe(403);
+        // Answering twice is refused.
+        expect((await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: poster.token })).status).toBe(409);
+    });
+
+    it("a claim the poster says no to stays open for staff, who decide", async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const runner = await member();
+        const claim = await call('POST', `/api/directory/${id}/claim`, { token: runner.token, body: {} });
+        const no = await call('POST', `/api/directory/transfers/${claim.body.id}/decline`, { token: poster.token });
+        expect(no.body).toMatchObject({ status: 'pending', ownerDeclined: true });
+        expect((await row(id)).ownerId).toBe(poster.id);
+
+        const staff = await member({ role: 'MOD' });
+        const open = await call('GET', '/api/admin/directory/transfers', { token: staff.token });
+        const listed = open.body.data.find((t: any) => t.id === claim.body.id);
+        expect(listed.ownerDeclinedAt).toBeTruthy();
+        expect(listed.listing).toMatchObject({ id });
+
+        const granted = await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: staff.token });
+        expect(granted.status).toBe(200);
+        expect((await row(id)).ownerId).toBe(runner.id);
+        expect(await prisma.auditLog.count({ where: { action: 'DIRECTORY_LISTING_TRANSFERRED', resource: `directory:${id}` } })).toBe(1);
+        // Both members hear what happened.
+        expect((await notes(runner.id)).at(-1)!.title).toMatch(/is yours now/);
+        expect((await notes(poster.id)).at(-1)!.title).toMatch(/has a new owner/);
+    });
+
+    it('staff can close a claim for good', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const claimant = await member();
+        const claim = await call('POST', `/api/directory/${id}/claim`, { token: claimant.token, body: {} });
+        const staff = await member({ admin: true });
+        const closed = await call('POST', `/api/directory/transfers/${claim.body.id}/decline`, { token: staff.token });
+        expect(closed.body.status).toBe('declined');
+        expect((await row(id)).ownerId).toBe(poster.id);
+        expect((await notes(claimant.id)).at(-1)!.title).toMatch(/was declined/);
+    });
+
+    it('an offer: the poster picks the member who runs it, who accepts', async () => {
+        const poster = await member();
+        const id = await liveListing(poster, { type: 'FARM', category: undefined });
+        const farmer = await member();
+        const other = await member();
+
+        expect((await call('POST', `/api/directory/${id}/transfer`, { token: other.token, body: { toUserId: farmer.id } })).status).toBe(403);
+        const offer = await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: farmer.id } });
+        expect(offer.status).toBe(201);
+        expect(offer.body).toMatchObject({ kind: 'offer', toUserId: farmer.id });
+        expect(JSON.parse((await notes(farmer.id)).at(-1)!.data).link).toBe(`/farms/${id}`);
+        expect((await call('GET', `/api/directory/${id}`, { token: farmer.token })).body.transfers).toHaveLength(1);
+
+        // The poster can't accept their own offer.
+        expect((await call('POST', `/api/directory/transfers/${offer.body.id}/accept`, { token: poster.token })).status).toBe(403);
+        const took = await call('POST', `/api/directory/transfers/${offer.body.id}/accept`, { token: farmer.token });
+        expect(took.status).toBe(200);
+        expect(await row(id)).toMatchObject({ ownerId: farmer.id, isOwnBusiness: true });
+    });
+
+    it('an offer can be said no to, or taken back', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const a = await member();
+        const b = await member();
+        const first = await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: a.id } });
+        const no = await call('POST', `/api/directory/transfers/${first.body.id}/decline`, { token: a.token });
+        expect(no.body.status).toBe('declined');
+        expect((await row(id)).ownerId).toBe(poster.id);
+
+        const second = await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: b.id } });
+        expect((await call('POST', `/api/directory/transfers/${second.body.id}/cancel`, { token: b.token })).status).toBe(403);
+        expect((await call('POST', `/api/directory/transfers/${second.body.id}/cancel`, { token: poster.token })).body.status).toBe('cancelled');
+        expect((await call('POST', `/api/directory/transfers/${second.body.id}/accept`, { token: b.token })).status).toBe(409);
+    });
+
+    it('offering it to someone who already asked for it hands it over at once', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const runner = await member();
+        await call('POST', `/api/directory/${id}/claim`, { token: runner.token, body: {} });
+        const moved = await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: runner.id } });
+        expect(moved.body).toMatchObject({ moved: true, ownerId: runner.id });
+        expect(await prisma.listingTransfer.count({ where: { listingId: id, status: 'pending' } })).toBe(0);
+    });
+
+    it("refuses a member who doesn't exist, is banned, or is blocked", async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        expect((await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: 'nobody' } })).body.reason).toBe('no_member');
+        const banned = await member();
+        await prisma.user.update({ where: { id: banned.id }, data: { isBanned: true } });
+        expect((await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: banned.id } })).body.reason).toBe('no_member');
+        const blocked = await member();
+        await prisma.block.create({ data: { blockerId: poster.id, blockedId: blocked.id } });
+        expect((await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: blocked.id } })).body.reason).toBe('blocked');
+        // And you can't claim your own listing.
+        expect((await call('POST', `/api/directory/${id}/claim`, { token: poster.token, body: {} })).body.reason).toBe('already_owner');
+    });
+
+    it('staff can move a listing outright, and open requests close', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const claimant = await member();
+        const runner = await member();
+        await call('POST', `/api/directory/${id}/claim`, { token: claimant.token, body: {} });
+
+        expect((await call('POST', `/api/admin/directory/${id}/owner`, { token: claimant.token, body: { userId: claimant.id } })).status).toBe(403);
+        const staff = await member({ admin: true });
+        const moved = await call('POST', `/api/admin/directory/${id}/owner`, { token: staff.token, body: { userId: runner.id } });
+        expect(moved.status).toBe(200);
+        expect(await row(id)).toMatchObject({ ownerId: runner.id, isOwnBusiness: true });
+        expect(await prisma.listingTransfer.count({ where: { listingId: id, status: 'pending' } })).toBe(0);
+        expect(await prisma.listingTransfer.count({ where: { listingId: id, kind: 'staff', status: 'accepted' } })).toBe(1);
+    });
+
+    it('a request goes stale if the listing changed hands in between', async () => {
+        const poster = await member();
+        const id = await liveListing(poster);
+        const a = await member();
+        const offer = await call('POST', `/api/directory/${id}/transfer`, { token: poster.token, body: { toUserId: a.id } });
+        // Staff move it elsewhere without closing this one (e.g. an older request).
+        await prisma.directoryListing.update({ where: { id }, data: { ownerId: (await member()).id } });
+        const late = await call('POST', `/api/directory/transfers/${offer.body.id}/accept`, { token: a.token });
+        expect(late.status).toBe(409);
+        expect(late.body.reason).toBe('stale');
+    });
+});

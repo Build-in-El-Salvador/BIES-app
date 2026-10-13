@@ -274,6 +274,14 @@ export const directoryApi = {
     unsave: (id) => del(`/directory/${id}/save`),
 
     unendorse: (id) => del(`/directory/${id}/endorse`),
+
+    // Handing a listing to the member who runs it: their claim, the owner's
+    // offer, and the answers (accept / decline / cancel).
+    claim: (id, message = '') => post(`/directory/${id}/claim`, { message }),
+    offer: (id, toUserId, message = '') => post(`/directory/${id}/transfer`, { toUserId, message }),
+    acceptTransfer: (transferId) => post(`/directory/transfers/${transferId}/accept`, {}),
+    declineTransfer: (transferId) => post(`/directory/transfers/${transferId}/decline`, {}),
+    cancelTransfer: (transferId) => post(`/directory/transfers/${transferId}/cancel`, {}),
 };
 
 // ─── Marketplace (Shopstr / NIP-99) ──────────────────────────────────────────
@@ -611,6 +619,8 @@ export const adminApi = {
     featureDirectoryListing: (id, featured) => put(`/admin/directory/${id}/feature`, { featured }),
     recomputeDirectoryScores: () => post('/admin/directory/recompute', {}),
     deleteDirectoryListing: (id) => del(`/admin/directory/${id}`),
+    listDirectoryTransfers: () => get('/admin/directory/transfers'),
+    moveDirectoryListing: (id, userId) => post(`/admin/directory/${id}/owner`, { userId }),
     listCourses: (params = {}) => get('/admin/courses', params),
     reviewCourse: (id, action, note) => put(`/admin/courses/${id}/review`, note ? { action, note } : { action }),
     featureCourse: (id, featured) => put(`/admin/courses/${id}/feature`, { featured }),

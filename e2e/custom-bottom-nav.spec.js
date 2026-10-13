@@ -3,7 +3,7 @@ import { createTestUser } from './helpers/testUser.js';
 
 const API = 'http://localhost:3001/api';
 const STORAGE_KEY = 'bies_bottom_nav';
-const DEFAULT_TABS = ['feed', 'discover', 'events', 'media', 'dashboard'];
+const DEFAULT_TABS = ['feed', 'members', 'farms', 'trusted', 'profile'];
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
@@ -59,7 +59,7 @@ async function openCustomizer(page, request) {
     await expect(page.getByTestId('nav-dock')).toBeVisible({ timeout: 15000 });
     // Default dock is fully populated before any customization.
     await expect(page.getByTestId('dock-icon-feed')).toBeVisible();
-    await expect(page.getByTestId('dock-icon-dashboard')).toBeVisible();
+    await expect(page.getByTestId('dock-icon-profile')).toBeVisible();
 }
 
 async function storedTabs(page) {
@@ -76,29 +76,29 @@ test.describe('Customizable bottom navbar', () => {
         await pointerDrag(page, '[data-testid="grid-icon-news"]', '[data-testid="nav-dock"]');
 
         await expect(page.getByTestId('dock-icon-news')).toBeVisible();
-        // Rightmost default tab (dashboard) was evicted back to the grid.
-        await expect(page.getByTestId('grid-icon-dashboard')).toBeVisible();
-        await expect(page.getByTestId('dock-icon-dashboard')).toHaveCount(0);
+        // Rightmost default tab (profile) was evicted back to the grid.
+        await expect(page.getByTestId('grid-icon-profile')).toBeVisible();
+        await expect(page.getByTestId('dock-icon-profile')).toHaveCount(0);
 
         const stored = await storedTabs(page);
         expect(stored).toHaveLength(5);
         expect(stored).toContain('news');
-        expect(stored).not.toContain('dashboard');
+        expect(stored).not.toContain('profile');
     });
 
     test('drag a dock icon out to the grid removes it', async ({ page, request }) => {
         await openCustomizer(page, request);
 
-        await expect(page.getByTestId('dock-icon-media')).toBeVisible();
+        await expect(page.getByTestId('dock-icon-farms')).toBeVisible();
 
-        await pointerDrag(page, '[data-testid="dock-icon-media"]', '[data-testid="grid-icon-news"]');
+        await pointerDrag(page, '[data-testid="dock-icon-farms"]', '[data-testid="grid-icon-news"]');
 
-        await expect(page.getByTestId('grid-icon-media')).toBeVisible();
-        await expect(page.getByTestId('dock-icon-media')).toHaveCount(0);
+        await expect(page.getByTestId('grid-icon-farms')).toBeVisible();
+        await expect(page.getByTestId('dock-icon-farms')).toHaveCount(0);
 
         const stored = await storedTabs(page);
         expect(stored).toHaveLength(4);
-        expect(stored).not.toContain('media');
+        expect(stored).not.toContain('farms');
     });
 
     test('reset restores the default tabs', async ({ page, request }) => {
@@ -112,7 +112,7 @@ test.describe('Customizable bottom navbar', () => {
         await page.waitForTimeout(300);
 
         expect(await storedTabs(page)).toEqual(DEFAULT_TABS);
-        await expect(page.getByTestId('dock-icon-dashboard')).toBeVisible();
+        await expect(page.getByTestId('dock-icon-profile')).toBeVisible();
         await expect(page.getByTestId('grid-icon-news')).toBeVisible();
     });
 
@@ -124,7 +124,7 @@ test.describe('Customizable bottom navbar', () => {
 
         await page.goto('/feed');
         await expect(page.getByTestId('bottom-nav-news')).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId('bottom-nav-dashboard')).toHaveCount(0);
+        await expect(page.getByTestId('bottom-nav-profile')).toHaveCount(0);
     });
 
     test('customization persists across reload', async ({ page, request }) => {
