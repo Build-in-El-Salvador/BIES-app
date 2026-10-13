@@ -32,7 +32,8 @@ if (config.s3.endpoint && config.s3.accessKey) {
 }
 
 // ─── Local fallback directory ───
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
+// UPLOAD_DIR is for tests; the app keeps them next to the code (Dockerfile).
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
 const PUBLIC_DIR = path.join(UPLOAD_DIR, 'public');
 const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
 
@@ -64,10 +65,11 @@ const SAFE_EXTENSIONS: Record<string, string> = {
 
 /**
  * Generate a unique filename with a safe extension derived from MIME type.
+ * Never the uploader's own extension: "x.html" would be served as a web page.
+ * The name's shape is what uploads.service.ts recognises (UPLOAD_NAME).
  */
-function generateFilename(originalName: string, mimeType?: string): string {
-    // Derive extension from validated MIME type, falling back to original extension
-    const ext = (mimeType && SAFE_EXTENSIONS[mimeType]) || path.extname(originalName);
+function generateFilename(mimeType: string): string {
+    const ext = SAFE_EXTENSIONS[mimeType] || '';
     const hash = crypto.randomBytes(16).toString('hex');
     return `${Date.now()}-${hash}${ext}`;
 }
@@ -85,14 +87,13 @@ function validatePath(basedir: string, key: string): string {
 
 /**
  * Upload a public file (images, avatars).
- * Returns the public URL.
+ * Returns the public URL, and the file's name (for deletePublicFile).
  */
 export async function uploadPublicFile(
     fileBuffer: Buffer,
-    originalName: string,
     mimeType: string
-): Promise<string> {
-    const filename = generateFilename(originalName, mimeType);
+): Promise<{ url: string; name: string }> {
+    const filename = generateFilename(mimeType);
     const key = `media/${filename}`;
 
     if (s3Client) {
@@ -106,15 +107,16 @@ export async function uploadPublicFile(
             })
         );
 
-        return config.s3.publicUrl
+        const url = config.s3.publicUrl
             ? `${config.s3.publicUrl}/${key}`
             : `${config.s3.endpoint}/${config.s3.bucket}/${key}`;
+        return { url, name: filename };
     }
 
     // Local fallback
     const filePath = validatePath(PUBLIC_DIR, filename);
     fs.writeFileSync(filePath, fileBuffer);
-    return `${BASE_PATH}/uploads/public/${filename}`;
+    return { url: `${BASE_PATH}/uploads/public/${filename}`, name: filename };
 }
 
 /**
@@ -123,10 +125,9 @@ export async function uploadPublicFile(
  */
 export async function uploadPrivateFile(
     fileBuffer: Buffer,
-    originalName: string,
     mimeType: string
-): Promise<string> {
-    const filename = generateFilename(originalName, mimeType);
+): Promise<{ key: string; name: string }> {
+    const filename = generateFilename(mimeType);
     const key = `decks/${filename}`;
 
     if (s3Client) {
@@ -140,13 +141,13 @@ export async function uploadPrivateFile(
             })
         );
 
-        return key;
+        return { key, name: filename };
     }
 
     // Local fallback
     const filePath = validatePath(PRIVATE_DIR, filename);
     fs.writeFileSync(filePath, fileBuffer);
-    return `private/${filename}`;
+    return { key: `private/${filename}`, name: filename };
 }
 
 /**
@@ -185,4 +186,13 @@ export async function deleteFile(key: string): Promise<void> {
     if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
     }
+}
+
+/**
+ * Delete an uploaded file by its name (uploadPublicFile / uploadPrivateFile),
+ * wherever it is kept.
+ */
+export async function deleteStoredFile(name: string, isPrivate = false): Promise<void> {
+    if (s3Client) return deleteFile(`${isPrivate ? 'decks' : 'media'}/${name}`);
+    return deleteFile(`${isPrivate ? 'private' : 'public'}/${name}`);
 }

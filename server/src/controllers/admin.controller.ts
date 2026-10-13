@@ -25,6 +25,7 @@ import {
 import { BADGES } from '../services/badges.catalog';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
+import { deleteListingAndFiles } from './directory.controller';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -1620,7 +1621,12 @@ export async function recomputeDirectoryScores(req: Request, res: Response): Pro
  */
 export async function deleteDirectoryListing(req: Request, res: Response): Promise<void> {
     try {
-        await prisma.directoryListing.delete({ where: { id: req.params.id } });
+        const exists = await prisma.directoryListing.count({ where: { id: req.params.id } });
+        if (!exists) {
+            res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        await deleteListingAndFiles(req.params.id, req.user!.id);
 
         await prisma.auditLog.create({
             data: {

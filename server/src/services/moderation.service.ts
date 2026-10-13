@@ -22,6 +22,7 @@ import { sendEmail } from './email.service';
 import { cache } from './redis.service';
 import { nip19 } from 'nostr-tools';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
+import { linksIn, uploadNameOf } from './uploads.service';
 
 export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo'] as const;
 export const REPORT_REASONS = [
@@ -124,6 +125,14 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
         }
         author = event.pubkey;
         snapshot = event.content.slice(0, MAX_DETAILS);
+        // Its photos' links too, when the text was cut or they're only in
+        // imeta tags: they're how removing it deletes its photos
+        // (moderation.controller.ts adminRemoveReportedNote).
+        const media = [...linksIn(event.content), ...event.tags
+            .filter((t) => Array.isArray(t) && t[0] === 'imeta')
+            .flatMap((t) => t.slice(1).filter((v) => typeof v === 'string' && v.startsWith('url ')).map((v) => v.slice(4)))]
+            .filter((url) => uploadNameOf(url) && !snapshot.includes(url));
+        if (media.length) snapshot = `${snapshot}\n${[...new Set(media)].join('\n')}`;
     }
 
     const targetUserId = await responsibleMember(input.targetType, input.targetId, author);

@@ -65,6 +65,7 @@ model User {
   directoryListings     DirectoryListing[]     @relation("DirectoryListingsOwned")
   directoryMemberships  DirectoryListing[]     @relation("DirectoryListingsAsMember")
   albums                Album[]
+  uploads               Upload[]
   directoryEndorsements DirectoryEndorsement[]
   savedListings         SavedListing[]
   listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
@@ -1002,6 +1003,26 @@ model AlbumPhoto {
 }
 
 // A member saved a listing for later (Google Maps "Save", Yelp bookmarks).
+// The files members upload (POST /upload/media, /upload/deck) and who
+// uploaded each, so a file can be deleted with what showed it, and an
+// account's files with the account (services/uploads.service.ts).
+model Upload {
+  id        String   @id @default(cuid())
+  // The stored file's name (storage.service.ts generateFilename)
+  name      String   @unique
+  userId    String?  @map("user_id")
+  mimeType  String   @default("") @map("mime_type")
+  size      Int      @default(0)
+  // A pitch deck (uploadPrivateFile), kept apart from the public files
+  isPrivate Boolean  @default(false) @map("is_private")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("uploads")
+}
+
 model SavedListing {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
