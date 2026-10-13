@@ -33,6 +33,7 @@ import EditEvent from './pages/EditEvent';
 import MyEvents from './pages/MyEvents';
 import Team from './pages/Team';
 import PublicProfile from './pages/PublicProfile';
+import FollowList from './pages/FollowList';
 import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import Messages from './pages/Messages';
@@ -252,6 +253,8 @@ const AppContent = () => {
                     } />
                     <Route path="/events/:id" element={<FeatureRoute flag="events"><ProtectedRoute><EventDetail /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/members" element={<ProtectedRoute><Discover key="members" membersOnly /></ProtectedRoute>} />
+                    <Route path="/members/:userId/followers" element={<ProtectedRoute><FollowList key="followers" kind="followers" /></ProtectedRoute>} />
+                    <Route path="/members/:userId/following" element={<ProtectedRoute><FollowList key="following" kind="following" /></ProtectedRoute>} />
                     <Route path="/builders" element={<Navigate to="/discover" replace />} />
                     <Route path="/builder/:id" element={<ProtectedRoute><PublicProfile type="builder" /></ProtectedRoute>} />
                     <Route path="/investors" element={<Navigate to="/discover" replace />} />

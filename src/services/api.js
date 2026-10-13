@@ -256,7 +256,7 @@ export const projectsApi = {
 
 export const directoryApi = {
     list: (params = {}) => get('/directory', params),
-    // params: { type, search, certified, btc, language, sort, page, limit, ownerId }
+    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved }
 
     get: (id) => get(`/directory/${id}`),
 
@@ -268,6 +268,10 @@ export const directoryApi = {
 
     // A review: vote 1 vouches, -1 doesn't recommend (and needs a comment).
     endorse: (id, { vote = 1, comment = '' } = {}) => post(`/directory/${id}/endorse`, { vote, comment }),
+
+    // Keep a listing for later (answers { saved }).
+    save: (id) => post(`/directory/${id}/save`),
+    unsave: (id) => del(`/directory/${id}/save`),
 
     unendorse: (id) => del(`/directory/${id}/endorse`),
 };

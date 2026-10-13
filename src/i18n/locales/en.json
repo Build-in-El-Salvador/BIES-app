@@ -59,7 +59,7 @@
   },
   "nav": {
     "discover": "Discover",
-    "trusted": "BIES Trusted",
+    "trusted": "Businesses",
     "members": "Members",
     "events": "Events",
     "media": "Media",
@@ -101,7 +101,7 @@
     "adminPanel": "Admin Panel",
     "leaderboard": "Leaderboard",
     "farmDirectory": "Regenerative Farm Directory",
-    "certifiedDirectory": "BIES Trusted",
+    "certifiedDirectory": "Businesses",
     "bounties": "Bounty Board",
     "wallet": "Wallet",
     "profile": "Profile",
@@ -779,7 +779,9 @@
     "showMoreComments_plural": "Show {{count}} more comments",
     "loadMore": "Load More",
     "loading": "Loading...",
-    "searching": "Searching..."
+    "searching": "Searching...",
+    "deleteReply": "Delete",
+    "deleteReplyConfirm": "Delete this reply?"
   },
   "nostrFeed": {
     "publicTab": "Public",
@@ -1671,13 +1673,13 @@
   },
   "directory": {
     "farmTitle": "Farm Directory",
-    "certifiedTitle": "BIES Trusted",
+    "certifiedTitle": "Businesses",
     "searchFarms": "Search farms, products, or locations",
     "searchProviders": "Search businesses, services or places",
     "sectionFarms": "Regenerative Farms",
     "sectionFarmsSub": "Local farms across El Salvador that BIES members vouch for",
-    "sectionCertified": "BIES Trusted",
-    "sectionCertifiedSub": "Businesses and services BIES members vouch for",
+    "sectionCertified": "Businesses",
+    "sectionCertifiedSub": "Local businesses and services BIES members recommend",
     "directoriesSection": "Directories",
     "addListing": "Add Listing",
     "whatTheyProduce": "What They Produce",
@@ -1845,14 +1847,22 @@
       "directions": "Directions",
       "website": "Website",
       "share": "Share",
-      "copied": "Copied"
+      "copied": "Copied",
+      "save": "Save",
+      "saved": "Saved"
     },
     "moreDetails": "More details (optional)",
     "moreDetailsHint": "Photos, about, opening hours, phone, WhatsApp, website…",
-    "aboutHeading": "About and hours",
+    "aboutHeading": "About, hours and map",
     "addMyFarm": "Add my farm",
     "addMyBusiness": "Add my business",
-    "postRecommendation": "Post recommendation"
+    "postRecommendation": "Post recommendation",
+    "noSaved": "Nothing saved yet. Tap Save on a farm or business to keep it here.",
+    "mapUrlLabel": "Map link",
+    "mapUrlHint": "For exact directions, paste the place’s link from Google Maps or Apple Maps (Share → Copy link).",
+    "alreadyListed": "Already on BIES? Recommend it instead of adding it again:",
+    "recommendThisOne": "Recommend this one",
+    "viewListing": "View"
   },
   "marketplace": {
     "entryLabel": "Marketplace",
@@ -1926,7 +1936,7 @@
     "discover": "Discover",
     "members": "Members",
     "farms": "Farms",
-    "trusted": "Trusted",
+    "trusted": "Businesses",
     "events": "Events",
     "news": "News",
     "dashboard": "Dashboard",
@@ -2443,5 +2453,9 @@
       "mutedIntro": "Accounts outside BIES whose posts and messages are hidden on this device."
     },
     "unmute": "Unmute"
+  },
+  "follow": {
+    "noFollowers": "No followers yet.",
+    "noFollowing": "Not following anyone yet."
   }
 }

@@ -19,6 +19,9 @@ export const DIRECTORY_CATEGORIES = [
 /** A downvote must say why, in at least this many characters. */
 export const DOWNVOTE_REASON_MIN = 20;
 
+/** A link to the place on a map app (Google, Apple, Waze, OpenStreetMap), for Directions. */
+const MAPS_URL = /^https:\/\/((www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+\/|maps\.app\.goo\.gl\/|goo\.gl\/maps|maps\.apple\.com\/|(www\.)?waze\.com\/|(www\.)?openstreetmap\.org\/)/i;
+
 export const createDirectoryListingSchema = z.object({
     type: z.enum(['FARM', 'PROVIDER']),
     name: z.string().min(1).max(120),
@@ -50,6 +53,7 @@ export const createDirectoryListingSchema = z.object({
     bestFor: z.string().max(200).optional(),
     pricing: z.string().max(200).optional(),
     comment: z.string().max(500).optional(),
+    mapUrl: z.string().max(500).regex(MAPS_URL, 'Use a Google Maps, Apple Maps, Waze or OpenStreetMap link').optional().or(z.literal('')),
     memberUserId: z.string().optional().or(z.literal('')),
 });
 
@@ -71,7 +75,7 @@ const ALLOWED_FIELDS = [
     'type', 'name', 'category', 'hours', 'isOwnBusiness', 'about', 'photo', 'logo', 'photos', 'location',
     'phone', 'whatsapp', 'email', 'website', 'instagram', 'languages',
     'btcAccepted', 'products', 'practices', 'skills', 'bestFor',
-    'pricing', 'comment',
+    'pricing', 'comment', 'mapUrl',
 ];
 const STAFF_FIELDS = ['memberUserId'];
 
@@ -155,7 +159,7 @@ function mirrorToNostr(listing: any): void {
 export async function listListings(req: Request, res: Response): Promise<void> {
     try {
         const {
-            type, search, certified, btc, language, ownerId, category,
+            type, search, certified, btc, language, ownerId, category, saved,
             page = '1', limit = '20',
             sort = 'newest',
         } = req.query;
@@ -175,6 +179,8 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             }
         }
         if (certified === 'true') where.isCertified = true;
+        // The viewer's saved listings (signed out: none).
+        if (saved === 'true') where.saves = { some: { userId: req.user?.id ?? '' } };
         if (category && typeof category === 'string') where.category = category;
         if (btc === 'true') where.btcAccepted = true;
         if (language && typeof language === 'string') {
@@ -273,7 +279,13 @@ export async function getListing(req: Request, res: Response): Promise<void> {
         }
         // Reviews are for members: signed out, only the counts.
         const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
-        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD };
+        const savedByMe = req.user
+            ? !!(await prisma.savedListing.findUnique({
+                where: { userId_listingId: { userId: req.user.id, listingId: listing.id } },
+                select: { id: true },
+            }))
+            : false;
+        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({
@@ -506,5 +518,35 @@ export async function removeEndorsement(req: Request, res: Response): Promise<vo
     } catch (error) {
         console.error('Remove endorsement error:', error);
         res.status(500).json({ error: 'Failed to remove endorsement' });
+    }
+}
+
+/**
+ * POST /directory/:id/save — keep a listing for later (Google Maps "Save").
+ * DELETE /directory/:id/save — forget it. Both answer { saved }.
+ */
+export async function saveListing(req: Request, res: Response): Promise<void> {
+    try {
+        const listing = await prisma.directoryListing.findUnique({ where: { id: req.params.id }, select: { id: true } });
+        if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+        await prisma.savedListing.upsert({
+            where: { userId_listingId: { userId: req.user!.id, listingId: listing.id } },
+            create: { userId: req.user!.id, listingId: listing.id },
+            update: {},
+        });
+        res.json({ saved: true });
+    } catch (error) {
+        console.error('Save directory listing error:', error);
+        res.status(500).json({ error: 'Failed to save listing' });
+    }
+}
+
+export async function unsaveListing(req: Request, res: Response): Promise<void> {
+    try {
+        await prisma.savedListing.deleteMany({ where: { userId: req.user!.id, listingId: req.params.id } });
+        res.json({ saved: false });
+    } catch (error) {
+        console.error('Unsave directory listing error:', error);
+        res.status(500).json({ error: 'Failed to unsave listing' });
     }
 }

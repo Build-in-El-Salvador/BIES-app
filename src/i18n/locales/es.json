@@ -59,7 +59,7 @@
   },
   "nav": {
     "discover": "Descubrir",
-    "trusted": "Confianza BIES",
+    "trusted": "Negocios",
     "members": "Miembros",
     "events": "Eventos",
     "media": "Medios",
@@ -101,7 +101,7 @@
     "adminPanel": "Panel de Admin",
     "leaderboard": "Clasificacion",
     "farmDirectory": "Directorio de Fincas Regenerativas",
-    "certifiedDirectory": "Negocios de confianza",
+    "certifiedDirectory": "Negocios",
     "bounties": "Tablero de recompensas",
     "wallet": "Billetera",
     "profile": "Perfil",
@@ -738,7 +738,9 @@
     "showMoreComments_plural": "Mostrar {{count}} comentarios mas",
     "loadMore": "Cargar Mas",
     "loading": "Cargando...",
-    "searching": "Buscando..."
+    "searching": "Buscando...",
+    "deleteReply": "Eliminar",
+    "deleteReplyConfirm": "¿Eliminar esta respuesta?"
   },
   "nostrFeed": {
     "publicTab": "Publico",
@@ -1672,13 +1674,13 @@
   },
   "directory": {
     "farmTitle": "Directorio de Fincas",
-    "certifiedTitle": "Negocios de confianza",
+    "certifiedTitle": "Negocios",
     "searchFarms": "Buscar fincas, productos o ubicaciones",
     "searchProviders": "Busca negocios, servicios o lugares",
     "sectionFarms": "Fincas Regenerativas",
     "sectionFarmsSub": "Fincas locales en El Salvador que los miembros de BIES recomiendan",
-    "sectionCertified": "Negocios de confianza",
-    "sectionCertifiedSub": "Negocios y servicios que los miembros de BIES recomiendan",
+    "sectionCertified": "Negocios",
+    "sectionCertifiedSub": "Negocios y servicios locales que los miembros de BIES recomiendan",
     "directoriesSection": "Directorios",
     "addListing": "Agregar Listado",
     "whatTheyProduce": "Que Producen",
@@ -1846,14 +1848,22 @@
       "directions": "Cómo llegar",
       "website": "Sitio web",
       "share": "Compartir",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "save": "Guardar",
+      "saved": "Guardados"
     },
     "moreDetails": "Más detalles (opcional)",
     "moreDetailsHint": "Fotos, descripción, horario, teléfono, WhatsApp, sitio web…",
-    "aboutHeading": "Descripción y horario",
+    "aboutHeading": "Descripción, horario y mapa",
     "addMyFarm": "Agregar mi finca",
     "addMyBusiness": "Agregar mi negocio",
-    "postRecommendation": "Publicar recomendación"
+    "postRecommendation": "Publicar recomendación",
+    "noSaved": "Aún no has guardado nada. Toca Guardar en una finca o negocio para tenerlo aquí.",
+    "mapUrlLabel": "Enlace del mapa",
+    "mapUrlHint": "Para indicaciones exactas, pega el enlace del lugar en Google Maps o Apple Maps (Compartir → Copiar enlace).",
+    "alreadyListed": "¿Ya está en BIES? Recomiéndalo en vez de agregarlo otra vez:",
+    "recommendThisOne": "Recomendar este",
+    "viewListing": "Ver"
   },
   "marketplace": {
     "entryLabel": "Mercado",
@@ -1927,7 +1937,7 @@
     "discover": "Descubrir",
     "members": "Miembros",
     "farms": "Fincas",
-    "trusted": "Confianza",
+    "trusted": "Negocios",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",
@@ -2444,5 +2454,9 @@
       "mutedIntro": "Cuentas fuera de BIES cuyas publicaciones y mensajes están ocultos en este dispositivo."
     },
     "unmute": "Dejar de silenciar"
+  },
+  "follow": {
+    "noFollowers": "Aún no tiene seguidores.",
+    "noFollowing": "Aún no sigue a nadie."
   }
 }

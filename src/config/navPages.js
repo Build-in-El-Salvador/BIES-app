@@ -19,7 +19,7 @@ import {
   MessageCircle,
   Wallet,
   Leaf,
-  ShieldCheck,
+  Building2,
   Users,
 } from 'lucide-react';
 import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags.js';
@@ -35,7 +35,8 @@ export const NAV_PAGES = [
   { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover', flag: 'projects' },
   { id: 'members', path: '/members', icon: Users, labelKey: 'mobileNav.members', auth: true },
   { id: 'farms', path: '/farms', icon: Leaf, labelKey: 'mobileNav.farms', auth: true, flag: 'directories' },
-  { id: 'trusted', path: '/trusted', icon: ShieldCheck, labelKey: 'mobileNav.trusted', auth: true, flag: 'directories' },
+  // Businesses (route /trusted): "BIES Trusted" is the badge a listing earns there.
+  { id: 'trusted', path: '/trusted', icon: Building2, labelKey: 'mobileNav.trusted', auth: true, flag: 'directories' },
   // Spread conditionally so the entry is absent (not just hidden) when the
   // build-time constant is off; the `flag:` key layers the runtime toggle on top.
   ...(MARKETPLACE_ENABLED

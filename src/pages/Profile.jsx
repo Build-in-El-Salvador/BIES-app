@@ -65,8 +65,11 @@ const Profile = () => {
         const pubkey = profile?.nostrPubkey || user?.nostrPubkey;
         if (pubkey) {
             nostrService.getProfile(pubkey).then(setNostrProfile).catch(() => { });
-            nostrService.getFollowerCount(pubkey).then(setNostrFollowers).catch(() => { });
-            nostrService.getFollowingCount(pubkey).then(setNostrFollowing).catch(() => { });
+            // Public Nostr follower counts (relay.nostr.band): website only
+            if (!isNativePlatform()) {
+                nostrService.getFollowerCount(pubkey).then(setNostrFollowers).catch(() => { });
+                nostrService.getFollowingCount(pubkey).then(setNostrFollowing).catch(() => { });
+            }
         }
     }, [profile?.nostrPubkey, user?.nostrPubkey]);
 
@@ -76,11 +79,11 @@ const Profile = () => {
         if (!userId) return;
         profilesApi.getFollowers(userId).then(res => {
             const list = res?.data || res || [];
-            setBiesFollowers(list.length);
+            setBiesFollowers(res?.pagination?.total ?? list.length);
         }).catch(() => { });
         profilesApi.getFollowing(userId).then(res => {
             const list = res?.data || res || [];
-            setBiesFollowing(list.length);
+            setBiesFollowing(res?.pagination?.total ?? list.length);
         }).catch(() => { });
     }, [profile?.user?.id, user?.id]);
 
@@ -196,18 +199,18 @@ const Profile = () => {
                             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                                 {/* BIES stats */}
                                 <div style={{ display: 'flex', gap: '1.5rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    <Link to={`/members/${profile?.user?.id || user?.id}/followers`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', minHeight: 44 }}>
                                         <Users size={16} style={{ color: 'var(--color-primary)' }} />
                                         <span style={{ fontWeight: 700, color: 'var(--color-gray-900)', fontFamily: 'var(--font-display)' }}>{biesFollowers}</span>
                                         <span style={{ color: 'var(--color-gray-500)', fontSize: '0.875rem' }}>Followers</span>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                    </Link>
+                                    <Link to={`/members/${profile?.user?.id || user?.id}/following`} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none', minHeight: 44 }}>
                                         <span style={{ fontWeight: 700, color: 'var(--color-gray-900)', fontFamily: 'var(--font-display)' }}>{biesFollowing}</span>
                                         <span style={{ color: 'var(--color-gray-500)', fontSize: '0.875rem' }}>Following</span>
-                                    </div>
+                                    </Link>
                                 </div>
                                 {/* Nostr stats */}
-                                {nostrFollowers !== null && (
+                                {!isNativePlatform() && nostrFollowers !== null && (
                                     <div style={{ display: 'flex', gap: '1.5rem', paddingLeft: '1.5rem', borderLeft: '1px solid var(--color-gray-200)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                             <NostrIcon size={14} className="text-purple-500" />
