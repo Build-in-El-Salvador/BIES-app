@@ -20,6 +20,7 @@ import SignerToast from './components/SignerToast';
 // Pages
 import Landing from './pages/Landing';
 import Feed from './pages/Feed';
+import Home from './pages/Home';
 import Discover from './pages/Discover';
 import Members from './pages/Members';
 import Builders from './pages/Builders';
@@ -117,7 +118,7 @@ const ProtectedRoute = ({ children }) => {
 const PublicRoute = ({ children }) => {
     const { user, loading } = useAuth();
     if (loading) return null;
-    if (user) return <Navigate to="/feed" replace />;
+    if (user) return <Navigate to="/home" replace />;
     return children;
 };
 
@@ -128,7 +129,7 @@ const AdminRoute = ({ children }) => {
 
     if (loading) return <div className="p-10 text-center">Loading...</div>;
     if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-    if (!isStaff) return <Navigate to="/feed" replace />;
+    if (!isStaff) return <Navigate to="/home" replace />;
 
     return children;
 };
@@ -201,7 +202,10 @@ const AppContent = () => {
             <div className="app-content">
                 <Routes>
                     {/* Public Routes */}
-                    <Route path="/" element={user ? <Navigate to="/feed" replace /> : <Navigate to="/login" replace />} />
+                    <Route path="/" element={user ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
+                    <Route path="/home" element={
+                        <ProtectedRoute><Home /></ProtectedRoute>
+                    } />
                     <Route path="/feed" element={
                         <ProtectedRoute><Feed /></ProtectedRoute>
                     } />
@@ -348,7 +352,7 @@ const AppContent = () => {
                     } />
 
                     {/* Old link: the name-and-photo step now opens over the app (ProfileGate). */}
-                    <Route path="/profile-setup" element={<Navigate to="/feed" replace />} />
+                    <Route path="/profile-setup" element={<Navigate to="/home" replace />} />
                     <Route path="/profile" element={
                         <ProtectedRoute>
                             <Profile />

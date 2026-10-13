@@ -343,7 +343,7 @@ export const AuthProvider = ({ children }) => {
     const completeExternalLogin = (user) => {
         setUser(user);
         initWebSocket(user);
-        return '/feed';
+        return '/home';
     };
 
     /**

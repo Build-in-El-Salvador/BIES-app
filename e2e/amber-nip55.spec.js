@@ -103,7 +103,7 @@ test.describe('NIP-55 Amber login', () => {
         await page.goto(`${callback2}${encodeURIComponent(JSON.stringify(signed))}`);
 
         // ── JWT established, amber mode active ──
-        await page.waitForURL(/\/(feed|profile-setup|dashboard)/, { timeout: 30_000 });
+        await page.waitForURL(/\/(home|feed|dashboard)/, { timeout: 30_000 });
         const stored = await page.evaluate(() => ({
             token: localStorage.getItem('bies_token'),
             method: localStorage.getItem('bies_login_method'),

@@ -52,7 +52,7 @@ test.describe('NIP-46 nostrconnect QR login', () => {
         bunker.approveNostrConnect(uri);
 
         // Pairing → challenge login → app
-        await page.waitForURL(/\/(feed|profile-setup|dashboard)/, { timeout: 60_000 });
+        await page.waitForURL(/\/(home|feed|dashboard)/, { timeout: 60_000 });
 
         const methods = bunker.requests.map(r => r.method);
         expect(methods).toContain('get_public_key');

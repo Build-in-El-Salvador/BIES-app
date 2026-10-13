@@ -1947,6 +1947,7 @@
     }
   },
   "mobileNav": {
+    "homePage": "Home",
     "home": "Feed",
     "discover": "Discover",
     "members": "Members",
@@ -2489,5 +2490,27 @@
     "notImage": "Please choose a photo.",
     "uploadFailed": "The photo didn't upload. Please try again.",
     "saveFailed": "Your profile wasn't saved. Please try again."
+  },
+  "home": {
+    "title": "Explore the Ecosystem",
+    "subtitle": "Discover people, businesses, and opportunities in El Salvador.",
+    "cards": {
+      "community": {
+        "title": "Community",
+        "desc": "Meet and connect with people in the BIES network."
+      },
+      "farms": {
+        "title": "Regenerative Farms",
+        "desc": "Discover farms, producers, and regenerative projects."
+      },
+      "businesses": {
+        "title": "Business Directory",
+        "desc": "Find local businesses and services in El Salvador."
+      },
+      "opportunities": {
+        "title": "Opportunities",
+        "desc": "Explore jobs, partnerships, events, and more."
+      }
+    }
   }
 }

@@ -90,7 +90,7 @@ const Navbar = () => {
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Link to={isAuthenticated ? "/feed" : "/"} className="logo">
+          <Link to={isAuthenticated ? "/home" : "/"} className="logo">
             <img src={logoHorizontalWhite} alt="Build in El Salvador" className="logo-desktop" style={{ height: '40px' }} />
             <img src={logoIconDark} alt="BIES" className="logo-mobile-pwa" style={{ height: '36px', display: 'none' }} />
           </Link>

@@ -1948,6 +1948,7 @@
     }
   },
   "mobileNav": {
+    "homePage": "Inicio",
     "home": "Feed",
     "discover": "Descubrir",
     "members": "Miembros",
@@ -2490,5 +2491,27 @@
     "notImage": "Elige una foto.",
     "uploadFailed": "La foto no se subió. Inténtalo de nuevo.",
     "saveFailed": "Tu perfil no se guardó. Inténtalo de nuevo."
+  },
+  "home": {
+    "title": "Explora el ecosistema",
+    "subtitle": "Descubre personas, negocios y oportunidades en El Salvador.",
+    "cards": {
+      "community": {
+        "title": "Comunidad",
+        "desc": "Conoce y conecta con personas de la red BIES."
+      },
+      "farms": {
+        "title": "Fincas regenerativas",
+        "desc": "Descubre fincas, productores y proyectos regenerativos."
+      },
+      "businesses": {
+        "title": "Directorio de negocios",
+        "desc": "Encuentra negocios y servicios locales en El Salvador."
+      },
+      "opportunities": {
+        "title": "Oportunidades",
+        "desc": "Explora empleos, alianzas, eventos y más."
+      }
+    }
   }
 }

@@ -1,6 +1,7 @@
 // Single source of truth for navigable pages — shared by the customizable
 // mobile bottom navbar (MobileBottomNav / CustomizeNavbar) and the Cowork feature.
 import {
+  Home,
   MessageSquare,
   Compass,
   Calendar,
@@ -14,7 +15,6 @@ import {
   Target,
   Trophy,
   GraduationCap,
-  UserCircle,
   Settings,
   MessageCircle,
   Wallet,
@@ -30,6 +30,7 @@ import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags.js';
 // The stored preference keeps the id, so re-enabling the feature restores
 // the user's tab untouched.
 export const NAV_PAGES = [
+  { id: 'home', path: '/home', icon: Home, labelKey: 'mobileNav.homePage', auth: true },
   { id: 'feed', path: '/feed', icon: MessageSquare, labelKey: 'mobileNav.home' },
   // Discover is projects + members; with projects off it's the same as Members.
   { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover', flag: 'projects' },
@@ -55,14 +56,19 @@ export const NAV_PAGES = [
     ? [{ id: 'bounties', path: '/bounties', icon: Target, labelKey: 'nav.bounties', auth: true, flag: 'bounties' }]
     : []),
   { id: 'leaderboard', path: '/leaderboard', icon: Trophy, labelKey: 'nav.leaderboard', auth: true, flag: 'points' },
-  { id: 'profile', path: '/profile', icon: UserCircle, labelKey: 'nav.profile', auth: true },
   { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings', auth: true },
   { id: 'feedback', path: '/feedback', icon: MessageCircle, labelKey: 'customNav.pages.feedback', flag: 'feedback' },
 ];
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));
 
-export const DEFAULT_BOTTOM_NAV = ['feed', 'members', 'farms', 'trusted', 'profile'];
+// Profile is in the side menu, not the bar (Oct 2026).
+export const DEFAULT_BOTTOM_NAV = ['home', 'feed', 'members', 'farms', 'trusted'];
+
+// Bars saved before Home: the old default becomes the new one, and a
+// customized bar's Profile tab becomes Home.
+const PREVIOUS_DEFAULT = ['feed', 'members', 'farms', 'trusted', 'profile'];
+const RETIRED = { profile: 'home' };
 
 export const MAX_TABS = 5;
 export const MIN_TABS = 1;
@@ -74,9 +80,10 @@ export const MIN_TABS = 1;
  */
 export function sanitizeTabs(ids) {
   if (!Array.isArray(ids)) return [...DEFAULT_BOTTOM_NAV];
+  if (ids.join() === PREVIOUS_DEFAULT.join()) return [...DEFAULT_BOTTOM_NAV];
   const seen = new Set();
   const result = [];
-  for (const id of ids) {
+  for (const id of ids.map((i) => RETIRED[i] || i)) {
     if (NAV_PAGES_BY_ID[id] && !seen.has(id)) {
       seen.add(id);
       result.push(id);
