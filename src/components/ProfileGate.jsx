@@ -16,6 +16,41 @@ import './ProfileGate.css';
 const NAME_MAX = 60;
 
 /**
+ * A member's own Nostr profile (kind 0) from the public relays, without
+ * waiting on a slow or dead one: it answers shortly after the first relay
+ * that has it (newer copies from others still win in that moment), when every
+ * relay has answered, or after `maxWait`. Null if none has it.
+ */
+function findNostrProfile(pubkey, { maxWait = 5000, grace = 600 } = {}) {
+    return new Promise((resolve) => {
+        let newest = null;
+        let sub = null;
+        let graceTimer = null;
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(cap);
+            clearTimeout(graceTimer);
+            sub?.close();
+            let profile = null;
+            try { profile = newest ? JSON.parse(newest.content) : null; } catch { /* not JSON */ }
+            resolve(profile && typeof profile === 'object' ? profile : null);
+        };
+        const cap = setTimeout(finish, maxWait);
+        sub = nostrService.pool.subscribeMany(PUBLIC_RELAYS, { kinds: [0], authors: [pubkey] }, {
+            onevent: (event) => {
+                if (event.pubkey !== pubkey) return;
+                if (!newest || event.created_at > newest.created_at) newest = event;
+                if (!graceTimer) graceTimer = setTimeout(finish, grace);
+            },
+            oneose: finish,
+        });
+        if (done) sub.close();
+    });
+}
+
+/**
  * The cropped photo goes to BIES, like listing photos (no signing step, and
  * it stays with BIES). A full URL, since Nostr profiles carry it too.
  */
@@ -52,7 +87,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
     useEffect(() => {
         if (!nostrSigner.signsOnDevice || !user.nostrPubkey) return undefined;
         let cancelled = false;
-        nostrService.getProfile(user.nostrPubkey, PUBLIC_RELAYS).then((found) => {
+        findNostrProfile(user.nostrPubkey).then((found) => {
             if (cancelled || !found) return;
             setNostrProfile(found);
             const nostrName = (found.display_name || found.name || '').trim().slice(0, NAME_MAX);
