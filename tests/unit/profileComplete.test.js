@@ -1,5 +1,5 @@
 /**
- * Who the app asks for a name and photo before anything else
+ * Who the app asks for a name before anything else (a photo is optional)
  * (src/utils/profileComplete.js, shown by ProfileGate).
  *
  * Run: npm run test:unit   (node --test; no network)
@@ -10,7 +10,7 @@ import { isPlaceholderName, needsProfile } from '../../src/utils/profileComplete
 
 const member = (name, avatar) => ({ profile: { name, avatar } });
 
-test('asks new members for a name and a photo', () => {
+test('asks new members for a name', () => {
     assert.equal(needsProfile(member('', '')), true);
     assert.equal(needsProfile({ profile: null }), true);
 });
@@ -20,8 +20,8 @@ test("treats a Nostr sign-in's placeholder as no name", () => {
     assert.equal(needsProfile(member('nostr:a0fe412a', 'https://x.test/a.jpg')), true);
 });
 
-test('still asks for a photo when only the name is there', () => {
-    assert.equal(needsProfile(member('Ana Rivas', '')), true);
+test("doesn't insist on a photo", () => {
+    assert.equal(needsProfile(member('Ana Rivas', '')), false);
     assert.equal(needsProfile(member('   ', 'https://x.test/a.jpg')), true);
 });
 

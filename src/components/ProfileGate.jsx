@@ -25,11 +25,11 @@ async function uploadPhoto(file) {
 }
 
 /**
- * A member's BIES name and photo, asked for before anything else (after the
- * terms of use) until both are there: new accounts, and Nostr sign-ins that
- * only have a "nostr:1a2b3c4d" placeholder. It can't be dismissed, only
- * finished or signed out of. A Nostr sign-in starts from their Nostr name
- * and picture, but still chooses the name BIES shows.
+ * A member's BIES name, asked for before anything else (after the terms of
+ * use) until there is one: new accounts, and Nostr sign-ins that only have a
+ * "nostr:1a2b3c4d" placeholder. A photo is offered too, but optional. It
+ * can't be dismissed, only finished or signed out of. A Nostr sign-in starts
+ * from their Nostr name and picture, but still chooses the name BIES shows.
  */
 const ProfileGate = ({ user, onDone, onSignOut }) => {
     const { t } = useTranslation();
@@ -93,7 +93,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
     };
 
     const clean = name.trim();
-    const ready = !!clean && !!avatar && !uploading && !busy;
+    const ready = !!clean && !uploading && !busy;
 
     const save = async (e) => {
         e.preventDefault();
@@ -102,7 +102,8 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
         setBusy(true);
         setError('');
         try {
-            const updates = { name: clean, avatar };
+            const updates = { name: clean };
+            if (avatar) updates.avatar = avatar;
             // The rest of a Nostr profile comes along where BIES has nothing yet.
             const found = nostrProfile || {};
             if (!current.bio && found.about) updates.bio = found.about;
@@ -112,7 +113,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
 
             // Email accounts: the server publishes their profile on save.
             if (nostrSigner.signsOnDevice) {
-                await nostrService.updateProfileToBiesRelay({ name: clean, display_name: clean, picture: avatar })
+                await nostrService.updateProfileToBiesRelay({ name: clean, display_name: clean, ...(avatar ? { picture: avatar } : {}) })
                     .catch((err) => console.warn('[ProfileGate] BIES relay profile failed:', err));
             }
             // Welcome a new member in the BIES feed (never on public relays).
@@ -180,10 +181,8 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
                         {busy && <Loader2 size={18} className="mod-spin" />}
                         {t('profileGate.continue')}
                     </button>
-                    {!ready && !busy && !uploading && (
-                        <p className="mod-hint pg-missing">
-                            {!avatar && !clean ? t('profileGate.needBoth') : !avatar ? t('profileGate.needPhoto') : t('profileGate.needName')}
-                        </p>
+                    {!clean && !busy && !uploading && (
+                        <p className="mod-hint pg-missing">{t('profileGate.needName')}</p>
                     )}
                     <button type="button" className="mod-link" onClick={onSignOut} disabled={busy}>
                         {t('moderation.terms.signOut')}

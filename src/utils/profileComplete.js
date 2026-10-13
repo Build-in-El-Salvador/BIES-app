@@ -8,9 +8,8 @@ export const isPlaceholderName = (name) => {
 };
 
 /**
- * Whether a signed-in member still has to choose their BIES name and photo.
- * The app asks for both before anything else (ProfileGate), so nobody shows
- * up as "nostr:1a2b3c4d" or a blank avatar.
+ * Whether a signed-in member still has to choose their BIES name. The app
+ * asks before anything else (ProfileGate), so nobody shows up as
+ * "nostr:1a2b3c4d"; a photo is offered there too, but optional.
  */
-export const needsProfile = (user) =>
-    !!user && (isPlaceholderName(user.profile?.name) || !user.profile?.avatar);
+export const needsProfile = (user) => !!user && isPlaceholderName(user.profile?.name);
