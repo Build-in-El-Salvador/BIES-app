@@ -663,6 +663,12 @@ textarea {
 
 /* ===== PWA & Mobile App Styles ===== */
 
+/* One gap between the header and a page's first content on phones. Each
+   page's top padding reads it: padding-top: var(--page-top, <desktop value>). */
+@media (max-width: 768px) {
+  :root { --page-top: 0.75rem; }
+}
+
 .app-content {
   min-height: calc(100vh - 73px);
   padding-top: calc(70px + env(safe-area-inset-top, 0px));

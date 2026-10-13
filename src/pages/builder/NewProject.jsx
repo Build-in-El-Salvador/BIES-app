@@ -932,7 +932,7 @@ const NewProject = () => {
                     min-height: 100vh;
                     padding-bottom: 4rem;
                 }
-                .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+                .py-8 { padding-top: var(--page-top, 2rem); padding-bottom: 2rem; }
                 .mb-8 { margin-bottom: 2rem; }
 
                 .page-header { margin-bottom: 2rem; }

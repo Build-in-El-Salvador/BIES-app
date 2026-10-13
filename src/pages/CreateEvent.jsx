@@ -824,7 +824,7 @@ const CreateEvent = () => {
 
             <style jsx>{`
                 .event-edit-page { background: var(--color-gray-100); min-height: 100vh; padding-bottom: 4rem; }
-                .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+                .py-8 { padding-top: var(--page-top, 2rem); padding-bottom: 2rem; }
                 .mb-8 { margin-bottom: 2rem; }
                 .max-w-6xl { max-width: 1200px; margin: 0 auto; }
                 .page-header { margin-bottom: 1rem; }
