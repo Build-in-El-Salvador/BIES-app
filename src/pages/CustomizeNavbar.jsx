@@ -7,6 +7,7 @@ import usePointerDrag from '../hooks/usePointerDrag';
 import useFlipLayout from '../hooks/useFlipLayout';
 import { NAV_PAGES, NAV_PAGES_BY_ID, MAX_TABS, MIN_TABS } from '../config/navPages';
 import BackButton from '../components/BackButton';
+import '../components/settings/SettingsUI.css';
 
 const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
 const sameOrder = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
@@ -174,14 +175,11 @@ const CustomizeNavbar = () => {
     const GhostIcon = ghostPage ? ghostPage.icon : null;
 
     return (
-        <div className="container customize-page" style={{ paddingTop: 'var(--page-top, 1.5rem)' }}>
-            <div className="customize-header">
-                <BackButton fallback="/settings" />
-                <h1>{t('customNav.title')}</h1>
-                <button type="button" className="reset-btn" data-testid="nav-reset" onClick={handleReset}>
-                    <RotateCcw size={15} />
-                    <span>{t('customNav.reset')}</span>
-                </button>
+        // Laid out as the other Settings pages (SettingsUI): the same title and back button.
+        <div className="set-page customize-page">
+            <div className="set-head back-head">
+                <BackButton to="/settings" />
+                <h1 className="set-title">{t('customNav.title')}</h1>
             </div>
             <p className="subtitle">{t('customNav.subtitle')}</p>
             {saveError && (
@@ -192,6 +190,10 @@ const CustomizeNavbar = () => {
                 </p>
             )}
             <p className="desktop-note">{t('customNav.desktopNote')}</p>
+            <button type="button" className="reset-btn" data-testid="nav-reset" onClick={handleReset}>
+                <RotateCcw size={15} />
+                <span>{t('customNav.reset')}</span>
+            </button>
 
             <div className="phone-frame">
                 <div className="icon-grid" ref={gridRef}>
@@ -287,11 +289,9 @@ const CustomizeNavbar = () => {
             )}
 
             <style jsx>{`
-                .customize-page { max-width: 48rem; padding-bottom: 3rem; }
-
-                .customize-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-                .customize-header h1 { flex: 1; font-size: 1.5rem; margin: 0; }
-                .reset-btn { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-full); border: 1px solid var(--color-gray-300); background: var(--color-surface); color: var(--color-gray-600); font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+                /* The title stays on one line. */
+                .set-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .reset-btn { display: inline-flex; margin: 0.6rem 0 0.25rem; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem; border-radius: var(--radius-full); border: 1px solid var(--color-gray-300); background: var(--color-surface); color: var(--color-gray-600); font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
                 .reset-btn:hover { border-color: var(--color-secondary); color: var(--color-secondary); }
 
                 .subtitle { color: var(--color-gray-500); font-size: 0.9rem; margin-bottom: 0.25rem; }

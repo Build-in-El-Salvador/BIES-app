@@ -77,7 +77,6 @@ const Navbar = () => {
     if (path.startsWith('/dashboard')) return t('pageTitles.dashboard');
     if (path.startsWith('/notifications')) return t('pageTitles.notifications');
     if (path.startsWith('/messages')) return t('pageTitles.messages');
-    if (path === '/settings/navbar') return t('customNav.title');
     if (path.startsWith('/settings')) return t('pageTitles.settings');
     if (path.startsWith('/feedback')) return 'Feedback';
     if (path.startsWith('/admin')) return t('pageTitles.adminPanel');
