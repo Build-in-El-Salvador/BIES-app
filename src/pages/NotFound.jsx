@@ -9,7 +9,7 @@ const NotFound = () => {
         <div className="not-found-page">
             <h1>404</h1>
             <p>{t('notFound.message', 'The page you\'re looking for doesn\'t exist.')}</p>
-            <button onClick={() => navigate('/feed')} className="btn btn-primary">
+            <button onClick={() => navigate('/home')} className="btn btn-primary">
                 {t('notFound.goHome', 'Go Home')}
             </button>
 

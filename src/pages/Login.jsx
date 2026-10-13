@@ -93,14 +93,14 @@ const Login = ({ nostr = false }) => {
     // Redirect to dashboard if already logged in
     useEffect(() => {
         if (!authLoading && authedUser && !offering.current) {
-            navigate('/feed', { replace: true });
+            navigate('/home', { replace: true });
         }
     }, [authLoading, authedUser, navigate]);
 
     const handleResult = (result) => {
         offering.current = false;
         if (result.success) {
-            navigate('/feed');
+            navigate('/home');
         } else {
             setError(result.error || 'Login failed. Please try again.');
         }

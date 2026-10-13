@@ -168,7 +168,7 @@ const Signup = () => {
                     }
                 }
 
-                navigate('/feed');
+                navigate('/home');
             } else {
                 setError(result.error || 'Failed to register. Please try again.');
             }
@@ -198,7 +198,7 @@ const Signup = () => {
                     <div className="text-center w-full">
                         <h2 className="text-2xl font-bold mb-2">{t('emailSignIn.joinHeading')}</h2>
                         <p className="text-gray-500 mb-6">{t('emailSignIn.joinSubtext')}</p>
-                        <EmailSignIn onSuccess={() => navigate('/feed')} />
+                        <EmailSignIn onSuccess={() => navigate('/home')} />
                         <div className="signup-divider"><span>{t('common.or')}</span></div>
                         <p className="text-gray-500 text-sm mb-4">{t('emailSignIn.ownKeyIntro')}</p>
                         <button onClick={generateKeys} className="btn-outline w-full py-3 rounded-full">

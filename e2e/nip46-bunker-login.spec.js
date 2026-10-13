@@ -38,7 +38,7 @@ test.describe('NIP-46 bunker login', () => {
         await page.click('button:has-text("Login with Remote Signer")');
 
         // Backend challenge is signed by the mock bunker → JWT → app
-        await page.waitForURL(/\/(feed|profile-setup|dashboard)/, { timeout: 60_000 });
+        await page.waitForURL(/\/(home|feed|dashboard)/, { timeout: 60_000 });
 
         // The bunker served connect + get_public_key + sign_event(27235)
         const methods = bunker.requests.map(r => r.method);

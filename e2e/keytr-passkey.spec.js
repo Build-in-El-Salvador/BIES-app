@@ -100,7 +100,7 @@ test.describe('keytr PRF passkey', () => {
         await page.click('text=Login with Passkey (NIP-K1)');
 
         // Tier-1 login: fetch events by indexed pubkey → PRF assertion → JWT
-        await page.waitForURL(/\/(feed|profile-setup|dashboard)/, { timeout: 30_000 });
+        await page.waitForURL(/\/(home|feed|dashboard)/, { timeout: 30_000 });
 
         // v=1 (PRF) credential — the KiH migration prompt must NOT appear
         await expect(page.locator('text=Upgrade your passkey security')).not.toBeVisible();
