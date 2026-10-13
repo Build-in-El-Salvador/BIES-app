@@ -10,7 +10,7 @@ import { primalService, EXPLORE_VIEWS } from '../services/primalService';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
-import { notificationsApi } from '../services/api';
+import { notificationsApi, uploadApi } from '../services/api';
 import NostrIcon from '../components/NostrIcon';
 import ZapModal from '../components/ZapModal';
 import EmojiPicker from '../components/EmojiPicker';
@@ -690,7 +690,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 content += urls.join('\n');
 
                 uploadResults.forEach((result, i) => {
-                    tags.push(mediaService.buildImetaTag(result, attachedFiles[i].file, attachedFiles[i].dimensions));
+                    tags.push(mediaService.buildImetaTag(result, attachedFiles[i].dimensions));
                 });
             }
 
@@ -1050,6 +1050,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             }
             // Remove from local feed
             setPosts(prev => prev.filter(p => p.id !== post.id));
+            // Its photos and videos go from BIES too (only mine; the server checks).
+            const media = [...new Set([
+                ...(post.content.match(/https?:\/\/[^\s<>"']+/g) || []),
+                ...post.tags.filter(t => t[0] === 'imeta').flatMap(t => t.slice(1)).filter(v => v.startsWith('url ')).map(v => v.slice(4)),
+            ])].slice(0, 20);
+            if (media.length) uploadApi.discard(media).catch(() => { /* leftovers only */ });
         } catch (err) {
             console.error('[Feed] Delete request failed:', err);
         } finally {

@@ -7,6 +7,10 @@ import { getAssetUrl } from '../utils/assets';
  * Blossom hosts (Primal, nostr.build): a Private Feed post's text stayed on
  * the members-only relay while its photos sat on the open internet with
  * outside companies. URLs come back absolute, as Nostr events need them.
+ *
+ * The server shrinks photos and takes out their location and other
+ * metadata, so what it stores isn't the file sent: its size, type, SHA-256
+ * and pixel size come back with the link, for the post's imeta tag.
  */
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -18,47 +22,42 @@ const ALLOWED_TYPES = [
     'video/mp4', 'video/webm', 'video/quicktime',
 ];
 
-/** SHA-256 of a file, lowercase hex: the `x` of a NIP-92 imeta tag. */
-async function computeSha256(file) {
-    const buffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 /**
  * Upload a file to BIES. `url` is absolute, for Nostr events; `path` is as
  * BIES stored it, for BIES's own records (album photos), which it checks.
+ * The rest describe the stored file; `width` and `height` only for a photo.
  * @param {File} file
- * @returns {Promise<{url: string, path: string, sha256: string, size: number, type: string}>}
+ * @returns {Promise<{url: string, path: string, sha256: string, size: number, type: string, width?: number, height?: number}>}
  */
 async function uploadFile(file) {
-    const [sha256, { url }] = await Promise.all([computeSha256(file), uploadApi.media(file)]);
+    const stored = await uploadApi.media(file);
     return {
-        url: new URL(getAssetUrl(url), window.location.origin).href,
-        path: url,
-        sha256,
-        size: file.size,
-        type: file.type,
+        url: new URL(getAssetUrl(stored.url), window.location.origin).href,
+        path: stored.url,
+        sha256: stored.sha256,
+        size: stored.size ?? file.size,
+        type: stored.type || file.type,
+        ...(stored.width && stored.height ? { width: stored.width, height: stored.height } : {}),
     };
 }
 
 /**
  * Build a NIP-92 imeta tag for a successfully uploaded file.
- * @param {{url: string, sha256: string, size: number}} result
- * @param {File} file
- * @param {{width: number, height: number}|null} dimensions
+ * @param {{url: string, sha256: string, size: number, type: string, width?: number, height?: number}} result
+ * @param {{width: number, height: number}|null} dimensions  the original's, for a video
  * @returns {string[]}
  */
-function buildImetaTag(result, file, dimensions) {
+function buildImetaTag(result, dimensions) {
     const tag = [
         'imeta',
         `url ${result.url}`,
-        `m ${file.type}`,
-        `x ${result.sha256}`,
+        `m ${result.type}`,
+        ...(result.sha256 ? [`x ${result.sha256}`] : []),
         `size ${result.size}`,
     ];
-    if (dimensions) {
-        tag.push(`dim ${dimensions.width}x${dimensions.height}`);
+    const dim = result.width ? result : dimensions;
+    if (dim) {
+        tag.push(`dim ${dim.width}x${dim.height}`);
     }
     return tag;
 }
