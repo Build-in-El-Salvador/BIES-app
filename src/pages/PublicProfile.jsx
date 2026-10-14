@@ -99,18 +99,27 @@ const PublicProfile = ({ type }) => {
             .catch(() => { });
     }, [currentUser?.id, targetUserId]);
 
+    // The member's Nostr profile. The key is worked out here, not from the
+    // `npub` further down: a blocked member's page returns before it.
     useEffect(() => {
-        if (!profile) return;
-            if (npub) {
-            try {
-                const decoded = nip19.decode(npub);
-                if (decoded.type === 'npub') {
-                    nostrService.getProfile(decoded.data).then(setNostrProfile).catch(() => { });
-                }
-            } catch {
-                // Invalid npub — skip
+        setNostrProfile(null);
+        if (!profile || profile.blocked) return undefined;
+        const key = profile.user?.nostrPubkey
+            ? nip19.npubEncode(profile.user.nostrPubkey)
+            : profile.nostrNpub;
+        if (!key) return undefined;
+        let cancelled = false;
+        try {
+            const decoded = nip19.decode(key);
+            if (decoded.type === 'npub') {
+                nostrService.getProfile(decoded.data)
+                    .then((p) => { if (!cancelled) setNostrProfile(p); })
+                    .catch(() => { });
             }
+        } catch {
+            // Invalid npub — skip
         }
+        return () => { cancelled = true; };
     }, [profile]);
 
     // Fetch events this user hosts — upcoming for the panel, total for stats

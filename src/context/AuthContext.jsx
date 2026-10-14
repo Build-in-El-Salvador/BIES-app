@@ -218,6 +218,7 @@ export const AuthProvider = ({ children }) => {
     // ─── WebSocket setup ───────────────────────────────────────────────────
 
     const initWebSocket = useCallback((user) => {
+        let connectedBefore = false;
         const ws = new BiesWebSocket(
             // onMessage
             (msg) => {
@@ -240,8 +241,12 @@ export const AuthProvider = ({ children }) => {
                     window.dispatchEvent(new CustomEvent('bies:gamification', { detail: msg }));
                 }
             },
-            // onConnect
-            null,
+            // onConnect: after a reconnect (the socket closes when its token
+            // expires, every 15 minutes), catch up on what came in meanwhile.
+            () => {
+                if (connectedBefore) fetchInitialNotifications();
+                connectedBefore = true;
+            },
             // onDisconnect
             null
         );

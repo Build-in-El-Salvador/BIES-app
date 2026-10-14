@@ -516,7 +516,7 @@ const Discover = ({ membersOnly = false }) => {
         }));
 
         setProjects(listWithWatchlist);
-        setTotalPages(result?.totalPages || 1);
+        setTotalPages(result?.pagination?.totalPages || 1);
       } catch {
         setProjects([]);
       } finally {
@@ -544,7 +544,7 @@ const Discover = ({ membersOnly = false }) => {
 
         const list = result?.data || result || [];
         setBuilders(Array.isArray(list) ? list : []);
-        setBuildersTotalPages(result?.totalPages || 1);
+        setBuildersTotalPages(result?.pagination?.totalPages || 1);
 
         if (followingRes) {
           const fList = Array.isArray(followingRes?.data) ? followingRes.data : Array.isArray(followingRes) ? followingRes : [];
