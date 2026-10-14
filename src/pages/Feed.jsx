@@ -610,7 +610,6 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [authorLoadedAt, setAuthorLoadedAt] = useState(0);
     useEffect(() => {
         if (author && authorLoadedAt && posts.length < 10) loadOlderPrivate();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authorLoadedAt]);
 
     // Load more: older BIES posts, or more of the explore feed
@@ -1392,7 +1391,6 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         mergePosts([kept]);
         setOpenComments(prev => new Set(prev).add(kept.id));
         loadComments(kept.id);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loading, posts, feedMode]);
 
     // Close repost menu and post menu on outside click
