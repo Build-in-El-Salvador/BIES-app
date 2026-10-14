@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
+import { cache, cacheKey } from '../services/redis.service';
+import { privacyOf, PRIVACY_CHOICES } from '../services/profilePrivacy';
 
 export const updateNotificationSettingsSchema = z.object({
     emailNotifications: z.boolean().optional(),
@@ -16,6 +18,17 @@ export const updateNotificationSettingsSchema = z.object({
     notifyProfileViews: z.boolean().optional(),
     notifyZaps: z.boolean().optional(),
     notifyEvents: z.boolean().optional(),
+});
+
+export const updatePrivacySchema = z.object({
+    showInDirectory: z.boolean().optional(),
+    browsePrivately: z.boolean().optional(),
+    postsOnProfile: z.boolean().optional(),
+    bio: z.enum(PRIVACY_CHOICES.bio).optional(),
+    location: z.enum(PRIVACY_CHOICES.location).optional(),
+    links: z.enum(PRIVACY_CHOICES.links).optional(),
+    details: z.enum(PRIVACY_CHOICES.details).optional(),
+    network: z.enum(PRIVACY_CHOICES.network).optional(),
 });
 
 export const updateRelaysSchema = z.object({
@@ -338,5 +351,79 @@ export async function updatePreferences(req: Request, res: Response): Promise<vo
     } catch (error) {
         console.error('Update preferences error:', error);
         res.status(500).json({ error: 'Failed to update preferences' });
+    }
+}
+
+/** Settings → Privacy, as the app shows it. */
+async function privacySettings(userId: string) {
+    const [profile, settings] = await Promise.all([
+        prisma.profile.findUnique({ where: { userId }, select: { isPublic: true, nostrFeedMode: true, privacy: true } }),
+        prisma.userSettings.findUnique({ where: { userId }, select: { browsePrivately: true } }),
+    ]);
+    return {
+        showInDirectory: profile?.isPublic ?? true,
+        browsePrivately: settings?.browsePrivately ?? false,
+        postsOnProfile: (profile?.nostrFeedMode ?? 'combined') !== 'off',
+        ...privacyOf(profile?.privacy),
+    };
+}
+
+/**
+ * GET /settings/privacy
+ * Who sees what on your profile (services/profilePrivacy.ts), whether you're
+ * in the Members directory, whether your posts show on your profile, and
+ * whether you browse profiles privately.
+ */
+export async function getPrivacy(req: Request, res: Response): Promise<void> {
+    try {
+        res.json(await privacySettings(req.user!.id));
+    } catch (error) {
+        console.error('Get privacy error:', error);
+        res.status(500).json({ error: 'Failed to get privacy settings' });
+    }
+}
+
+/**
+ * PUT /settings/privacy
+ * Change any of them. The profile's caches are cleared, so the change shows
+ * at once.
+ */
+export async function updatePrivacy(req: Request, res: Response): Promise<void> {
+    try {
+        const userId = req.user!.id;
+        const body = req.body as z.infer<typeof updatePrivacySchema>;
+        const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true, privacy: true } });
+        if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
+
+        const privacy = privacyOf(profile.privacy);
+        for (const key of Object.keys(PRIVACY_CHOICES) as (keyof typeof PRIVACY_CHOICES)[]) {
+            if (body[key] !== undefined) (privacy as Record<string, string>)[key] = body[key]!;
+        }
+        const data: Prisma.ProfileUpdateInput = { privacy: JSON.stringify(privacy) };
+        if (body.showInDirectory !== undefined) data.isPublic = body.showInDirectory;
+        if (body.postsOnProfile !== undefined) data.nostrFeedMode = body.postsOnProfile ? 'private' : 'off';
+        await prisma.profile.update({ where: { userId }, data });
+
+        if (body.browsePrivately !== undefined) {
+            await prisma.userSettings.upsert({
+                where: { userId },
+                update: { browsePrivately: body.browsePrivately },
+                create: { userId, browsePrivately: body.browsePrivately },
+            });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { nostrPubkey: true } });
+        await Promise.all([
+            cache.del(cacheKey.profileDetail(userId)),
+            cache.del(cacheKey.profileDetail(profile.id)),
+            user?.nostrPubkey ? cache.del(cacheKey.profileDetail(user.nostrPubkey)) : Promise.resolve(),
+            cache.delPattern('profiles:'),
+            cache.delPattern('search:'),
+        ]);
+
+        res.json(await privacySettings(userId));
+    } catch (error) {
+        console.error('Update privacy error:', error);
+        res.status(500).json({ error: 'Failed to update privacy settings' });
     }
 }

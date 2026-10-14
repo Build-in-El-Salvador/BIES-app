@@ -4,6 +4,17 @@ import { notifyFollow } from '../services/notification.service';
 import { cache, TTL } from '../services/redis.service';
 import { publishAnnouncement } from '../services/nostr.service';
 import { blockedEitherWay } from '../services/moderation.service';
+import { canSeeNetwork, privacyOf } from '../services/profilePrivacy';
+
+/**
+ * A member's followers and following are for members, or only for them
+ * (Settings → Privacy: Network). Hidden: just the count, no one listed.
+ */
+async function networkHidden(req: Request, userId: string): Promise<boolean> {
+    if (req.user?.id === userId) return false;
+    const profile = await prisma.profile.findUnique({ where: { userId }, select: { privacy: true } });
+    return !canSeeNetwork(privacyOf(profile?.privacy), req.user ? 'member' : 'public');
+}
 
 /**
  * POST /profiles/:id/follow
@@ -115,6 +126,12 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
         const limit = Math.min(parseInt(req.query.limit as string || '20', 10), 50);
         const skip = (page - 1) * limit;
 
+        if (await networkHidden(req, userId)) {
+            const total = await prisma.follow.count({ where: { followingId: userId } });
+            res.json({ data: [], hidden: true, pagination: { page, limit, total, totalPages: 0 } });
+            return;
+        }
+
         const cKey = `followers:${userId}:${page}:${limit}`;
         const cached = await cache.getJson<any>(cKey);
         if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
@@ -160,6 +177,12 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
         const page = parseInt(req.query.page as string || '1', 10);
         const limit = Math.min(parseInt(req.query.limit as string || '20', 10), 50);
         const skip = (page - 1) * limit;
+
+        if (await networkHidden(req, userId)) {
+            const total = await prisma.follow.count({ where: { followerId: userId } });
+            res.json({ data: [], hidden: true, pagination: { page, limit, total, totalPages: 0 } });
+            return;
+        }
 
         const cKey = `following:${userId}:${page}:${limit}`;
         const cached = await cache.getJson<any>(cKey);

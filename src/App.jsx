@@ -44,6 +44,8 @@ import TakeYourKey from './pages/settings/TakeYourKey';
 import BlockedMembers from './pages/settings/BlockedMembers';
 import NotificationSettings from './pages/settings/NotificationSettings';
 import NostrKeys from './pages/settings/NostrKeys';
+import PrivacySettings from './pages/settings/PrivacySettings';
+import AlbumPage from './pages/AlbumPage';
 import CustomizeNavbar from './pages/CustomizeNavbar';
 import Cowork from './pages/Cowork';
 import Wallet from './pages/Wallet';
@@ -400,6 +402,12 @@ const AppContent = () => {
                             <NostrKeys />
                         </ProtectedRoute>
                     } />
+                    <Route path="/settings/privacy" element={
+                        <ProtectedRoute>
+                            <PrivacySettings />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/albums/:id" element={<ProtectedRoute><AlbumPage /></ProtectedRoute>} />
                     {CUSTOM_BOTTOM_NAV_ENABLED && (
                         <Route path="/settings/navbar" element={
                             <ProtectedRoute>

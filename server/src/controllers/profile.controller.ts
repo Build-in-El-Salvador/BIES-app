@@ -4,6 +4,7 @@ import { cache, cacheKey, TTL } from '../services/redis.service';
 import { notifyProfileView } from '../services/notification.service';
 import { publishProfileUpdate, publishAnnouncement } from '../services/nostr.service';
 import { blockedIds, hasBlocked } from '../services/moderation.service';
+import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
 import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -68,15 +69,28 @@ export const updateProfileSchema = z.object({
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
+/** Who is looking at this profile: its member, another member, or anyone. */
+const viewerOf = (req: Request, profileUserId: string): Viewer =>
+    !req.user ? 'public' : req.user.id === profileUserId ? 'self' : 'member';
+
 /**
  * GET /profiles
- * List profiles (cached), filterable by role, location, search. Members the
- * viewer blocked are left out after the cache, which all viewers share.
+ * List profiles (cached), filterable by role, location, search. After the
+ * cache, which all viewers share: members the viewer blocked are left out,
+ * each profile shows only what this viewer may see (profilePrivacy.ts), and
+ * a search or location only finds what the viewer can see.
  */
 export async function listProfiles(req: Request, res: Response): Promise<void> {
     const respond = async (result: any) => {
         const hidden = new Set(await blockedIds(req.user?.id));
-        res.json(hidden.size ? { ...result, data: result.data.filter((p: any) => !hidden.has(p.userId)) } : result);
+        const { search, location } = req.query;
+        const data = result.data
+            .filter((p: any) => !hidden.has(p.userId))
+            .filter((p: any) => typeof search !== 'string' || !search || matchesVisibly(p, search, viewerOf(req, p.userId)))
+            .filter((p: any) => typeof location !== 'string' || !location
+                || String(profileForViewer(p, viewerOf(req, p.userId)).location || '').toLowerCase().includes(location.toLowerCase()))
+            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
+        res.json({ ...result, data });
     };
     try {
         const { role, location, search, page = '1', limit = '20' } = req.query;
@@ -176,13 +190,19 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /profiles/:id
- * Get a single profile (cached, by userId or profileId). A member the viewer
- * blocked comes back as just a name, with `blocked: true`.
+ * Get a single profile (cached, by userId or profileId), as this viewer may
+ * see it (profilePrivacy.ts). A member who left the Members directory can
+ * still be opened by members (from a post, say), not by anyone else. A
+ * member the viewer blocked comes back as just a name, with `blocked: true`.
  */
 export async function getProfile(req: Request, res: Response): Promise<void> {
     const viewerBlocked = (ownerId: string) =>
         !!req.user && req.user.id !== ownerId ? hasBlocked(req.user.id, { id: ownerId }) : Promise.resolve(false);
     const respond = async (result: any) => {
+        if (!req.user && !result.isPublic) {
+            res.status(404).json({ error: 'Profile not found' });
+            return;
+        }
         if (await viewerBlocked(result.userId)) {
             res.json({
                 id: result.id,
@@ -194,7 +214,24 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             });
             return;
         }
-        res.json(result);
+        recordView(result);
+        res.json(profileForViewer(result, viewerOf(req, result.userId)));
+    };
+    // Each view (cached or not): the count, and "X viewed your profile" once
+    // an hour per viewer, unless they browse privately (Settings → Privacy).
+    const recordView = (result: any) => {
+        prisma.profile.update({ where: { id: result.id }, data: { viewCount: { increment: 1 } } }).catch(() => { });
+        if (!req.user || req.user.id === result.userId) return;
+        const viewerId = req.user.id;
+        (async () => {
+            const settings = await prisma.userSettings.findUnique({ where: { userId: viewerId }, select: { browsePrivately: true } });
+            if (settings?.browsePrivately) return;
+            const viewDedupKey = `profile_view:${result.userId}:${viewerId}`;
+            if (await cache.get(viewDedupKey)) return;
+            await cache.set(viewDedupKey, '1', 3600);
+            const viewerProfile = await prisma.profile.findUnique({ where: { userId: viewerId }, select: { name: true } });
+            await notifyProfileView({ profileOwnerId: result.userId, viewerName: viewerProfile?.name || 'Someone', viewerId });
+        })().catch(() => { });
     };
     try {
         const cKey = cacheKey.profileDetail(req.params.id);
@@ -208,7 +245,6 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                     { id: req.params.id },
                     { user: { nostrPubkey: req.params.id } },
                 ],
-                isPublic: true,
             },
             include: {
                 user: {
@@ -246,30 +282,6 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         if (!profile) {
             res.status(404).json({ error: 'Profile not found' });
             return;
-        }
-
-        // Increment view count (non-blocking)
-        prisma.profile.update({
-            where: { id: profile.id },
-            data: { viewCount: { increment: 1 } },
-        }).catch(() => { });
-
-        // Notify profile owner of view (dedup: once per viewer per hour)
-        if (req.user && req.user.id !== profile.userId && !(await viewerBlocked(profile.userId))) {
-            const viewDedupKey = `profile_view:${profile.userId}:${req.user.id}`;
-            const alreadyNotified = await cache.get(viewDedupKey);
-            if (!alreadyNotified) {
-                const viewerProfile = await prisma.profile.findUnique({
-                    where: { userId: req.user.id },
-                    select: { name: true },
-                });
-                notifyProfileView({
-                    profileOwnerId: profile.userId,
-                    viewerName: viewerProfile?.name || 'Someone',
-                    viewerId: req.user.id,
-                }).catch(() => { });
-                cache.set(viewDedupKey, '1', 3600).catch(() => { }); // 1 hour dedup
-            }
         }
 
         const result = {

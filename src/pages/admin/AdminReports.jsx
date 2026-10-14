@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Flag, ExternalLink, Trash2, UserX, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
-import { adminApi, eventsApi } from '../../services/api';
+import { adminApi, albumsApi, eventsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { openExternal } from '../../utils/openExternal';
 
@@ -18,6 +18,8 @@ const TARGET_LABELS = {
     endorsement: 'Recommendation',
     event: 'Event',
     note: 'Post',
+    album: 'Album',
+    photo: 'Photo',
 };
 
 // The terms promise a review within 24 hours (§6): flag what is getting close.
@@ -85,6 +87,9 @@ const AdminReports = () => {
         note: { label: 'post', confirm: 'Remove this post from the BIES relay?', action: (r) => adminApi.removeReportedNote(r.id) },
         // Deleting an event is for admins (as on the event page).
         ...(isAdmin ? { event: { label: 'event', confirm: 'Delete this event for good?', action: (r) => eventsApi.delete(r.targetId) } } : {}),
+        album: { label: 'album', confirm: 'Delete this album and its photos for good?', action: (r) => albumsApi.delete(r.targetId) },
+        // The report's link is the photo's album (/albums/:id).
+        photo: { label: 'photo', confirm: 'Delete this photo for good?', action: (r) => albumsApi.deletePhoto(r.link.split('/').pop(), r.targetId) },
     };
 
     const removeContent = (r) => {

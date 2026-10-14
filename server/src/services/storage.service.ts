@@ -54,6 +54,8 @@ const SAFE_EXTENSIONS: Record<string, string> = {
     'image/webp': '.webp',
     'image/svg+xml': '.svg',
     'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/webm': '.webm',
     'application/pdf': '.pdf',
     'application/vnd.ms-powerpoint': '.ppt',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',

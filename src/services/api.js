@@ -720,10 +720,26 @@ export const mediaApi = {
 
 // ─── User Preferences (persistent across login/logout) ──────────────────────
 
-// Settings → Notifications: push on or off, and what to push (the bell keeps everything)
+// Settings → Notifications: push on or off, and what to push (the bell keeps everything);
+// Settings → Privacy: who sees what on your profile (server: services/profilePrivacy.ts)
 export const settingsApi = {
     get: () => get('/settings'),
     updateNotifications: (data) => put('/settings/notifications', data),
+    getPrivacy: () => get('/settings/privacy'),
+    updatePrivacy: (data) => put('/settings/privacy', data),
+};
+
+// Photo albums: a member's, or a farm's or business's (server: album.controller.ts)
+export const albumsApi = {
+    forUser: (userId) => get('/albums', { user: userId }),
+    forListing: (listingId) => get('/albums', { listing: listingId }),
+    get: (id) => get(`/albums/${id}`),
+    create: (data) => post('/albums', data),
+    update: (id, data) => request('PATCH', `/albums/${id}`, data),
+    delete: (id) => del(`/albums/${id}`),
+    addPhotos: (id, photos) => post(`/albums/${id}/photos`, { photos }),
+    updatePhoto: (id, photoId, data) => request('PATCH', `/albums/${id}/photos/${photoId}`, data),
+    deletePhoto: (id, photoId) => del(`/albums/${id}/photos/${photoId}`),
 };
 
 export const preferencesApi = {

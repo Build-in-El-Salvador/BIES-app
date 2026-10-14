@@ -23,7 +23,7 @@ import { cache } from './redis.service';
 import { nip19 } from 'nostr-tools';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
 
-export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note'] as const;
+export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo'] as const;
 export const REPORT_REASONS = [
     'harassment',
     'sexual',
@@ -83,6 +83,17 @@ async function responsibleMember(type: ReportTarget, id: string, pubkey?: string
             if (!pubkey) return null;
             const author = await prisma.user.findUnique({ where: { nostrPubkey: pubkey }, select: { id: true } });
             return author?.id ?? null;
+        }
+        case 'album':
+        case 'photo': {
+            // An album's member, or its listing's (album.controller.ts albumMember).
+            const albumId = type === 'album' ? id : (await prisma.albumPhoto.findUnique({ where: { id }, select: { albumId: true } }))?.albumId;
+            const album = albumId ? await prisma.album.findUnique({
+                where: { id: albumId },
+                select: { userId: true, listing: { select: { ownerId: true, memberUserId: true } } },
+            }) : null;
+            if (!album) return undefined;
+            return album.userId ?? album.listing?.memberUserId ?? album.listing?.ownerId ?? null;
         }
     }
 }
@@ -180,6 +191,16 @@ async function describeTarget(type: string, id: string, pubkey: string | null, s
         case 'event': {
             const event = await prisma.event.findUnique({ where: { id }, select: { title: true } });
             return { text: `Event: ${event?.title ?? '(deleted)'}`, link: event ? `/events/${id}` : null };
+        }
+        case 'album': {
+            const album = await prisma.album.findUnique({ where: { id }, select: { title: true } });
+            return { text: `Photo album: ${album?.title ?? '(deleted)'}`, link: album ? `/albums/${id}` : null };
+        }
+        case 'photo': {
+            const photo = await prisma.albumPhoto.findUnique({ where: { id }, select: { caption: true, albumId: true, album: { select: { title: true } } } });
+            return photo
+                ? { text: `Photo in the album "${photo.album.title}"${photo.caption ? `: "${photo.caption}"` : ''}`, link: `/albums/${photo.albumId}` }
+                : { text: 'Photo (deleted)', link: null };
         }
         default: {
             let link: string | null = null;

@@ -17,6 +17,9 @@ import {
     getPreferences,
     updatePreferences,
     updatePreferencesSchema,
+    getPrivacy,
+    updatePrivacy,
+    updatePrivacySchema,
 } from '../controllers/settings.controller';
 
 const router = Router();
@@ -25,6 +28,8 @@ router.use(authenticate);
 
 router.get('/', getSettings);
 router.put('/notifications', validate(updateNotificationSettingsSchema), updateNotificationSettings);
+router.get('/privacy', getPrivacy);
+router.put('/privacy', validate(updatePrivacySchema), updatePrivacy);
 router.put('/relays', validate(updateRelaysSchema), updateRelays);
 router.get('/media-read', getMediaRead);
 router.put('/media-read', validate(updateMediaReadSchema), updateMediaRead);

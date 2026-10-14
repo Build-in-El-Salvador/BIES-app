@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    Bell, Moon, Globe, Smartphone, LayoutGrid, Users, Play, CalendarDays, Mail, AtSign, Key, Ban, Trash2, LogOut,
+    Bell, Moon, Globe, Smartphone, LayoutGrid, Users, Play, CalendarDays, Mail, AtSign, Key, Lock, Trash2, LogOut,
     Wallet, FileText, Shield, LifeBuoy, User, ChevronRight,
 } from 'lucide-react';
 import WalletConnect from '../components/WalletConnect';
@@ -22,7 +22,8 @@ import { isPlaceholderName } from '../utils/profileComplete';
  * Settings, as one list: you at the top (to Edit profile), then Account,
  * the app (notifications, appearance, language, the bottom bar), the wallet
  * where zaps are on, help and legal, and Log out. Longer settings have
- * their own pages: Notifications, Nostr key, Blocked members, Delete account.
+ * their own pages: Privacy (with Blocked members), Notifications, Nostr key,
+ * Delete account.
  */
 const Settings = () => {
     const { t, i18n } = useTranslation();
@@ -109,7 +110,7 @@ const Settings = () => {
             <SettingsGroup title={t('account.sectionTitle')}>
                 <SettingsRow icon={AtSign} label={t('settings.email')} value={user?.email || t('settings.noEmail')} />
                 {user?.nostrPubkey && <SettingsRow icon={Key} label={t('settings.nostrKey')} to="/settings/nostr" testId="settings-nostr" />}
-                <SettingsRow icon={Ban} label={t('moderation.settings.blockedLabel')} to="/settings/blocked" testId="settings-blocked" />
+                <SettingsRow icon={Lock} label={t('settings.privacy')} to="/settings/privacy" testId="settings-privacy" />
                 <SettingsRow icon={Trash2} label={t('account.deleteLabel')} to="/settings/delete-account" danger testId="settings-delete-account" />
             </SettingsGroup>
 

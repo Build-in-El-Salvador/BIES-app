@@ -64,6 +64,7 @@ model User {
   leaderboardSnapshots LeaderboardSnapshot[]
   directoryListings     DirectoryListing[]     @relation("DirectoryListingsOwned")
   directoryMemberships  DirectoryListing[]     @relation("DirectoryListingsAsMember")
+  albums                Album[]
   directoryEndorsements DirectoryEndorsement[]
   savedListings         SavedListing[]
   listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
@@ -192,6 +193,9 @@ model Profile {
   coinosToken      String?  @map("coinos_token") // Encrypted JWT for Coinos API
   // Misc
   isPublic     Boolean  @default(true) @map("is_public")
+  // Who sees what (Settings → Privacy), JSON: { bio, location, links, details, network }.
+  // Missing keys take the defaults in services/profilePrivacy.ts.
+  privacy      String   @default("{}")
   viewCount    Int      @default(0) @map("view_count")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -679,6 +683,8 @@ model UserSettings {
   notifyProfileViews   Boolean @default(true) @map("notify_profile_views")
   notifyZaps           Boolean @default(true) @map("notify_zaps")
   notifyEvents         Boolean @default(true) @map("notify_events")
+  // View profiles without "X viewed your profile" (Settings → Privacy)
+  browsePrivately      Boolean @default(false) @map("browse_privately")
   relays               String  @default("[]") // JSON array of relay URLs
   mediaReadItems       String  @default("{}") @map("media_read_items") // JSON: { watched: [...], read: [...] }
   preferences          String  @default("{}") // JSON: { theme, language, projectsView, membersView, eventsView, mediaView }
@@ -950,8 +956,49 @@ model DirectoryListing {
   endorsements DirectoryEndorsement[]
   saves        SavedListing[]
   transfers    ListingTransfer[]
+  albums       Album[]
   @@index([type, status])
   @@map("directory_listings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Photo albums: a member's, or a farm's or business's (exactly one of userId
+// and listingId). A listing's albums are run by whoever runs the listing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Album {
+  id           String   @id @default(cuid())
+  userId       String?  @map("user_id")
+  listingId    String?  @map("listing_id")
+  title        String
+  description  String   @default("")
+  visibility   String   @default("MEMBERS") // PUBLIC | MEMBERS | ONLY_ME (ONLY_ME: members' albums only)
+  coverPhotoId String?  @map("cover_photo_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user    User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing DirectoryListing? @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  photos  AlbumPhoto[]
+
+  @@index([userId])
+  @@index([listingId])
+  @@map("albums")
+}
+
+model AlbumPhoto {
+  id        String   @id @default(cuid())
+  albumId   String   @map("album_id")
+  url       String
+  caption   String   @default("")
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([albumId])
+  @@map("album_photos")
 }
 
 // A member saved a listing for later (Google Maps "Save", Yelp bookmarks).

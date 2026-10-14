@@ -143,7 +143,8 @@
     "layoutGrid": "Grid",
     "layoutCards": "Cards",
     "layoutIcons": "Icons",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "privacy": "Privacy"
   },
   "landing": {
     "forInvestors": "For Global Investors",
@@ -2403,7 +2404,9 @@
         "listing": "Report this listing",
         "endorsement": "Report this recommendation",
         "event": "Report this event",
-        "note": "Report this post"
+        "note": "Report this post",
+        "album": "Report this album",
+        "photo": "Report this photo"
       },
       "why": "What's wrong with it?",
       "detailsLabel": "Anything else we should know? (optional)",
@@ -2551,7 +2554,10 @@
     "posts": "Posts",
     "noPosts": "No posts yet.",
     "noPhotos": "No photos yet.",
-    "newMember": "New member"
+    "newMember": "New member",
+    "photosFromPosts": "From posts",
+    "networkPrivate": "{{name}} keeps their network private.",
+    "networkPrivateList": "This member keeps their network private."
   },
   "notificationSettings": {
     "push": "Push notifications",
@@ -2578,5 +2584,91 @@
     "footer": "Notices about your account and your listings always come through. Everything also shows under the bell.",
     "loadFailed": "Couldn't load your settings. Try again.",
     "saveFailed": "Couldn't save that. Try again."
+  },
+  "privacySettings": {
+    "title": "Privacy",
+    "whoSees": "Who can see your profile",
+    "whoSeesFooter": "Your name, profile photo, cover photo and headline are public. Each album has its own setting.",
+    "parts": {
+      "bio": "Bio",
+      "location": "Location",
+      "links": "Links and Lightning",
+      "details": "Details and experience",
+      "network": "Network"
+    },
+    "partsDesc": {
+      "bio": "About you, under your name",
+      "location": "Where you're based",
+      "links": "Website, X, LinkedIn and Lightning address",
+      "details": "Experience, sections and interests",
+      "network": "Your followers and who you follow"
+    },
+    "audiences": {
+      "PUBLIC": "Everyone",
+      "MEMBERS": "Members",
+      "ONLY_ME": "Only me"
+    },
+    "onBies": "On BIES",
+    "directory": "Show me in Members",
+    "directoryDesc": "Off: you're not listed or found in search. Members can still open your profile from your posts.",
+    "posts": "Posts on my profile",
+    "postsDesc": "Your Private Feed posts, which members can see",
+    "browsePrivately": "Browse profiles privately",
+    "browsePrivatelyDesc": "Members aren't told when you view their profile",
+    "nostrFooter": "These settings cover what BIES shows. Anything you publish to public Nostr is outside BIES's control.",
+    "loadFailed": "Couldn't load your privacy settings. Try again.",
+    "saveFailed": "Couldn't save that. Try again."
+  },
+  "albums": {
+    "title": "Albums",
+    "new": "New album",
+    "newTitle": "New album",
+    "editTitle": "Edit album",
+    "name": "Name",
+    "namePlaceholder": "A trip, an event, your work…",
+    "namePlaceholderListing": "The farm, Harvest 2026, Our team…",
+    "description": "Description",
+    "descriptionPlaceholder": "What these photos show (optional)",
+    "audience": "Who can see it",
+    "audiences": {
+      "PUBLIC": "Everyone",
+      "MEMBERS": "Members",
+      "ONLY_ME": "Only me"
+    },
+    "audienceHints": {
+      "PUBLIC": "Anyone, including people who aren't members.",
+      "MEMBERS": "Only BIES members.",
+      "ONLY_ME": "Only you."
+    },
+    "create": "Create album",
+    "save": "Save",
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos",
+    "emptyOwn": "Group photos into albums: a trip, an event, your work.",
+    "emptyListing": "Show different parts of the place, document its growth, or introduce the team.",
+    "addPhotos": "Add photos",
+    "uploading": "Adding photos… {{done}} of {{total}}",
+    "uploadFailed": "Couldn't add that photo. Try again.",
+    "saveFailed": "Couldn't save that. Try again.",
+    "objectionable": "That text breaks the community rules. Change it and try again.",
+    "unavailable": "This album isn't available. It may have been deleted, or it's private.",
+    "goHome": "Go to Home",
+    "noPhotos": "No photos yet.",
+    "noPhotosOwn": "No photos yet. Add some to start the album.",
+    "photo": "Photo",
+    "photoOptions": "Photo options",
+    "cover": "Cover",
+    "edit": "Edit album",
+    "delete": "Delete album",
+    "deleteConfirm": "Delete this album and its photos? This can't be undone.",
+    "reportAlbum": "Report album",
+    "reportPhoto": "Report photo",
+    "addCaption": "Add caption",
+    "editCaption": "Edit caption",
+    "caption": "Caption",
+    "captionPlaceholder": "What it shows, or when (optional)",
+    "makeCover": "Make album cover",
+    "deletePhoto": "Delete photo",
+    "deletePhotoConfirm": "Delete this photo?"
   }
 }

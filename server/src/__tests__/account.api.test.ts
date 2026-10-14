@@ -119,7 +119,7 @@ beforeAll(async () => {
 afterAll(async () => {
     server?.close();
     await prisma.$disconnect();
-    fs.rmSync(env.dir, { recursive: true, force: true });
+    fs.rmSync(env.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); // a late write can race the delete (ENOTEMPTY)
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
