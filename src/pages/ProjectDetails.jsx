@@ -144,7 +144,7 @@ const ProjectDetails = () => {
     const tags = project.tags || [];
     const teamMembers = project.teamMembers || [];
     const teamInfo = project.teamInfo || [];
-    const hasDeck = !!project.deckKey;
+    const hasDeck = !!(project.hasDeck ?? project.deckKey);
     const stage = project.stage || 'IDEA';
     const category = project.category || 'OTHER';
     const followerCount = project._count?.watchlisted || 0;

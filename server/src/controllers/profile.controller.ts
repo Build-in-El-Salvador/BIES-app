@@ -3,7 +3,7 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { notifyProfileView } from '../services/notification.service';
 import { publishProfileUpdate, publishAnnouncement } from '../services/nostr.service';
-import { blockedIds, hasBlocked } from '../services/moderation.service';
+import { hasBlocked, hiddenFromIds } from '../services/moderation.service';
 import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
@@ -83,7 +83,7 @@ const viewerOf = (req: Request, profileUserId: string): Viewer =>
  */
 export async function listProfiles(req: Request, res: Response): Promise<void> {
     const respond = async (result: any) => {
-        const hidden = new Set(await blockedIds(req.user?.id));
+        const hidden = new Set(await hiddenFromIds(req.user?.id));
         const { search, location } = req.query;
         const data = result.data
             .filter((p: any) => !hidden.has(p.userId))
@@ -91,7 +91,18 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
             .filter((p: any) => typeof location !== 'string' || !location
                 || String(profileForViewer(p, viewerOf(req, p.userId)).location || '').toLowerCase().includes(location.toLowerCase()))
             .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
-        res.json({ ...result, data });
+        if (!result.searched) {
+            res.json({ ...result, data });
+            return;
+        }
+        // A search or location filter: every candidate was fetched, so the
+        // page and the total come from what this viewer can see. A total
+        // counted over hidden fields told them a hidden location matched.
+        const { page, limit } = result.pagination;
+        res.json({
+            data: data.slice((page - 1) * limit, page * limit),
+            pagination: { page, limit, total: data.length, totalPages: Math.ceil(data.length / limit) },
+        });
     };
     try {
         const { role, location, search, page = '1', limit = '20' } = req.query;
@@ -138,6 +149,9 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
             ];
         }
 
+        // With a search or location, fetch every candidate (up to 500) and
+        // let respond() page through what the viewer can see.
+        const searched = !!((typeof search === 'string' && search) || (typeof location === 'string' && location));
         const [profiles, total] = await Promise.all([
             prisma.profile.findMany({
                 where,
@@ -150,11 +164,11 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                         },
                     },
                 },
-                skip,
-                take,
+                skip: searched ? 0 : skip,
+                take: searched ? 500 : take,
                 orderBy: { viewCount: 'desc' },
             }),
-            prisma.profile.count({ where }),
+            searched ? Promise.resolve(0) : prisma.profile.count({ where }),
         ]);
 
         const parsed = profiles.map((p) => ({
@@ -179,6 +193,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                 total,
                 totalPages: Math.ceil(total / take),
             },
+            ...(searched ? { searched: true } : {}),
         };
 
         await cache.setJson(cKey, result, TTL.PROFILE_LIST);
@@ -194,13 +209,18 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
  * Get a single profile (cached, by userId or profileId), as this viewer may
  * see it (profilePrivacy.ts). A member who left the Members directory can
  * still be opened by members (from a post, say), not by anyone else. A
- * member the viewer blocked comes back as just a name, with `blocked: true`.
+ * member the viewer blocked comes back as just a name, with `blocked: true`;
+ * to a member they blocked, it isn't there at all (404), as on Facebook.
  */
 export async function getProfile(req: Request, res: Response): Promise<void> {
     const viewerBlocked = (ownerId: string) =>
         !!req.user && req.user.id !== ownerId ? hasBlocked(req.user.id, { id: ownerId }) : Promise.resolve(false);
     const respond = async (result: any) => {
         if (!req.user && !result.isPublic) {
+            res.status(404).json({ error: 'Profile not found' });
+            return;
+        }
+        if (req.user && req.user.id !== result.userId && await hasBlocked(result.userId, { id: req.user.id })) {
             res.status(404).json({ error: 'Profile not found' });
             return;
         }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Folder, Calendar, Users, Trophy, FileText, Newspaper, MessageSquare, ShieldCheck, Store, GraduationCap, Ticket, Target, SlidersHorizontal, LogOut, Flag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -8,7 +8,10 @@ import { useTheme } from '../../context/ThemeContext';
 
 const AdminDashboard = () => {
   const { t } = useTranslation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  // Moderators moderate: Reports and the Directory. The rest (members'
+  // emails, points, roles, settings) is for admins (admin.routes.ts).
+  const isAdmin = !!user?.isAdmin;
   const { theme } = useTheme();
   const location = useLocation();
   const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -20,7 +23,7 @@ const AdminDashboard = () => {
     return () => setPortalTarget(null);
   }, []);
 
-  const tabs = [
+  const allTabs = [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
     { to: '/admin/reports', label: 'Reports', icon: Flag },
     { to: '/admin/projects', label: 'Projects', icon: Folder },
@@ -37,6 +40,8 @@ const AdminDashboard = () => {
     { to: '/admin/feedback', label: 'Feedback', icon: MessageSquare },
     { to: '/admin/features', label: t('features.tab'), icon: SlidersHorizontal },
   ];
+  const MODERATOR_TABS = ['/admin/reports', '/admin/directory'];
+  const tabs = isAdmin ? allTabs : allTabs.filter((tab) => MODERATOR_TABS.includes(tab.to));
 
   const isTabActive = (path, end) => end ? location.pathname === path : location.pathname.startsWith(path);
 
@@ -124,7 +129,9 @@ const AdminDashboard = () => {
       )}
 
       <main className="dashboard-content">
-        <Outlet />
+        {!isAdmin && !MODERATOR_TABS.some((path) => location.pathname.startsWith(path))
+          ? <Navigate to="/admin/reports" replace />
+          : <Outlet />}
       </main>
 
       <style>{`

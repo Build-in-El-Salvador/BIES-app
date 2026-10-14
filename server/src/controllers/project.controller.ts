@@ -5,6 +5,8 @@ import { getPresignedUrl } from '../services/storage.service';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { notifyProjectUpdate, notifyDeckRequest, notifyDeckApproved, notifyDeckDenied, notifyInvestmentInterest } from '../services/notification.service';
 import { z } from 'zod';
+import { withoutDeckKey } from '../utils/projectFields';
+import { nestedProfileForViewer } from '../services/profilePrivacy';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -136,7 +138,7 @@ export async function listProjects(req: Request, res: Response): Promise<void> {
         ]);
 
         const parsed = projects.map((p) => ({
-            ...p,
+            ...withoutDeckKey(p),
             tags: JSON.parse(p.tags || '[]'),
             customSections: JSON.parse(p.customSections || '[]'),
             teamInfo: JSON.parse(p.teamInfo || '[]'),
@@ -172,7 +174,15 @@ export async function getProject(req: Request, res: Response): Promise<void> {
     try {
         const cKey = cacheKey.projectDetail(req.params.id);
         const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        // An unpublished project is for its owner and admins, cached or not.
+        const mayView = (p: { isPublished: boolean; ownerId: string }) =>
+            p.isPublished || (!!req.user && (p.ownerId === req.user.id || req.user.isAdmin));
+        // The owner's bio as their Settings → Privacy allows, per viewer.
+        const shownTo = (p: any) => ({ ...p, owner: nestedProfileForViewer(p.owner, req.user?.id) });
+        if (cached) {
+            if (!mayView(cached)) { res.status(404).json({ error: 'Project not found' }); return; }
+            res.setHeader('X-Cache', 'HIT'); res.json(shownTo(cached)); return;
+        }
 
         const project = await prisma.project.findUnique({
             where: { id: req.params.id },
@@ -180,7 +190,7 @@ export async function getProject(req: Request, res: Response): Promise<void> {
                 owner: {
                     select: {
                         id: true, nostrPubkey: true, role: true,
-                        profile: { select: { name: true, avatar: true, company: true, bio: true } },
+                        profile: { select: { name: true, avatar: true, company: true, bio: true, privacy: true } },
                     },
                 },
                 teamMembers: {
@@ -207,18 +217,14 @@ export async function getProject(req: Request, res: Response): Promise<void> {
         }
 
         // Only allow owner/admin to view unpublished projects
-        if (!project.isPublished) {
-            const isOwner = req.user && project.ownerId === req.user.id;
-            const isAdmin = req.user && req.user.isAdmin;
-            if (!isOwner && !isAdmin) {
-                res.status(404).json({ error: 'Project not found' });
-                return;
-            }
+        if (!mayView(project)) {
+            res.status(404).json({ error: 'Project not found' });
+            return;
         }
 
-        const result = { ...project, tags: JSON.parse(project.tags || '[]'), customSections: JSON.parse(project.customSections || '[]'), teamInfo: JSON.parse(project.teamInfo || '[]'), useOfFunds: JSON.parse(project.useOfFunds || '[]') };
+        const result = { ...withoutDeckKey(project), tags: JSON.parse(project.tags || '[]'), customSections: JSON.parse(project.customSections || '[]'), teamInfo: JSON.parse(project.teamInfo || '[]'), useOfFunds: JSON.parse(project.useOfFunds || '[]') };
         await cache.setJson(cKey, result, TTL.PROJECT_DETAIL);
-        res.json(result);
+        res.json(shownTo(result));
     } catch (error) {
         console.error('Get project error:', error);
         res.status(500).json({ error: 'Failed to get project' });
@@ -231,9 +237,6 @@ export async function getProject(req: Request, res: Response): Promise<void> {
  */
 export async function createProject(req: Request, res: Response): Promise<void> {
     try {
-        require('fs').appendFileSync('/tmp/bies_debug.log', "--- CREATE PROJECT ---\n" + JSON.stringify(req.body, null, 2) + "\n");
-        console.log("--- CREATE PROJECT ---");
-
         // Explicitly pick allowed fields — never allow isPublished, status, isFeatured, etc.
         const allowedFields = ['title', 'description', 'category', 'stage', 'fundingGoal', 'thumbnail', 'demoUrl', 'websiteUrl', 'tags', 'customSections', 'teamInfo', 'useOfFunds', 'requiresDeckApproval'];
         const data: any = {};
@@ -313,9 +316,6 @@ export async function updateProject(req: Request, res: Response): Promise<void> 
         if (existing.ownerId !== req.user!.id && !req.user!.isAdmin) {
             res.status(403).json({ error: 'Not authorized to update this project' }); return;
         }
-
-        require('fs').appendFileSync('/tmp/bies_debug.log', "--- UPDATE PROJECT ---\n" + JSON.stringify(req.body, null, 2) + "\n");
-        console.log("--- UPDATE PROJECT ---");
 
         // Explicitly pick allowed fields — never allow isPublished, status, isFeatured, ownerId, etc.
         const allowedFields = ['title', 'description', 'category', 'stage', 'fundingGoal', 'raisedAmount', 'thumbnail', 'demoUrl', 'websiteUrl', 'tags', 'customSections', 'teamInfo', 'useOfFunds', 'ownerRole', 'requiresDeckApproval'];
@@ -668,8 +668,12 @@ export async function reviewDeckRequest(req: Request, res: Response): Promise<vo
             res.status(403).json({ error: 'Not authorized' }); return;
         }
 
+        // Only a request for this project: the owner check above is for it.
+        const existingRequest = await prisma.deckRequest.findFirst({ where: { id: requestId, projectId }, select: { id: true } });
+        if (!existingRequest) { res.status(404).json({ error: 'Request not found' }); return; }
+
         const deckRequest = await prisma.deckRequest.update({
-            where: { id: requestId },
+            where: { id: existingRequest.id },
             data: { status, reviewedAt: new Date() },
         });
 

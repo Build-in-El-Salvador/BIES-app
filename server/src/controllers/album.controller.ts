@@ -14,7 +14,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import { hasBlocked } from '../services/moderation.service';
+import { blockedEitherWay } from '../services/moderation.service';
 import { discardUploads, ownsUploads } from '../services/uploads.service';
 import { objectionableField, objectionableResponse } from '../services/contentFilter';
 
@@ -83,7 +83,7 @@ async function canView(req: Request, album: AlbumWithOwner): Promise<boolean> {
     if (album.visibility === 'ONLY_ME') return false;
     if (album.visibility === 'MEMBERS' && !req.user) return false;
     const member = albumMember(album);
-    if (req.user && member && await hasBlocked(req.user.id, { id: member })) return false;
+    if (req.user && member && member !== req.user.id && await blockedEitherWay(req.user.id, member)) return false;
     return true;
 }
 

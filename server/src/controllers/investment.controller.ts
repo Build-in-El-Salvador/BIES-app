@@ -48,14 +48,15 @@ export async function listInvestments(req: Request, res: Response): Promise<void
 
         const where: any = {};
 
-        if (role === 'INVESTOR') {
-            where.investorId = userId;
+        if (req.user!.isAdmin) {
+            // Admin can filter by projectId
+            if (projectId) where.projectId = projectId;
         } else if (role === 'BUILDER') {
             // Show investments in builder's own projects
             where.project = { ownerId: userId };
-        } else if (req.user!.isAdmin) {
-            // Admin can filter by projectId
-            if (projectId) where.projectId = projectId;
+        } else {
+            // Everyone else: only their own (a member used to see everyone's).
+            where.investorId = userId;
         }
 
         if (status && typeof status === 'string') {

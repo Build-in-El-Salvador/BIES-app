@@ -3,23 +3,27 @@ import { moderationApi } from './api';
 /**
  * The members this member blocked. The server hides them everywhere it
  * serves content; the app hides them where content comes straight from Nostr
- * (the Feed, messages), by pubkey. Held per signed-in member, so another
+ * (the Feed, messages), by pubkey. Blocking works both ways: `pubkeys` also
+ * holds the members who blocked this one (`hiddenPubkeys` from the server),
+ * whose posts are hidden too; `members` (Settings → Blocked members) lists
+ * only those this member blocked. Held per signed-in member, so another
  * account on the same device never sees this list.
  */
 
-export const EMPTY = { userId: null, loaded: false, error: false, members: [], ids: new Set(), pubkeys: new Set() };
+export const EMPTY = { userId: null, loaded: false, error: false, members: [], hidden: [], ids: new Set(), pubkeys: new Set() };
 let state = EMPTY;
 let pending = null;
 const listeners = new Set();
 
-function set(userId, members, { error = false } = {}) {
+function set(userId, members, { error = false, hidden = state.userId === userId ? state.hidden : [] } = {}) {
     state = {
         userId,
         loaded: true,
         error,
         members,
+        hidden,
         ids: new Set(members.map((m) => m.id)),
-        pubkeys: new Set(members.map((m) => m.nostrPubkey).filter(Boolean)),
+        pubkeys: new Set([...members.map((m) => m.nostrPubkey), ...hidden].filter(Boolean)),
     };
     listeners.forEach((fn) => fn());
 }
@@ -34,7 +38,7 @@ export function loadBlocks(userId) {
     }
     if (pending?.userId === userId) return pending.promise;
     const promise = moderationApi.blocks()
-        .then((res) => { if (pending?.promise === promise) set(userId, res.data || []); })
+        .then((res) => { if (pending?.promise === promise) set(userId, res.data || [], { hidden: res.hiddenPubkeys || [] }); })
         // The server still hides them. Keep what we had, and say it failed.
         .catch(() => { if (pending?.promise === promise) set(userId, membersOf(userId), { error: true }); })
         .finally(() => { if (pending?.promise === promise) pending = null; });

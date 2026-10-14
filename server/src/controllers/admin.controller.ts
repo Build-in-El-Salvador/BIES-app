@@ -26,6 +26,7 @@ import { BADGES } from '../services/badges.catalog';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles } from './directory.controller';
+import { withoutDeckKey } from '../utils/projectFields';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -927,7 +928,7 @@ export async function listAdminProjects(req: Request, res: Response): Promise<vo
         ]);
 
         const parsed = projects.map((p) => ({
-            ...p,
+            ...withoutDeckKey(p),
             tags: JSON.parse(p.tags || '[]'),
         }));
 
@@ -1468,7 +1469,7 @@ export async function listAdminDirectory(req: Request, res: Response): Promise<v
                 include: {
                     owner: {
                         select: {
-                            id: true, email: true,
+                            id: true, email: !!req.user!.isAdmin, // moderators see no emails
                             profile: { select: { name: true, avatar: true } },
                         },
                     },

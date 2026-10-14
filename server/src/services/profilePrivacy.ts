@@ -58,6 +58,22 @@ const HIDDEN_AS: Record<'location' | 'links' | 'details', Record<string, unknown
 // All a signed-out visitor gets, at most.
 const PUBLIC_FIELDS = ['id', 'userId', 'name', 'avatar', 'banner', 'title', 'company', 'bio', 'isPublic', 'createdAt'];
 
+/** Who is looking at a member's profile: themselves, another member, or anyone. */
+export function viewerFor(viewerId: string | null | undefined, memberId: string | null | undefined): Viewer {
+    if (!viewerId) return 'public';
+    return viewerId === memberId ? 'self' : 'member';
+}
+
+/**
+ * A member's profile as it appears inside something else (a listing's
+ * member, a course's author, a project's owner): select its \`privacy\` too,
+ * and this applies the member's settings as on their own profile page.
+ */
+export function nestedProfileForViewer<T extends { id?: string; profile?: Record<string, any> | null }>(user: T | null | undefined, viewerId: string | null | undefined): T | null | undefined {
+    if (!user?.profile) return user;
+    return { ...user, profile: profileForViewer(user.profile, viewerFor(viewerId, user.id)) };
+}
+
 /** Whether this viewer may see the member's followers and following. */
 export function canSeeNetwork(privacy: Privacy, viewer: Viewer): boolean {
     return viewer === 'self' || (viewer === 'member' && privacy.network === 'MEMBERS');

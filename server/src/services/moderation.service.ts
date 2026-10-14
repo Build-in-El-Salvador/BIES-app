@@ -394,6 +394,27 @@ export async function hasBlocked(blockerId: string, other: { id?: string; pubkey
 }
 
 /** Whether either member blocked the other: they can't follow or message each other. */
+/**
+ * Both ways: the members this member blocked, and those who blocked them.
+ * What either side publishes is hidden from the other, as on Facebook (Mike,
+ * 2026-10-13): the blocker sees nothing of the blocked member, and the
+ * blocked member nothing of the blocker, without being told why.
+ */
+export async function hiddenFromIds(userId: string | null | undefined): Promise<string[]> {
+    if (!userId) return [];
+    const rows = await prisma.block.findMany({
+        where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
+        select: { blockerId: true, blockedId: true },
+    });
+    return rows.map((r) => (r.blockerId === userId ? r.blockedId : r.blockerId));
+}
+
+/** The pubkeys of the members who blocked this member: the app hides their posts too. */
+export async function blockerPubkeys(userId: string): Promise<string[]> {
+    const rows = await prisma.block.findMany({ where: { blockedId: userId }, select: { blocker: { select: { nostrPubkey: true } } } });
+    return rows.map((r) => r.blocker.nostrPubkey).filter(Boolean);
+}
+
 export async function blockedEitherWay(a: string, b: string): Promise<boolean> {
     const found = await prisma.block.findFirst({
         where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },

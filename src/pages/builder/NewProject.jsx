@@ -55,7 +55,7 @@ const NewProject = () => {
                     useOfFunds: project.useOfFunds || [],
                     requiresDeckApproval: project.requiresDeckApproval !== undefined ? project.requiresDeckApproval : true,
                 });
-                if (project.deckKey) setExistingDeck(true);
+                if (project.hasDeck || project.deckKey) setExistingDeck(true);
             }).catch(() => {
                 setError('Failed to load project for editing.');
             }).finally(() => setLoadingProject(false));
