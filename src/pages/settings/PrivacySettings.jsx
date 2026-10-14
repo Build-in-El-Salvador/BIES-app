@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlignLeft, Ban, Briefcase, Eye, Link2, MapPin, Newspaper, Users, UserSearch } from 'lucide-react';
-import { settingsApi } from '../../services/api';
+import { profilesApi, settingsApi } from '../../services/api';
+import { nostrSigner } from '../../services/nostrSigner';
+import { nostrService } from '../../services/nostrService';
+import { nostrLinkFields } from '../../services/nostrProfileLinks';
 import { SettingsPage, SettingsGroup, SettingsRow, SettingsSelect, Switch } from '../../components/settings/SettingsUI';
 
 // Who can see each part of a profile (server: services/profilePrivacy.ts).
@@ -28,16 +31,35 @@ const PrivacySettings = () => {
         settingsApi.getPrivacy().then(setPrivacy).catch(() => setError(t('privacySettings.loadFailed')));
     }, []);
 
-    const save = async (changes) => {
-        const before = privacy;
+    // Saves go one after another, and only the last one's answer (the whole
+    // setting as saved) replaces what's shown, so quick changes can't undo
+    // each other. After a failure the page shows what is actually saved.
+    const queue = useRef(Promise.resolve());
+    const waiting = useRef(0);
+    const save = (changes) => {
         setPrivacy((p) => ({ ...p, ...changes }));
         setError('');
-        try {
-            setPrivacy(await settingsApi.updatePrivacy(changes));
-        } catch {
-            setPrivacy(before);
-            setError(t('privacySettings.saveFailed'));
-        }
+        waiting.current += 1;
+        queue.current = queue.current.then(async () => {
+            let saved = null;
+            let ok = false;
+            try {
+                saved = await settingsApi.updatePrivacy(changes);
+                ok = true;
+            } catch {
+                setError(t('privacySettings.saveFailed'));
+                saved = await settingsApi.getPrivacy().catch(() => null);
+            }
+            waiting.current -= 1;
+            if (saved && waiting.current === 0) setPrivacy(saved);
+            // With a key on this device, the app updates the Nostr profile on
+            // the BIES relay (the server does it for keys BIES holds).
+            if (ok && changes.links !== undefined && nostrSigner.signsOnDevice) {
+                profilesApi.me()
+                    .then((me) => nostrService.updateProfileToBiesRelay(nostrLinkFields(me, { links: changes.links })))
+                    .catch((err) => console.error('Relay profile sync failed (non-blocking):', err));
+            }
+        });
     };
 
     return (

@@ -69,11 +69,11 @@ export async function followUser(req: Request, res: Response): Promise<void> {
         // Notify the followed user
         const follower = await prisma.user.findUnique({
             where: { id: followerId },
-            include: { profile: { select: { name: true } } },
+            include: { profile: { select: { name: true, privacy: true } } },
         });
         const followed = await prisma.user.findUnique({
             where: { id: followingId },
-            include: { profile: { select: { name: true } } },
+            include: { profile: { select: { name: true, privacy: true } } },
         });
         await notifyFollow({
             followedId: followingId,
@@ -81,12 +81,16 @@ export async function followUser(req: Request, res: Response): Promise<void> {
             followerId,
         });
 
-        // Announce follow on the BIES feed
-        const followerName = follower?.profile?.name || 'A BIES member';
-        const followedName = followed?.profile?.name || 'a builder';
-        publishAnnouncement(followerId, `${followerName} started following ${followedName} on BIES.`, [['t', 'follow']]).catch((err) =>
-            console.error('[Nostr] Follow announcement failed:', err)
-        );
+        // Announce follow on the BIES feed, unless either member keeps their
+        // network to themselves (Settings → Privacy → Network).
+        const networkPrivate = [follower, followed].some((u) => privacyOf(u?.profile?.privacy).network === 'ONLY_ME');
+        if (!networkPrivate) {
+            const followerName = follower?.profile?.name || 'A BIES member';
+            const followedName = followed?.profile?.name || 'a builder';
+            publishAnnouncement(followerId, `${followerName} started following ${followedName} on BIES.`, [['t', 'follow']]).catch((err) =>
+                console.error('[Nostr] Follow announcement failed:', err)
+            );
+        }
 
         res.status(201).json({ message: 'Followed', follow });
     } catch (error: any) {

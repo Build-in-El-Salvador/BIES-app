@@ -117,3 +117,29 @@ export function matchesVisibly(profile: Record<string, any>, term: string, viewe
         .toLowerCase();
     return text.includes(term.toLowerCase());
 }
+
+/**
+ * The fields of the member's Nostr profile (kind 0) that BIES publishes for
+ * them on its members' relay (nostr.service.ts publishProfileUpdate). Other
+ * members can read that relay, so "Links: Only me" leaves the website,
+ * Lightning, Bolt12 and NIP-05 fields out, as the API does.
+ */
+export function nostrProfileFor(profile: {
+    name?: string | null; bio?: string | null; avatar?: string | null; banner?: string | null;
+    website?: string | null; nip05Name?: string | null; lightningAddress?: string | null; bolt12Offer?: string | null;
+}, privacy: Privacy) {
+    const links = privacy.links !== 'ONLY_ME';
+    const isLnurl = !!profile.lightningAddress?.toLowerCase().startsWith('lnurl1');
+    return {
+        name: profile.name || '',
+        about: profile.bio || '',
+        picture: profile.avatar || '',
+        banner: profile.banner || '',
+        website: links ? profile.website || '' : '',
+        nip05: links && profile.nip05Name ? `${profile.nip05Name}@buildinelsalvador.com` : '',
+        lud16: links && !isLnurl ? profile.lightningAddress || '' : '',
+        lud06: links && isLnurl ? profile.lightningAddress || '' : '',
+        bolt12: links ? profile.bolt12Offer || '' : '',
+    };
+}
+
