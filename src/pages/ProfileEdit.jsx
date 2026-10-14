@@ -1133,40 +1133,44 @@ const ProfileEdit = () => {
                     </button>
                     <div>
                         <span className="pe-label" style={{ padding: 0, marginBottom: '0.5rem', display: 'block' }}>
-                            {t('profileEdit.showNostrFeed', 'Nostr feed on profile')}
+                            {t('profileEdit.showNostrFeed', 'Show my posts on my profile')}
                         </span>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                            {/* The profile shows BIES feed posts only, so it's on or off
+                                (an older Public or Combined choice counts as on). */}
                             {[
                                 { value: 'off',      label: t('common.off', 'Off') },
-                                { value: 'private',   label: t('profileEdit.privateOnly', 'Private') },
-                                { value: 'public',    label: t('nostrFeed.publicTab', 'Public') },
-                                { value: 'combined',  label: t('nostrFeed.combined', 'Combined') },
-                            ].map(opt => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => setForm(prev => ({ ...prev, nostrFeedMode: opt.value }))}
-                                    style={{
-                                        padding: '0.45rem 0.5rem',
-                                        fontSize: '0.8rem',
-                                        fontWeight: 600,
-                                        borderRadius: 'var(--radius-md, 6px)',
-                                        border: form.nostrFeedMode === opt.value
-                                            ? '2px solid var(--color-primary, #0052cc)'
-                                            : '1px solid var(--color-gray-300)',
-                                        background: form.nostrFeedMode === opt.value
-                                            ? 'var(--color-primary-50, #e6f0ff)'
-                                            : 'var(--color-surface, #fff)',
-                                        color: form.nostrFeedMode === opt.value
-                                            ? 'var(--color-primary, #0052cc)'
-                                            : 'var(--color-gray-600)',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.15s',
-                                    }}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
+                                { value: 'private',  label: t('common.on', 'On') },
+                            ].map(opt => {
+                                const selected = opt.value === 'off' ? form.nostrFeedMode === 'off' : form.nostrFeedMode !== 'off';
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        aria-pressed={selected}
+                                        onClick={() => setForm(prev => ({ ...prev, nostrFeedMode: opt.value }))}
+                                        style={{
+                                            padding: '0.45rem 0.5rem',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 600,
+                                            borderRadius: 'var(--radius-md, 6px)',
+                                            border: selected
+                                                ? '2px solid var(--color-primary, #0052cc)'
+                                                : '1px solid var(--color-gray-300)',
+                                            background: selected
+                                                ? 'var(--color-primary-50, #e6f0ff)'
+                                                : 'var(--color-surface, #fff)',
+                                            color: selected
+                                                ? 'var(--color-primary, #0052cc)'
+                                                : 'var(--color-gray-600)',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s',
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>

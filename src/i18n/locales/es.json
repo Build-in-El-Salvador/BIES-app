@@ -1239,7 +1239,7 @@
     "fetch": "Obtener",
     "applyToBies": "Aplicar a BIES",
     "pushToRelays": "Enviar a relays",
-    "showNostrFeed": "Mostrar feed Nostr en perfil",
+    "showNostrFeed": "Mostrar mis publicaciones en mi perfil",
     "nostrFeedHelp": "Cuando esta activado, tus notas Nostr recientes se muestran en tu perfil BIES.",
     "privateOnly": "Solo privado",
     "privateOnlyDesc": "Notas del relay BIES.",
@@ -2509,5 +2509,31 @@
         "desc": "Explora empleos, alianzas, eventos y más."
       }
     }
+  },
+  "profileView": {
+    "followers_one": "{{count}} seguidor",
+    "followers_other": "{{count}} seguidores",
+    "following": "{{count}} siguiendo",
+    "editProfile": "Editar perfil",
+    "viewCover": "Ver foto de portada",
+    "message": "Mensaje",
+    "tabs": {
+      "all": "Todo",
+      "photos": "Fotos"
+    },
+    "details": "Detalles",
+    "at": "en",
+    "runs": "Dirige",
+    "workingOn": "Trabaja en",
+    "addDetails": "Agrega tu cargo, tu negocio y dónde estás, para que los miembros sepan a qué te dedicas.",
+    "network": "Red",
+    "seeAll": "Ver todo",
+    "networkEmpty": "Aún no tiene conexiones.",
+    "networkEmptyOwn": "Sigue a miembros para crear tu red.",
+    "findMembers": "Buscar miembros",
+    "posts": "Publicaciones",
+    "noPosts": "Aún no hay publicaciones.",
+    "noPhotos": "Aún no hay fotos.",
+    "newMember": "Miembro nuevo"
   }
 }
