@@ -6,6 +6,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
 import { notifyWatchlistAdd } from '../services/notification.service';
+import { withoutDeckKey } from '../utils/projectFields';
 
 export const addToWatchlistSchema = z.object({
     projectId: z.string().min(1),
@@ -40,7 +41,7 @@ export async function getWatchlist(req: Request, res: Response): Promise<void> {
         const parsed = items.map((item) => ({
             ...item,
             project: {
-                ...item.project,
+                ...withoutDeckKey(item.project),
                 tags: JSON.parse(item.project.tags || '[]'),
             },
         }));

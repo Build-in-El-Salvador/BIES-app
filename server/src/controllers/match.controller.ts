@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, TTL } from '../services/redis.service';
+import { withoutDeckKey } from '../utils/projectFields';
+import { privacyOf } from '../services/profilePrivacy';
 
 /**
  * GET /match/projects/:id/matches
@@ -11,10 +13,7 @@ export async function getProjectMatches(req: Request, res: Response): Promise<vo
     try {
         const projectId = req.params.id;
 
-        const cKey = `matches:${projectId}`;
-        const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
-
+        // Who may see them first, then the cache (it's shared by everyone).
         const project = await prisma.project.findUnique({
             where: { id: projectId },
             select: { ownerId: true, category: true, stage: true, fundingGoal: true, title: true },
@@ -25,6 +24,10 @@ export async function getProjectMatches(req: Request, res: Response): Promise<vo
         if (project.ownerId !== req.user!.id && !req.user!.isAdmin) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
+
+        const cKey = `matches:${projectId}`;
+        const cached = await cache.getJson<any>(cKey);
+        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
 
         // Get all public investor profiles
         const investors = await prisma.profile.findMany({
@@ -39,8 +42,12 @@ export async function getProjectMatches(req: Request, res: Response): Promise<vo
             },
         });
 
+        // Investors who keep their details (focus, stages, tickets) to
+        // themselves aren't matched on them (Settings → Privacy).
+        const open = investors.filter((investor) => privacyOf(investor.privacy).details !== 'ONLY_ME');
+
         // Score each investor
-        const scored = investors.map((investor) => {
+        const scored = open.map((investor) => {
             let score = 0;
             const reasons: string[] = [];
 
@@ -176,7 +183,7 @@ export async function getInvestorRecommendations(req: Request, res: Response): P
             }
 
             return {
-                project: { ...project, tags: JSON.parse(project.tags || '[]') },
+                project: { ...withoutDeckKey(project), tags: JSON.parse(project.tags || '[]') },
                 score,
                 reasons,
             };

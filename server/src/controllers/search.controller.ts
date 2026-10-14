@@ -5,7 +5,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
-import { blockedIds } from '../services/moderation.service';
+import { hiddenFromIds } from '../services/moderation.service';
 import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
 
 const viewerOf = (req: Request, userId: string): Viewer =>
@@ -18,14 +18,20 @@ const viewerOf = (req: Request, userId: string): Viewer =>
  * (Settings → Privacy), found only by what the viewer can see of it.
  */
 async function withoutBlocked(req: Request, results: any): Promise<any> {
-    const hidden = new Set(await blockedIds(req.user?.id));
+    const hidden = new Set(await hiddenFromIds(req.user?.id));
     const out = { ...results };
     if (Array.isArray(out.profiles)) {
         const q = String(out.query ?? req.query.q ?? '');
-        out.profiles = out.profiles
+        const visible = out.profiles
             .filter((p: any) => !hidden.has(p.userId))
             .filter((p: any) => !q || matchesVisibly(p, q, viewerOf(req, p.userId)))
             .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
+        // Every candidate was fetched: page and count what this viewer can
+        // see (a count over hidden fields told them a hidden bio matched).
+        const page = Math.max(1, parseInt(req.query.page as string || '1', 10) || 1);
+        const limit = Math.min(parseInt(req.query.limit as string || '10', 10) || 10, 30);
+        out.profiles = visible.slice((page - 1) * limit, page * limit);
+        out.profileTotal = visible.length;
     }
     if (!hidden.size) return out;
     if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.ownerId));
@@ -99,32 +105,26 @@ export async function search(req: Request, res: Response): Promise<void> {
         }
 
         if (type === 'all' || type === 'profiles') {
-            const [profiles, profileTotal] = await Promise.all([
-                prisma.profile.findMany({
-                    where: {
-                        isPublic: true,
-                        OR: [
-                            { name: searchTerm },
-                            { bio: searchTerm },
-                            { company: searchTerm },
-                            { location: searchTerm },
-                            { title: searchTerm },
-                        ],
-                    },
-                    take: limit,
-                    skip,
-                    orderBy: { viewCount: 'desc' },
-                    include: {
-                        user: { select: { id: true, role: true, nostrPubkey: true } },
-                    },
-                }),
-                prisma.profile.count({
-                    where: {
-                        isPublic: true,
-                        OR: [{ name: searchTerm }, { bio: searchTerm }, { company: searchTerm }],
-                    },
-                }),
-            ]);
+            // Every candidate (up to 200): withoutBlocked pages and counts
+            // what each viewer can see.
+            const profiles = await prisma.profile.findMany({
+                where: {
+                    isPublic: true,
+                    OR: [
+                        { name: searchTerm },
+                        { bio: searchTerm },
+                        { company: searchTerm },
+                        { location: searchTerm },
+                        { title: searchTerm },
+                    ],
+                },
+                take: 200,
+                orderBy: { viewCount: 'desc' },
+                include: {
+                    user: { select: { id: true, role: true, nostrPubkey: true } },
+                },
+            });
+            const profileTotal = profiles.length;
             // Cached whole; withoutBlocked shows each viewer what they may see.
             results.profiles = profiles.map((p) => ({
                 ...p,

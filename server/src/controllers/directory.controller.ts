@@ -2,11 +2,12 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
-import { blockedEitherWay, blockedIds } from '../services/moderation.service';
+import { blockedEitherWay, blockedIds, hasBlocked, hiddenFromIds } from '../services/moderation.service';
 import { config } from '../config';
 import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
+import { nestedProfileForViewer } from '../services/profilePrivacy';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ const ownerSelect = {
 const memberUserSelect = {
     select: {
         id: true, nostrPubkey: true, role: true,
-        profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true } },
+        profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true, privacy: true } },
     },
 };
 
@@ -133,13 +134,15 @@ function pickAllowedFields(body: any, staff: boolean): any {
 
 /**
  * Mirror a live listing to the BIES relay as a NIP-99 classified (replaceable
- * kind:30402 keyed by d-tag = listing id), signed by the linked member's key
- * when set, else the owner's. Doesn't wait; members who sign on their own
- * device mirror from the app instead.
+ * kind:30402 keyed by d-tag = listing id), signed by the owner's key, or by
+ * the linked member's when they are the one editing it: never someone else's
+ * key for another member's words. Doesn't wait; members who sign on their
+ * own device mirror from the app instead.
  */
-export function mirrorToNostr(listing: any): void {
+export function mirrorToNostr(listing: any, editorId?: string): void {
     if (listing.status !== 'active') return;
-    publishDirectoryListing(listing.memberUserId ?? listing.ownerId, listing)
+    const signer = listing.memberUserId && editorId === listing.memberUserId ? listing.memberUserId : listing.ownerId;
+    publishDirectoryListing(signer, listing)
         .then(async (eventId) => {
             if (eventId) {
                 await prisma.directoryListing.update({
@@ -217,8 +220,9 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             prisma.directoryListing.count({ where }),
         ]);
 
-        // Listings run by a member the viewer blocked are left out.
-        const hidden = new Set(await blockedIds(req.user?.id));
+        // Listings run by a member the viewer blocked, or who blocked the
+        // viewer, are left out.
+        const hidden = new Set(await hiddenFromIds(req.user?.id));
         const visible = hidden.size ? listings.filter((l) => !hidden.has(listingMember(l))) : listings;
 
         res.json({
@@ -272,14 +276,20 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             }
         }
 
-        // A member the viewer blocked: their listing is gone for the viewer,
-        // and so are their recommendations on other listings.
-        const hidden = new Set(await blockedIds(req.user?.id));
-        if (hidden.has(listingMember(listing))) {
+        // A member the viewer blocked: their listing is gone for the viewer.
+        const member = listingMember(listing);
+        if ((await blockedIds(req.user?.id)).includes(member)) {
             res.status(404).json({ error: 'You blocked the member who runs this listing', reason: 'blocked' });
             return;
         }
-        // Reviews are for members: signed out, only the counts.
+        // The member who runs it blocked the viewer: it isn't there for them.
+        if (req.user && member && member !== req.user.id && await hasBlocked(member, { id: req.user.id })) {
+            res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        // Reviews are for members: signed out, only the counts; none by
+        // members blocked either way.
+        const hidden = new Set(await hiddenFromIds(req.user?.id));
         const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
         const savedByMe = req.user
             ? !!(await prisma.savedListing.findUnique({
@@ -289,7 +299,9 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             : false;
         // Open ownership requests the viewer can see or answer.
         const transfers = await transfersFor(listing, req);
-        const shown = { ...listing, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
+        // The linked member's Lightning details as their Settings → Privacy allows.
+        const memberUser = nestedProfileForViewer(listing.memberUser, req.user?.id);
+        const shown = { ...listing, memberUser, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({
@@ -346,7 +358,7 @@ export async function createListing(req: Request, res: Response): Promise<void> 
         await recomputeListingScore(listing.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
-        mirrorToNostr(listing);
+        mirrorToNostr(listing, req.user!.id);
 
         res.status(201).json(parseListing(listing));
     } catch (error) {
@@ -407,7 +419,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
             console.error('[Directory] Score recompute failed:', err)
         );
 
-        mirrorToNostr(listing);
+        mirrorToNostr(listing, req.user!.id);
 
         res.json(parseListing(listing));
     } catch (error) {

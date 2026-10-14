@@ -24,6 +24,7 @@ import {
 } from '../services/courses.service';
 import { claimZapPurchase } from '../services/coursePurchase.service';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
+import { nestedProfileForViewer } from '../services/profilePrivacy';
 
 // ─── Constants / helpers ─────────────────────────────────────────────────────
 
@@ -417,7 +418,7 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
                         id: true,
                         nostrPubkey: true,
                         profile: {
-                            select: { name: true, avatar: true, lightningAddress: true },
+                            select: { name: true, avatar: true, lightningAddress: true, privacy: true },
                         },
                     },
                 },
@@ -483,7 +484,8 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
 
         const { lessons, _count, ...courseFields } = course;
         res.json({
-            ...serializeCourse(courseFields),
+            // The author's Lightning address as their Settings → Privacy allows.
+            ...serializeCourse({ ...courseFields, author: nestedProfileForViewer(courseFields.author, req.user?.id) ?? courseFields.author }),
             lessons: lessons.map(serializeLessonMeta),
             lessonCount: lessons.length,
             studentCount: _count.enrollments,

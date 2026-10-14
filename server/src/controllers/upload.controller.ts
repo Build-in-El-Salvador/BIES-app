@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import { uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
+import path from 'path';
+import { privateFileFromLink, uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
 import { prepareMedia, UnreadableMediaError } from '../services/mediaProcessing';
 import { discardUploadNames, discardUploads, recordUpload } from '../services/uploads.service';
 
@@ -167,4 +168,20 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
         console.error('Upload deck error:', error);
         res.status(500).json({ error: 'Failed to upload deck' });
     }
+}
+
+/**
+ * GET /upload/private/:name?exp=&sig=
+ * A private file (a pitch deck) through the 15-minute link getProjectDeck
+ * hands out (storage.service.ts getPresignedUrl): the link is the permission.
+ */
+export async function downloadPrivateFile(req: Request, res: Response): Promise<void> {
+    const file = privateFileFromLink(req.params.name, String(req.query.exp ?? ''), String(req.query.sig ?? ''));
+    if (!file) {
+        res.status(404).json({ error: 'This link has expired' });
+        return;
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.download(file, `pitch-deck${path.extname(file)}`);
 }

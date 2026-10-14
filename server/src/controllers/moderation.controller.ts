@@ -9,7 +9,7 @@ import {
     blockMember,
     canHandleReport,
     createReport,
-    listBlocks,
+    listBlocks, blockerPubkeys,
     listReports,
     resolveReport,
     unblockMember,
@@ -86,7 +86,10 @@ export async function report(req: Request, res: Response): Promise<void> {
 /** GET /api/blocks */
 export async function getBlocks(req: Request, res: Response): Promise<void> {
     try {
-        res.json({ data: await listBlocks(req.user!.id) });
+        // hiddenPubkeys: the members who blocked this one. The app hides their
+        // posts too (blocking works both ways), without listing them anywhere.
+        const [data, hiddenPubkeys] = await Promise.all([listBlocks(req.user!.id), blockerPubkeys(req.user!.id)]);
+        res.json({ data, hiddenPubkeys });
     } catch (error) {
         console.error('[Moderation] List blocks failed:', error);
         res.status(500).json({ error: 'Failed to load blocked members' });
@@ -206,10 +209,17 @@ export async function adminDeleteEndorsement(req: Request, res: Response): Promi
     try {
         const endorsement = await prisma.directoryEndorsement.findUnique({
             where: { id: req.params.id },
-            select: { id: true, listingId: true, userId: true, comment: true },
+            select: { id: true, listingId: true, userId: true, comment: true, listing: { select: { ownerId: true, memberUserId: true } } },
         });
         if (!endorsement) {
             res.status(404).json({ error: 'Recommendation not found' });
+            return;
+        }
+        // A moderator doesn't remove what's written about their own business,
+        // or by them: that's for an admin, as with reports about themselves.
+        const own = [endorsement.userId, endorsement.listing.ownerId, endorsement.listing.memberUserId];
+        if (!req.user!.isAdmin && own.includes(req.user!.id)) {
+            res.status(403).json({ error: 'An admin has to remove this one' });
             return;
         }
         await prisma.directoryEndorsement.delete({ where: { id: endorsement.id } });

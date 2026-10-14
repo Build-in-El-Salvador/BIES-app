@@ -161,8 +161,30 @@ export async function getPresignedUrl(key: string): Promise<string> {
         return getSignedUrl(s3Client, command, { expiresIn: 900 }); // 15 minutes
     }
 
-    // Local fallback — just return the path (in dev mode, served as static)
-    return `${BASE_PATH}/uploads/${key}`;
+    // Local fallback: a link to the API that works for 15 minutes, like S3's.
+    // The uploads folder itself never serves private/ (nginx, index.ts).
+    const name = key.split('/').pop() || '';
+    const exp = Date.now() + 15 * 60 * 1000;
+    return `${BASE_PATH}/api/upload/private/${name}?exp=${exp}&sig=${signPrivateLink(name, exp)}`;
+}
+
+function signPrivateLink(name: string, exp: number): string {
+    return crypto.createHmac('sha256', config.jwtSecret).update(`private-file:${name}:${exp}`).digest('hex');
+}
+
+/**
+ * The private file a getPresignedUrl link names (local storage), if the link
+ * is genuine and hasn't expired; otherwise null.
+ */
+export function privateFileFromLink(name: string, exp: string, sig: string): string | null {
+    if (!/^\d{13}-[0-9a-f]{32}\.(pdf|pptx?)$/i.test(name)) return null;
+    const expires = Number(exp);
+    if (!Number.isSafeInteger(expires) || expires < Date.now()) return null;
+    const expected = signPrivateLink(name, expires);
+    if (typeof sig !== 'string' || sig.length !== expected.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    const file = validatePath(PRIVATE_DIR, name);
+    return fs.existsSync(file) ? file : null;
 }
 
 /**
