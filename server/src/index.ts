@@ -9,7 +9,7 @@ import http from 'http';
 import { config } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { sanitize } from './middleware/sanitize';
-import { auditLog } from './middleware/audit';
+import { auditLog, forgetOldAuditIps } from './middleware/audit';
 import { featureGate } from './middleware/featureGate';
 import { rateLimitKey } from './utils/rateLimitKey';
 import { attachWebSocketServer } from './services/websocket.service';
@@ -295,17 +295,22 @@ server.listen(config.port, () => {
     // Initialize native push (APNs) — no-ops when unconfigured
     initApns();
 
-    // Delete sessions that ended over 30 days ago, and reports closed over
-    // 12 months ago (privacy notice), now and twice a day.
+    // Delete sessions that ended over 30 days ago and reports closed over 12
+    // months ago, and blank audit entries' IP addresses after 90 days
+    // (privacy notice), now and twice a day.
     const pruneSessions = () => deleteOldSessions()
         .then((count) => { if (count) console.log(`[Sessions] Deleted ${count} old sessions`); })
         .catch((err) => console.error('[Sessions] Cleanup failed:', err));
     const pruneReports = () => deleteOldReports()
         .then((count) => { if (count) console.log(`[Moderation] Deleted ${count} old reports`); })
         .catch((err) => console.error('[Moderation] Cleanup failed:', err));
+    const pruneAuditIps = () => forgetOldAuditIps()
+        .then((count) => { if (count) console.log(`[Audit] Removed IP addresses from ${count} entries over 90 days old`); })
+        .catch((err) => console.error('[Audit] Cleanup failed:', err));
     pruneSessions();
     pruneReports();
-    setInterval(() => { pruneSessions(); pruneReports(); }, 12 * 60 * 60 * 1000).unref();
+    pruneAuditIps();
+    setInterval(() => { pruneSessions(); pruneReports(); pruneAuditIps(); }, 12 * 60 * 60 * 1000).unref();
 
     // Points scorer (relay indexer) + monthly rollover loop — a scorer
     // failure must never take down the API.

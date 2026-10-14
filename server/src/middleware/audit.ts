@@ -11,6 +11,22 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 
+/** How long an audit entry keeps the IP address and browser it came from. */
+const KEEP_IP_DAYS = 90;
+
+/**
+ * After 90 days an audit entry keeps what happened, but no longer the IP
+ * address or browser details (privacy notice). Returns how many were blanked.
+ */
+export async function forgetOldAuditIps(): Promise<number> {
+    const cutoff = new Date(Date.now() - KEEP_IP_DAYS * 24 * 60 * 60 * 1000);
+    const { count } = await prisma.auditLog.updateMany({
+        where: { createdAt: { lt: cutoff }, OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }] },
+        data: { ipAddress: null, userAgent: null },
+    });
+    return count;
+}
+
 // Map of route patterns → action names
 const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
     { method: 'POST', pattern: /^\/api\/auth\/email\/verify/, action: 'AUTH_EMAIL_LOGIN' },
