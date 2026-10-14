@@ -2,6 +2,7 @@
  * Notification controller — list, read, and manage user notifications.
  */
 
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -177,6 +178,7 @@ export async function deleteNotification(req: Request, res: Response): Promise<v
  * The authenticated user is the actor; targetPubkey is the recipient.
  */
 const VALID_FEED_TYPES = ['POST_COMMENT', 'POST_LIKE', 'COMMENT_LIKE', 'COMMENT_REPLY'] as const;
+const HEX_ID = /^[0-9a-f]{64}$/;
 
 export async function feedInteraction(req: Request, res: Response): Promise<void> {
     try {
@@ -188,10 +190,22 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             return;
         }
 
-        if (!targetPubkey || typeof targetPubkey !== 'string') {
+        if (typeof targetPubkey !== 'string' || !HEX_ID.test(targetPubkey)) {
             res.status(400).json({ error: 'targetPubkey is required' });
             return;
         }
+        // The post it's about must be a real event id. The same like, or the
+        // same comment text, notifies once a day however often it's sent.
+        if (typeof eventId !== 'string' || !HEX_ID.test(eventId)) {
+            res.status(400).json({ error: 'eventId is required' });
+            return;
+        }
+        const text = typeof contentPreview === 'string' && type !== 'POST_LIKE' && type !== 'COMMENT_LIKE'
+            ? crypto.createHash('sha256').update(contentPreview).digest('hex').slice(0, 16)
+            : '';
+        const once = `feedInteraction:${req.user!.id}:${targetPubkey}:${type}:${eventId}:${text}`;
+        if (await cache.get(once)) { res.json({ message: 'ok' }); return; }
+        await cache.set(once, '1', 24 * 60 * 60);
 
         // The name is the actor's own, never what the request says.
         const actor = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { name: true } });
@@ -202,7 +216,7 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             targetPubkey,
             type,
             actorName: name,
-            eventId: typeof eventId === 'string' ? eventId.slice(0, 64) : undefined,
+            eventId,
             contentPreview: typeof contentPreview === 'string' ? contentPreview.slice(0, 120) : undefined,
         });
 

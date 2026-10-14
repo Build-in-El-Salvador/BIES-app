@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { authenticate } from '../middleware/auth';
+import { rateLimitKey } from '../utils/rateLimitKey';
 import { validate } from '../middleware/validate';
 import {
     listNotifications,
@@ -31,7 +33,17 @@ router.delete('/device-token', unregisterDeviceToken);
 
 router.get('/', listNotifications);
 router.get('/count', getUnreadCount);
-router.post('/feed-interaction', feedInteraction);
+// A like, repost or reply notifies the post's author (and their phone):
+// 60 an hour per member is plenty for real use.
+const feedInteractionLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    message: { error: 'Too many notifications, please try again later' },
+});
+router.post('/feed-interaction', feedInteractionLimiter, feedInteraction);
 router.put('/read-all', markAllRead);
 router.put('/:id/read', markRead);
 router.delete('/:id', deleteNotification);

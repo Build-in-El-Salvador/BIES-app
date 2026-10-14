@@ -168,7 +168,7 @@ describe('feed notifications', () => {
         const res = await fetch(`${base}/api/notifications/feed-interaction`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ben.token}` },
-            body: JSON.stringify({ type: 'POST_COMMENT', targetPubkey: ana.pubkey, actorName: 'BIES Support', contentPreview: 'Renew at https://evil.example' }),
+            body: JSON.stringify({ type: 'POST_COMMENT', targetPubkey: ana.pubkey, eventId: 'a'.repeat(64), actorName: 'BIES Support', contentPreview: 'Renew at https://evil.example' }),
         });
         expect(res.status).toBe(200);
         const note = await prisma.notification.findFirst({ where: { userId: ana.id }, orderBy: { createdAt: 'desc' } });

@@ -46,6 +46,7 @@ import path from 'path';
 import express from 'express';
 import prisma from '../lib/prisma';
 import profileRoutes from '../routes/profile.routes';
+import notificationRoutes from '../routes/notification.routes';
 import settingsRoutes from '../routes/settings.routes';
 import albumRoutes from '../routes/album.routes';
 import adminRoutes from '../routes/admin.routes';
@@ -66,6 +67,7 @@ beforeAll(async () => {
     app.use('/api/settings', settingsRoutes);
     app.use('/api/albums', albumRoutes);
     app.use('/api/admin', adminRoutes);
+    app.use('/api/notifications', notificationRoutes);
     app.use('/api', moderationRoutes);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, resolve));
@@ -220,6 +222,26 @@ describe('staff', () => {
         expect(byMod.status).toBe(403);
         expect(byMod.body.reason).toBe('own_listing');
         expect((await call('POST', `/api/admin/directory/${listing.id}/owner`, { token: admin.token, body: { userId: admin.id } })).status).toBe(200);
+    });
+});
+
+describe('feed notifications', () => {
+    it('need a real post id, and the same one notifies once', async () => {
+        const ana = await member('Ana Feed');
+        const ben = await member('Ben Feed');
+        const pubkey = (await prisma.user.findUniqueOrThrow({ where: { id: ana.id } })).nostrPubkey;
+        const send = (body: Record<string, unknown>) => call('POST', '/api/notifications/feed-interaction', { token: ben.token, body: { targetPubkey: pubkey, ...body } });
+        const count = () => prisma.notification.count({ where: { userId: ana.id } });
+
+        expect((await send({ type: 'POST_LIKE' })).status).toBe(400);
+        expect((await send({ type: 'POST_LIKE', eventId: '../admin' })).status).toBe(400);
+        for (let i = 0; i < 3; i++) await send({ type: 'POST_LIKE', eventId: 'b'.repeat(64) });
+        expect(await count()).toBe(1);
+        // Two different comments on one post both notify; the same one twice doesn't.
+        await send({ type: 'POST_COMMENT', eventId: 'b'.repeat(64), contentPreview: 'Lovely farm' });
+        await send({ type: 'POST_COMMENT', eventId: 'b'.repeat(64), contentPreview: 'Lovely farm' });
+        await send({ type: 'POST_COMMENT', eventId: 'b'.repeat(64), contentPreview: 'When can I visit?' });
+        expect(await count()).toBe(3);
     });
 });
 
