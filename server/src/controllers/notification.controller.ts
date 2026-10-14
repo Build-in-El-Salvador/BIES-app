@@ -179,7 +179,7 @@ const VALID_FEED_TYPES = ['POST_COMMENT', 'POST_LIKE', 'COMMENT_LIKE', 'COMMENT_
 
 export async function feedInteraction(req: Request, res: Response): Promise<void> {
     try {
-        const { type, targetPubkey, actorName, eventId, contentPreview } = req.body;
+        const { type, targetPubkey, eventId, contentPreview } = req.body;
         const actorPubkey = req.user!.nostrPubkey;
 
         if (!type || !VALID_FEED_TYPES.includes(type)) {
@@ -192,13 +192,17 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             return;
         }
 
+        // The name is the actor's own, never what the request says.
+        const actor = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { name: true } });
+        const name = actor?.name?.trim() && !actor.name.startsWith('nostr:') ? actor.name.trim().slice(0, 60) : 'A member';
+
         await notifyFeedInteraction({
             actorPubkey,
             targetPubkey,
             type,
-            actorName: actorName || 'Someone',
-            eventId,
-            contentPreview,
+            actorName: name,
+            eventId: typeof eventId === 'string' ? eventId.slice(0, 64) : undefined,
+            contentPreview: typeof contentPreview === 'string' ? contentPreview.slice(0, 120) : undefined,
         });
 
         res.json({ message: 'ok' });
