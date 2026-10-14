@@ -71,8 +71,8 @@ const AlbumPage = () => {
             for (const file of files) {
                 const err = mediaService.validateFile(file, 0);
                 if (err) throw new Error(err);
-                const [{ path }, dim] = await Promise.all([mediaService.uploadFile(file), mediaService.getImageDimensions(file)]);
-                uploaded.push({ url: path, ...(dim ? { width: dim.width, height: dim.height } : {}) });
+                const { path, width, height } = await mediaService.uploadFile(file);
+                uploaded.push({ url: path, ...(width && height ? { width, height } : {}) });
                 setUploading({ done: uploaded.length, total: files.length });
             }
             for (let i = 0; i < uploaded.length; i += BATCH) await albumsApi.addPhotos(album.id, uploaded.slice(i, i + BATCH));

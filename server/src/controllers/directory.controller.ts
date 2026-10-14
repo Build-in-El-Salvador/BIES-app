@@ -6,6 +6,7 @@ import { blockedEitherWay, blockedIds } from '../services/moderation.service';
 import { config } from '../config';
 import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
+import { discardUploads } from '../services/uploads.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
     try {
         const existing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { ownerId: true },
+            select: { ownerId: true, photo: true, logo: true, photos: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -392,6 +393,10 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
                 memberUser: ownerSelect,
             },
         });
+
+        // Photos taken off it go, if the owner or this editor uploaded them.
+        const removed = listingPhotos(existing).filter((url) => !listingPhotos(listing).includes(url));
+        if (removed.length) await discardUploads(removed, { uploadedBy: [existing.ownerId, req.user!.id] });
 
         // Now marked as their own business: their vouch goes.
         if (data.isOwnBusiness === true) {
@@ -427,13 +432,37 @@ export async function deleteListing(req: Request, res: Response): Promise<void> 
             res.status(403).json({ error: 'Not authorized to delete this listing' }); return;
         }
 
-        await prisma.directoryListing.delete({ where: { id: req.params.id } });
+        await deleteListingAndFiles(req.params.id, req.user!.id);
 
         res.json({ message: 'Listing deleted' });
     } catch (error) {
         console.error('Delete directory listing error:', error);
         res.status(500).json({ error: 'Failed to delete directory listing' });
     }
+}
+
+/** A listing's photo, logo and gallery, as stored. */
+function listingPhotos(listing: { photo: string; logo: string; photos: string }): string[] {
+    let gallery: unknown = [];
+    try { gallery = JSON.parse(listing.photos || '[]'); } catch { /* not JSON: no gallery */ }
+    return [listing.photo, listing.logo, ...(Array.isArray(gallery) ? gallery : [])]
+        .filter((url): url is string => typeof url === 'string' && !!url);
+}
+
+/**
+ * Delete a listing, and the files that showed only on it: its photos (when
+ * its owner or `actorId` uploaded them) and its albums' photos. Admins'
+ * deletes come here too (admin.controller.ts deleteDirectoryListing).
+ */
+export async function deleteListingAndFiles(id: string, actorId: string): Promise<void> {
+    const listing = await prisma.directoryListing.findUnique({
+        where: { id },
+        select: { ownerId: true, photo: true, logo: true, photos: true, albums: { select: { photos: { select: { url: true } } } } },
+    });
+    if (!listing) return;
+    await prisma.directoryListing.delete({ where: { id } });
+    await discardUploads(listingPhotos(listing), { uploadedBy: [listing.ownerId, actorId] });
+    await discardUploads(listing.albums.flatMap((a) => a.photos.map((p) => p.url)));
 }
 
 /** The new counts and status of a listing, for the review endpoints' answers. */

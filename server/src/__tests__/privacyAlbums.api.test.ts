@@ -29,6 +29,7 @@ vi.mock('nostr-tools/pool', () => ({
 vi.mock('../services/email.service', () => ({ sendEmail: vi.fn(async () => {}) }));
 
 import { execSync } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
@@ -195,7 +196,11 @@ describe('who sees what on a profile', () => {
 });
 
 describe('photo albums', () => {
-    const upload = (name: string) => `https://app.example.test/uploads/public/${name}.jpg`;
+    // A stored file's link (storage.service.ts names), and its record as this member's upload.
+    const fileName = (label: string) => `1760000000000-${crypto.createHash('md5').update(label).digest('hex')}.jpg`;
+    const upload = (label: string) => `https://app.example.test/uploads/public/${fileName(label)}`;
+    const owned = (m: Member, ...labels: string[]) =>
+        Promise.all(labels.map((label) => prisma.upload.create({ data: { name: fileName(label), userId: m.id } })));
 
     it('a member makes an album and adds BIES photos; members see it, strangers do not', async () => {
         const ana = await member('Ana G');
@@ -207,9 +212,13 @@ describe('photo albums', () => {
 
         expect((await call('POST', `/api/albums/${id}/photos`, { token: ana.token, body: { photos: [{ url: 'https://elsewhere.test/x.jpg' }] } })).status).toBe(400);
         expect((await call('POST', `/api/albums/${id}/photos`, { token: ben.token, body: { photos: [{ url: upload('b') }] } })).status).toBe(403);
+        // Only her own uploads: one of Ben's is turned away.
+        await owned(ben, 'b');
+        expect((await call('POST', `/api/albums/${id}/photos`, { token: ana.token, body: { photos: [{ url: upload('b') }] } })).status).toBe(400);
+        await owned(ana, 'week1', 'week2');
         const added = await call('POST', `/api/albums/${id}/photos`, {
             token: ana.token,
-            body: { photos: [{ url: upload('week1'), caption: 'Week 1' }, { url: '/uploads/public/week2.jpg', caption: 'Week 2' }] },
+            body: { photos: [{ url: upload('week1'), caption: 'Week 1' }, { url: new URL(upload('week2')).pathname, caption: 'Week 2' }] },
         });
         expect(added.status).toBe(201);
 
@@ -255,6 +264,7 @@ describe('photo albums', () => {
     it('the cover, and what happens when its photo goes', async () => {
         const ana = await member('Ana J');
         const id = (await call('POST', '/api/albums', { token: ana.token, body: { title: 'Cover test' } })).body.id;
+        await owned(ana, 'c1', 'c2');
         const photos = (await call('POST', `/api/albums/${id}/photos`, { token: ana.token, body: { photos: [{ url: upload('c1') }, { url: upload('c2') }] } })).body.data;
         expect((await call('PATCH', `/api/albums/${id}`, { token: ana.token, body: { coverPhotoId: photos[1].id } })).status).toBe(200);
         const cover = async () => (await call('GET', `/api/albums?user=${ana.id}`, { token: ana.token })).body.data[0].cover.url;
@@ -269,6 +279,7 @@ describe('photo albums', () => {
         const ana = await member('Ana K');
         const ben = await member('Ben K');
         const id = (await call('POST', '/api/albums', { token: ana.token, body: { title: 'Farm' } })).body.id;
+        await owned(ana, 'k', 'k2');
         const bad = await call('POST', `/api/albums/${id}/photos`, { token: ana.token, body: { photos: [{ url: upload('k'), caption: 'kill yourself' }] } });
         expect(bad.status).toBe(422);
         expect((await call('POST', '/api/albums', { token: ana.token, body: { title: 'Puta farm' } })).status).toBe(422);
@@ -287,6 +298,7 @@ describe('photo albums', () => {
     it('deleting an album deletes its photos', async () => {
         const ana = await member('Ana L');
         const id = (await call('POST', '/api/albums', { token: ana.token, body: { title: 'Gone' } })).body.id;
+        await owned(ana, 'l');
         await call('POST', `/api/albums/${id}/photos`, { token: ana.token, body: { photos: [{ url: upload('l') }] } });
         expect((await call('DELETE', `/api/albums/${id}`, { token: ana.token })).status).toBe(200);
         expect(await prisma.albumPhoto.count({ where: { albumId: id } })).toBe(0);

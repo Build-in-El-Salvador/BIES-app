@@ -17,6 +17,7 @@ import {
 import { recomputeListingScore } from '../services/directoryReputation.service';
 import { requestEventRemoval } from '../services/relayWhitelist.service';
 import { publicUser } from './auth.controller';
+import { discardUploads, linksIn } from '../services/uploads.service';
 
 const HEX64 = /^[0-9a-f]{64}$/;
 
@@ -231,13 +232,14 @@ export async function adminDeleteEndorsement(req: Request, res: Response): Promi
 
 /**
  * DELETE /api/admin/reports/:id/note: remove a reported post from the BIES
- * relay. Copies on other Nostr relays are beyond BIES's reach; suspending
- * the member stops them posting here again.
+ * relay, and delete its photos and videos from BIES (those its author
+ * uploaded). Copies on other Nostr relays are beyond BIES's reach;
+ * suspending the member stops them posting here again.
  */
 export async function adminRemoveReportedNote(req: Request, res: Response): Promise<void> {
     try {
         const moderator = { id: req.user!.id, isAdmin: req.user!.isAdmin };
-        const report = await prisma.report.findUnique({ where: { id: req.params.id }, select: { id: true, targetType: true, targetId: true, targetPubkey: true } });
+        const report = await prisma.report.findUnique({ where: { id: req.params.id }, select: { id: true, targetType: true, targetId: true, targetPubkey: true, snapshot: true } });
         if (!report || report.targetType !== 'note' || !(await canHandleReport(report.id, moderator))) {
             res.status(404).json({ error: 'Report not found' });
             return;
@@ -246,6 +248,10 @@ export async function adminRemoveReportedNote(req: Request, res: Response): Prom
             res.status(500).json({ error: "Couldn't ask the relay to remove it" });
             return;
         }
+        const author = report.targetPubkey
+            ? await prisma.user.findUnique({ where: { nostrPubkey: report.targetPubkey }, select: { id: true } })
+            : null;
+        if (author) await discardUploads(linksIn(report.snapshot), { uploadedBy: [author.id] });
         await prisma.auditLog.create({
             data: {
                 userId: req.user!.id,

@@ -6,15 +6,16 @@
  * Who runs an album: a member runs their own; a listing's albums are run by
  * whoever runs the listing (its owner, as for editing it). BIES staff can run
  * any, for moderation. Who sees one: PUBLIC anyone, MEMBERS signed-in
- * members, ONLY_ME just its member (members' albums only). Photos are BIES
- * uploads (POST /upload/media), never links to elsewhere.
+ * members, ONLY_ME just its member (members' albums only). Photos are the
+ * adder's own BIES uploads (POST /upload/media), never links to elsewhere,
+ * and their files are deleted with them (services/uploads.service.ts).
  */
 
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
-import { config } from '../config';
 import { hasBlocked } from '../services/moderation.service';
+import { discardUploads, ownsUploads } from '../services/uploads.service';
 import { objectionableField, objectionableResponse } from '../services/contentFilter';
 
 export const ALBUM_VISIBILITY = ['PUBLIC', 'MEMBERS', 'ONLY_ME'] as const;
@@ -84,30 +85,6 @@ async function canView(req: Request, album: AlbumWithOwner): Promise<boolean> {
     const member = albumMember(album);
     if (req.user && member && await hasBlocked(req.user.id, { id: member })) return false;
     return true;
-}
-
-/**
- * A photo BIES stores: an /uploads/public/ file on this server, or a media/
- * object at the S3 public URL. Never a link to somewhere else.
- */
-export function isOwnUpload(raw: string): boolean {
-    const file = /^[A-Za-z0-9._-]+$/;
-    const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
-    const localPath = (path: string) => {
-        const prefix = `${basePath}/uploads/public/`;
-        return path.startsWith(prefix) && file.test(path.slice(prefix.length));
-    };
-    if (raw.startsWith('/')) return localPath(raw);
-    let url: URL;
-    try { url = new URL(raw); } catch { return false; }
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
-    if (url.search || url.hash || url.username || url.password) return false;
-    const s3 = config.s3.publicUrl.replace(/\/+$/, '');
-    if (s3 && raw.startsWith(`${s3}/media/`)) return file.test(raw.slice(`${s3}/media/`.length));
-    const ownHosts = new Set([config.appPublicUrl, process.env.API_PUBLIC_URL || ''].filter(Boolean).map((u) => {
-        try { return new URL(u).host; } catch { return ''; }
-    }));
-    return ownHosts.has(url.host) && localPath(url.pathname);
 }
 
 const albumSummary = (album: { id: string; title: string; description: string; visibility: string; coverPhotoId: string | null; updatedAt: Date; photos: { id: string; url: string }[]; _count: { photos: number } }) => {
@@ -278,7 +255,9 @@ export async function deleteAlbum(req: Request, res: Response): Promise<void> {
     try {
         const album = await managedAlbum(req, res);
         if (!album) return;
+        const photos = await prisma.albumPhoto.findMany({ where: { albumId: album.id }, select: { url: true } });
         await prisma.album.delete({ where: { id: album.id } });
+        await discardUploads(photos.map((p) => p.url));
         res.json({ deleted: true });
     } catch (error) {
         console.error('Delete album error:', error);
@@ -292,7 +271,7 @@ export async function addPhotos(req: Request, res: Response): Promise<void> {
         const album = await managedAlbum(req, res);
         if (!album) return;
         const { photos } = req.body as z.infer<typeof addPhotosSchema>;
-        if (photos.some((p) => !isOwnUpload(p.url))) {
+        if (!(await ownsUploads(req.user!.id, photos.map((p) => p.url)))) {
             res.status(400).json({ error: 'Upload photos to BIES first' });
             return;
         }
@@ -344,10 +323,11 @@ export async function deletePhoto(req: Request, res: Response): Promise<void> {
     try {
         const album = await managedAlbum(req, res);
         if (!album) return;
-        const photo = await prisma.albumPhoto.findFirst({ where: { id: req.params.photoId, albumId: album.id }, select: { id: true } });
+        const photo = await prisma.albumPhoto.findFirst({ where: { id: req.params.photoId, albumId: album.id }, select: { id: true, url: true } });
         if (!photo) { res.status(404).json({ error: 'Photo not found' }); return; }
         await prisma.albumPhoto.delete({ where: { id: photo.id } });
         if (album.coverPhotoId === photo.id) await prisma.album.update({ where: { id: album.id }, data: { coverPhotoId: null } });
+        await discardUploads([photo.url]);
         res.json({ deleted: true });
     } catch (error) {
         console.error('Delete photo error:', error);

@@ -1,7 +1,11 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import multer from 'multer';
+import { z } from 'zod';
 import prisma from '../lib/prisma';
 import { uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
+import { prepareMedia, UnreadableMediaError } from '../services/mediaProcessing';
+import { discardUploadNames, discardUploads, recordUpload } from '../services/uploads.service';
 
 // ─── Multer config (memory storage — files stay in buffer) ───
 
@@ -47,7 +51,11 @@ export const uploadMiddleware = upload.single('file');
 
 /**
  * POST /upload/media
- * Upload a public image/video. Returns the public URL.
+ * Upload a public image/video. Photos are shrunk and lose their metadata,
+ * videos their location (services/mediaProcessing.ts); the upload is
+ * recorded as the member's (services/uploads.service.ts). Returns the public
+ * URL, and what a Nostr event's imeta tag says of the stored file: its type,
+ * size, SHA-256 and, for a photo, its size in pixels.
  */
 export async function uploadMedia(req: Request, res: Response): Promise<void> {
     try {
@@ -62,16 +70,51 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const url = await uploadPublicFile(
-            req.file.buffer,
-            req.file.originalname,
-            req.file.mimetype
-        );
+        let media;
+        try {
+            media = await prepareMedia(req.file.buffer, req.file.mimetype);
+        } catch (err) {
+            if (err instanceof UnreadableMediaError) {
+                res.status(400).json({ error: err.message });
+                return;
+            }
+            throw err;
+        }
 
-        res.json({ url });
+        const { url, name } = await uploadPublicFile(media.buffer, media.mimeType);
+        await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length });
+
+        res.json({
+            url,
+            type: media.mimeType,
+            size: media.buffer.length,
+            sha256: crypto.createHash('sha256').update(media.buffer).digest('hex'),
+            ...(media.width && media.height ? { width: media.width, height: media.height } : {}),
+        });
     } catch (error) {
         console.error('Upload media error:', error);
         res.status(500).json({ error: 'Failed to upload media' });
+    }
+}
+
+export const discardMediaSchema = z.object({
+    urls: z.array(z.string().max(1000)).min(1).max(20),
+});
+
+/**
+ * POST /upload/discard
+ * Delete the member's own uploads behind these links, when nothing on BIES
+ * still shows them: the app sends a post's photos when the member deletes the
+ * post. Others' uploads are left alone.
+ */
+export async function discardMedia(req: Request, res: Response): Promise<void> {
+    try {
+        const { urls } = req.body as z.infer<typeof discardMediaSchema>;
+        const deleted = await discardUploads(urls, { uploadedBy: [req.user!.id] });
+        res.json({ deleted });
+    } catch (error) {
+        console.error('Discard media error:', error);
+        res.status(500).json({ error: 'Failed to delete the files' });
     }
 }
 
@@ -97,18 +140,15 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const key = await uploadPrivateFile(
-            req.file.buffer,
-            req.file.originalname,
-            req.file.mimetype
-        );
+        const { key, name } = await uploadPrivateFile(req.file.buffer, req.file.mimetype);
+        await recordUpload(req.user!.id, { name, mimeType: req.file.mimetype, size: req.file.size, isPrivate: true });
 
         // Associate with project if projectId is provided
         const projectId = req.query.projectId as string;
         if (projectId) {
             const project = await prisma.project.findUnique({
                 where: { id: projectId },
-                select: { ownerId: true },
+                select: { ownerId: true, deckKey: true },
             });
 
             if (project && project.ownerId === req.user!.id) {
@@ -116,6 +156,9 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
                     where: { id: projectId },
                     data: { deckKey: key },
                 });
+                // The deck it replaces goes.
+                const old = project.deckKey?.split('/').pop();
+                if (old) await discardUploadNames([old], { uploadedBy: [req.user!.id] });
             }
         }
 

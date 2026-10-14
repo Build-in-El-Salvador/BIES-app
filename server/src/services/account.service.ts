@@ -16,8 +16,9 @@
  *    Until this commits nothing has changed, so if it fails the member is
  *    still signed in and can try again;
  * 3. only then: sockets close, relay access goes, BIES's relay deletes the
- *    events, the signed requests go to the public relays. Nothing here
- *    throws: the account is already gone;
+ *    events, the signed requests go to the public relays, and the files the
+ *    member uploaded go (uploads.service.ts), except any still shown by
+ *    something that stays. Nothing here throws: the account is already gone;
  * 4. emails a confirmation that says what was done.
  * An admin emptying the trash erases without step 3's relay work (a merged
  * account's events now belong to the account it was merged into), unless
@@ -43,6 +44,7 @@ import { publishRetraction, signRetraction } from './nostr.service';
 import { cache, cacheKey } from './redis.service';
 import { markVanished, removeFromRelayWhitelist, requestRelayPurge } from './relayWhitelist.service';
 import { revokeOtherSessions, revokeUserSessions } from './session.service';
+import { discardUploadNames, filesOfAccount } from './uploads.service';
 
 // ─── Confirming with a signature ──────────────────────────────────────────────
 
@@ -201,6 +203,14 @@ export async function deleteAccount(
         }
     }
 
+    // Their files, found while the account still says whose they are. Without
+    // `retract` (a merged account), uploads nothing here shows may be in posts
+    // that now belong to the other account, and stay.
+    const files = await filesOfAccount(userId, { everything: retract }).catch((err) => {
+        console.error('[Account] Could not list the files:', errorText(err));
+        return [] as string[];
+    });
+
     // 2. Erase. Audit rows about the person keep what happened, but not their
     // name or pubkey (admin actions recorded both); rows kept for others lose
     // the account's IP addresses; other members' notifications about them
@@ -264,6 +274,9 @@ export async function deleteAccount(
             }
         }
     }
+
+    // Their photos, videos and decks (discardUploadNames never throws).
+    await discardUploadNames(files);
 
     await Promise.all([
         cache.del(cacheKey.profileDetail(userId)),
@@ -365,8 +378,8 @@ export function renderAccountDeletedEmail(
     const date = today(lang);
     if (lang === 'es') {
         const deleted = done.relayPurgeRequested
-            ? 'Borramos su perfil, sus fichas del directorio y sus recomendaciones, sus mensajes y sus publicaciones en el relay de BIES.'
-            : 'Borramos su perfil, sus fichas del directorio y sus recomendaciones, y sus mensajes.';
+            ? 'Borramos su perfil, sus fotos, sus fichas del directorio y sus recomendaciones, sus mensajes y sus publicaciones en el relay de BIES.'
+            : 'Borramos su perfil, sus fotos, sus fichas del directorio y sus recomendaciones, y sus mensajes.';
         const key = done.keyDestroyed
             ? done.retracted
                 ? ' También destruimos la clave de Nostr que guardábamos para usted, y pedimos a otros relays de Nostr que borren lo que se publicó con ella. Cada relay de terceros decide por su cuenta.'
@@ -380,8 +393,8 @@ export function renderAccountDeletedEmail(
         ]);
     }
     const deleted = done.relayPurgeRequested
-        ? 'We deleted your profile, your directory listings and recommendations, your messages, and your posts on the BIES relay.'
-        : 'We deleted your profile, your directory listings and recommendations, and your messages.';
+        ? 'We deleted your profile, your photos, your directory listings and recommendations, your messages, and your posts on the BIES relay.'
+        : 'We deleted your profile, your photos, your directory listings and recommendations, and your messages.';
     const key = done.keyDestroyed
         ? done.retracted
             ? ' We also destroyed the Nostr key we held for you, and asked other Nostr relays to delete what was published with it. Relays run by others decide for themselves.'

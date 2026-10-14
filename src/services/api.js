@@ -315,6 +315,9 @@ export const uploadApi = {
         fd.append('file', file);
         return uploadFile(`/upload/deck?projectId=${projectId}`, fd);
     },
+
+    // Delete my own uploads behind these links (a deleted post's photos).
+    discard: (urls) => post('/upload/discard', { urls }),
 };
 
 // ─── Messages ────────────────────────────────────────────────────────────────

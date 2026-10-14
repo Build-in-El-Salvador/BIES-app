@@ -6,6 +6,7 @@ import { publishProfileUpdate, publishAnnouncement } from '../services/nostr.ser
 import { blockedIds, hasBlocked } from '../services/moderation.service';
 import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
 import { z } from 'zod';
+import { discardUploads } from '../services/uploads.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -342,8 +343,9 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             }
         }
 
-        // Fetch old profile to detect lightning address / bolt12 offer changes
-        const oldProfile = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { lightningAddress: true, bolt12Offer: true } });
+        // Fetch old profile to detect lightning address / bolt12 offer changes,
+        // and photos replaced
+        const oldProfile = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { lightningAddress: true, bolt12Offer: true, avatar: true, banner: true } });
 
         // Convert arrays/objects to JSON strings for SQLite
         const arrayFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
@@ -363,6 +365,10 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             cache.del(cacheKey.profileDetail(profile.id)),
             cache.delPattern('profiles:'),
         ]);
+
+        // A profile photo or cover replaced: the old file goes, if it was theirs.
+        const replaced = [oldProfile?.avatar, oldProfile?.banner].filter((url): url is string => !!url && url !== profile.avatar && url !== profile.banner);
+        if (replaced.length) await discardUploads(replaced, { uploadedBy: [req.user!.id] });
 
         const arrayParsedFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
         const parsed: any = { ...profile, coinosToken: undefined };
