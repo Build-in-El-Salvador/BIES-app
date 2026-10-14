@@ -2464,6 +2464,7 @@
       "readPrivacy": "Privacy Notice",
       "agree": "I agree",
       "signOut": "Sign out",
+      "deleteInstead": "Delete my account instead",
       "changed": "The terms were just updated. Please read them again, then agree.",
       "error": "That didn't save. Please try again."
     },

@@ -2465,6 +2465,7 @@
       "readPrivacy": "Aviso de privacidad",
       "agree": "Acepto",
       "signOut": "Cerrar sesión",
+      "deleteInstead": "Mejor eliminar mi cuenta",
       "changed": "Los términos se acaban de actualizar. Léalos de nuevo y luego acéptelos.",
       "error": "No se pudo guardar. Intente de nuevo."
     },

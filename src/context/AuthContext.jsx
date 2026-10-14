@@ -34,6 +34,9 @@ export const AuthProvider = ({ children }) => {
     // The terms of use come before everything else, once per version; then
     // a name and photo, for members who don't have both yet.
     const termsPending = !!user && user.termsAccepted === false;
+    // Deleting the account needs neither the terms nor a name: that page
+    // holds the two sheets back while it's open (DeleteAccount.jsx).
+    const [gatesHeld, holdGates] = useState(false);
     const profilePending = !termsPending && needsProfile(user);
     useEffect(() => {
         // A request refused for want of the current terms (api.js).
@@ -447,6 +450,7 @@ export const AuthProvider = ({ children }) => {
             updateRole,
             refreshUser,
             whenTermsAccepted,
+            holdGates,
             isAuthenticated: !!user,
             isBuilder: user?.role === 'BUILDER',
             isInvestor: user?.role === 'INVESTOR',
@@ -455,10 +459,10 @@ export const AuthProvider = ({ children }) => {
             isStaff: !!user?.isAdmin || user?.role === 'MOD',
         }}>
             {children}
-            {termsPending && (
+            {termsPending && !gatesHeld && (
                 <TermsGate user={user} onAccepted={handleTermsAccepted} onSignOut={logout} />
             )}
-            {profilePending && (
+            {profilePending && !gatesHeld && (
                 <ProfileGate key={user.id} user={user} onDone={refreshUser} onSignOut={logout} />
             )}
             {showPasskeyPrompt && !termsPending && !profilePending && (
