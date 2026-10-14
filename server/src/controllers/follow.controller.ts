@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { notifyFollow } from '../services/notification.service';
 import { cache, TTL } from '../services/redis.service';
-import { publishAnnouncement } from '../services/nostr.service';
 import { blockedEitherWay, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { canSeeNetwork, privacyOf } from '../services/profilePrivacy';
 
@@ -66,31 +65,17 @@ export async function followUser(req: Request, res: Response): Promise<void> {
             cache.delPattern(`following:${followerId}:`),
         ]);
 
-        // Notify the followed user
+        // Notify the followed user. Follows aren't posted to the feed, as on
+        // Facebook, Instagram and LinkedIn.
         const follower = await prisma.user.findUnique({
             where: { id: followerId },
-            include: { profile: { select: { name: true, privacy: true } } },
-        });
-        const followed = await prisma.user.findUnique({
-            where: { id: followingId },
-            include: { profile: { select: { name: true, privacy: true } } },
+            include: { profile: { select: { name: true } } },
         });
         await notifyFollow({
             followedId: followingId,
             followerName: follower?.profile?.name || 'Someone',
             followerId,
         });
-
-        // Announce follow on the BIES feed, unless either member keeps their
-        // network to themselves (Settings → Privacy → Network).
-        const networkPrivate = [follower, followed].some((u) => privacyOf(u?.profile?.privacy).network === 'ONLY_ME');
-        if (!networkPrivate) {
-            const followerName = follower?.profile?.name || 'A BIES member';
-            const followedName = followed?.profile?.name || 'a builder';
-            publishAnnouncement(followerId, `${followerName} started following ${followedName} on BIES.`, [['t', 'follow']]).catch((err) =>
-                console.error('[Nostr] Follow announcement failed:', err)
-            );
-        }
 
         res.status(201).json({ message: 'Followed', follow });
     } catch (error: any) {

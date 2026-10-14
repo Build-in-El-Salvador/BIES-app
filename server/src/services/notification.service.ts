@@ -313,11 +313,15 @@ export async function notifyDeckDenied(params: {
     });
 }
 
+// Off unless the member turns it on (Settings → Notifications), and then
+// neither the bell nor push gets it, as on Facebook and Instagram.
 export async function notifyProfileView(params: {
     profileOwnerId: string;
     viewerName: string;
     viewerId: string;
 }): Promise<void> {
+    const settings = await prisma.userSettings.findUnique({ where: { userId: params.profileOwnerId }, select: { notifyProfileViews: true } });
+    if (!settings?.notifyProfileViews) return;
     await createNotification({
         userId: params.profileOwnerId,
         type: 'PROFILE_VIEW',

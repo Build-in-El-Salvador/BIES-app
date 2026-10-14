@@ -2581,7 +2581,7 @@
     "commentsDesc": "En sus publicaciones, y respuestas a sus comentarios",
     "follows": "Nuevos seguidores",
     "profileViews": "Visitas a su perfil",
-    "profileViewsDesc": "Cuando un miembro ve su perfil",
+    "profileViewsDesc": "Cuando un miembro ve su perfil. Desactivado: tampoco en la campana",
     "messages": "Mensajes",
     "zaps": "Zaps",
     "events": "Eventos",

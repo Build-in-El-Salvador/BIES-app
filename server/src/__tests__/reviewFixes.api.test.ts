@@ -144,17 +144,13 @@ describe('privacy reaches Nostr and the feed', () => {
         expect(nostr.publishAnnouncement).not.toHaveBeenCalled();
     });
 
-    it('a follow is announced only when neither member keeps their network private', async () => {
+    it('a follow tells the member and posts nothing to the feed', async () => {
         const dan = await member('Dan Follow');
         const eve = await member('Eve Follow');
-        const fay = await member('Fay Private');
-        await call('PUT', '/api/settings/privacy', { token: fay.token, body: { network: 'ONLY_ME' } });
 
         expect((await call('POST', `/api/profiles/${eve.id}/follow`, { token: dan.token })).status).toBe(201);
-        expect(nostr.publishAnnouncement).toHaveBeenCalledTimes(1);
-        expect((await call('POST', `/api/profiles/${fay.id}/follow`, { token: dan.token })).status).toBe(201);
-        expect((await call('POST', `/api/profiles/${dan.id}/follow`, { token: fay.token })).status).toBe(201);
-        expect(nostr.publishAnnouncement).toHaveBeenCalledTimes(1);
+        expect(nostr.publishAnnouncement).not.toHaveBeenCalled();
+        expect(await prisma.notification.count({ where: { userId: eve.id, type: 'FOLLOW' } })).toBe(1);
     });
 });
 

@@ -2580,7 +2580,7 @@
     "commentsDesc": "On your posts, and replies to your comments",
     "follows": "New followers",
     "profileViews": "Profile views",
-    "profileViewsDesc": "When a member looks at your profile",
+    "profileViewsDesc": "When a member looks at your profile. Off: not under the bell either",
     "messages": "Messages",
     "zaps": "Zaps",
     "events": "Events",
