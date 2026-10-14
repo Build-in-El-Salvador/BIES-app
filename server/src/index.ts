@@ -64,6 +64,7 @@ import bountyRoutes from './routes/bounty.routes';
 import flagsRoutes from './routes/flags.routes';
 import signerRoutes from './routes/signer.routes';
 import moderationRoutes from './routes/moderation.routes';
+import { servableUploadsOnly } from './middleware/uploads';
 
 const app = express();
 
@@ -193,7 +194,7 @@ app.use('/api/contact', contactLimiter);
 app.use('/.well-known', nip05Routes);
 
 // ─── Static files (local upload fallback) ────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+app.use('/uploads', servableUploadsOnly, express.static(path.join(__dirname, '..', 'uploads')));
 
 // ─── Audit logging (runs after auth middleware attaches req.user) ─────────────
 app.use(auditLog);

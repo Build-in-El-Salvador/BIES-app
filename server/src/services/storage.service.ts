@@ -32,7 +32,8 @@ if (config.s3.endpoint && config.s3.accessKey) {
 }
 
 // ─── Local fallback directory ───
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
+// UPLOAD_DIR is for tests; the app keeps them next to the code (Dockerfile).
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
 const PUBLIC_DIR = path.join(UPLOAD_DIR, 'public');
 const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
 
@@ -52,8 +53,6 @@ const SAFE_EXTENSIONS: Record<string, string> = {
     'image/gif': '.gif',
     'image/webp': '.webp',
     'image/svg+xml': '.svg',
-    // Videos too: otherwise the uploader's own file name sets the extension,
-    // and "x.html" would be served from our domain as a web page.
     'video/mp4': '.mp4',
     'video/quicktime': '.mov',
     'video/webm': '.webm',
@@ -65,9 +64,9 @@ const SAFE_EXTENSIONS: Record<string, string> = {
 /**
  * Generate a unique filename with a safe extension derived from MIME type.
  */
-function generateFilename(originalName: string, mimeType?: string): string {
-    // Derive extension from validated MIME type, falling back to original extension
-    const ext = (mimeType && SAFE_EXTENSIONS[mimeType]) || path.extname(originalName);
+function generateFilename(mimeType: string): string {
+    // From the validated MIME type only, never the uploader's file name.
+    const ext = SAFE_EXTENSIONS[mimeType] || '';
     const hash = crypto.randomBytes(16).toString('hex');
     return `${Date.now()}-${hash}${ext}`;
 }
@@ -92,7 +91,7 @@ export async function uploadPublicFile(
     originalName: string,
     mimeType: string
 ): Promise<string> {
-    const filename = generateFilename(originalName, mimeType);
+    const filename = generateFilename(mimeType);
     const key = `media/${filename}`;
 
     if (s3Client) {
@@ -126,7 +125,7 @@ export async function uploadPrivateFile(
     originalName: string,
     mimeType: string
 ): Promise<string> {
-    const filename = generateFilename(originalName, mimeType);
+    const filename = generateFilename(mimeType);
     const key = `decks/${filename}`;
 
     if (s3Client) {
