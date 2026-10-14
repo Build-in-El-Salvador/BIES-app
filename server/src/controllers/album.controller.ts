@@ -70,17 +70,20 @@ function albumMember(album: AlbumWithOwner): string | null {
     return album.userId ?? album.listing?.memberUserId ?? album.listing?.ownerId ?? null;
 }
 
+/** The member, or the listing's owner, runs the album: they add, edit and choose who sees it. */
 function canManage(req: Request, album: { userId: string | null; listing: { ownerId: string } | null }): boolean {
     if (!req.user) return false;
-    if (isStaff(req)) return true;
     return album.userId ? album.userId === req.user.id : album.listing?.ownerId === req.user.id;
 }
 
 async function canView(req: Request, album: AlbumWithOwner): Promise<boolean> {
     if (canManage(req, album)) return true;
+    // "Only me" is only them, staff included.
+    if (album.visibility === 'ONLY_ME') return false;
+    // Staff see the rest, to handle reports, even from members who blocked them.
+    if (isStaff(req)) return true;
     if (album.user?.deletedAt) return false;
     if (album.listing && album.listing.status !== 'active') return false;
-    if (album.visibility === 'ONLY_ME') return false;
     if (album.visibility === 'MEMBERS' && !req.user) return false;
     const member = albumMember(album);
     if (req.user && member && member !== req.user.id && await blockedEitherWay(req.user.id, member)) return false;
@@ -212,11 +215,14 @@ export async function createAlbum(req: Request, res: Response): Promise<void> {
     }
 }
 
-/** The album, when the signed-in member runs it; otherwise answers and returns null. */
-async function managedAlbum(req: Request, res: Response): Promise<AlbumWithOwner | null> {
+/**
+ * The album, when the signed-in member runs it; otherwise answers and returns
+ * null. `takeDown`: deleting, which staff can also do (Admin → Reports).
+ */
+async function managedAlbum(req: Request, res: Response, { takeDown = false } = {}): Promise<AlbumWithOwner | null> {
     const album = await loadAlbum(req.params.id);
     if (!album) { res.status(404).json({ error: 'Album not found' }); return null; }
-    if (!canManage(req, album)) { res.status(403).json({ error: 'Not your album' }); return null; }
+    if (!canManage(req, album) && !(takeDown && isStaff(req))) { res.status(403).json({ error: 'Not your album' }); return null; }
     return album;
 }
 
@@ -253,7 +259,7 @@ export async function updateAlbum(req: Request, res: Response): Promise<void> {
 /** DELETE /albums/:id — the album and its photos. */
 export async function deleteAlbum(req: Request, res: Response): Promise<void> {
     try {
-        const album = await managedAlbum(req, res);
+        const album = await managedAlbum(req, res, { takeDown: true });
         if (!album) return;
         const photos = await prisma.albumPhoto.findMany({ where: { albumId: album.id }, select: { url: true } });
         await prisma.album.delete({ where: { id: album.id } });
@@ -321,7 +327,7 @@ export async function updatePhoto(req: Request, res: Response): Promise<void> {
 /** DELETE /albums/:id/photos/:photoId — the cover falls back to the first photo. */
 export async function deletePhoto(req: Request, res: Response): Promise<void> {
     try {
-        const album = await managedAlbum(req, res);
+        const album = await managedAlbum(req, res, { takeDown: true });
         if (!album) return;
         const photo = await prisma.albumPhoto.findFirst({ where: { id: req.params.photoId, albumId: album.id }, select: { id: true, url: true } });
         if (!photo) { res.status(404).json({ error: 'Photo not found' }); return; }

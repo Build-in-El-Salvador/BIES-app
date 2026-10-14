@@ -33,8 +33,10 @@ const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 const QUIZ_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
 const QUIZ_ATTEMPTS_PER_WINDOW = 5;
 
-function isStaff(req: Request): boolean {
-    return Boolean(req.user && (req.user.isAdmin || req.user.role === 'MOD'));
+// Course staff powers (any course's drafts, edits, deletion and paid lessons)
+// are admin-only: moderators handle reports and the directory.
+function isCourseAdmin(req: Request): boolean {
+    return Boolean(req.user?.isAdmin);
 }
 
 function escapeHtml(str: string): string {
@@ -202,7 +204,7 @@ function moderationResetPatch(
     course: { status: string },
     req: Request
 ): { status?: string } {
-    if (course.status === 'active' && !isStaff(req)) {
+    if (course.status === 'active' && !isCourseAdmin(req)) {
         return { status: 'pending-review' };
     }
     return {};
@@ -226,7 +228,7 @@ async function loadOwnedCourse(
         res.status(404).json({ error: 'Course not found' });
         return null;
     }
-    if (course.authorId !== req.user!.id && !isStaff(req)) {
+    if (course.authorId !== req.user!.id && !isCourseAdmin(req)) {
         res.status(403).json({ error: 'Not authorized' });
         return null;
     }
@@ -445,7 +447,7 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
 
         const userId = req.user?.id ?? null;
         const isOwner = userId === course.authorId;
-        if (course.status !== 'active' && !isOwner && !isStaff(req)) {
+        if (course.status !== 'active' && !isOwner && !isCourseAdmin(req)) {
             res.status(404).json({ error: 'Course not found' });
             return;
         }
@@ -829,7 +831,7 @@ export async function updateLesson(req: Request, res: Response): Promise<void> {
 
         // Staff edit on an active course → refresh the mirror (author edits
         // reset to pending-review and re-mirror on re-approval).
-        if (existing.status === 'active' && isStaff(req)) {
+        if (existing.status === 'active' && isCourseAdmin(req)) {
             mirrorCourseToNostr(existing.id).catch(() => {});
         }
         res.json(sanitizeLessonForLearner(updated));
@@ -969,7 +971,7 @@ export async function getLesson(req: Request, res: Response): Promise<void> {
             course,
             lesson,
             userId,
-            isAdmin: isStaff(req),
+            isAdmin: isCourseAdmin(req),
             enrolled: Boolean(enrollment),
             purchased: Boolean(purchase),
         });
@@ -987,7 +989,7 @@ export async function getLesson(req: Request, res: Response): Promise<void> {
         res.set('Cache-Control', 'no-store');
 
         const payload = sanitizeLessonForLearner(lesson);
-        const isOwner = userId === course.authorId || isStaff(req);
+        const isOwner = userId === course.authorId || isCourseAdmin(req);
         if (isOwner && lesson.type === 'QUIZ' && lesson.quizAnswerKey) {
             // Editor needs the answers back — author/staff only.
             (payload as any).answerKey = JSON.parse(lesson.quizAnswerKey);
@@ -1172,7 +1174,7 @@ export async function upsertProgress(req: Request, res: Response): Promise<void>
             course,
             lesson: { isFreePreview: lesson.isFreePreview },
             userId,
-            isAdmin: isStaff(req),
+            isAdmin: isCourseAdmin(req),
             enrolled: true,
             purchased: Boolean(purchase),
         });
@@ -1258,7 +1260,7 @@ export async function submitQuiz(req: Request, res: Response): Promise<void> {
             course,
             lesson: { isFreePreview: lesson.isFreePreview },
             userId,
-            isAdmin: isStaff(req),
+            isAdmin: isCourseAdmin(req),
             enrolled: true,
             purchased: Boolean(purchase),
         });

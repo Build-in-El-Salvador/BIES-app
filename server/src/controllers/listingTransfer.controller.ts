@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { recomputeListingScore } from '../services/directoryReputation.service';
 import { createNotification } from '../services/notification.service';
-import { blockedEitherWay } from '../services/moderation.service';
+import { blockedEitherWay, moderatorsOwn } from '../services/moderation.service';
 import { mirrorToNostr } from './directory.controller';
 import { z } from 'zod';
 
@@ -117,10 +117,14 @@ export async function claimListing(req: Request, res: Response): Promise<void> {
         const me = req.user!.id;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, name: true, type: true, status: true, ownerId: true },
+            select: { id: true, name: true, type: true, status: true, ownerId: true, memberUserId: true },
         });
         if (!listing || listing.status !== 'active') { res.status(404).json({ error: 'Listing not found' }); return; }
         if (listing.ownerId === me) { res.status(400).json({ error: 'This listing is already yours', reason: 'already_owner' }); return; }
+        // Blocked either way: the listing isn't there for them (getListing).
+        for (const other of [listing.ownerId, listing.memberUserId]) {
+            if (other && other !== me && await blockedEitherWay(me, other)) { res.status(404).json({ error: 'Listing not found' }); return; }
+        }
 
         const open = await prisma.listingTransfer.findFirst({
             where: { listingId: listing.id, toUserId: me, status: 'pending' },
@@ -229,7 +233,7 @@ export async function offerListing(req: Request, res: Response): Promise<void> {
 async function openTransfer(req: Request, res: Response) {
     const transfer = await prisma.listingTransfer.findUnique({
         where: { id: req.params.transferId },
-        include: { listing: { select: { id: true, name: true, type: true, ownerId: true } } },
+        include: { listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true } } },
     });
     if (!transfer) { res.status(404).json({ error: 'Request not found' }); return null; }
     if (transfer.status !== 'pending') {
@@ -263,6 +267,7 @@ export async function acceptTransfer(req: Request, res: Response): Promise<void>
         const byStaff = transfer.kind === 'claim' && !byOwner && isStaff(req);
         const byRecipient = transfer.kind === 'offer' && transfer.toUserId === me;
         if (!byOwner && !byStaff && !byRecipient) { res.status(403).json({ error: 'Not your request to answer' }); return; }
+        if (byStaff && moderatorsOwn(req.user, listing.ownerId, listing.memberUserId, transfer.toUserId)) { res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' }); return; }
         if (!(await activeMember(transfer.toUserId))) { res.status(400).json({ error: 'Member not found', reason: 'no_member' }); return; }
 
         await moveListing(listing.id, transfer.toUserId, me, transfer.id);
@@ -432,9 +437,10 @@ export async function staffMoveListing(req: Request, res: Response): Promise<voi
         const { userId } = req.body;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, name: true, type: true, ownerId: true },
+            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true },
         });
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+        if (moderatorsOwn(req.user, listing.ownerId, listing.memberUserId, userId)) { res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' }); return; }
         if (listing.ownerId === userId) { res.status(400).json({ error: 'They already own it', reason: 'already_owner' }); return; }
         if (!(await activeMember(userId))) { res.status(400).json({ error: 'Member not found', reason: 'no_member' }); return; }
 

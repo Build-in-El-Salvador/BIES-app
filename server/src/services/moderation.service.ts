@@ -11,9 +11,10 @@
  * doesn't see reports about themselves; an admin does. Closed reports are
  * deleted after 12 months, as the privacy notice says.
  *
- * Blocks: the blocker stops seeing the blocked member's profile, listings,
- * recommendations and posts. Neither can follow or message the other, and a
- * follow between them ends.
+ * Blocks work both ways: neither member sees the other's profile, network,
+ * listings, recommendations, albums or posts. Neither can follow, message or
+ * claim from the other, and a follow between them ends. A member's block
+ * doesn't hide them from moderators and admins (isStaffUser).
  */
 
 import prisma from '../lib/prisma';
@@ -393,28 +394,48 @@ export async function hasBlocked(blockerId: string, other: { id?: string; pubkey
     return !!found;
 }
 
-/** Whether either member blocked the other: they can't follow or message each other. */
+/**
+ * A moderator doesn't decide on what's theirs, as with reports about
+ * themselves: a listing they own or run, or one that would move to them.
+ * Another moderator or an admin does. Admins can.
+ */
+export function moderatorsOwn(user: { id: string; isAdmin?: boolean } | null | undefined, ...memberIds: (string | null | undefined)[]): boolean {
+    return !!user && !user.isAdmin && memberIds.includes(user.id);
+}
+
+/**
+ * Moderators and admins: a member who blocks them still can't be contacted
+ * by them, but isn't hidden from them, so reports about that member can
+ * still be handled. Blocks staff make themselves work as for anyone.
+ */
+export function isStaffUser(user: { isAdmin?: boolean; role?: string } | null | undefined): boolean {
+    return !!user && (!!user.isAdmin || user.role === 'MOD');
+}
+
 /**
  * Both ways: the members this member blocked, and those who blocked them.
  * What either side publishes is hidden from the other, as on Facebook (Mike,
  * 2026-10-13): the blocker sees nothing of the blocked member, and the
- * blocked member nothing of the blocker, without being told why.
+ * blocked member nothing of the blocker, without being told why. For staff,
+ * only the members they blocked themselves (isStaffUser).
  */
-export async function hiddenFromIds(userId: string | null | undefined): Promise<string[]> {
+export async function hiddenFromIds(userId: string | null | undefined, { staff = false } = {}): Promise<string[]> {
     if (!userId) return [];
     const rows = await prisma.block.findMany({
-        where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
+        where: staff ? { blockerId: userId } : { OR: [{ blockerId: userId }, { blockedId: userId }] },
         select: { blockerId: true, blockedId: true },
     });
     return rows.map((r) => (r.blockerId === userId ? r.blockedId : r.blockerId));
 }
 
-/** The pubkeys of the members who blocked this member: the app hides their posts too. */
-export async function blockerPubkeys(userId: string): Promise<string[]> {
+/** The pubkeys of the members who blocked this member: the app hides their posts too (not for staff). */
+export async function blockerPubkeys(userId: string, { staff = false } = {}): Promise<string[]> {
+    if (staff) return [];
     const rows = await prisma.block.findMany({ where: { blockedId: userId }, select: { blocker: { select: { nostrPubkey: true } } } });
     return rows.map((r) => r.blocker.nostrPubkey).filter(Boolean);
 }
 
+/** Whether either member blocked the other: they can't follow or message each other. */
 export async function blockedEitherWay(a: string, b: string): Promise<boolean> {
     const found = await prisma.block.findFirst({
         where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },

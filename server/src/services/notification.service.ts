@@ -63,13 +63,17 @@ export async function removePushTargets(userId: string): Promise<void> {
 const ACTOR_ID_KEYS = ['actorId', 'senderId', 'followerId', 'viewerId', 'attendeeId', 'inviterId', 'buyerId'] as const;
 const ACTOR_PUBKEY_KEYS = ['actorPubkey', 'senderPubkey'] as const;
 
-/** Whoever caused the notification, when the recipient blocked them. */
+/** Whoever caused the notification, when either of them blocked the other. */
 async function fromBlockedMember(userId: string, data: Record<string, unknown>): Promise<boolean> {
     const pick = (keys: readonly string[]) => keys.map((k) => data[k]).find((v): v is string => typeof v === 'string' && !!v);
     const id = pick(ACTOR_ID_KEYS);
     const pubkey = pick(ACTOR_PUBKEY_KEYS);
     if (!id && !pubkey) return false;
-    return hasBlocked(userId, { id, pubkey });
+    if (await hasBlocked(userId, { id, pubkey })) return true;
+    // Blocking works both ways: nothing reaches the blocked member from the
+    // blocker either.
+    const actorId = id ?? (await prisma.user.findUnique({ where: { nostrPubkey: pubkey! }, select: { id: true } }))?.id;
+    return !!actorId && actorId !== userId && (await hasBlocked(actorId, { id: userId }));
 }
 
 // Which Settings → Notifications switch decides whether a type is pushed to

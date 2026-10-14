@@ -3,7 +3,7 @@ import prisma from '../lib/prisma';
 import { notifyFollow } from '../services/notification.service';
 import { cache, TTL } from '../services/redis.service';
 import { publishAnnouncement } from '../services/nostr.service';
-import { blockedEitherWay } from '../services/moderation.service';
+import { blockedEitherWay, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { canSeeNetwork, privacyOf } from '../services/profilePrivacy';
 
 /**
@@ -14,6 +14,17 @@ async function networkHidden(req: Request, userId: string): Promise<boolean> {
     if (req.user?.id === userId) return false;
     const profile = await prisma.profile.findUnique({ where: { userId }, select: { privacy: true } });
     return !canSeeNetwork(privacyOf(profile?.privacy), req.user ? 'member' : 'public');
+}
+
+/**
+ * A block between the viewer and this member hides their network too, both
+ * ways, as their profile is (staff: only blocks they made themselves).
+ */
+async function blockedNetwork(req: Request, userId: string): Promise<boolean> {
+    if (!req.user || req.user.id === userId) return false;
+    return isStaffUser(req.user)
+        ? hasBlocked(req.user.id, { id: userId })
+        : blockedEitherWay(req.user.id, userId);
 }
 
 /**
@@ -126,19 +137,29 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
         const limit = Math.min(parseInt(req.query.limit as string || '20', 10), 50);
         const skip = (page - 1) * limit;
 
+        if (await blockedNetwork(req, userId)) {
+            res.status(404).json({ error: 'Profile not found' });
+            return;
+        }
         if (await networkHidden(req, userId)) {
             const total = await prisma.follow.count({ where: { followingId: userId } });
             res.json({ data: [], hidden: true, pagination: { page, limit, total, totalPages: 0 } });
             return;
         }
 
+        // Members blocked either way are left out, from the page and the
+        // total; the shared cache is only for viewers with no blocks.
+        const hidden = await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) });
         const cKey = `followers:${userId}:${page}:${limit}`;
-        const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        if (!hidden.length) {
+            const cached = await cache.getJson<any>(cKey);
+            if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        }
+        const where = { followingId: userId, ...(hidden.length ? { followerId: { notIn: hidden } } : {}) };
 
         const [followers, total] = await Promise.all([
             prisma.follow.findMany({
-                where: { followingId: userId },
+                where,
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
@@ -151,7 +172,7 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
                     },
                 },
             }),
-            prisma.follow.count({ where: { followingId: userId } }),
+            prisma.follow.count({ where }),
         ]);
 
         const result = {
@@ -159,7 +180,7 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
 
-        await cache.setJson(cKey, result, TTL.FOLLOW_LIST);
+        if (!hidden.length) await cache.setJson(cKey, result, TTL.FOLLOW_LIST);
         res.json(result);
     } catch (error) {
         console.error('Get followers error:', error);
@@ -178,19 +199,29 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
         const limit = Math.min(parseInt(req.query.limit as string || '20', 10), 50);
         const skip = (page - 1) * limit;
 
+        if (await blockedNetwork(req, userId)) {
+            res.status(404).json({ error: 'Profile not found' });
+            return;
+        }
         if (await networkHidden(req, userId)) {
             const total = await prisma.follow.count({ where: { followerId: userId } });
             res.json({ data: [], hidden: true, pagination: { page, limit, total, totalPages: 0 } });
             return;
         }
 
+        // Members blocked either way are left out, from the page and the
+        // total; the shared cache is only for viewers with no blocks.
+        const hidden = await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) });
         const cKey = `following:${userId}:${page}:${limit}`;
-        const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        if (!hidden.length) {
+            const cached = await cache.getJson<any>(cKey);
+            if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
+        }
+        const where = { followerId: userId, ...(hidden.length ? { followingId: { notIn: hidden } } : {}) };
 
         const [following, total] = await Promise.all([
             prisma.follow.findMany({
-                where: { followerId: userId },
+                where,
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
@@ -203,7 +234,7 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
                     },
                 },
             }),
-            prisma.follow.count({ where: { followerId: userId } }),
+            prisma.follow.count({ where }),
         ]);
 
         const result = {
@@ -211,7 +242,7 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
 
-        await cache.setJson(cKey, result, TTL.FOLLOW_LIST);
+        if (!hidden.length) await cache.setJson(cKey, result, TTL.FOLLOW_LIST);
         res.json(result);
     } catch (error) {
         console.error('Get following error:', error);
