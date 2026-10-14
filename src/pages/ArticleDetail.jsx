@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, User, Loader2 } from 'lucide-react';
+import { Calendar, User, Loader2 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { contentApi } from '../services/api';
 import { useTranslation } from 'react-i18next';
 import ZapButton from '../components/ZapButton';
+import BackButton from '../components/BackButton';
 
 const ArticleDetail = () => {
     const { t } = useTranslation();
@@ -52,7 +53,7 @@ const ArticleDetail = () => {
                     <h2>{t('articleDetail.articleNotFound')}</h2>
                     <p style={{ color: '#64748b', marginTop: '0.5rem' }}>{error || t('articleDetail.articleRemovedDesc')}</p>
                     <Link to="/news" style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#64748b' }}>
-                        <ArrowLeft size={16} /> {t('articleDetail.backToNews')}
+                        {t('articleDetail.backToNews')}
                     </Link>
                 </div>
             </div>
@@ -62,9 +63,9 @@ const ArticleDetail = () => {
     return (
         <div className="article-page">
             <div className="container">
-                <Link to="/news" className="back-link">
-                    <ArrowLeft size={16} /> {t('articleDetail.backToNews')}
-                </Link>
+                <div className="back-head">
+                    <BackButton to="/news" label={t('articleDetail.backToNews')} />
+                </div>
 
                 {(article.image || article.coverImage) && (
                     <div className="hero-image">
@@ -117,17 +118,6 @@ const ArticleDetail = () => {
                     padding: 0 1rem;
                 }
 
-                .back-link {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    color: #64748b;
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                    margin: 1.5rem 0;
-                    transition: color 0.2s;
-                }
-                .back-link:hover { color: #0f172a; }
 
                 .hero-image {
                     width: 100%;

@@ -181,12 +181,11 @@ One APNs key works for both sandbox and production and for all your apps on the 
 
 ### 5.2 Enable the capability on the App ID / in Xcode
 
-In Xcode (`npx cap open ios`), target **App** → **Signing & Capabilities**:
+The `aps-environment` entitlement is in `ios/App/App/App.entitlements` (added 2026-10-13; before that, every `register()` failed with "no valid aps-environment entitlement string found" and no token was ever produced). Xcode shows it as the **Push Notifications** capability under target **App** → **Signing & Capabilities**. The file says `development`; an App Store or TestFlight export signs `production`.
 
-1. **+ Capability** → **Push Notifications** (this adds the `aps-environment` entitlement; without it `register()` fires `registrationError` and no token is ever produced).
-2. **+ Capability** → **Background Modes** → check **Remote notifications** (needed for background delivery).
+With automatic signing (`-allowProvisioningUpdates`), the next signed build registers the `com.bies.app` App ID for push; otherwise enable Push Notifications on the App ID at developer.apple.com → Identifiers.
 
-With automatic signing, adding the capability registers the `com.bies.app` App ID for push for you; otherwise enable Push Notifications on the App ID at developer.apple.com → Identifiers.
+Background Modes → Remote notifications is **not** needed: it's for silent pushes, and BIES sends visible alerts only.
 
 ### 5.3 Install the plugin pod
 

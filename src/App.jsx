@@ -42,6 +42,8 @@ import Settings from './pages/Settings';
 import DeleteAccount from './pages/settings/DeleteAccount';
 import TakeYourKey from './pages/settings/TakeYourKey';
 import BlockedMembers from './pages/settings/BlockedMembers';
+import NotificationSettings from './pages/settings/NotificationSettings';
+import NostrKeys from './pages/settings/NostrKeys';
 import CustomizeNavbar from './pages/CustomizeNavbar';
 import Cowork from './pages/Cowork';
 import Wallet from './pages/Wallet';
@@ -386,6 +388,16 @@ const AppContent = () => {
                     <Route path="/settings/blocked" element={
                         <ProtectedRoute>
                             <BlockedMembers />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/settings/notifications" element={
+                        <ProtectedRoute>
+                            <NotificationSettings />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/settings/nostr" element={
+                        <ProtectedRoute>
+                            <NostrKeys />
                         </ProtectedRoute>
                     } />
                     {CUSTOM_BOTTOM_NAV_ENABLED && (

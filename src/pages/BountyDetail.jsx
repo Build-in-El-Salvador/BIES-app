@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, Zap, Trophy, Star, Clock, Loader2, AlertCircle,
+    Zap, Trophy, Star, Clock, Loader2, AlertCircle,
     CheckCircle, XCircle, Undo2, Edit3, Send, Target,
 } from 'lucide-react';
 import { bountiesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getAssetUrl } from '../utils/assets';
 import ZapModal from '../components/ZapModal';
+import BackButton from '../components/BackButton';
 
 // Presence check works with either an explicit flag or the raw address
 const hasLightning = (u) => !!(u?.hasLightningAddress || u?.profile?.lightningAddress);
@@ -72,7 +73,7 @@ const BountyDetail = () => {
                         to="/bounties"
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
-                        <ArrowLeft size={16} /> {t('bounties.backToBounties')}
+                        {t('bounties.backToBounties')}
                     </Link>
                 </div>
             </div>
@@ -185,9 +186,9 @@ const BountyDetail = () => {
         <div className="bounty-detail-page">
             <div className="container">
                 <div className="bounty-detail-content">
-                    <Link to="/bounties" className="bounty-back-link">
-                        <ArrowLeft size={18} /> {t('bounties.backToBounties')}
-                    </Link>
+                    <div className="back-head">
+                        <BackButton to="/bounties" label={t('bounties.backToBounties')} />
+                    </div>
 
                     {actionError && (
                         <div className="bounty-error-banner"><AlertCircle size={16} /> {actionError}</div>
@@ -419,20 +420,6 @@ const BountyDetail = () => {
                     max-width: 760px;
                     margin: 0 auto;
                 }
-
-                /* Link components don't get the styled-jsx scope hash — anchor
-                   these rules on a scoped parent instead (see Leaderboard.jsx) */
-                .bounty-detail-content :global(.bounty-back-link) {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    color: var(--color-gray-500);
-                    font-weight: 500;
-                    font-size: 0.9rem;
-                    text-decoration: none;
-                    margin-bottom: 1rem;
-                }
-                .bounty-detail-content :global(.bounty-back-link:hover) { color: var(--color-primary); }
 
                 .bounty-error-banner {
                     display: flex;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Users, ArrowLeft, Share2, MessageSquare, Loader2, Heart, AlertTriangle, ExternalLink, FileText, Globe, Briefcase, TrendingUp, Target, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Users, Share2, MessageSquare, Loader2, Heart, AlertTriangle, ExternalLink, FileText, Globe, Briefcase, TrendingUp, Target, Layers, ChevronLeft, ChevronRight } from 'lucide-react';
 import { projectsApi, analyticsApi, watchlistApi } from '../services/api';
 import DeckRequestButton from '../components/DeckRequestButton';
 import ZapButton from '../components/ZapButton';
@@ -12,6 +12,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { useAuth } from '../context/AuthContext';
 import { useUserMode } from '../context/UserModeContext';
 import { useLightbox } from '../context/LightboxContext';
+import BackButton from '../components/BackButton';
 import { safeHref } from '../utils/safeUrl';
 
 const ProjectDetails = () => {
@@ -156,9 +157,9 @@ const ProjectDetails = () => {
 
     return (
         <div className="pd-container">
-            <Link to="/discover" className="pd-back">
-                <ArrowLeft size={16} /> {t('projectDetails.backToDiscover', 'Back to Discover')}
-            </Link>
+            <div className="back-head">
+                <BackButton to="/discover" label={t('projectDetails.backToDiscover', 'Back to Discover')} />
+            </div>
 
             {/* ─── Header ─────────────────────────────── */}
             <header className="pd-header">
@@ -511,13 +512,6 @@ const ProjectDetails = () => {
                 .pd-error-link { color: var(--color-primary); margin-top: 1rem; display: inline-block; }
 
                 /* Back Link */
-                .pd-back {
-                    display: inline-flex; align-items: center; gap: 0.5rem;
-                    color: var(--color-gray-500); font-weight: 500; font-size: 0.9rem;
-                    margin-bottom: 1.5rem; transition: color 0.15s;
-                    text-decoration: none;
-                }
-                .pd-back:hover { color: var(--color-primary); }
 
                 /* Header */
                 .pd-header {

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Save, Loader2, Camera, Link2, X } from 'lucide-react';
+import { Save, Loader2, Camera, Link2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { coursesApi, uploadApi } from '../../services/api';
 import ImageCropModal from '../../components/ImageCropModal';
 import { getAssetUrl } from '../../utils/assets';
+import BackButton from '../../components/BackButton';
 
 const CATEGORIES = [
   { value: 'BITCOIN', label: 'Bitcoin' },
@@ -211,26 +212,7 @@ const NewCourse = () => {
     <div>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-        <button
-          onClick={() => navigate(-1)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '0.5rem 0.875rem',
-            border: '1px solid var(--color-gray-200)',
-            borderRadius: 'var(--radius-md)',
-            background: 'none',
-            color: 'var(--color-gray-600)',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            fontWeight: 500,
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <ChevronLeft size={16} /> {t('dashboard.back')}
-        </button>
+        <BackButton fallback="/dashboard/courses" />
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-gray-800)' }}>
             {editId ? t('dashboard.editCourse') : t('dashboard.newCourseTitle')}

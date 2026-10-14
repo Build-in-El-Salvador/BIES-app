@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
-    ArrowLeft, Loader2, AlertCircle, Camera, X, Plus, Trash2,
+    Loader2, AlertCircle, Camera, X, Plus, Trash2,
     CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { directoryApi, uploadApi } from '../../services/api';
@@ -16,6 +16,7 @@ import MemberSearchSelect from '../../components/MemberSearchSelect';
 import ImageCropModal from '../../components/ImageCropModal';
 import { getAssetUrl } from '../../utils/assets';
 import { PRODUCE_ICON_KEYS, getProduceIcon } from './produceIcons';
+import BackButton from '../../components/BackButton';
 
 const FARM_PRACTICES = [
     { id: 'regenerative', tKey: 'directory.practices.regenerative' },
@@ -388,7 +389,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         to={isFarm ? '/farms' : '/trusted'}
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
-                        <ArrowLeft size={16} /> {t('directory.backToDirectory')}
+                        {t('directory.backToDirectory')}
                     </Link>
                 </div>
             </div>
@@ -406,15 +407,15 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                     {/* Header */}
                     <div className="dir-form-header">
-                        <button onClick={() => navigate(-1)} className="dir-back-link" type="button">
-                            <ArrowLeft size={18} /> {t('common.back')}
-                        </button>
-                        <h1 className="dir-form-title">
-                            {isFarm
-                                ? <Leaf size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                                : <Building2 size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
-                            {pageTitle}
-                        </h1>
+                        <div className="back-head">
+                            <BackButton fallback={isFarm ? '/farms' : '/trusted'} />
+                            <h1 className="dir-form-title">
+                                {isFarm
+                                    ? <Leaf size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                    : <Building2 size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />}
+                                {pageTitle}
+                            </h1>
+                        </div>
                         {!editMode && <p className="dir-form-subtitle">{t('directory.createSubtitle')}</p>}
                     </div>
 
@@ -881,20 +882,6 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     margin-bottom: 1.25rem;
                 }
 
-                .dir-back-link {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    color: var(--color-gray-500);
-                    font-weight: 500;
-                    font-size: 0.9rem;
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    padding: 0;
-                    margin-bottom: 0.75rem;
-                }
-                .dir-back-link:hover { color: var(--color-primary); }
 
                 .dir-form-title {
                     display: flex;

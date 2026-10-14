@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Loader2, AlertCircle, Camera, X, Store, Globe } from 'lucide-react';
+import { Loader2, AlertCircle, Camera, X, Store, Globe } from 'lucide-react';
 import { uploadApi, marketplaceApi } from '../../services/api';
 import { nostrService } from '../../services/nostrService';
 import { nostrSigner } from '../../services/nostrSigner';
 import { MARKETPLACE_CATEGORIES } from '../../utils/nip99';
 import { getAssetUrl } from '../../utils/assets';
 import { marketCategoryLabel } from '../../components/marketplace/MarketListingCard';
+import BackButton from '../../components/BackButton';
 
 const MAX_IMAGES = 5;
 const CURRENCIES = ['SATS', 'USD'];
@@ -184,7 +185,7 @@ const CreateMarketListing = ({ editMode = false }) => {
                         to="/market"
                         style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}
                     >
-                        <ArrowLeft size={16} /> {t('marketplace.title')}
+                        {t('marketplace.title')}
                     </Link>
                 </div>
             </div>
@@ -198,13 +199,13 @@ const CreateMarketListing = ({ editMode = false }) => {
 
                     {/* Header */}
                     <div className="mk-form-header">
-                        <button onClick={() => navigate(-1)} className="mk-back-link" type="button">
-                            <ArrowLeft size={18} /> {t('common.back')}
-                        </button>
-                        <h1 className="mk-form-title">
-                            <Store size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
-                            {editMode ? t('marketplace.edit') : t('marketplace.create')}
-                        </h1>
+                        <div className="back-head">
+                            <BackButton fallback="/market" />
+                            <h1 className="mk-form-title">
+                                <Store size={24} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+                                {editMode ? t('marketplace.edit') : t('marketplace.create')}
+                            </h1>
+                        </div>
                     </div>
 
                     {submitError && (
@@ -363,20 +364,6 @@ const CreateMarketListing = ({ editMode = false }) => {
                 .mk-form-header {
                     margin-bottom: 1.25rem;
                 }
-                .mk-back-link {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.25rem;
-                    color: var(--color-gray-500);
-                    font-weight: 500;
-                    font-size: 0.9rem;
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    padding: 0;
-                    margin-bottom: 0.75rem;
-                }
-                .mk-back-link:hover { color: var(--color-primary); }
                 .mk-form-title {
                     display: flex;
                     align-items: center;

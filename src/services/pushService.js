@@ -25,6 +25,9 @@ let listenersBound = false;
 // Last device token we captured, so logout can best-effort unregister it.
 let lastToken = null;
 
+/** Fired on window when this phone's notification permission may have changed. */
+export const PERMISSION_EVENT = 'bies:push-permission';
+
 /** The runtime PushNotifications plugin, or null on web / older shells. */
 function getPlugin() {
     return (typeof window !== 'undefined' && window.Capacitor?.Plugins?.PushNotifications) || null;
@@ -82,6 +85,8 @@ export async function initNativePush() {
     } catch (err) {
         console.warn('[Push] Native push init failed:', err);
     }
+    // Settings → Notifications may be open while iOS asks: tell it the answer.
+    window.dispatchEvent(new Event(PERMISSION_EVENT));
 }
 
 /**
@@ -90,4 +95,38 @@ export async function initNativePush() {
  */
 export function nativePushToken() {
     return isNativePlatform() ? lastToken : null;
+}
+
+/**
+ * This phone's notification permission for BIES: 'granted', 'denied',
+ * 'prompt' (not asked yet) or 'unavailable' (web, or a shell without push).
+ */
+export async function nativePushPermission() {
+    if (!isNativePlatform()) return 'unavailable';
+    if (getPlatform() === 'android' && !ANDROID_PUSH_ENABLED) return 'unavailable';
+    const push = getPlugin();
+    if (!push) return 'unavailable';
+    try {
+        const { receive } = await push.checkPermissions();
+        return receive === 'granted' || receive === 'denied' ? receive : 'prompt';
+    } catch {
+        return 'unavailable';
+    }
+}
+
+/**
+ * Settings → Notifications on: ask iOS if it hasn't been asked, register
+ * this phone, and say where that left the permission.
+ */
+export async function enableNativePush() {
+    await initNativePush();
+    return nativePushPermission();
+}
+
+/**
+ * Open BIES's page in iPhone Settings, where notifications that were turned
+ * off can be allowed again. The WebView hands the app-settings: URL to iOS.
+ */
+export function openNativeAppSettings() {
+    window.location.href = 'app-settings:';
 }

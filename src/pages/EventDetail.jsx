@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Calendar, MapPin, Clock, Users, Globe, Link as LinkIcon, ShieldCheck, Award, Zap, AlertCircle, Send, Facebook, Twitter, Mail, Check, MessageSquare, Loader2, Tag, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, MoreHorizontal, Copy, UserPlus, X, Search, Flag, CalendarPlus, Navigation, Edit3, Radio, Ticket } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, Globe, Link as LinkIcon, ShieldCheck, Award, Zap, AlertCircle, Send, Facebook, Twitter, Mail, Check, MessageSquare, Loader2, Tag, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, MoreHorizontal, Copy, UserPlus, X, Search, Flag, CalendarPlus, Navigation, Edit3, Radio, Ticket } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { getAssetUrl } from '../utils/assets';
 import { openExternal } from '../utils/openExternal';
@@ -17,6 +17,7 @@ import { useLightbox } from '../context/LightboxContext';
 import { nostrService } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import BackButton from '../components/BackButton';
 import { safeHref } from '../utils/safeUrl';
 
 const EventDetail = () => {
@@ -331,7 +332,7 @@ const EventDetail = () => {
                         <h2>{t('eventDetail.eventNotFound', 'Event not found')}</h2>
                         <p style={{ color: '#64748b', margin: '0.5rem 0' }}>{error || t('eventDetail.eventNotFoundDesc', "This event doesn't exist or has been removed.")}</p>
                         <Link to="/events" className="back-link" style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}>
-                            <ArrowLeft size={16} /> {t('eventDetail.backToEvents', 'Back to Events')}
+                            {t('eventDetail.backToEvents', 'Back to Events')}
                         </Link>
                     </div>
                 </div>
@@ -353,15 +354,7 @@ const EventDetail = () => {
                             style={{ cursor: 'pointer' }}
                         />
                     )}
-                    <Link to="/events" style={{
-                        position: 'absolute', top: '24px', left: '24px',
-                        borderRadius: '50%', background: 'var(--color-surface)', border: '1px solid var(--color-gray-200)',
-                        width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        textDecoration: 'none', color: 'var(--color-gray-700)', boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                        zIndex: 10,
-                    }}>
-                        <ArrowLeft size={20} />
-                    </Link>
+                    <BackButton to="/events" overlay label={t('eventDetail.backToEvents', 'Back to Events')} />
                     <span className={`category-badge ${(event.category || '').toLowerCase()}`}>
                         {event.category?.replace(/_/g, ' ')}
                     </span>

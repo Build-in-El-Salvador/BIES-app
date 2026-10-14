@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, ChevronLeft, Loader2, FileText, X, Save, Upload, Plus, UserPlus, Trash2, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, GripVertical } from 'lucide-react';
+import { Camera, Loader2, FileText, X, Save, Upload, Plus, UserPlus, Trash2, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, GripVertical } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { projectsApi, uploadApi, profilesApi } from '../../services/api';
 import RichTextEditor from '../../components/RichTextEditor';
 import { useSectionDrag, reorderArray } from '../../hooks/useSectionDrag';
+import BackButton from '../../components/BackButton';
 
 const NewProject = () => {
     const navigate = useNavigate();
@@ -581,10 +582,10 @@ const NewProject = () => {
                 {/* Page Header */}
                 <div className="page-header">
                     <div>
-                        <button onClick={() => navigate(-1)} className="back-link">
-                            <ChevronLeft size={18} /> Back
-                        </button>
-                        <h1 className="h1-title">{editId ? 'Edit Project' : 'Create New Project'}</h1>
+                        <div className="back-head">
+                            <BackButton fallback="/discover" />
+                            <h1 className="h1-title">{editId ? 'Edit Project' : 'Create New Project'}</h1>
+                        </div>
                         <p className="text-gray-500">Launch your venture on the Bitcoin network</p>
                     </div>
                 </div>
@@ -936,12 +937,6 @@ const NewProject = () => {
                 .mb-8 { margin-bottom: 2rem; }
 
                 .page-header { margin-bottom: 2rem; }
-                .back-link {
-                    display: inline-flex; align-items: center; gap: 0.25rem;
-                    color: var(--color-gray-500); font-weight: 500; font-size: 0.9rem;
-                    background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 0.75rem;
-                }
-                .back-link:hover { color: var(--color-primary); }
 
                 .h1-title { font-size: 2rem; line-height: 2.25rem; font-weight: 700; font-family: var(--font-display); margin-bottom: 0.25rem; }
                 .h3-title { font-size: 1.25rem; font-weight: 700; font-family: var(--font-display); }

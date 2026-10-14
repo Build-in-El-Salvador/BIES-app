@@ -673,6 +673,12 @@ model UserSettings {
   notifyInvestments    Boolean @default(true) @map("notify_investments")
   notifyFollows        Boolean @default(true) @map("notify_follows")
   notifyProjectUpdates Boolean @default(true) @map("notify_project_updates")
+  // Push per category (notification.service.ts PUSH_CATEGORY); the bell keeps everything
+  notifyLikes          Boolean @default(true) @map("notify_likes")
+  notifyComments       Boolean @default(true) @map("notify_comments")
+  notifyProfileViews   Boolean @default(true) @map("notify_profile_views")
+  notifyZaps           Boolean @default(true) @map("notify_zaps")
+  notifyEvents         Boolean @default(true) @map("notify_events")
   relays               String  @default("[]") // JSON array of relay URLs
   mediaReadItems       String  @default("{}") @map("media_read_items") // JSON: { watched: [...], read: [...] }
   preferences          String  @default("{}") // JSON: { theme, language, projectsView, membersView, eventsView, mediaView }

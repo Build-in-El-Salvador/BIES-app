@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    ArrowLeft, Calendar, MapPin, Clock, Users, Globe, Tag, ShieldCheck,
+    Calendar, MapPin, Clock, Users, Globe, Tag, ShieldCheck,
     Eye, Lock, EyeOff, Ticket, Award, UserCheck, AlertCircle, Loader2,
     Plus, Trash2, Camera, Save, X, Link as LinkIcon,
     Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon,
@@ -17,6 +17,7 @@ import TagInput from '../components/TagInput';
 import RichTextEditor from '../components/RichTextEditor';
 import { getAssetUrl } from '../utils/assets';
 import { useSectionDrag, reorderArray } from '../hooks/useSectionDrag';
+import BackButton from '../components/BackButton';
 
 const VISIBILITY_OPTIONS = [
     { value: 'PUBLIC', label: 'Public', icon: <Globe size={15} />, desc: 'Visible to everyone on BIES' },
@@ -412,10 +413,10 @@ const CreateEvent = () => {
 
                 <div className="page-header">
                     <div>
-                        <button onClick={() => navigate(-1)} className="back-link">
-                            <ArrowLeft size={18} /> Back
-                        </button>
-                        <h1 className="h1-title">Create New Event</h1>
+                        <div className="back-head">
+                            <BackButton fallback="/events" />
+                            <h1 className="h1-title">Create New Event</h1>
+                        </div>
                         <p className="text-gray-500">Host a Bitcoin-native event and grow your community.</p>
                     </div>
                 </div>
@@ -869,8 +870,6 @@ const CreateEvent = () => {
                 }
                 .import-btn:hover { opacity: 0.9; }
                 .import-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-                .back-link { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--color-gray-500); font-weight: 500; font-size: 0.9rem; background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 0.75rem; }
-                .back-link:hover { color: var(--color-primary); }
                 .h1-title { font-size: 2rem; font-weight: 700; font-family: var(--font-display); margin-bottom: 0.25rem; }
                 .h3-title { font-size: 1.2rem; font-weight: 700; font-family: var(--font-display); }
                 .text-gray-500 { color: var(--color-gray-500); margin: 0; }

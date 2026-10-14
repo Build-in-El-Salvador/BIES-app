@@ -394,7 +394,10 @@ const ProjectCard = ({ project, t, viewType = 'standard' }) => {
 
 /**
  * Projects and members. `membersOnly` (/members), or the `projects` feature
- * being off (as in the store app), leaves just the member directory.
+ * being off (as in the store app), leaves just the member directory: search,
+ * with no filters for now. Members don't have roles yet, so there's no role
+ * filter or role badge anywhere; they'll be added as they develop (Mike,
+ * 2026-10-13).
  */
 const Discover = ({ membersOnly = false }) => {
   const { t } = useTranslation();
@@ -408,7 +411,6 @@ const Discover = ({ membersOnly = false }) => {
   const [selectedIndustries, setSelectedIndustries] = useState([]);
   const [selectedStages, setSelectedStages] = useState([]);
   const [selectedLocations, setSelectedLocations] = useState([]);
-  const [selectedRoles, setSelectedRoles] = useState([]);
   const [minFunding, setMinFunding] = useState('');
   const [maxFunding, setMaxFunding] = useState('');
   const [memberViewType, setMemberViewType] = useState(() => localStorage.getItem('bies_members_view') || defaultView);
@@ -458,14 +460,6 @@ const Discover = ({ membersOnly = false }) => {
     { id: 'ENTERTAINMENT', label: 'Entertainment' },
     { id: 'LOGISTICS', label: 'Logistics' },
     { id: 'EDUCATION', label: 'Education' }
-  ];
-
-  const memberRoles = [
-    { id: 'BUILDER', label: t('discover.roles.builders', 'Builders') },
-    { id: 'INVESTOR', label: t('discover.roles.investors', 'Investors') },
-    { id: 'EDUCATOR', label: t('discover.roles.educators', 'Educators') },
-    { id: 'EVENT_HOST', label: t('discover.roles.eventHosts', 'Event Hosts') },
-    { id: 'MEMBER', label: t('discover.roles.members', 'Members') }
   ];
 
   const handleIndustryChange = (industryId) => {
@@ -542,8 +536,6 @@ const Discover = ({ membersOnly = false }) => {
         const params = { page: buildersPage, limit: 12 };
         if (searchQuery) params.search = searchQuery;
         if (selectedLocations.length === 1) params.location = selectedLocations[0];
-        if (selectedRoles.length === 1) params.role = selectedRoles[0];
-        // If zero or multiple roles are selected, we don't pass 'role' natively since the API might only support strings. Client-side filtering applies below.
 
         const [result, followingRes] = await Promise.all([
           profilesApi.list(params),
@@ -567,7 +559,7 @@ const Discover = ({ membersOnly = false }) => {
     };
     const debounce = setTimeout(fetchBuilders, 300);
     return () => clearTimeout(debounce);
-  }, [searchQuery, buildersPage, user?.id, currentView, selectedLocations, selectedRoles]);
+  }, [searchQuery, buildersPage, user?.id, currentView, selectedLocations]);
 
   // Client-side multi-filter (API may not support multi-select)
   const filteredProjects = projects.filter(p => {
@@ -587,10 +579,6 @@ const Discover = ({ membersOnly = false }) => {
       const loc = b.location || b.profile?.location || '';
       if (!selectedLocations.some(l => l.toLowerCase() === loc.toLowerCase())) return false;
     }
-    if (selectedRoles.length > 1) {
-      const role = b.role || '';
-      if (!selectedRoles.includes(role)) return false;
-    }
     return true;
   });
 
@@ -600,13 +588,13 @@ const Discover = ({ membersOnly = false }) => {
       <h1 className="page-header" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>{onlyMembers ? t('discover.members', 'Members') : t('discover.title')}</h1>
 
       <div className="search-row">
-        <div className="search-left-column">
+        {!onlyMembers && <div className="search-left-column">
           {(mode === 'builder' || user?.role === 'BUILDER' || user?.isAdmin || user?.role === 'MOD') && (
             <Link to="/dashboard/builder/new-project" className="btn btn-primary create-project-btn" style={{ display: 'flex', width: '100%', boxSizing: 'border-box', gap: '0.5rem', justifyContent: 'center' }}>
               <Plus size={18} /><span>{t('discover.newProject')}</span>
             </Link>
           )}
-        </div>
+        </div>}
         <div style={{ display: 'flex', flex: 1, gap: '0.75rem', alignItems: 'center', minWidth: 0, maxWidth: '100%' }}>
           <div className="search-bar">
             <Search size={20} className="search-icon" />
@@ -670,12 +658,14 @@ const Discover = ({ membersOnly = false }) => {
               </div>
             )}
             
-            <button className="mobile-filter-toggle" style={{ display: 'flex' }} onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}>
-              <SlidersHorizontal size={20} />
-              {(selectedIndustries.length + selectedStages.length + selectedLocations.length + selectedRoles.length) > 0 && (
-                <span className="filter-badge">{selectedIndustries.length + selectedStages.length + selectedLocations.length + selectedRoles.length}</span>
-              )}
-            </button>
+            {!onlyMembers && (
+              <button className="mobile-filter-toggle" style={{ display: 'flex' }} onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)} aria-label={t('common.filters')}>
+                <SlidersHorizontal size={20} />
+                {(selectedIndustries.length + selectedStages.length + selectedLocations.length) > 0 && (
+                  <span className="filter-badge">{selectedIndustries.length + selectedStages.length + selectedLocations.length}</span>
+                )}
+              </button>
+            )}
             <button className="btn btn-primary search-btn-desktop" onClick={() => { }}>{t('common.search')}</button>
           </div>
           {isPWA && !onlyMembers && (mode === 'builder' || user?.role === 'BUILDER' || user?.isAdmin || user?.role === 'MOD') && (
@@ -706,8 +696,8 @@ const Discover = ({ membersOnly = false }) => {
       </div>
 
       <div className="content-layout">
-        {/* Filters Sidebar */}
-        <div className={`filters-column ${mobileFiltersOpen ? 'mobile-open' : ''}`}>
+        {/* Filters Sidebar (none on the members-only directory, for now) */}
+        {!onlyMembers && <div className={`filters-column ${mobileFiltersOpen ? 'mobile-open' : ''}`}>
           <aside className="filters">
             <div className="filter-header" style={{ justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -839,27 +829,6 @@ const Discover = ({ membersOnly = false }) => {
             {(currentView === 'members' || currentView === 'both') && (
               <>
                 <div className="filter-group">
-                  <label>{t('discover.role', 'Role')}</label>
-                  <div className="checkbox-list">
-                    {memberRoles.map(role => (
-                      <label key={role.id}>
-                        <input
-                          type="checkbox"
-                          checked={selectedRoles.includes(role.id)}
-                          onChange={() => {
-                            setSelectedRoles(prev =>
-                              prev.includes(role.id) ? prev.filter(r => r !== role.id) : [...prev, role.id]
-                            );
-                            setBuildersPage(1);
-                          }}
-                        />
-                        {role.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="filter-group">
                   <label>{t('discover.location', 'Location')}</label>
                   <div className="checkbox-list">
                     {['El Salvador', 'Remote', 'USA', 'Europe', 'Latin America'].map(loc => (
@@ -882,7 +851,7 @@ const Discover = ({ membersOnly = false }) => {
               </>
             )}
           </aside>
-        </div>
+        </div>}
 
         {/* Content Section */}
         <div style={{ flex: 1, width: '100%' }}>
@@ -935,15 +904,9 @@ const Discover = ({ membersOnly = false }) => {
                             </div>
                         );
                         
-                        const roleTags = [];
-                        if (builder.user?.role === 'INVESTOR') roleTags.push('Investor');
-                        if (builder.user?.isAdmin) roleTags.push('Admin');
-                        if (builder.user?.role === 'MOD') roleTags.push('Moderator');
-                        if (builder.user?._count?.projects > 0) roleTags.push('Builder');
-                        if (builder.user?._count?.hostedEvents > 0) roleTags.push('Event Host');
                         // Like a LinkedIn card: the headline and location say who they are;
-                        // a few tags, no generic "Member" pill.
-                        const tags = [...roleTags, ...(builder.skills || builder.tags || [])].slice(0, 3);
+                        // a few of their own tags, and no role badges (no roles yet).
+                        const tags = (builder.skills || builder.tags || []).slice(0, 3);
                         const subline = builder.location
                             ? <><MapPin size={13} aria-hidden="true" /><span className="builder-subline-text">{builder.location}</span></>
                             : !builder.title && !builder.company && builder.bio
@@ -955,8 +918,6 @@ const Discover = ({ membersOnly = false }) => {
                                     <div className="builder-card-icons">
                                         <div className="builder-avatar-wrap-icons">
                                             {avatarContent}
-                                            {builder.user?.role === 'MOD' && <div className="badge-shield" title="Moderator">🛡️</div>}
-                                            {builder.user?.isAdmin && <div className="badge-shield" title="Admin">👑</div>}
                                         </div>
                                         <h3 className="builder-name-icons">{builder.name}</h3>
                                     </div>
@@ -970,8 +931,6 @@ const Discover = ({ membersOnly = false }) => {
                                     <div className="builder-card-list">
                                         <div className="builder-avatar-wrap-list relative">
                                             {avatarContent}
-                                            {builder.user?.role === 'MOD' && <div className="badge-shield list-badge" title="Moderator">🛡️</div>}
-                                            {builder.user?.isAdmin && <div className="badge-shield list-badge" title="Admin">👑</div>}
                                         </div>
                                         <div className="builder-info-list" style={{ flex: 1, overflow: 'hidden' }}>
                                             <h3 className="font-semibold text-lg builder-name-clamp">{builder.name}</h3>
@@ -984,7 +943,7 @@ const Discover = ({ membersOnly = false }) => {
                                             {tags.length > 0 && (
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
                                                     {tags.map((tag, i) => (
-                                                        <span key={i} className={`builder-tag ${roleTags.includes(tag) ? 'role-tag-highlight' : ''}`} style={{ padding: '2px 8px', fontSize: '0.75rem' }}>{tag}</span>
+                                                        <span key={i} className="builder-tag" style={{ padding: '2px 8px', fontSize: '0.75rem' }}>{tag}</span>
                                                     ))}
                                                 </div>
                                             )}
@@ -1014,8 +973,6 @@ const Discover = ({ membersOnly = false }) => {
                                 <div className="builder-card">
                                     <div className="h-48 bg-gray-100 relative builder-avatar-wrap-standard">
                                         {avatarContent}
-                                        {builder.user?.role === 'MOD' && <div className="badge-shield standard-badge" title="Moderator">🛡️</div>}
-                                        {builder.user?.isAdmin && <div className="badge-shield standard-badge" title="Admin">👑</div>}
                                     </div>
                                     <div className="p-5 flex-1 flex flex-col">
                                         <h3 className="font-semibold text-xl mb-1">{builder.name}</h3>
@@ -1026,7 +983,7 @@ const Discover = ({ membersOnly = false }) => {
                                         {tags.length > 0 && (
                                             <div className="flex flex-wrap gap-2 mb-4">
                                                 {tags.map((tag, i) => (
-                                                    <span key={i} className={`builder-tag ${roleTags.includes(tag) ? 'role-tag-highlight' : ''}`}>{tag}</span>
+                                                    <span key={i} className="builder-tag">{tag}</span>
                                                 ))}
                                             </div>
                                         )}
@@ -1489,32 +1446,6 @@ const Discover = ({ membersOnly = false }) => {
           border-radius: 99px;
           color: var(--color-gray-600);
           font-weight: 500;
-        }
-        .role-tag-highlight {
-          background: var(--color-primary-light);
-          color: white;
-          background-color: var(--color-primary);
-        }
-        .badge-shield {
-          position: absolute;
-          bottom: 0px;
-          right: 0px;
-          background: white;
-          border-radius: 50%;
-          font-size: 14px;
-          line-height: 1;
-          padding: 2px;
-          box-shadow: var(--shadow-sm);
-        }
-        .list-badge {
-          bottom: -2px;
-          right: -2px;
-        }
-        .standard-badge {
-          bottom: 8px;
-          right: 8px;
-          font-size: 20px;
-          padding: 4px;
         }
         .line-clamp-2 {
           display: -webkit-box;

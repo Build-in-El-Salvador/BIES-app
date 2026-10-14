@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    ArrowLeft, MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
+    MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
     Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
@@ -22,6 +22,7 @@ import { publicUrl } from '../../utils/publicUrl';
 import { useLightbox } from '../../context/LightboxContext';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
+import BackButton from '../../components/BackButton';
 import '../../components/moderation/Moderation.css';
 
 const PRACTICE_META = {
@@ -137,7 +138,7 @@ const ListingDetail = () => {
                                 textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)',
                             }}
                         >
-                            <ArrowLeft size={16} /> {t('directory.backToDirectory')}
+                            {t('directory.backToDirectory')}
                         </Link>
                     </div>
                 </div>
@@ -314,20 +315,7 @@ const ListingDetail = () => {
                             {isFarm ? <Leaf size={56} /> : <Building2 size={56} />}
                         </div>
                     )}
-                    <Link
-                        to={backPath}
-                        aria-label={t('directory.backToDirectory')}
-                        style={{
-                            position: 'absolute', top: 16, left: 16,
-                            width: 42, height: 42, borderRadius: '50%',
-                            background: 'var(--color-surface)', border: '1px solid var(--color-gray-200)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            textDecoration: 'none', color: 'var(--color-gray-700)',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.15)', zIndex: 5,
-                        }}
-                    >
-                        <ArrowLeft size={20} />
-                    </Link>
+                    <BackButton to={backPath} overlay label={t('directory.backToDirectory')} />
                 </div>
             </div>
 

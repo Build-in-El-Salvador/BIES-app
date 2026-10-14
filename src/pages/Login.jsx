@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Loader2, Key, KeyRound, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { AlertCircle, Loader2, Key, KeyRound, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
 import { nip19, getPublicKey } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { PASSKEY_ENABLED, NIP46_ENABLED, AMBER_NIP55_ENABLED } from '../config/featureFlags';
@@ -16,6 +16,7 @@ import NostrConnectQR from '../components/NostrConnectQR';
 import EmailSignIn from '../components/EmailSignIn';
 import { readKeyInput, unlockBackup } from '../services/accountKey';
 import { declineSave, getSavedKey, rememberSaved, saveKey, savedKeyAvailable, shouldOfferToSave } from '../services/savedKey';
+import BackButton from '../components/BackButton';
 
 /**
  * Sign-in, on two screens: /login is email, and /login/nostr (`nostr`) holds
@@ -387,9 +388,7 @@ const Login = ({ nostr = false }) => {
         <div className="login-container">
             <div className="login-card">
                 {nostr && !offer && (
-                    <button type="button" className="login-back" onClick={backToEmail} aria-label={t('login.backToEmail')}>
-                        <ArrowLeft size={16} /> {t('common.back')}
-                    </button>
+                    <BackButton onClick={backToEmail} label={t('login.backToEmail')} className="login-back" />
                 )}
 
                 <div className="logo mb-6">
@@ -821,21 +820,11 @@ const Login = ({ nostr = false }) => {
                     font-size: 0.875rem;
                     color: var(--color-gray-500);
                 }
-                .login-back {
+                /* The back button (BackButton) at the card's top left. */
+                .login-card :global(.login-back) {
                     align-self: flex-start;
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    margin: -0.25rem 0 0.5rem;
-                    padding: 0.25rem 0;
-                    background: none;
-                    border: none;
-                    color: var(--color-gray-500);
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    cursor: pointer;
+                    margin: -0.5rem 0 0.25rem -10px;
                 }
-                .login-back:hover { color: var(--color-primary); }
                 .login-footer {
                     margin-top: clamp(1rem, 3vh, 1.5rem);
                     padding-top: clamp(0.5rem, 1.5vh, 0.75rem);

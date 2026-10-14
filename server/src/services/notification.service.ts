@@ -72,6 +72,42 @@ async function fromBlockedMember(userId: string, data: Record<string, unknown>):
     return hasBlocked(userId, { id, pubkey });
 }
 
+// Which Settings → Notifications switch decides whether a type is pushed to
+// the member's phone or browser. Types not listed (account and listing
+// notices, SYSTEM) are always pushed while push is on. The bell lists every
+// notification either way.
+type PushSetting =
+    | 'notifyMessages' | 'notifyFollows' | 'notifyLikes' | 'notifyComments' | 'notifyProfileViews'
+    | 'notifyZaps' | 'notifyEvents' | 'notifyInvestments' | 'notifyProjectUpdates';
+export const PUSH_CATEGORY: Partial<Record<NotificationType, PushSetting>> = {
+    NEW_MESSAGE: 'notifyMessages',
+    FOLLOW: 'notifyFollows',
+    POST_LIKE: 'notifyLikes',
+    COMMENT_LIKE: 'notifyLikes',
+    POST_COMMENT: 'notifyComments',
+    COMMENT_REPLY: 'notifyComments',
+    PROFILE_VIEW: 'notifyProfileViews',
+    ZAP_RECEIVED: 'notifyZaps',
+    EVENT_RSVP: 'notifyEvents',
+    INVESTMENT_INTEREST: 'notifyInvestments',
+    INVESTMENT_STATUS: 'notifyInvestments',
+    WATCHLIST_ADD: 'notifyInvestments',
+    DECK_REQUEST: 'notifyInvestments',
+    DECK_APPROVED: 'notifyInvestments',
+    DECK_DENIED: 'notifyInvestments',
+    PROJECT_VIEW: 'notifyInvestments',
+    PROJECT_UPDATE: 'notifyProjectUpdates',
+};
+
+/** Whether the member wants this type pushed (no settings row: everything). */
+export async function wantsPush(userId: string, type: NotificationType): Promise<boolean> {
+    const settings = await prisma.userSettings.findUnique({ where: { userId } });
+    if (!settings) return true;
+    if (!settings.pushNotifications) return false;
+    const setting = PUSH_CATEGORY[type];
+    return !setting || settings[setting] !== false;
+}
+
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
     const { userId, type, title, body, data = {} } = params;
 
@@ -106,11 +142,13 @@ export async function createNotification(params: CreateNotificationParams): Prom
             },
         });
 
-        // Always attempt web push. The service worker decides whether to
-        // show a system notification based on whether a BIES window is
-        // currently focused, so we don't double-notify an active user.
-        // sendPushToUser no-ops for users without subscriptions or with
-        // push disabled in their settings.
+        // Push only what the member asked for (Settings → Notifications).
+        if (!(await wantsPush(userId, type))) return;
+
+        // Web push: the service worker decides whether to show a system
+        // notification based on whether a BIES window is currently focused,
+        // so we don't double-notify an active user. sendPushToUser no-ops
+        // for users without subscriptions.
         if (isWebPushEnabled()) {
             sendPushToUser(userId, {
                 title,
@@ -526,8 +564,9 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
             return data.projectId ? `/projects/${data.projectId}` : '/projects';
         case 'FOLLOW':
         case 'PROFILE_VIEW':
-            return data.followerId ? `/profile/${data.followerId}` :
-                   data.viewerId ? `/profile/${data.viewerId}` : '/';
+            // A member's profile, by user id.
+            return data.followerId ? `/builder/${data.followerId}` :
+                   data.viewerId ? `/builder/${data.viewerId}` : '/notifications';
         case 'INVESTMENT_STATUS':
             return data.projectId ? `/projects/${data.projectId}` : '/notifications';
         case 'ZAP_RECEIVED':
@@ -538,7 +577,9 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
         case 'POST_LIKE':
         case 'COMMENT_LIKE':
         case 'COMMENT_REPLY':
-            return '/feed';
+            // The post, with its replies open (a comment opens its post).
+            return typeof data.eventId === 'string' && /^[0-9a-f]{64}$/.test(data.eventId)
+                ? `/feed?post=${data.eventId}` : '/feed';
         case 'LEVEL_UP':
         case 'BADGE_EARNED':
             return '/leaderboard';
