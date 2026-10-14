@@ -76,7 +76,9 @@
           var d = document.createElement('div');
           d.style.cssText = 'margin-top:2rem;text-align:center;color:rgba(255,255,255,0.7);font:14px system-ui,sans-serif';
           d.innerHTML = '<p>Taking longer than expected\u2026</p>'
-            + '<button onclick="location.reload()" style="margin-top:0.75rem;padding:0.5rem 1.5rem;background:#FF5B00;color:#fff;border:none;border-radius:8px;font-size:0.9rem;cursor:pointer">Reload</button>';
+            + '<button type="button" style="margin-top:0.75rem;padding:0.5rem 1.5rem;background:#FF5B00;color:#fff;border:none;border-radius:8px;font-size:0.9rem;cursor:pointer">Reload</button>';
+          // A listener, not onclick="": the page's CSP runs no inline handlers.
+          d.querySelector('button').addEventListener('click', function () { location.reload(); });
           s.appendChild(d);
         }
       }, 8000);

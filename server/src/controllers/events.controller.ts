@@ -810,6 +810,14 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Event not found' }); return;
         }
 
+        // Invite only: the host, admins, and members the host invited.
+        if (event.visibility === 'INVITE_ONLY' && event.hostId !== userId && !req.user!.isAdmin) {
+            const invited = await prisma.eventAttendee.findFirst({ where: { eventId: req.params.id, userId }, select: { id: true } });
+            if (!invited) {
+                res.status(403).json({ error: 'This event is invite only' }); return;
+            }
+        }
+
         if (status === 'GOING' && event.maxAttendees) {
             // Only GOING attendees consume capacity (not INTERESTED/INVITED/NOT_GOING)
             const goingCount = await prisma.eventAttendee.count({

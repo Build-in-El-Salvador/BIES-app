@@ -51,7 +51,7 @@ async function nostrLogin(request, sk, pk) {
         kind: 27235,
         pubkey: pk,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [],
+        tags: [['u', new URL(`${API}/auth/nostr-login`).href], ['method', 'POST']],
         content: challenge,
     }, sk);
 

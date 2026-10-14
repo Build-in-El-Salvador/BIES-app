@@ -333,28 +333,48 @@ describe('POST /api/auth/email/start', () => {
         expect(mockedSend).toHaveBeenCalledTimes(10);
     });
 
-    it('allows 50 codes an hour per IP', async () => {
-        for (let i = 0; i < 50; i++) {
-            expect((await post('/email/start', { email: `guest${i}@example.com` })).status).toBe(200);
-        }
-        const res = await post('/email/start', { email: 'guest50@example.com' });
+    it('allows 50 codes an hour and 200 a day per IP', async () => {
+        let n = 0;
+        const next = () => post('/email/start', { email: `guest${n++}@example.com` });
+        for (let i = 0; i < 50; i++) expect((await next()).status).toBe(200);
+        let res = await next();
         expect(res.status).toBe(429);
         expect(res.body.reason).toBe('rate_limited');
+
+        for (let hour = 0; hour < 3; hour++) {
+            advance(61 * 60_000);
+            for (let i = 0; i < 50; i++) expect((await next()).status).toBe(200);
+        }
+        advance(61 * 60_000);
+        res = await next(); // the 201st today
+        expect(res.status).toBe(429);
     });
 
-    it('stops at the daily ceiling, except for the App Review address', async () => {
+    it('keeps a third of the daily ceiling for members, answers new addresses the same either way, and lets App Review in', async () => {
         const saved = config.email.maxCodesPerDay;
-        config.email.maxCodesPerDay = 2;
+        config.email.maxCodesPerDay = 6; // new addresses may use 4
+        db.state.users.push({ id: 'member-a', email: 'member.a@example.com', profile: null }, { id: 'member-b', email: 'member.b@example.com', profile: null });
         try {
-            await requestCode('one@example.com');
-            await requestCode('two@example.com');
-            const third = await post('/email/start', { email: 'three@example.com' });
-            expect(third.status).toBe(429);
-            expect(third.body.reason).toBe('busy');
+            for (const email of ['n1@example.com', 'n2@example.com', 'n3@example.com', 'n4@example.com']) await requestCode(email);
+            expect(mockedSend).toHaveBeenCalledTimes(4);
+
+            // A fifth new address: the same answer, but nothing is sent.
+            const quiet = await post('/email/start', { email: 'n5@example.com' });
+            expect(quiet.status).toBe(200);
+            expect(mockedSend).toHaveBeenCalledTimes(4);
+
+            // Members still get their codes, up to the whole ceiling.
+            await requestCode('member.a@example.com');
+            await requestCode('member.b@example.com');
+            expect(mockedSend).toHaveBeenCalledTimes(6);
+            const full = await post('/email/start', { email: 'n6@example.com' });
+            expect(full.status).toBe(429);
+            expect(full.body.reason).toBe('busy');
 
             expect((await post('/email/start', { email: 'review@bies.test' })).status).toBe(200);
         } finally {
             config.email.maxCodesPerDay = saved;
+            db.state.users = db.state.users.filter((u) => !String(u.id).startsWith('member-'));
         }
     });
 
@@ -411,12 +431,14 @@ describe('POST /api/auth/email/start', () => {
         expect((await post('/email/verify', { email: 'rush@example.com', code: lastCode() })).status).toBe(201);
 
         const saved = config.email.maxCodesPerDay;
-        config.email.maxCodesPerDay = 5;
+        config.email.maxCodesPerDay = 6; // new addresses may use 4
         try {
             const many = await Promise.all(
-                Array.from({ length: 12 }, (_, i) => post('/email/start', { email: `crowd${i}@example.com` })));
-            // 1 code already sent today in this test, so 4 more fit.
-            expect(many.filter((r) => r.status === 200)).toHaveLength(4);
+                Array.from({ length: 8 }, (_, i) => post('/email/start', { email: `crowd${i}@example.com` })));
+            // 1 code already went to a new address today in this test, so 3
+            // more are sent; every request gets the same answer.
+            expect(many.every((r) => r.status === 200)).toBe(true);
+            expect(mockedSend).toHaveBeenCalledTimes(4);
         } finally {
             config.email.maxCodesPerDay = saved;
         }

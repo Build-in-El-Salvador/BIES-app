@@ -24,6 +24,8 @@ import { checkSession, onSessionsEnded, verifyAccessToken } from './session.serv
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AuthenticatedWebSocket extends WebSocket {
+    /** Closes the socket (4001) when its access token expires; the app refreshes and reconnects. */
+    expiryTimer?: NodeJS.Timeout;
     userId?: string;
     sessionId?: string;
     isAlive?: boolean;
@@ -109,6 +111,17 @@ export function attachWebSocketServer(httpServer: Server): void {
             ws.close(CLOSE_REFRESH, checked.reason);
             return;
         }
+
+        // The socket lasts as long as its token: then 4001, and the app
+        // reconnects with a fresh one, which checks the session again. A copied
+        // token can't keep a stream open past its 15 minutes.
+        const expiresInMs = (checked.claims.exp ?? 0) * 1000 - Date.now();
+        if (expiresInMs <= 0) {
+            ws.close(CLOSE_REFRESH, 'Token expired');
+            return;
+        }
+        ws.expiryTimer = setTimeout(() => ws.close(CLOSE_REFRESH, 'Token expired'), expiresInMs);
+        ws.once('close', () => clearTimeout(ws.expiryTimer));
 
         // Messages that arrive before the session check are dropped: the
         // listeners below aren't attached yet.

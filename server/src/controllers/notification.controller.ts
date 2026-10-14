@@ -8,6 +8,7 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey } from '../services/redis.service';
 import { notifyFeedInteraction } from '../services/notification.service';
 import { config } from '../config';
+import { isPushServiceEndpoint } from '../services/webpush.service';
 
 /**
  * Native push device token registration. APNs (and FCM) device tokens are
@@ -238,6 +239,10 @@ export async function subscribePush(req: Request, res: Response): Promise<void> 
 
         if (!endpoint || !keys?.p256dh || !keys?.auth) {
             res.status(400).json({ error: 'endpoint and keys (p256dh, auth) are required' });
+            return;
+        }
+        if (typeof endpoint !== 'string' || endpoint.length > 1000 || !isPushServiceEndpoint(endpoint)) {
+            res.status(400).json({ error: "That isn't a browser push service" });
             return;
         }
 

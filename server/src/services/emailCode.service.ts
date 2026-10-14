@@ -46,7 +46,14 @@ const PER_EMAIL_LIMITS = [
     { windowMs: HOUR, max: 5, samePurposeOnly: false },
     { windowMs: DAY, max: 10, samePurposeOnly: false },
 ];
+// Generous per IP: members share one at events (venue Wi-Fi) and behind
+// mobile carriers' NAT. The daily ceiling's share for members (below) is what
+// keeps a flood from locking them out.
 const MAX_PER_IP_PER_HOUR = 50;
+const MAX_PER_IP_PER_DAY = 200;
+// The share of the daily ceiling codes for addresses with no account may use:
+// the rest is kept for members, so made-up addresses can't lock them out.
+const NEW_ADDRESS_SHARE = 2 / 3;
 const RETENTION_MS = DAY;
 
 const REVIEW_CODE_RE = /^\d{6}$/;
@@ -194,7 +201,9 @@ const NOT_YET_SENT = new Date(0);
 
 type Reservation =
     | { ok: true; id: string; createdAt: Date }
-    | { ok: false; reason: 'rate_limited' | 'busy'; retryAfterSeconds: number };
+    | { ok: false; reason: 'rate_limited' | 'busy'; retryAfterSeconds: number }
+    // New addresses' share of the daily ceiling is used up (issueEmailCode).
+    | { ok: false; reason: 'quiet' };
 
 async function reserveCode(
     emailHash: string,
@@ -202,6 +211,7 @@ async function reserveCode(
     codeHash: string,
     ipHash: string | null,
     review: boolean,
+    newAddress: boolean,
 ): Promise<Reservation> {
     const now = Date.now();
     await prisma.emailCode.deleteMany({ where: { createdAt: { lt: new Date(now - RETENTION_MS) } } });
@@ -223,10 +233,11 @@ async function reserveCode(
     }
 
     if (ipHash) {
-        const fromIp = await prisma.emailCode.count({
-            where: { ipHash, createdAt: { gte: new Date(now - HOUR) } },
-        });
-        if (fromIp >= MAX_PER_IP_PER_HOUR) {
+        const [fromIpHour, fromIpDay] = await Promise.all([
+            prisma.emailCode.count({ where: { ipHash, createdAt: { gte: new Date(now - HOUR) } } }),
+            prisma.emailCode.count({ where: { ipHash, createdAt: { gte: new Date(now - DAY) } } }),
+        ]);
+        if (fromIpHour >= MAX_PER_IP_PER_HOUR || fromIpDay >= MAX_PER_IP_PER_DAY) {
             return { ok: false, reason: 'rate_limited', retryAfterSeconds: 15 * 60 };
         }
     }
@@ -241,10 +252,19 @@ async function reserveCode(
             console.error(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; email sign-in is refusing new codes`);
             return { ok: false, reason: 'busy', retryAfterSeconds: 60 * 60 };
         }
+        if (newAddress) {
+            const newToday = await prisma.emailCode.count({
+                where: { newAddress: true, createdAt: { gte: new Date(now - DAY) } },
+            });
+            if (newToday >= Math.floor(config.email.maxCodesPerDay * NEW_ADDRESS_SHARE)) {
+                console.error('[EmailCode] The share of the daily ceiling for new addresses is used up; their codes are not sent today');
+                return { ok: false, reason: 'quiet' };
+            }
+        }
     }
 
     const row = await prisma.emailCode.create({
-        data: { emailHash, purpose, codeHash, expiresAt: NOT_YET_SENT, ipHash },
+        data: { emailHash, purpose, codeHash, expiresAt: NOT_YET_SENT, ipHash, newAddress },
         select: { id: true, createdAt: true },
     });
     return { ok: true, id: row.id, createdAt: row.createdAt };
@@ -266,8 +286,18 @@ export async function issueEmailCode(
     const review = isReviewAddress(address);
     const code = review ? config.reviewLogin.code : crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
 
+    // Only to know which share of the daily ceiling this code uses: the
+    // answer to the caller is the same either way (see 'quiet' below).
+    const newAddress = !(await prisma.user.findUnique({ where: { email: address }, select: { id: true } }));
     const reserved = await oneAtATime(() =>
-        reserveCode(emailHash, purpose, hashCode(purpose, emailHash, code), ipHash, review));
+        reserveCode(emailHash, purpose, hashCode(purpose, emailHash, code), ipHash, review, newAddress));
+    if (!reserved.ok && reserved.reason === 'quiet') {
+        // New addresses' share is used up: answer as if it were sent (so the
+        // answer never tells whether an address has an account), send nothing,
+        // and take about as long as a send would.
+        await new Promise((resolve) => setTimeout(resolve, 250 + crypto.randomInt(0, 400)));
+        return { ok: true };
+    }
     if (!reserved.ok) return reserved;
 
     if (review) {

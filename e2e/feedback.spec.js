@@ -34,7 +34,7 @@ async function nostrLogin(request) {
     const signedEvent = finalizeEvent({
         kind: 27235,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [],
+        tags: [['u', new URL(`${API}/auth/nostr-login`).href], ['method', 'POST']],
         content: challenge,
     }, sk);
 

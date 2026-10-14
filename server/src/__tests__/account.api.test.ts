@@ -166,7 +166,7 @@ async function signInByEmail(email: string) {
 async function signInByNostr(secretKey: Uint8Array) {
     const pubkey = getPublicKey(secretKey);
     const { body } = await call('GET', `/api/auth/nostr-challenge?pubkey=${pubkey}`);
-    const signedEvent = finalizeEvent({ kind: 27235, created_at: now(), tags: [], content: body.challenge }, secretKey);
+    const signedEvent = finalizeEvent({ kind: 27235, created_at: now(), tags: [['u', `${process.env.APP_PUBLIC_URL || 'https://app.buildinelsalvador.com'}/api/auth/nostr-login`], ['method', 'POST']], content: body.challenge }, secretKey);
     const r = await call('POST', '/api/auth/nostr-login', { body: { pubkey, signedEvent } });
     return r as { status: number; body: { token: string; user: { id: string; nostrPubkey: string; hostedKey: boolean } } };
 }

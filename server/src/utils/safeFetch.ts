@@ -80,11 +80,26 @@ function pinnedSafeLookup(
     });
 }
 
-/** GET a URL as JSON with full SSRF protection. Resolves to parsed JSON or null. */
-export function safeGetJson(rawUrl: string, timeoutMs: number): Promise<any | null> {
+/**
+ * GET a URL with full SSRF protection: https only, every hop's addresses
+ * checked and pinned, redirects re-validated, the body capped at `maxBytes`
+ * and the whole request at `timeoutMs`. Resolves to the body and its type,
+ * or null on any failure.
+ */
+export function safeGet(
+    rawUrl: string,
+    { timeoutMs, maxBytes = MAX_BODY_BYTES, headers = {} }: { timeoutMs: number; maxBytes?: number; headers?: Record<string, string> },
+): Promise<{ body: Buffer; contentType: string } | null> {
     return new Promise((resolve) => {
         let settled = false;
-        const done = (v: any) => { if (!settled) { settled = true; resolve(v); } };
+        // The whole request, redirects included, within timeoutMs.
+        const deadline = setTimeout(() => done(null), timeoutMs);
+        const done = (v: { body: Buffer; contentType: string } | null) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(deadline);
+            resolve(v);
+        };
 
         const attempt = (urlStr: string, redirectsLeft: number): void => {
             let url: URL;
@@ -97,7 +112,7 @@ export function safeGetJson(rawUrl: string, timeoutMs: number): Promise<any | nu
 
             const req = https.request(
                 url,
-                { method: 'GET', lookup: pinnedSafeLookup as any, timeout: timeoutMs },
+                { method: 'GET', lookup: pinnedSafeLookup as any, timeout: timeoutMs, headers },
                 (res) => {
                     const status = res.statusCode || 0;
                     // Manual redirect handling so each hop is re-validated by pinnedSafeLookup.
@@ -120,19 +135,13 @@ export function safeGetJson(rawUrl: string, timeoutMs: number): Promise<any | nu
                     const chunks: Buffer[] = [];
                     res.on('data', (c: Buffer) => {
                         size += c.length;
-                        if (size > MAX_BODY_BYTES) {
+                        if (size > maxBytes) {
                             req.destroy();
                             return done(null);
                         }
                         chunks.push(c);
                     });
-                    res.on('end', () => {
-                        try {
-                            done(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-                        } catch {
-                            done(null);
-                        }
-                    });
+                    res.on('end', () => done({ body: Buffer.concat(chunks), contentType: String(res.headers['content-type'] || '') }));
                 }
             );
             req.on('timeout', () => { req.destroy(); done(null); });
@@ -142,4 +151,15 @@ export function safeGetJson(rawUrl: string, timeoutMs: number): Promise<any | nu
 
         attempt(rawUrl, MAX_REDIRECTS);
     });
+}
+
+/** GET a URL as JSON with full SSRF protection. Resolves to parsed JSON or null. */
+export async function safeGetJson(rawUrl: string, timeoutMs: number): Promise<any | null> {
+    const res = await safeGet(rawUrl, { timeoutMs });
+    if (!res) return null;
+    try {
+        return JSON.parse(res.body.toString('utf8'));
+    } catch {
+        return null;
+    }
 }

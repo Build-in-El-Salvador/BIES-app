@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import { readFileSync } from 'fs'
+import { createHash } from 'crypto'
 
 const { version } = JSON.parse(readFileSync('./version.json', 'utf8'))
 
@@ -37,6 +38,51 @@ const proxy = {
     },
 }
 
+/**
+ * A Content-Security-Policy for the app's page, as a <meta> tag: the only kind
+ * that also covers the phone app's WebView, and the front proxy (YunoHost)
+ * replaces CSP headers. Built pages only: the dev server injects inline
+ * scripts of its own. The two inline scripts in index.html are allowed by
+ * their hashes; nothing else inline runs. Builds that talk to a local server
+ * (the Simulator) may also reach localhost over http/ws.
+ */
+function contentSecurityPolicy() {
+    let local = false
+    return {
+        name: 'bies-content-security-policy',
+        apply: 'build',
+        configResolved(config) {
+            const targets = [config.env.VITE_API_URL, config.env.VITE_NOSTR_RELAY].filter(Boolean)
+            local = targets.some((t) => /^(https?|wss?):\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(t))
+        },
+        transformIndexHtml: {
+            order: 'post',
+            handler(html) {
+                const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+                    .map((m) => `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`)
+                const dev = local ? ' http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*' : ''
+                const policy = [
+                    "default-src 'self'",
+                    `script-src 'self' ${hashes.join(' ')}`.trim(),
+                    "style-src 'self' 'unsafe-inline'",
+                    // Any image or video address (old posts have http ones); they can't run code.
+                    "img-src * data: blob:",
+                    "media-src * data: blob:",
+                    "font-src 'self' data:",
+                    `connect-src 'self' https: wss:${dev}`,
+                    'frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com',
+                    "worker-src 'self' blob:",
+                    "manifest-src 'self'",
+                    "object-src 'none'",
+                    "base-uri 'self'",
+                    "form-action 'self'",
+                ].join('; ')
+                return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />\n  <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
+            },
+        },
+    }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '/',
@@ -50,6 +96,7 @@ export default defineConfig({
         dedupe: ['@scure/base'],
     },
     plugins: [
+        contentSecurityPolicy(),
         react({
             babel: {
                 plugins: ['styled-jsx/babel']

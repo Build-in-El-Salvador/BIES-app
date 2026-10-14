@@ -255,7 +255,7 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: {
-                id: true, title: true, hostId: true, isPublished: true,
+                id: true, title: true, hostId: true, isPublished: true, visibility: true,
                 startDate: true, endDate: true,
                 priceSats: true, ticketCapacity: true, payoutLightningAddress: true,
                 host: { select: { profile: { select: { lightningAddress: true } } } },
@@ -264,6 +264,13 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
 
         if (!event || !event.isPublished) {
             res.status(404).json({ error: 'Event not found' }); return;
+        }
+        // Invite only: the host, admins, and members the host invited.
+        if (event.visibility === 'INVITE_ONLY' && event.hostId !== buyerId && !req.user!.isAdmin) {
+            const invited = await prisma.eventAttendee.findFirst({ where: { eventId, userId: buyerId }, select: { id: true } });
+            if (!invited) {
+                res.status(403).json({ error: 'This event is invite only' }); return;
+            }
         }
         if (!event.priceSats || event.priceSats <= 0) {
             res.status(400).json({ error: 'This event does not sell tickets' }); return;

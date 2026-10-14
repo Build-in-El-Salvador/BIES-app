@@ -76,8 +76,22 @@ export async function signAsHostedUser(
         await prisma.hostedSignature.create({
             data: { userId, kind: signed.kind, eventId: signed.id, source },
         });
+        pruneOldSignatures();
     }
     return signed;
+}
+
+// The signature log keeps 90 days (Settings shows the recent ones); pruned at
+// most once an hour, as signatures come in.
+const SIGNATURE_LOG_DAYS = 90;
+let lastPrune = 0;
+function pruneOldSignatures(): void {
+    if (Date.now() - lastPrune < 60 * 60 * 1000) return;
+    lastPrune = Date.now();
+    // Detached: pruning never holds up or fails a signature.
+    Promise.resolve()
+        .then(() => prisma.hostedSignature.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - SIGNATURE_LOG_DAYS * 24 * 60 * 60 * 1000) } } }))
+        .catch((err) => console.error('[Signer] Pruning the signature log failed:', err instanceof Error ? err.message : err));
 }
 
 /**
