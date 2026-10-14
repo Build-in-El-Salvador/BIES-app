@@ -687,7 +687,7 @@ model UserSettings {
   // Push per category (notification.service.ts PUSH_CATEGORY); the bell keeps everything
   notifyLikes          Boolean @default(true) @map("notify_likes")
   notifyComments       Boolean @default(true) @map("notify_comments")
-  notifyProfileViews   Boolean @default(true) @map("notify_profile_views")
+  notifyProfileViews   Boolean @default(false) @map("notify_profile_views") // off: no "viewed your profile" at all
   notifyZaps           Boolean @default(true) @map("notify_zaps")
   notifyEvents         Boolean @default(true) @map("notify_events")
   // View profiles without "X viewed your profile" (Settings → Privacy)

@@ -169,10 +169,19 @@ describe('who sees what on a profile', () => {
         expect((await call('GET', `/api/profiles/${dan.id}`, { token: ben.token })).status).toBe(200);
     });
 
+    it('"viewed your profile" is off until the member turns it on', async () => {
+        const ana = await member('Ana G');
+        const ben = await member('Ben G');
+        await call('GET', `/api/profiles/${ana.id}`, { token: ben.token });
+        await new Promise((r) => setTimeout(r, 300));
+        expect(await prisma.notification.count({ where: { userId: ana.id, type: 'PROFILE_VIEW' } })).toBe(0);
+    });
+
     it('browsing privately sends no "viewed your profile"', async () => {
         const ana = await member('Ana F');
         const ben = await member('Ben F');
         const cleo = await member('Cleo F');
+        await call('PUT', '/api/settings/notifications', { token: ana.token, body: { notifyProfileViews: true } });
         await setPrivacy(cleo, { browsePrivately: true });
         await call('GET', `/api/profiles/${ana.id}`, { token: ben.token });
         await call('GET', `/api/profiles/${ana.id}`, { token: cleo.token });

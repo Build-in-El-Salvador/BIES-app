@@ -84,18 +84,19 @@ const notify = (userId: string, type: Parameters<typeof createNotification>[0]['
 const bell = (userId: string) => prisma.notification.count({ where: { userId } });
 
 describe('Settings → Notifications', () => {
-    it('starts with every switch on, and saves each one', async () => {
+    it('starts with every switch on but profile views, and saves each one', async () => {
         const ana = await member('Ana');
         const initial = await call('GET', '/api/settings', { token: ana.token });
         expect(initial.status).toBe(200);
-        for (const key of ['pushNotifications', 'notifyLikes', 'notifyComments', 'notifyFollows', 'notifyProfileViews', 'notifyMessages', 'notifyZaps', 'notifyEvents', 'notifyInvestments', 'notifyProjectUpdates']) {
+        for (const key of ['pushNotifications', 'notifyLikes', 'notifyComments', 'notifyFollows', 'notifyMessages', 'notifyZaps', 'notifyEvents', 'notifyInvestments', 'notifyProjectUpdates']) {
             expect(initial.body[key], key).toBe(true);
         }
+        expect(initial.body.notifyProfileViews).toBe(false);
 
-        const saved = await call('PUT', '/api/settings/notifications', { token: ana.token, body: { notifyLikes: false, notifyProfileViews: false } });
+        const saved = await call('PUT', '/api/settings/notifications', { token: ana.token, body: { notifyLikes: false, notifyProfileViews: true } });
         expect(saved.status).toBe(200);
         const after = await call('GET', '/api/settings', { token: ana.token });
-        expect(after.body).toMatchObject({ notifyLikes: false, notifyProfileViews: false, notifyComments: true, pushNotifications: true });
+        expect(after.body).toMatchObject({ notifyLikes: false, notifyProfileViews: true, notifyComments: true, pushNotifications: true });
     });
 
     it('takes only true or false, and nothing but the switches', async () => {
