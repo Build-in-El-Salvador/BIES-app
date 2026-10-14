@@ -180,9 +180,8 @@ export function privateFileFromLink(name: string, exp: string, sig: string): str
     if (!/^\d{13}-[0-9a-f]{32}\.(pdf|pptx?)$/i.test(name)) return null;
     const expires = Number(exp);
     if (!Number.isSafeInteger(expires) || expires < Date.now()) return null;
-    const expected = signPrivateLink(name, expires);
-    if (typeof sig !== 'string' || sig.length !== expected.length) return null;
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+    if (typeof sig !== 'string' || !/^[0-9a-f]{64}$/.test(sig)) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(signPrivateLink(name, expires), 'hex'))) return null;
     const file = validatePath(PRIVATE_DIR, name);
     return fs.existsSync(file) ? file : null;
 }

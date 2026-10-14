@@ -20,6 +20,21 @@ import sharp from 'sharp';
 /** The longest side of a stored photo, in pixels. */
 export const MAX_SIDE = 1600;
 
+// A small file can claim a huge picture (a PNG of one colour compresses to
+// almost nothing), and decoding it takes memory by its pixels, not its bytes.
+// 50 megapixels holds a 48-megapixel phone photo; anything bigger is refused.
+// Photos are done one at a time and libvips keeps no cache, so a few uploads
+// at once can't take the server past its memory limit.
+export const MAX_INPUT_PIXELS = 50_000_000;
+sharp.cache(false);
+
+let photoQueue: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(task: () => Promise<T>): Promise<T> {
+    const run = photoQueue.then(task, task);
+    photoQueue = run.catch(() => undefined);
+    return run;
+}
+
 /** Not a photo or video we can read, whatever its type said. */
 export class UnreadableMediaError extends Error {
     constructor(message = "That file isn't a photo or video we can read") {
@@ -38,7 +53,7 @@ export interface PreparedMedia {
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export async function prepareMedia(input: Buffer, mimeType: string): Promise<PreparedMedia> {
-    if (PHOTO_TYPES.has(mimeType)) return preparePhoto(input, mimeType);
+    if (PHOTO_TYPES.has(mimeType)) return oneAtATime(() => preparePhoto(input, mimeType));
     switch (mimeType) {
         case 'image/gif': {
             if (input.toString('latin1', 0, 4) !== 'GIF8') throw new UnreadableMediaError();
@@ -69,7 +84,7 @@ async function readMetadata(input: Buffer) {
 async function preparePhoto(input: Buffer, mimeType: string): Promise<PreparedMedia> {
     // An animated WebP keeps its frames. 'error' rather than sharp's stricter
     // 'warning': phones write JPEGs that libjpeg warns about but reads fine.
-    let pipeline = sharp(input, { autoOrient: true, animated: mimeType === 'image/webp', failOn: 'error' })
+    let pipeline = sharp(input, { autoOrient: true, animated: mimeType === 'image/webp', failOn: 'error', limitInputPixels: MAX_INPUT_PIXELS })
         .resize({ width: MAX_SIDE, height: MAX_SIDE, fit: 'inside', withoutEnlargement: true });
     // Without withMetadata(), sharp writes no metadata and converts to sRGB.
     if (mimeType === 'image/png') pipeline = pipeline.png({ compressionLevel: 9 });

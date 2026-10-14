@@ -164,11 +164,17 @@ const generalLimiter = rateLimit({
     keyGenerator: rateLimitKey,
 });
 
-// Upload: 30 per 15 min
+// Upload: 60 files per 15 min per account (per IP signed out), so a room on
+// one Wi-Fi doesn't share one budget and an album's photos go up in one go.
+// Only uploads count: not deck downloads, nor the cleanup after a delete.
 const uploadLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 30,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: { error: 'Upload limit reached, please try again later' },
+    skip: (req) => req.method !== 'POST' || req.path === '/discard',
+    keyGenerator: rateLimitKey,
 });
 
 // Search / autocomplete: 120 per minute (frequent UI calls)
@@ -204,8 +210,8 @@ app.use(auditLog);
 // flag is off. Core prefixes (auth, profiles, admin, flags, …) are never
 // gated — admins must always be able to re-enable a feature. `/api/news` is
 // gated per-endpoint inside its router because the Media page and the admin
-// panel depend on `/api/news/settings`. Cowork has no server prefix (pure
-// client-side Nostr) — it is gated in the UI only.
+// panel depend on `/api/news/settings`. Watchlist and matches belong to
+// projects, and articles (`/api/content`) to news.
 app.use('/api/flags', flagsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/signer', signerRoutes);
@@ -213,11 +219,11 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/projects', featureGate('projects'), projectRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/messages', featureGate('messages'), messageRoutes);
-app.use('/api/watchlist', watchlistRoutes);
+app.use('/api/watchlist', featureGate('projects'), watchlistRoutes);
 app.use('/api/investments', featureGate('investors'), investmentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', featureGate('events'), eventRoutes);
-app.use('/api/cowork', coworkRoutes);
+app.use('/api/cowork', featureGate('cowork'), coworkRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/admin', adminRoutes);
@@ -226,16 +232,16 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/account', accountRoutes);
-app.use('/api/content', contentRoutes);
+app.use('/api/content', featureGate('news'), contentRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/media', featureGate('media'), mediaRoutes);
-app.use('/api/match', matchRoutes);
+app.use('/api/match', featureGate('projects'), matchRoutes);
 app.use('/api/wallet', featureGate('zaps'), walletRoutes);
 app.use('/api/feedback', featureGate('feedback'), feedbackRoutes);
 app.use('/api/points', featureGate('points'), pointsRoutes);
 app.use('/api/directory', featureGate('directories'), directoryRoutes);
 app.use('/api/albums', albumRoutes);
-app.use('/api/courses', coursesRoutes);
+app.use('/api/courses', featureGate('courses'), coursesRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/marketplace', featureGate('marketplace'), marketplaceRoutes);
 app.use('/api/bounties', featureGate('bounties'), bountyRoutes);
@@ -248,6 +254,14 @@ app.use((_req, res) => {
 
 // ─── Global error handler (must be last) ─────────────────────────────────────
 app.use(errorHandler);
+
+// ─── Unhandled rejections ─────────────────────────────────────────────────────
+// Express 4 drops the promise an async handler returns, so an error thrown
+// outside a handler's try/catch would otherwise end the whole process (Node's
+// default) and take every member's connection with it. Log it instead.
+process.on('unhandledRejection', (reason) => {
+    console.error('[Server] Unhandled rejection:', reason);
+});
 
 // ─── HTTP server + WebSocket ──────────────────────────────────────────────────
 const server = http.createServer(app);
