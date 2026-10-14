@@ -74,25 +74,50 @@ export async function importEventFromUrl(req: Request, res: Response): Promise<v
 function extractOgTags(html: string): Record<string, string> {
     const tags: Record<string, string> = {};
     // Match <meta property="og:*" content="*"> and <meta name="*" content="*">
-    const metaRegex = /<meta\s+(?:[^>]*?\s)?(?:property|name)=["']([^"']+)["']\s+content=["']([^"']*)["'][^>]*>/gi;
+    // Runs inside a tag are bounded ({0,1000}): unbounded ones take minutes
+    // on a crafted page of unclosed tags, and the server is one process.
+    const metaRegex = /<meta\s+(?:[^>]{0,1000}?\s)?(?:property|name)=["']([^"']+)["']\s+content=["']([^"']*)["'][^>]{0,1000}>/gi;
     let match;
     while ((match = metaRegex.exec(html)) !== null) {
         tags[match[1].toLowerCase()] = decodeHtmlEntities(match[2]);
     }
     // Also try reversed order: content before property
-    const metaRegex2 = /<meta\s+content=["']([^"']*)["']\s+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+    const metaRegex2 = /<meta\s+content=["']([^"']*)["']\s+(?:property|name)=["']([^"']+)["'][^>]{0,1000}>/gi;
     while ((match = metaRegex2.exec(html)) !== null) {
         tags[match[2].toLowerCase()] = decodeHtmlEntities(match[1]);
     }
     return tags;
 }
 
+/**
+ * The JSON-LD blocks in a page. A linear scan: each opening tag is matched
+ * only at its own position, and the search for its closing tag moves on, so
+ * a crafted page of unclosed tags can't make it quadratic.
+ */
+export function jsonLdBlocks(html: string): string[] {
+    const blocks: string[] = [];
+    const opening = /<script[^>]{0,1000}type=["']application\/ld\+json["'][^>]{0,1000}>/giy;
+    const lower = html.toLowerCase();
+    let from = 0;
+    while (from < html.length) {
+        const start = lower.indexOf('<script', from);
+        if (start === -1) break;
+        opening.lastIndex = start;
+        const tag = opening.exec(html);
+        if (!tag) { from = start + 7; continue; }
+        const bodyStart = start + tag[0].length;
+        const end = lower.indexOf('</script>', bodyStart);
+        if (end === -1) break;
+        blocks.push(html.slice(bodyStart, end));
+        from = end + 9;
+    }
+    return blocks;
+}
+
 function extractJsonLd(html: string): any | null {
-    const scriptRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-    let match;
-    while ((match = scriptRegex.exec(html)) !== null) {
+    for (const block of jsonLdBlocks(html)) {
         try {
-            const data = JSON.parse(match[1].trim());
+            const data = JSON.parse(block.trim());
             // Could be an array or single object
             const items = Array.isArray(data) ? data : [data];
             for (const item of items) {
