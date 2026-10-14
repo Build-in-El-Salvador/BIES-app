@@ -245,6 +245,24 @@ describe('deleting', () => {
         }
     });
 
+    it('a GIF in the shared library stays when a post showing it is deleted, and goes with its uploader\'s account', async () => {
+        const gina = await member('Gina');
+        const gif = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#f80' } }).gif().toBuffer();
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(gif)], { type: 'image/gif' }), 'dance.gif');
+        const res = await fetch(`${base}/api/upload/media?shared=1`, { method: 'POST', headers: { Authorization: `Bearer ${gina.token}` }, body: form });
+        expect(res.status).toBe(200);
+        const url = ((await res.json()) as any).url as string;
+        expect(await prisma.upload.findUnique({ where: { name: url.split('/').pop() } })).toMatchObject({ shared: true });
+
+        // Gina deletes her post with it: other members' posts may show it.
+        expect((await call('POST', '/api/upload/discard', { token: gina.token, body: { urls: [absolute(url)] } })).status).toBe(200);
+        expect(stored(url)).toBe(true);
+
+        await deleteAccount(gina.id, { notify: false });
+        expect(stored(url)).toBe(false);
+    });
+
     it('deleting an account deletes the member\'s files, except one still shown on someone else\'s listing', async () => {
         const carla = await member('Carla');
         const dan = await member('Dan');

@@ -83,7 +83,10 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         }
 
         const { url, name } = await uploadPublicFile(media.buffer, media.mimeType);
-        await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length });
+        // ?shared=1: a GIF for the shared library (gifStore.js), which other
+        // members' posts can show, so deleting a post leaves it.
+        const shared = req.query.shared === '1' && media.mimeType === 'image/gif';
+        await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length, shared });
 
         res.json({
             url,

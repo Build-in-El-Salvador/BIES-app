@@ -1021,6 +1021,9 @@ model Upload {
   size      Int      @default(0)
   // A pitch deck (uploadPrivateFile), kept apart from the public files
   isPrivate Boolean  @default(false) @map("is_private")
+  // In the shared GIF library: other members' posts can show it, so it goes
+  // only with its uploader's account
+  shared    Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)

@@ -2650,6 +2650,8 @@
     "addPhotos": "Add photos",
     "uploading": "Adding photos… {{done}} of {{total}}",
     "uploadFailed": "Couldn't add that photo. Try again.",
+    "someNotAdded_one": "1 photo wasn't added: {{reason}}",
+    "someNotAdded_other": "{{count}} photos weren't added: {{reason}}",
     "saveFailed": "Couldn't save that. Try again.",
     "objectionable": "That text breaks the community rules. Change it and try again.",
     "unavailable": "This album isn't available. It may have been deleted, or it's private.",

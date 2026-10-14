@@ -2651,6 +2651,8 @@
     "addPhotos": "Agregar fotos",
     "uploading": "Agregando fotos… {{done}} de {{total}}",
     "uploadFailed": "No se pudo agregar esa foto. Inténtelo de nuevo.",
+    "someNotAdded_one": "1 foto no se agregó: {{reason}}",
+    "someNotAdded_other": "{{count}} fotos no se agregaron: {{reason}}",
     "saveFailed": "No se pudo guardar. Inténtelo de nuevo.",
     "objectionable": "Ese texto no cumple las normas de la comunidad. Cámbielo e inténtelo de nuevo.",
     "unavailable": "Este álbum no está disponible. Puede que se haya eliminado o que sea privado.",

@@ -81,7 +81,8 @@ class GifStore {
     }
 
     async uploadGif(file, description = '', tags = []) {
-        const result = await mediaService.uploadFile(file);
+        // Shared: other members pick it for their posts too.
+        const result = await mediaService.uploadFile(file, { shared: true });
         const dimensions = await mediaService.getImageDimensions(file);
 
         const eventTags = [

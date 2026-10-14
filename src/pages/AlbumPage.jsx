@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Flag, ImagePlus, GalleryVerticalEnd, Loader2, MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react';
-import { albumsApi } from '../services/api';
+import { albumsApi, uploadApi } from '../services/api';
 import { mediaService } from '../services/mediaService';
 import { useLightbox } from '../context/LightboxContext';
 import { getAssetUrl } from '../utils/assets';
@@ -61,27 +61,51 @@ const AlbumPage = () => {
     const date = (d) => new Date(d).toLocaleDateString(i18n.language?.startsWith('es') ? 'es' : 'en', { day: 'numeric', month: 'short', year: 'numeric' });
 
     const addPhotos = async (e) => {
-        const files = Array.from(e.target.files || []).filter((f) => f.type.startsWith('image/'));
+        const picked = Array.from(e.target.files || []).filter((f) => f.type.startsWith('image/'));
         e.target.value = '';
-        if (!files.length) return;
+        if (!picked.length) return;
         setError('');
+        // Check every file first: one that can't go up doesn't stop the rest.
+        const problems = [];
+        const files = picked.filter((file) => {
+            const err = mediaService.validateFile(file, 0);
+            if (err) problems.push(err);
+            return !err;
+        });
         setUploading({ done: 0, total: files.length });
-        try {
-            const uploaded = [];
-            for (const file of files) {
-                const err = mediaService.validateFile(file, 0);
-                if (err) throw new Error(err);
-                const { path, width, height } = await mediaService.uploadFile(file);
-                uploaded.push({ url: path, ...(width && height ? { width, height } : {}) });
-                setUploading({ done: uploaded.length, total: files.length });
+        // Photos join the album as they go up (BATCH at a time), so a failure
+        // partway keeps the ones already uploaded.
+        let pending = [];
+        let added = 0;
+        const flush = async () => {
+            if (!pending.length) return;
+            const batch = pending;
+            pending = [];
+            try {
+                await albumsApi.addPhotos(album.id, batch);
+                added += batch.length;
+            } catch (err) {
+                // Not added (the album is full, say): their files go again.
+                uploadApi.discard(batch.map((p) => p.url)).catch(() => { });
+                throw err;
             }
-            for (let i = 0; i < uploaded.length; i += BATCH) await albumsApi.addPhotos(album.id, uploaded.slice(i, i + BATCH));
-            await load();
+        };
+        try {
+            for (const file of files) {
+                const { path, width, height } = await mediaService.uploadFile(file);
+                pending.push({ url: path, ...(width && height ? { width, height } : {}) });
+                setUploading({ done: added + pending.length, total: files.length });
+                if (pending.length >= BATCH) await flush();
+            }
+            await flush();
         } catch (err) {
-            setError(err?.message || t('albums.uploadFailed'));
-            await load();
+            problems.push(err?.message || t('albums.uploadFailed'));
+            await flush().catch(() => { });
         } finally {
+            const notAdded = picked.length - added;
+            if (problems.length) setError(notAdded > 0 ? t('albums.someNotAdded', { count: notAdded, reason: problems[0] }) : problems[0]);
             setUploading(null);
+            await load();
         }
     };
 
