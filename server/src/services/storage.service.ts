@@ -53,8 +53,6 @@ const SAFE_EXTENSIONS: Record<string, string> = {
     'image/gif': '.gif',
     'image/webp': '.webp',
     'image/svg+xml': '.svg',
-    // Videos too: otherwise the uploader's own file name sets the extension,
-    // and "x.html" would be served from our domain as a web page.
     'video/mp4': '.mp4',
     'video/quicktime': '.mov',
     'video/webm': '.webm',
@@ -65,7 +63,7 @@ const SAFE_EXTENSIONS: Record<string, string> = {
 
 /**
  * Generate a unique filename with a safe extension derived from MIME type.
- * Never the uploader's own extension: "x.html" would be served as a web page.
+ * Never the uploader's own extension.
  * The name's shape is what uploads.service.ts recognises (UPLOAD_NAME).
  */
 function generateFilename(mimeType: string): string {

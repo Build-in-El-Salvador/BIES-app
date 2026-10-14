@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUserMode } from '../context/UserModeContext';
 import { useLightbox } from '../context/LightboxContext';
 import BackButton from '../components/BackButton';
+import { safeHref } from '../utils/safeUrl';
 
 const ProjectDetails = () => {
     const { id } = useParams();
@@ -134,8 +135,9 @@ const ProjectDetails = () => {
     const ownerAvatar = project.owner?.profile?.avatar || '';
     const ownerBio = project.owner?.profile?.bio || '';
     const coverImage = project.thumbnail || project.coverImage || '';
-    const website = project.websiteUrl || project.website || '';
-    const demoUrl = project.demoUrl || '';
+    // Only http(s) links.
+    const website = safeHref(project.websiteUrl || project.website) || '';
+    const demoUrl = safeHref(project.demoUrl) || '';
     const raised = project.raisedAmount || project.raised || 0;
     const goal = project.fundingGoal || 0;
     const progressPct = goal > 0 ? Math.round((raised / goal) * 100) : 0;

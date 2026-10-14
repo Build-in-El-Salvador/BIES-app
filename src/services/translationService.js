@@ -1,41 +1,24 @@
 /**
- * Translation service — tries local LibreTranslate first, falls back to MyMemory API.
+ * Translation service: BIES's own LibreTranslate (nginx /translate/). Nothing
+ * goes to outside services: members' posts stay on BIES.
  */
 
 const cache = new Map();
 
-const LIBRE_URL = '/translate/translate';
-const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
+// The app has no same-origin server: it reaches the API's host (VITE_API_URL).
+const LIBRE_URL = `${(import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')}/translate/translate`;
 
-/**
- * Try LibreTranslate first (self-hosted), fall back to MyMemory (free public API).
- */
 async function callTranslateApi(text, source, target, format = 'text') {
-    // Try LibreTranslate first
-    try {
-        const res = await fetch(LIBRE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: text, source, target, format }),
-            signal: AbortSignal.timeout(3000), // 3s timeout
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data.translatedText) return data.translatedText;
-        }
-    } catch {
-        // LibreTranslate not available, try fallback
-    }
-
-    // Fallback: MyMemory API (free, no key needed)
-    const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text)}&langpair=${source}|${target}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`MyMemory API error: ${res.status}`);
+    const res = await fetch(LIBRE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: text, source, target, format }),
+        signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`Translation failed (${res.status})`);
     const data = await res.json();
-    if (data.responseStatus !== 200 && data.responseStatus !== '200') {
-        throw new Error(data.responseDetails || 'Translation failed');
-    }
-    return data.responseData?.translatedText || text;
+    if (!data.translatedText) throw new Error('Translation failed');
+    return data.translatedText;
 }
 
 /**
@@ -53,7 +36,7 @@ export async function translateText(text, source = 'en', target = 'es') {
 }
 
 /**
- * Translate HTML content. Strips tags for MyMemory, keeps tags for LibreTranslate.
+ * Translate HTML content, as plain text (its formatting is lost).
  */
 export async function translateHtml(html, source = 'en', target = 'es') {
     if (!html || !html.trim()) return html;
@@ -61,10 +44,8 @@ export async function translateHtml(html, source = 'en', target = 'es') {
     const cacheKey = `html|${source}|${target}|${html}`;
     if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-    // Extract plain text from HTML for translation
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const plainText = temp.textContent || temp.innerText || '';
+    // Plain text from the HTML, through an inert parser (nothing in it loads or runs).
+    const plainText = new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
 
     if (!plainText.trim()) return html;
 

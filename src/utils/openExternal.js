@@ -27,6 +27,8 @@ export function openExternal(url) {
             url = window.location.origin + url;
         }
     }
+    // Only web links: a member's javascript: or data: "link" opens nothing.
+    if (!/^https?:\/\//i.test(url)) return;
     if (isNativePlatform()) {
         const browser = window.Capacitor?.Plugins?.Browser;
         if (browser?.open) {
