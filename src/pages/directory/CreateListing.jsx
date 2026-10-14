@@ -868,7 +868,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
             <style jsx>{`
                 .listing-form-page {
-                    padding-top: 1.5rem;
+                    padding-top: var(--page-top, 1.5rem);
                     padding-bottom: 4rem;
                 }
 

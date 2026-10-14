@@ -1072,7 +1072,7 @@ const Discover = ({ membersOnly = false }) => {
 
       <style jsx>{`
         .discover-page {
-          padding-top: 2rem;
+          padding-top: var(--page-top, 2rem);
           padding-bottom: 4rem;
           overflow-x: hidden;
           box-sizing: border-box;

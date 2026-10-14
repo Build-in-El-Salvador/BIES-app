@@ -351,7 +351,7 @@ const CreateMarketListing = ({ editMode = false }) => {
 
             <style jsx>{`
                 .market-form-page {
-                    padding-top: 1.5rem;
+                    padding-top: var(--page-top, 1.5rem);
                     padding-bottom: 4rem;
                 }
 

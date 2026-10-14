@@ -88,7 +88,7 @@ const FollowList = ({ kind }) => {
             </div>
 
             <style jsx>{`
-                .follow-list-page { padding-top: 1.5rem; padding-bottom: 4rem; }
+                .follow-list-page { padding-top: var(--page-top, 1.5rem); padding-bottom: 4rem; }
                 .follow-list { max-width: 640px; margin: 0 auto; }
                 .follow-back {
                     display: inline-flex; align-items: center; gap: 6px; min-height: 44px;

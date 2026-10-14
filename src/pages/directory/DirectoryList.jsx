@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, SlidersHorizontal, Plus, Leaf, Building2, Loader2, Bookmark } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, Loader2, Bookmark } from 'lucide-react';
 import { directoryApi } from '../../services/api';
 import DirectoryListingCard from '../../components/directory/DirectoryListingCard';
 import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
@@ -231,17 +231,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         ))}
                 </div>
 
-                {/* Section header */}
-                <div className="dir-section-header">
-                    <div className="dir-section-icon">
-                        {isFarm ? <Leaf size={20} /> : <Building2 size={20} />}
-                    </div>
-                    <div className="dir-section-text">
-                        <h2>{isFarm ? t('directory.sectionFarms') : t('directory.sectionCertified')}</h2>
-                        <p>{isFarm ? t('directory.sectionFarmsSub') : t('directory.sectionCertifiedSub')}</p>
-                    </div>
-                </div>
-
                 {/* Listing cards */}
                 {loading ? (
                     <div className="dir-loading">
@@ -270,7 +259,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
 
             <style jsx>{`
                 .directory-page {
-                    padding-top: 2rem;
+                    padding-top: var(--page-top, 2rem);
                     padding-bottom: 4rem;
                     box-sizing: border-box;
                 }
@@ -284,7 +273,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     display: flex;
                     align-items: center;
                     gap: 0.75rem;
-                    margin-bottom: 1.5rem;
+                    margin-bottom: 0.75rem;
                 }
 
                 .dir-search-bar {
@@ -435,37 +424,6 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     margin: 0;
                     accent-color: var(--color-primary);
                     cursor: pointer;
-                }
-
-                .dir-section-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.85rem;
-                    margin-bottom: 1.25rem;
-                }
-                .dir-section-icon {
-                    width: 44px;
-                    height: 44px;
-                    border-radius: 50%;
-                    background: var(--color-blue-tint);
-                    color: var(--color-primary);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
-                .dir-section-text {
-                    min-width: 0;
-                }
-                .dir-section-text h2 {
-                    font-size: 1.15rem;
-                    font-weight: 700;
-                    margin: 0;
-                }
-                .dir-section-text p {
-                    font-size: 0.85rem;
-                    color: var(--color-gray-500);
-                    margin: 2px 0 0;
                 }
 
                 .dir-list {

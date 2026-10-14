@@ -46,10 +46,9 @@ test.describe('Directories', () => {
         await page.goto('/farms');
         await page.waitForLoadState('networkidle');
 
-        // Section header with title + subtitle
-        const header = page.locator('.dir-section-header');
-        await expect(header).toBeVisible();
-        await expect(header).toContainText('Regenerative Farms');
+        // The title is in the top bar; nothing repeats it under the search
+        await expect(page.locator('.mobile-page-title')).toHaveText('Farms');
+        await expect(page.locator('.dir-section-header')).toHaveCount(0);
 
         // Search input with farm placeholder
         const search = page.locator('input[placeholder="Search farms, products, or locations"]');
@@ -112,15 +111,13 @@ test.describe('Directories', () => {
         expect(live.ownerId).toBe(user.id);
     });
 
-    test('desktop: Businesses renders its section header', async ({ page }) => {
+    test('desktop: Businesses has its page title', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 800 });
         await loginAs(page, token);
         await page.goto('/trusted');
         await page.waitForLoadState('networkidle');
 
-        const header = page.locator('.dir-section-header');
-        await expect(header).toBeVisible();
-        await expect(header).toContainText('Businesses');
+        await expect(page.locator('h1.page-header')).toHaveText('Businesses');
 
         await page.screenshot({ path: 'e2e/screenshots/directory-trusted-desktop.png', fullPage: false });
     });

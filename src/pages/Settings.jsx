@@ -252,7 +252,7 @@ const Settings = () => {
     };
 
     return (
-        <div className="container py-8 max-w-3xl" style={{ paddingTop: '1.5rem' }}>
+        <div className="container py-8 max-w-3xl" style={{ paddingTop: 'var(--page-top, 1.5rem)' }}>
             <h1 className="mb-8 page-title-block">{t('settings.title')}</h1>
 
             <div className="settings-section">

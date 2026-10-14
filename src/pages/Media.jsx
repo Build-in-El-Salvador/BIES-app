@@ -1216,7 +1216,7 @@ const Media = () => {
         }
 
         @media (max-width: 768px) {
-          .media-page { padding-top: 1rem !important; }
+          .media-page { padding-top: var(--page-top, 1rem) !important; }
           .grid-cols-3,
           .grid-cols-2 {
             grid-template-columns: 1fr;
