@@ -8,6 +8,10 @@ import { z } from 'zod';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+// http(s) links only.
+const webLink = z.string().trim().max(2000)
+    .refine((v) => v === '' || /^https?:\/\//i.test(v), { message: 'Links must start with https://' });
+
 export const createProjectSchema = z.object({
     title: z.string().min(1).max(200),
     description: z.string().min(1),
@@ -20,8 +24,9 @@ export const createProjectSchema = z.object({
     fundingGoal: z.number().positive().optional(),
     raisedAmount: z.number().min(0).optional(),
     thumbnail: z.string().optional().or(z.literal('')),
-    demoUrl: z.string().url().optional().or(z.literal('')),
-    websiteUrl: z.string().url().optional().or(z.literal('')),
+    // http(s) only: zod's url() lets javascript: through.
+    demoUrl: webLink.optional(),
+    websiteUrl: webLink.optional(),
     tags: z.array(z.string()).optional(),
     customSections: z.array(z.any()).optional(),
     teamInfo: z.array(z.object({ name: z.string(), position: z.string().optional(), avatar: z.string().optional() })).optional(),

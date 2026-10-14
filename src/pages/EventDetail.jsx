@@ -17,6 +17,7 @@ import { useLightbox } from '../context/LightboxContext';
 import { nostrService } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { safeHref } from '../utils/safeUrl';
 
 const EventDetail = () => {
     const { id } = useParams();
@@ -658,9 +659,9 @@ const EventDetail = () => {
                                         Tickets: {event.priceSats.toLocaleString()} sats — log in to buy
                                     </div>
                                 )
-                            ) : (event.externalUrl || event.ticketUrl) ? (
+                            ) : safeHref(event.externalUrl || event.ticketUrl) ? (
                                 <a
-                                    href={event.externalUrl || event.ticketUrl}
+                                    href={safeHref(event.externalUrl || event.ticketUrl)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="ticket-btn"

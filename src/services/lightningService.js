@@ -1,5 +1,6 @@
 import { bech32 } from '@scure/base';
 import { nostrSigner } from './nostrSigner.js';
+import { bolt11Msats } from '../utils/bolt11.js';
 
 /**
  * Check if a string is a raw LNURL (bech32-encoded, lnurl1... prefix).
@@ -76,6 +77,8 @@ export async function requestInvoice(callback, amountMsats, zapRequestEvent) {
         if (!res.ok) return null;
         const data = await res.json();
         if (data.status === 'ERROR') return null;
+        // LUD-06: the invoice must be for exactly the amount asked.
+        if (typeof data.pr !== 'string' || bolt11Msats(data.pr) !== Number(amountMsats)) return null;
         return data;
     } catch {
         return null;
@@ -164,23 +167,10 @@ export function isBolt11(value) {
  *   amountless/invalid invoices.
  */
 export function decodeBolt11Amount(bolt11) {
-    if (typeof bolt11 !== 'string') return null;
-    const match = bolt11.trim().toLowerCase().match(/^ln(?:bc|tb|tbs|bcrt)(\d+)([munp]?)1/);
-    if (!match) return null;
-    const num = Number(match[1]);
-    if (!Number.isSafeInteger(num) || num <= 0) return null;
-    const MSATS_PER_BTC = 100_000_000_000;
-    let msats;
-    switch (match[2]) {
-        case 'm': msats = num * (MSATS_PER_BTC / 1e3); break;
-        case 'u': msats = num * (MSATS_PER_BTC / 1e6); break;
-        case 'n': msats = num * (MSATS_PER_BTC / 1e9); break;
-        case 'p': msats = num / 10; break; // 10 pico-BTC = 1 msat
-        default: msats = num * MSATS_PER_BTC;
-    }
-    if (!Number.isInteger(msats) || msats <= 0) return null;
-    return msats / 1000;
+    const msats = bolt11Msats(bolt11);
+    return msats == null ? null : msats / 1000;
 }
+
 
 /**
  * Check if a string is a valid Bolt12 offer (starts with lno1).
