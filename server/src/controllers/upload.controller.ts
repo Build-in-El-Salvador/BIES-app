@@ -5,11 +5,21 @@ import { uploadPublicFile, uploadPrivateFile } from '../services/storage.service
 
 // ─── Multer config (memory storage — files stay in buffer) ───
 
+// One file and nothing else. The last two are multer 2's own limits, which
+// @types/multer doesn't know yet.
+const limits = {
+    fileSize: 50 * 1024 * 1024, // 50MB max
+    files: 1,
+    fields: 5,
+    parts: 6,
+    fieldNameSize: 100,
+    fieldNestingDepth: 0,
+    fieldArrayIndexLimit: 0,
+};
+
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB max
-    },
+    limits,
     fileFilter: (_req, file, cb) => {
         // Allowed MIME types
         const allowedMedia = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];

@@ -17,6 +17,7 @@ import EmojiPicker from '../components/EmojiPicker';
 import NostrGifPicker from '../components/NostrGifPicker';
 import { useLightbox } from '../context/LightboxContext';
 import { nip19 } from 'nostr-tools';
+import { isGenuineRepost } from '../utils/repost';
 import { Note, FeedSkeleton, Paginator } from '../components/feed';
 import { formatTime as formatTimeUtil, parseNoteContent as parseNoteContentUtil, getDisplayName as getDisplayNameUtil } from '../utils/noteUtils';
 import '../components/feed/Feed.css';
@@ -276,7 +277,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         if (event.kind === 6) {
                             let original;
                             try { original = JSON.parse(event.content); } catch { return; }
-                            if (!original?.id || !original?.pubkey || !original?.content) return;
+                            if (!isGenuineRepost(event, original)) return;
                             const reposter = { pubkey: event.pubkey, timestamp: event.created_at, repostId: event.id };
                             setPosts(prev => {
                                 // Skip if this exact repost event was already processed
