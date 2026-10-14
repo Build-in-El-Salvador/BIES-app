@@ -207,7 +207,7 @@ const News = () => {
             </div>
 
             <style jsx>{`
-        .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+        .py-8 { padding-top: var(--page-top, 2rem); padding-bottom: 2rem; }
 
         .news-layout {
           display: grid;

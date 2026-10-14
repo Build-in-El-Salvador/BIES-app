@@ -166,7 +166,7 @@ const Bounties = () => {
 
             <style jsx>{`
                 .bounties-page {
-                    padding-top: 2rem;
+                    padding-top: var(--page-top, 2rem);
                     padding-bottom: 4rem;
                     box-sizing: border-box;
                 }

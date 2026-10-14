@@ -175,7 +175,7 @@ const CustomizeNavbar = () => {
     const GhostIcon = ghostPage ? ghostPage.icon : null;
 
     return (
-        <div className="container customize-page" style={{ paddingTop: '1.5rem' }}>
+        <div className="container customize-page" style={{ paddingTop: 'var(--page-top, 1.5rem)' }}>
             <div className="customize-header">
                 <button type="button" className="back-btn" aria-label={t('common.back')} onClick={() => navigate(-1)}>
                     <ChevronLeft size={22} />

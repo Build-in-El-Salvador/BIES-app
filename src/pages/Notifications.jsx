@@ -193,7 +193,7 @@ const Notifications = () => {
 
             <style jsx>{`
                 .container { max-width: 800px; margin: 0 auto; padding: 0 1rem; width: 100%; }
-                .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
+                .py-8 { padding-top: var(--page-top, 2rem); padding-bottom: 2rem; }
 
                 .header {
                     display: flex;
@@ -203,6 +203,12 @@ const Notifications = () => {
                 }
                 .header h1 { margin: 0; }
                 .header-actions { display: flex; gap: 0.5rem; }
+                /* Phones: the title is in the top bar, so the header is only
+                   "Mark all read", when there is something to mark. */
+                @media (max-width: 768px) {
+                    .header { margin-bottom: 0; }
+                    .header-actions:not(:empty) { margin-bottom: 0.75rem; }
+                }
 
                 .filter-tabs {
                     display: flex;

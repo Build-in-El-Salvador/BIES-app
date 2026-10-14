@@ -411,7 +411,7 @@ const BountyDetail = () => {
 
             <style jsx>{`
                 .bounty-detail-page {
-                    padding-top: 1.5rem;
+                    padding-top: var(--page-top, 1.5rem);
                     padding-bottom: 4rem;
                 }
 

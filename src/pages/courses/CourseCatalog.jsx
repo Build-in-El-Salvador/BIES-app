@@ -198,7 +198,7 @@ const CourseCatalog = () => {
 
             <style jsx>{`
                 .courses-catalog {
-                    padding-top: 2rem;
+                    padding-top: var(--page-top, 2rem);
                     padding-bottom: 4rem;
                     max-width: 1100px;
                     margin: 0 auto;
