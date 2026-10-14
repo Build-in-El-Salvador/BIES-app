@@ -145,6 +145,9 @@ model EmailCode {
   // For an address with no account yet: these share only part of the daily
   // ceiling, so a flood of made-up addresses can't stop members signing in.
   newAddress Boolean   @default(false) @map("new_address")
+  // Answered as sent but not emailed (that share was used up): counts against
+  // the per-address and per-IP limits, not the ceiling.
+  quiet      Boolean   @default(false)
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([emailHash, purpose, createdAt])

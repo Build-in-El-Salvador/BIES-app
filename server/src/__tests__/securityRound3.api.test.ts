@@ -100,9 +100,10 @@ describe('Nostr sign-in', () => {
         const key = generateSecretKey();
         const pubkey = getPublicKey(key);
 
+        // No tags at all: an app from before the check, told to reload.
         let res = await login(key, await challengeFor(pubkey), []);
         expect(res.status).toBe(400);
-        expect(res.body.reason).toBe('wrong_target');
+        expect(res.body.reason).toBe('update_required');
 
         res = await login(key, await challengeFor(pubkey), [['u', 'https://other.example/login'], ['method', 'POST']]);
         expect(res.body.reason).toBe('wrong_target');

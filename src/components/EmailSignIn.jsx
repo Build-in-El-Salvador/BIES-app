@@ -23,6 +23,10 @@ const EmailSignIn = ({ onSuccess }) => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [resendIn, setResendIn] = useState(0);
+    const [sentAt, setSentAt] = useState(0);
+    // Two minutes after a code is sent: email may be busy (shown to everyone,
+    // so it tells nothing about who has an account).
+    const [waited, setWaited] = useState(false);
 
     const lang = i18n.language?.startsWith('es') ? 'es' : 'en';
 
@@ -31,6 +35,13 @@ const EmailSignIn = ({ onSuccess }) => {
         const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
         return () => clearTimeout(timer);
     }, [resendIn]);
+
+    useEffect(() => {
+        setWaited(false);
+        if (step !== 'code') return undefined;
+        const timer = setTimeout(() => setWaited(true), 2 * 60 * 1000);
+        return () => clearTimeout(timer);
+    }, [step, sentAt]);
 
     const explain = (result) => {
         switch (result.reason) {
@@ -68,6 +79,7 @@ const EmailSignIn = ({ onSuccess }) => {
         if (result.success) {
             setStep('code');
             setCode('');
+            setSentAt(Date.now());
             setResendIn(result.resendAfterSeconds || 60);
         } else {
             setError(explain(result));
@@ -175,7 +187,7 @@ const EmailSignIn = ({ onSuccess }) => {
                             {t('emailSignIn.changeEmail')}
                         </button>
                     </div>
-                    <p className="email-signin-hint">{t('emailSignIn.checkSpam')}</p>
+                    <p className="email-signin-hint">{waited ? t('emailSignIn.stillNothing') : t('emailSignIn.checkSpam')}</p>
                 </form>
             )}
 

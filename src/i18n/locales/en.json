@@ -272,6 +272,7 @@
     "resendIn_other": "New code in {{count}} seconds",
     "changeEmail": "Use a different email",
     "checkSpam": "Nothing yet? Check your spam folder.",
+    "stillNothing": "Still nothing? Email may be busy today. Try again later, or sign in with Nostr.",
     "useNostr": "Sign in with Nostr",
     "nostrIntro": "For people who already have a Nostr key, or want to hold their own.",
     "ownKeyPrompt": "Want a Nostr key of your own?",

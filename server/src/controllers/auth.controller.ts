@@ -300,13 +300,16 @@ export async function getNostrChallenge(req: Request, res: Response): Promise<vo
         return;
     }
 
+    // Every challenge lives as long, so the map's order is expiry order: drop
+    // the expired ones from the front, and when it's full, the oldest (a
+    // flood then only costs sign-ins that took longer than it to finish).
     const now = Date.now();
     for (const [key, entry] of challenges) {
-        if (entry.expiresAt <= now) challenges.delete(key);
+        if (entry.expiresAt > now) break;
+        challenges.delete(key);
     }
-    if (challenges.size >= MAX_CHALLENGES) {
-        res.status(503).json({ error: 'Sign-in is busy. Try again in a minute.' });
-        return;
+    while (challenges.size >= MAX_CHALLENGES) {
+        challenges.delete(challenges.keys().next().value as string);
     }
     challenges.set(challenge, { pubkey, expiresAt: now + CHALLENGE_TTL_MS });
 
@@ -358,8 +361,14 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         }
 
         // ...for this endpoint, so a signature another site asked for fails.
+        // No tags at all: a BIES app from before this check (a tab left open
+        // across an update, or an old build), which only a reload fixes.
         if (!isBiesLoginRequest(signedEvent.tags)) {
-            res.status(400).json({ error: "This sign-in wasn't made for BIES. Please try again.", reason: 'wrong_target' });
+            const untagged = Array.isArray(signedEvent.tags)
+                && !signedEvent.tags.some((t: unknown) => Array.isArray(t) && (t[0] === 'u' || t[0] === 'method'));
+            res.status(400).json(untagged
+                ? { error: 'BIES was updated. Reload the page (or update the app), then sign in again.', reason: 'update_required' }
+                : { error: "This sign-in wasn't made for BIES. Please try again.", reason: 'wrong_target' });
             return;
         }
 

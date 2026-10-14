@@ -272,6 +272,7 @@
     "resendIn_other": "Código nuevo en {{count}} segundos",
     "changeEmail": "Usar otro correo",
     "checkSpam": "¿No le llegó? Revise su carpeta de spam.",
+    "stillNothing": "¿Sigue sin llegar? El correo puede estar saturado hoy. Intente más tarde o inicie sesión con Nostr.",
     "useNostr": "Iniciar sesión con Nostr",
     "nostrIntro": "Para quienes ya tienen una clave de Nostr o quieren guardar la suya.",
     "ownKeyPrompt": "¿Quiere su propia clave de Nostr?",
