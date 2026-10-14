@@ -318,9 +318,9 @@ describe('signAsHostedUser', () => {
 // ─── Rate limit ──────────────────────────────────────────────────────────────
 
 describe('rate limit', () => {
-    it('allows 120 signing requests a minute per account', async () => {
+    it('allows 60 signing requests a minute per account', async () => {
         // Refused kinds are cheap and still count.
-        const results = await Promise.all(Array.from({ length: 120 }, () => sign(note({ kind: 4 }), 'busy')));
+        const results = await Promise.all(Array.from({ length: 60 }, () => sign(note({ kind: 4 }), 'busy')));
         expect(results.every((r) => r.status === 400)).toBe(true);
         expect((await sign(note(), 'busy')).status).toBe(429);
         // Another account is unaffected.

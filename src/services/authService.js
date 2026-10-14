@@ -17,9 +17,18 @@ import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
 import { isNativePlatform } from '../utils/platform.js';
 import { nwcClient } from './nwcService.js';
-import { clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
+import { API_BASE, clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
 
 const USER_KEY = 'bies_user';
+
+/**
+ * NIP-98 tags for a sign-in (kind 27235): it names BIES's login endpoint, so
+ * the signer shows where it's going, and a sign-in another site asked for
+ * isn't accepted here (auth.controller.ts isBiesLoginRequest).
+ */
+function loginTags() {
+    return [['u', new URL(`${API_BASE}/auth/nostr-login`, window.location.origin).href], ['method', 'POST']];
+}
 
 export const authService = {
     // ─── Token management ───────────────────────────────────────────────────
@@ -112,7 +121,7 @@ export const authService = {
             kind: 27235,
             pubkey,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [],
+            tags: loginTags(),
             content: challenge,
         });
 
@@ -147,7 +156,7 @@ export const authService = {
             kind: 27235,
             pubkey,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [],
+            tags: loginTags(),
             content: challenge,
         }, sk);
 
@@ -181,7 +190,7 @@ export const authService = {
             kind: 27235,
             pubkey,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [],
+            tags: loginTags(),
             content: challenge,
         }, sk);
 
@@ -222,7 +231,7 @@ export const authService = {
         const signedEvent = await signer.signEvent({
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [],
+            tags: loginTags(),
             content: challenge,
         });
 
@@ -293,7 +302,7 @@ export const authService = {
             {
                 kind: 27235,
                 created_at: Math.floor(Date.now() / 1000),
-                tags: [],
+                tags: loginTags(),
                 content: challenge,
                 pubkey: pubkeyHex,
             },

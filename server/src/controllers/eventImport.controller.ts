@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { safeGet } from '../utils/safeFetch';
 
 /**
  * POST /events/import-url
@@ -35,63 +36,18 @@ export async function importEventFromUrl(req: Request, res: Response): Promise<v
             return;
         }
 
-        // Fetch the page with size limit
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const MAX_HTML_SIZE = 2 * 1024 * 1024; // 2MB
-
-        let html: string;
-        try {
-            const response = await fetch(url, {
-                signal: controller.signal,
-                redirect: 'follow',
-                headers: {
-                    'User-Agent': 'BIES-EventImport/1.0 (+https://bies.io)',
-                    'Accept': 'text/html',
-                },
-            });
-            if (!response.ok) {
-                res.status(400).json({ error: `Failed to fetch URL (${response.status})` });
-                return;
-            }
-
-            // Check content-length if available
-            const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
-            if (contentLength > MAX_HTML_SIZE) {
-                res.status(400).json({ error: 'Page is too large to import' });
-                return;
-            }
-
-            // Stream with size limit
-            const reader = response.body?.getReader();
-            if (!reader) {
-                res.status(400).json({ error: 'Failed to read response' });
-                return;
-            }
-            const chunks: Uint8Array[] = [];
-            let totalSize = 0;
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                totalSize += value.length;
-                if (totalSize > MAX_HTML_SIZE) {
-                    reader.cancel();
-                    res.status(400).json({ error: 'Page is too large to import' });
-                    return;
-                }
-                chunks.push(value);
-            }
-            html = Buffer.concat(chunks).toString('utf-8');
-        } catch (err: any) {
-            if (err.name === 'AbortError') {
-                res.status(408).json({ error: 'Request timed out fetching URL' });
-            } else {
-                res.status(400).json({ error: 'Failed to fetch URL' });
-            }
+        // Fetch the page: https only, every address checked (no internal
+        // hosts, however the name resolves or redirects), 2 MB, 10 seconds.
+        const page = await safeGet(url, {
+            timeoutMs: 10_000,
+            maxBytes: 2 * 1024 * 1024,
+            headers: { 'User-Agent': 'BIES-EventImport/1.0 (+https://buildinelsalvador.com)', Accept: 'text/html' },
+        });
+        if (!page) {
+            res.status(400).json({ error: "Couldn't load that page. Check the link starts with https:// and try again." });
             return;
-        } finally {
-            clearTimeout(timeout);
         }
+        const html = page.body.toString('utf-8');
 
         // Parse OG meta tags
         const og = extractOgTags(html);

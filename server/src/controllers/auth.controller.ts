@@ -83,8 +83,31 @@ export const nostrLoginSchema = z.object({
     challenge: z.string(),
 });
 
-// In-memory challenge store (use Redis in production)
-const challenges = new Map<string, { challenge: string; expiresAt: number }>();
+// Outstanding sign-in challenges, by challenge: several per pubkey, so asking
+// for one with someone else's pubkey never replaces theirs. Kept in memory:
+// the server is a single process, and after a restart the app asks again.
+const challenges = new Map<string, { pubkey: string; expiresAt: number }>();
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const MAX_CHALLENGES = 10_000;
+
+/**
+ * NIP-98: a sign-in names this endpoint (its `u` tag) and POST. A login event
+ * signed for another site, or with no tags, isn't a BIES sign-in.
+ */
+function isBiesLoginRequest(tags: unknown): boolean {
+    if (!Array.isArray(tags)) return false;
+    const only = (name: string) => {
+        const found = tags.filter((t) => Array.isArray(t) && t[0] === name);
+        return found.length === 1 && typeof found[0][1] === 'string' ? (found[0][1] as string) : null;
+    };
+    if (only('method')?.toUpperCase() !== 'POST') return false;
+    let url: URL;
+    try { url = new URL(only('u') ?? ''); } catch { return false; }
+    const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
+    const origins = [config.appPublicUrl, process.env.API_PUBLIC_URL || '', ...config.corsOrigin.split(',')]
+        .map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
+    return origins.includes(url.origin) && url.pathname === `${basePath}/api/auth/nostr-login` && !url.search;
+}
 
 // ─── NIP-05 auto-generation ───
 
@@ -277,10 +300,15 @@ export async function getNostrChallenge(req: Request, res: Response): Promise<vo
         return;
     }
 
-    challenges.set(pubkey, {
-        challenge,
-        expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-    });
+    const now = Date.now();
+    for (const [key, entry] of challenges) {
+        if (entry.expiresAt <= now) challenges.delete(key);
+    }
+    if (challenges.size >= MAX_CHALLENGES) {
+        res.status(503).json({ error: 'Sign-in is busy. Try again in a minute.' });
+        return;
+    }
+    challenges.set(challenge, { pubkey, expiresAt: now + CHALLENGE_TTL_MS });
 
     res.json({ challenge });
 }
@@ -299,21 +327,22 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // Verify challenge-response
-        const stored = challenges.get(pubkey);
-        if (!stored) {
+        if (!signedEvent || !signedEvent.sig || !signedEvent.id) {
+            res.status(400).json({ error: 'Signed event required' });
+            return;
+        }
+
+        // Verify challenge-response: the challenge is the event's content.
+        const challenge = typeof signedEvent.content === 'string' ? signedEvent.content : '';
+        const stored = challenges.get(challenge);
+        if (!stored || stored.pubkey !== pubkey) {
             res.status(400).json({ error: 'No challenge found. Request a new one.' });
             return;
         }
 
         if (Date.now() > stored.expiresAt) {
-            challenges.delete(pubkey);
+            challenges.delete(challenge);
             res.status(400).json({ error: 'Challenge expired. Request a new one.' });
-            return;
-        }
-
-        if (!signedEvent || !signedEvent.sig || !signedEvent.id) {
-            res.status(400).json({ error: 'Signed event required' });
             return;
         }
 
@@ -322,14 +351,15 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        if (signedEvent.content !== stored.challenge) {
-            res.status(400).json({ error: 'Challenge mismatch' });
-            return;
-        }
-
         // Verify event kind (NIP-98 HTTP auth)
         if (signedEvent.kind !== 27235) {
             res.status(400).json({ error: 'Signed event must be kind 27235' });
+            return;
+        }
+
+        // ...for this endpoint, so a signature another site asked for fails.
+        if (!isBiesLoginRequest(signedEvent.tags)) {
+            res.status(400).json({ error: "This sign-in wasn't made for BIES. Please try again.", reason: 'wrong_target' });
             return;
         }
 
@@ -348,7 +378,7 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         }
 
         // Challenge verified — clean up
-        challenges.delete(pubkey);
+        challenges.delete(challenge);
 
         // Find or create the user
         let user = await prisma.user.findUnique({

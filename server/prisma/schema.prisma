@@ -142,6 +142,9 @@ model EmailCode {
   expiresAt  DateTime  @map("expires_at")
   consumedAt DateTime? @map("consumed_at")
   ipHash     String?   @map("ip_hash")
+  // For an address with no account yet: these share only part of the daily
+  // ceiling, so a flood of made-up addresses can't stop members signing in.
+  newAddress Boolean   @default(false) @map("new_address")
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([emailHash, purpose, createdAt])

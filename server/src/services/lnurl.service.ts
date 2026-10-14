@@ -8,10 +8,10 @@
  */
 
 import crypto from 'crypto';
+import { safeGet } from '../utils/safeFetch';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024; // 1MB cap on LNURL provider responses
-const MAX_REDIRECTS = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -133,42 +133,17 @@ function upstreamReason(data: any, fallback: string): string {
 }
 
 /**
- * Fetch JSON from an LNURL provider with SSRF protection (scheme + host checks
- * re-applied on every redirect hop) and a streaming size cap on the body.
+ * Fetch JSON from an LNURL provider with SSRF protection: https only, and
+ * every hop's resolved addresses checked and pinned to the connection
+ * (utils/safeFetch.ts), so a name that resolves, or redirects, to an
+ * internal address is refused. Size- and time-bounded.
  */
 async function fetchLnurlJson(rawUrl: string, label: string): Promise<any> {
-    let url = assertSafeUrl(rawUrl);
-
-    let res = await fetch(url.toString(), { redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    for (let hop = 0; res.status >= 300 && res.status < 400; hop++) {
-        const location = res.headers.get('location');
-        if (!location || hop >= MAX_REDIRECTS) throw new Error(`${label} returned too many redirects`);
-        await res.body?.cancel().catch(() => {});
-        url = assertSafeUrl(new URL(location, url).toString());
-        res = await fetch(url.toString(), { redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    }
-    if (!res.ok) throw new Error(`${label} returned ${res.status}`);
-
-    const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
-    if (contentLength > MAX_RESPONSE_BYTES) throw new Error(`${label} response is too large`);
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error(`${label} returned no body`);
-    const chunks: Uint8Array[] = [];
-    let totalSize = 0;
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        totalSize += value.length;
-        if (totalSize > MAX_RESPONSE_BYTES) {
-            await reader.cancel().catch(() => {});
-            throw new Error(`${label} response is too large`);
-        }
-        chunks.push(value);
-    }
-
+    assertSafeUrl(rawUrl); // quick refusal for bad schemes and literal internal hosts
+    const res = await safeGet(rawUrl, { timeoutMs: FETCH_TIMEOUT_MS, maxBytes: MAX_RESPONSE_BYTES });
+    if (!res) throw new Error(`${label} couldn't be reached`);
     try {
-        return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        return JSON.parse(res.body.toString('utf8'));
     } catch {
         throw new Error(`${label} returned invalid JSON`);
     }

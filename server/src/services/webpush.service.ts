@@ -52,9 +52,11 @@ export async function sendPushToUser(userId: string, payload: {
     });
     if (settings && !settings.pushNotifications) return 0;
 
-    const subscriptions = await prisma.pushSubscription.findMany({
+    // Only the browsers' own push services (an endpoint saved before the
+    // check came in is skipped too).
+    const subscriptions = (await prisma.pushSubscription.findMany({
         where: { userId },
-    });
+    })).filter((sub) => isPushServiceEndpoint(sub.endpoint));
     if (subscriptions.length === 0) return 0;
 
     const jsonPayload = JSON.stringify(payload);
@@ -70,7 +72,7 @@ export async function sendPushToUser(userId: string, payload: {
                         keys: { p256dh: sub.p256dh, auth: sub.auth },
                     },
                     jsonPayload,
-                    { TTL: 86400 } // 24 hours
+                    { TTL: 86400, timeout: 10_000 } // kept 24 hours; give up after 10 s
                 );
                 sent++;
             } catch (error: any) {
@@ -107,3 +109,20 @@ export async function cleanupStaleSubscriptions(): Promise<number> {
     }
     return result.count;
 }
+
+/**
+ * A Web Push endpoint at one of the browsers' push services: Chrome and
+ * Android (FCM), Firefox (Mozilla), Edge (WNS) and Safari (Apple). Anything
+ * else would have the server send requests wherever a member pointed it.
+ */
+export function isPushServiceEndpoint(endpoint: string): boolean {
+    let url: URL;
+    try { url = new URL(endpoint); } catch { return false; }
+    if (url.protocol !== 'https:' || url.port) return false;
+    const host = url.hostname.toLowerCase();
+    return host === 'fcm.googleapis.com'
+        || host === 'push.services.mozilla.com' || host.endsWith('.push.services.mozilla.com')
+        || host.endsWith('.notify.windows.com')
+        || host === 'web.push.apple.com' || host.endsWith('.push.apple.com');
+}
+
