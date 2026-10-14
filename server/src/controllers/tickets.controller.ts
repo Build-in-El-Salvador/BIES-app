@@ -22,6 +22,7 @@ import {
     sha256Hex,
 } from '../services/lnurl.service';
 import * as coinosService from '../services/coinos.service';
+import { invitedTo } from './events.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -255,7 +256,7 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
         const event = await prisma.event.findUnique({
             where: { id: eventId },
             select: {
-                id: true, title: true, hostId: true, isPublished: true, visibility: true,
+                id: true, title: true, hostId: true, isPublished: true, visibility: true, guestList: true,
                 startDate: true, endDate: true,
                 priceSats: true, ticketCapacity: true, payoutLightningAddress: true,
                 host: { select: { profile: { select: { lightningAddress: true } } } },
@@ -266,11 +267,8 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Event not found' }); return;
         }
         // Invite only: the host, admins, and members the host invited.
-        if (event.visibility === 'INVITE_ONLY' && event.hostId !== buyerId && !req.user!.isAdmin) {
-            const invited = await prisma.eventAttendee.findFirst({ where: { eventId, userId: buyerId }, select: { id: true } });
-            if (!invited) {
-                res.status(403).json({ error: 'This event is invite only' }); return;
-            }
+        if (event.visibility === 'INVITE_ONLY' && event.hostId !== buyerId && !req.user!.isAdmin && !(await invitedTo(event, buyerId))) {
+            res.status(403).json({ error: 'This event is invite only' }); return;
         }
         if (!event.priceSats || event.priceSats <= 0) {
             res.status(400).json({ error: 'This event does not sell tickets' }); return;

@@ -160,6 +160,15 @@ describe('events', () => {
 
         expect((await call('POST', `/api/events/${event.id}/rsvp`, { token: stranger.token, body: { status: 'GOING' } })).status).toBe(403);
         expect((await call('POST', `/api/events/${event.id}/rsvp`, { token: guest.token, body: { status: 'GOING' } })).status).toBeLessThan(300);
+
+        // "Not going" keeps the invitation: they can still say yes later.
+        expect((await call('DELETE', `/api/events/${event.id}/rsvp`, { token: guest.token })).status).toBe(200);
+        expect((await call('POST', `/api/events/${event.id}/rsvp`, { token: guest.token, body: { status: 'GOING' } })).status).toBeLessThan(300);
+
+        // A guest the host picked in the event's guest list is invited too.
+        const listed = await member('Listed');
+        await prisma.event.update({ where: { id: event.id }, data: { guestList: JSON.stringify([{ name: 'Listed', userId: listed.id }]) } });
+        expect((await call('POST', `/api/events/${event.id}/rsvp`, { token: listed.token, body: { status: 'GOING' } })).status).toBeLessThan(300);
     });
 
     it('import fetches only public https pages', async () => {

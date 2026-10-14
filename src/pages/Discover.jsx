@@ -12,6 +12,9 @@ import { useViewPreference } from '../context/ViewContext';
 import { getAssetUrl } from '../utils/assets';
 import { stripHtml } from '../utils/text';
 
+// A member's headline: "Title at Company", or whichever they gave.
+const headline = (m) => (m.title && m.company ? `${m.title} at ${m.company}` : m.title || m.company || '');
+
 const ProjectCard = ({ project, t, viewType = 'standard' }) => {
   const [isLiked, setIsLiked] = useState(project._watchlisted || false);
 
@@ -936,7 +939,7 @@ const Discover = ({ membersOnly = false }) => {
                                             <h3 className="font-semibold text-lg builder-name-clamp">{builder.name}</h3>
                                             {(builder.company || builder.title || builder.role) && (
                                                 <p className="text-primary font-medium text-sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {builder.title ? `${builder.title} at ${builder.company || builder.role}` : builder.company || builder.role}
+                                                    {headline(builder)}
                                                 </p>
                                             )}
                                             {subline && <p className="builder-subline">{subline}</p>}
@@ -976,7 +979,7 @@ const Discover = ({ membersOnly = false }) => {
                                     </div>
                                     <div className="p-5 flex-1 flex flex-col">
                                         <h3 className="font-semibold text-xl mb-1">{builder.name}</h3>
-                                        {(builder.company || builder.title || builder.role) && <p className="text-primary font-medium text-sm mb-2">{builder.title ? `${builder.title} at ${builder.company || builder.role}` : builder.company || builder.role}</p>}
+                                        {(builder.company || builder.title) && <p className="text-primary font-medium text-sm mb-2">{headline(builder)}</p>}
                                         {builder.location && <p className="builder-subline mb-2"><MapPin size={13} aria-hidden="true" /><span className="builder-subline-text">{builder.location}</span></p>}
                                         <p className="text-sm text-gray-500 line-clamp-2 mb-4">{stripHtml(builder.bio || '')}</p>
 

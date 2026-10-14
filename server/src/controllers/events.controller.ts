@@ -787,6 +787,18 @@ export async function endorseEvent(req: Request, res: Response): Promise<void> {
  * POST /events/:id/rsvp
  * RSVP to an event.
  */
+/**
+ * Whether a member is invited to an event: the host invited them (an
+ * attendee row, whatever its status now), or picked them in the event's guest
+ * list. Invite-only events let only them, the host and admins RSVP or buy.
+ */
+export async function invitedTo(event: { id: string; guestList?: string | null }, userId: string): Promise<boolean> {
+    let guests: { userId?: string }[] = [];
+    try { guests = JSON.parse(event.guestList || '[]'); } catch { guests = []; }
+    if (Array.isArray(guests) && guests.some((g) => g?.userId === userId)) return true;
+    return !!(await prisma.eventAttendee.findFirst({ where: { eventId: event.id, userId }, select: { id: true } }));
+}
+
 export async function rsvpEvent(req: Request, res: Response): Promise<void> {
     try {
         const userId = req.user!.id;
@@ -800,8 +812,8 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         const event = await prisma.event.findUnique({
             where: { id: req.params.id },
             select: {
-                title: true, hostId: true, maxAttendees: true, isPublished: true,
-                visibility: true, nostrPublish: true,
+                id: true, title: true, hostId: true, maxAttendees: true, isPublished: true,
+                visibility: true, nostrPublish: true, guestList: true,
                 host: { select: { nostrPubkey: true } },
             },
         });
@@ -811,11 +823,8 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         }
 
         // Invite only: the host, admins, and members the host invited.
-        if (event.visibility === 'INVITE_ONLY' && event.hostId !== userId && !req.user!.isAdmin) {
-            const invited = await prisma.eventAttendee.findFirst({ where: { eventId: req.params.id, userId }, select: { id: true } });
-            if (!invited) {
-                res.status(403).json({ error: 'This event is invite only' }); return;
-            }
+        if (event.visibility === 'INVITE_ONLY' && event.hostId !== userId && !req.user!.isAdmin && !(await invitedTo(event, userId))) {
+            res.status(403).json({ error: 'This event is invite only' }); return;
         }
 
         if (status === 'GOING' && event.maxAttendees) {
@@ -909,9 +918,19 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
  */
 export async function cancelRsvp(req: Request, res: Response): Promise<void> {
     try {
-        await prisma.eventAttendee.deleteMany({
-            where: { eventId: req.params.id, userId: req.user!.id },
-        });
+        // On an invite-only event the invitation stays: back to INVITED, so
+        // the member can still say they're going later.
+        const event = await prisma.event.findUnique({ where: { id: req.params.id }, select: { visibility: true } });
+        if (event?.visibility === 'INVITE_ONLY') {
+            await prisma.eventAttendee.updateMany({
+                where: { eventId: req.params.id, userId: req.user!.id },
+                data: { status: 'INVITED' },
+            });
+        } else {
+            await prisma.eventAttendee.deleteMany({
+                where: { eventId: req.params.id, userId: req.user!.id },
+            });
+        }
         res.json({ message: 'RSVP cancelled' });
     } catch (error) {
         console.error('Cancel RSVP error:', error);

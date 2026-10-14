@@ -565,16 +565,17 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
         case 'DECK_REQUEST':
         case 'DECK_APPROVED':
         case 'DECK_DENIED':
-            return data.projectId ? `/projects/${data.projectId}` : '/projects';
+            // The app's project page is /project/:id (/projects is the API's).
+            return data.projectId ? `/project/${data.projectId}` : '/discover';
         case 'FOLLOW':
         case 'PROFILE_VIEW':
             // A member's profile, by user id.
             return data.followerId ? `/builder/${data.followerId}` :
                    data.viewerId ? `/builder/${data.viewerId}` : '/notifications';
         case 'INVESTMENT_STATUS':
-            return data.projectId ? `/projects/${data.projectId}` : '/notifications';
+            return data.projectId ? `/project/${data.projectId}` : '/notifications';
         case 'ZAP_RECEIVED':
-            return data.projectId ? `/projects/${data.projectId}` : '/notifications';
+            return data.projectId ? `/project/${data.projectId}` : '/notifications';
         case 'EVENT_RSVP':
             return data.eventId ? `/events/${data.eventId}` : '/events';
         case 'POST_COMMENT':

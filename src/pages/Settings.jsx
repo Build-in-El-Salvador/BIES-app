@@ -87,7 +87,7 @@ const Settings = () => {
     const avatar = user?.profile?.avatar;
     const layouts = [
         projectsOn && { key: 'projectsView', Icon: LayoutGrid, label: t('settings.projectsLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutGrid')]] },
-        projectsOn && { key: 'membersView', Icon: Users, label: t('settings.membersLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutCards')], ['icons', t('settings.layoutIcons')]] },
+        { key: 'membersView', Icon: Users, label: t('settings.membersLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutCards')], ['icons', t('settings.layoutIcons')]] },
         eventsOn && { key: 'eventsView', Icon: CalendarDays, label: t('settings.eventsLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutGrid')]] },
         mediaOn && { key: 'mediaView', Icon: Play, label: t('settings.mediaLayout'), options: [['card', t('settings.layoutCards')], ['list', t('settings.layoutList')], ['icon', t('settings.layoutIcons')]] },
     ].filter(Boolean);

@@ -77,7 +77,11 @@ function contentSecurityPolicy() {
                     "base-uri 'self'",
                     "form-action 'self'",
                 ].join('; ')
-                return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />\n  <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
+                // Right after the charset. If index.html's charset tag changes,
+                // fail the build rather than ship without the policy.
+                const marker = '<meta charset="UTF-8" />'
+                if (!html.includes(marker)) throw new Error(`contentSecurityPolicy: ${marker} not found in index.html`)
+                return html.replace(marker, `${marker}\n  <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
             },
         },
     }

@@ -92,6 +92,7 @@ a.set-row:active, button.set-row:active { background: var(--color-gray-50); }
   flex-shrink: 0;
   width: 51px;
   height: 31px;
+  min-height: 31px; /* phones give every button 36px (index.css) */
   padding: 0;
   border: none;
   border-radius: 999px;
