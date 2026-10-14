@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { authService } from '../services/authService';
 import { BiesWebSocket, notificationsApi } from '../services/api';
-import { notifyIncomingMessage, subscribeToPush } from '../utils/notificationManager';
+import { notifyIncomingMessage, subscribeToPush, unsubscribeFromPush } from '../utils/notificationManager';
 import { isNativePlatform } from '../utils/platform';
-import { initNativePush, nativePushToken } from '../services/pushService';
+import { initNativePush, nativePushToken, forgetNativePushToken } from '../services/pushService';
 import { nostrSigner } from '../services/nostrSigner';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
@@ -150,7 +150,13 @@ export const AuthProvider = ({ children }) => {
         // expiry, logout elsewhere) or another tab signed out. Forget this
         // device's secrets too, as logout does.
         const handleUnauthorized = () => {
-            if (userRef.current) authService.clearLocalSecrets();
+            if (userRef.current) {
+                // Tell the server too (best effort), so this phone stops getting
+                // the account's notifications, and stop this browser's.
+                authService.logout({ pushToken: nativePushToken() }).catch(() => { });
+                forgetNativePushToken();
+                if (!isNativePlatform()) unsubscribeFromPush().catch(() => { });
+            }
             setUser(null);
             setShowPushPrompt(false);
             setWsClient((prev) => { prev?.disconnect(); return null; });
@@ -383,8 +389,11 @@ export const AuthProvider = ({ children }) => {
         settleTermsWaiters(false);
         wsClient?.disconnect();
         setWsClient(null);
-        // The logout request also removes this phone's push registration.
+        // The logout request also removes this phone's push registration; a
+        // browser stops its own push subscription.
         authService.logout({ pushToken: nativePushToken() });
+        forgetNativePushToken();
+        if (!isNativePlatform()) unsubscribeFromPush().catch(() => { });
         setUser(null);
         setShowPushPrompt(false);
         setNotifications([]);

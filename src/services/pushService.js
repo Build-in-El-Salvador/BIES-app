@@ -23,7 +23,14 @@ import { ANDROID_PUSH_ENABLED } from '../config/featureFlags';
 let listenersBound = false;
 
 // Last device token we captured, so logout can best-effort unregister it.
+// Kept across launches too: logout must be able to send it even before this
+// launch's registration has answered.
 let lastToken = null;
+const TOKEN_KEY = 'bies_push_token';
+const rememberToken = (value) => {
+    lastToken = value;
+    try { if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+};
 
 /** Fired on window when this phone's notification permission may have changed. */
 export const PERMISSION_EVENT = 'bies:push-permission';
@@ -54,7 +61,7 @@ export async function initNativePush() {
             push.addListener('registration', (token) => {
                 const value = token?.value;
                 if (!value) return;
-                lastToken = value;
+                rememberToken(value);
                 notificationsApi.deviceTokenRegister(value, getPlatform()).catch(() => {});
             });
 
@@ -94,7 +101,33 @@ export async function initNativePush() {
  * logout request, so the server removes it while ending the session.
  */
 export function nativePushToken() {
-    return isNativePlatform() ? lastToken : null;
+    if (!isNativePlatform()) return null;
+    if (lastToken) return lastToken;
+    try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+/** After logout: the server no longer has this phone's token for anyone. */
+export function forgetNativePushToken() {
+    rememberToken(null);
+}
+
+/**
+ * Register this phone when iOS already allows BIES, without asking: after
+ * the member allowed it in iPhone Settings, say. Settings → Notifications
+ * calls it when it sees the permission granted. (Not initNativePush: that
+ * fires PERMISSION_EVENT, which Settings listens to.)
+ */
+export async function registerNativePushIfAllowed() {
+    if (!isNativePlatform()) return;
+    if (getPlatform() === 'android' && !ANDROID_PUSH_ENABLED) return;
+    const push = getPlugin();
+    if (!push || !listenersBound) return; // initNativePush binds them at sign-in
+    try {
+        const { receive } = await push.checkPermissions();
+        if (receive === 'granted') await push.register();
+    } catch (err) {
+        console.warn('[Push] Native registration failed:', err);
+    }
 }
 
 /**

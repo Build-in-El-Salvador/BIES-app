@@ -106,7 +106,8 @@ const Login = ({ nostr = false }) => {
     const handleResult = (result) => {
         offering.current = false;
         if (result.success) {
-            navigate(afterSignIn);
+            // In place of the sign-in page, so back doesn't return to it.
+            navigate(afterSignIn, { replace: true });
         } else {
             setError(result.error || 'Login failed. Please try again.');
         }
