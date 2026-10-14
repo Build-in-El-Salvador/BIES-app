@@ -16,10 +16,11 @@ export async function createTestUser(request, api, name) {
     if (!challengeRes.ok()) throw new Error(`Test sign-in challenge failed: ${challengeRes.status()}`);
     const { challenge } = await challengeRes.json();
 
+    // NIP-98: the sign-in names BIES's login endpoint and POST.
     const signedEvent = finalizeEvent({
         kind: 27235,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [],
+        tags: [['u', new URL(`${api}/auth/nostr-login`).href], ['method', 'POST']],
         content: challenge,
     }, sk);
     const res = await request.post(`${api}/auth/nostr-login`, { data: { pubkey, signedEvent } });

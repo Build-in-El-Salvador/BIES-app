@@ -3,8 +3,8 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { notifyProfileView } from '../services/notification.service';
 import { publishProfileUpdate, publishAnnouncement } from '../services/nostr.service';
-import { hasBlocked, hiddenFromIds } from '../services/moderation.service';
-import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
+import { hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
+import { matchesVisibly, nostrProfileFor, privacyOf, profileForViewer, type Viewer } from '../services/profilePrivacy';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
 
@@ -83,7 +83,7 @@ const viewerOf = (req: Request, profileUserId: string): Viewer =>
  */
 export async function listProfiles(req: Request, res: Response): Promise<void> {
     const respond = async (result: any) => {
-        const hidden = new Set(await hiddenFromIds(req.user?.id));
+        const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) }));
         const { search, location } = req.query;
         const data = result.data
             .filter((p: any) => !hidden.has(p.userId))
@@ -220,10 +220,8 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Profile not found' });
             return;
         }
-        if (req.user && req.user.id !== result.userId && await hasBlocked(result.userId, { id: req.user.id })) {
-            res.status(404).json({ error: 'Profile not found' });
-            return;
-        }
+        // The viewer's own block first, so the way back (Unblock) stays even
+        // when the other member blocked them too.
         if (await viewerBlocked(result.userId)) {
             res.json({
                 id: result.id,
@@ -233,6 +231,10 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                 user: { id: result.user?.id, nostrPubkey: result.user?.nostrPubkey },
                 blocked: true,
             });
+            return;
+        }
+        if (req.user && req.user.id !== result.userId && !isStaffUser(req.user) && await hasBlocked(result.userId, { id: req.user.id })) {
+            res.status(404).json({ error: 'Profile not found' });
             return;
         }
         recordView(result);
@@ -397,24 +399,16 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         }
 
         // Sync to Nostr Kind 0 if identity-related fields changed
+        // (as Settings → Privacy allows: "Links: Only me" leaves those out)
+        const privacy = privacyOf(profile.privacy);
         if (req.body.nip05Name !== undefined || req.body.lightningAddress !== undefined || req.body.bolt12Offer !== undefined || req.body.name !== undefined) {
-            const nip05 = profile.nip05Name ? `${profile.nip05Name}@buildinelsalvador.com` : '';
-            const isLnurl = profile.lightningAddress?.toLowerCase().startsWith('lnurl1');
-            publishProfileUpdate(req.user!.id, {
-                name: profile.name || '',
-                about: profile.bio || '',
-                picture: profile.avatar || '',
-                banner: profile.banner || '',
-                website: profile.website || '',
-                nip05,
-                lud16: isLnurl ? '' : (profile.lightningAddress || ''),
-                lud06: isLnurl ? (profile.lightningAddress || '') : '',
-                bolt12: profile.bolt12Offer || '',
-            }).catch((err) => console.error('[Nostr] Profile sync failed:', err));
+            publishProfileUpdate(req.user!.id, nostrProfileFor(profile, privacy))
+                .catch((err) => console.error('[Nostr] Profile sync failed:', err));
         }
 
-        // Announce lightning address addition on the BIES feed
-        if (req.body.lightningAddress && req.body.lightningAddress !== oldProfile?.lightningAddress) {
+        // Announce lightning address addition on the BIES feed, unless the
+        // member keeps their links to themselves.
+        if (privacy.links !== 'ONLY_ME' && req.body.lightningAddress && req.body.lightningAddress !== oldProfile?.lightningAddress) {
             publishAnnouncement(req.user!.id, `${profile.name || 'A BIES member'} just added a Lightning address! They're ready to receive sats.`, [['t', 'lightning']]).catch((err) =>
                 console.error('[Nostr] Lightning announcement failed:', err)
             );

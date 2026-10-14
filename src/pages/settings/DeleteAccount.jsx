@@ -22,8 +22,13 @@ import './AccountFlows.css';
  */
 const DeleteAccount = () => {
     const { t, i18n } = useTranslation();
-    const { user, loading } = useAuth();
+    const { user, loading, holdGates } = useAuth();
     const location = useLocation();
+    // The terms and name sheets stay away here: anyone can delete.
+    useEffect(() => {
+        holdGates?.(true);
+        return () => holdGates?.(false);
+    }, [holdGates]);
     const navigate = useNavigate();
     const lang = i18n.language?.startsWith('es') ? 'es' : 'en';
 

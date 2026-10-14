@@ -62,10 +62,10 @@ export function linksIn(text: string): string[] {
 
 export async function recordUpload(
     userId: string,
-    file: { name: string; mimeType: string; size: number; isPrivate?: boolean },
+    file: { name: string; mimeType: string; size: number; isPrivate?: boolean; shared?: boolean },
 ): Promise<void> {
     await prisma.upload.create({
-        data: { name: file.name, userId, mimeType: file.mimeType, size: file.size, isPrivate: !!file.isPrivate },
+        data: { name: file.name, userId, mimeType: file.mimeType, size: file.size, isPrivate: !!file.isPrivate, shared: !!file.shared },
     });
 }
 
@@ -128,6 +128,12 @@ export interface DiscardOptions {
      * on the way in (album photos) or come from BIES's own records.
      */
     uploadedBy?: (string | null | undefined)[];
+    /**
+     * Also delete files in the shared GIF library, which other members'
+     * posts can show and nothing here can see: only when their uploader's
+     * account goes.
+     */
+    includeShared?: boolean;
 }
 
 /** Delete the files behind these links, when nothing else shows them. How many went. */
@@ -137,14 +143,14 @@ export async function discardUploads(urls: Iterable<string>, options: DiscardOpt
 }
 
 /** As discardUploads, by file name (an account's uploads, a deck). */
-export async function discardUploadNames(names: string[], { uploadedBy }: DiscardOptions = {}): Promise<number> {
+export async function discardUploadNames(names: string[], { uploadedBy, includeShared = false }: DiscardOptions = {}): Promise<number> {
     try {
         const unique = [...new Set(names)];
         if (unique.length === 0) return 0;
         const owners = uploadedBy?.filter((id): id is string => !!id);
         if (owners && owners.length === 0) return 0;
         const records = await prisma.upload.findMany({
-            where: { name: { in: unique }, ...(owners ? { userId: { in: owners } } : {}) },
+            where: { name: { in: unique }, ...(owners ? { userId: { in: owners } } : {}), ...(includeShared ? {} : { shared: false }) },
             select: { id: true, name: true, isPrivate: true },
         });
         if (records.length === 0) return 0;

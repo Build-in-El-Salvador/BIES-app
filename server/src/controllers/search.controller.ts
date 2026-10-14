@@ -5,7 +5,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
-import { hiddenFromIds } from '../services/moderation.service';
+import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
 
 const viewerOf = (req: Request, userId: string): Viewer =>
@@ -18,7 +18,7 @@ const viewerOf = (req: Request, userId: string): Viewer =>
  * (Settings → Privacy), found only by what the viewer can see of it.
  */
 async function withoutBlocked(req: Request, results: any): Promise<any> {
-    const hidden = new Set(await hiddenFromIds(req.user?.id));
+    const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) }));
     const out = { ...results };
     if (Array.isArray(out.profiles)) {
         const q = String(out.query ?? req.query.q ?? '');
@@ -34,8 +34,9 @@ async function withoutBlocked(req: Request, results: any): Promise<any> {
         out.profileTotal = visible.length;
     }
     if (!hidden.size) return out;
-    if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.ownerId));
-    if (Array.isArray(out.events)) out.events = out.events.filter((e: any) => !hidden.has(e.hostId));
+    // The selects carry the owner and host as objects (owner.id, host.id).
+    if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.owner?.id ?? p.ownerId));
+    if (Array.isArray(out.events)) out.events = out.events.filter((e: any) => !hidden.has(e.host?.id ?? e.hostId));
     if (Array.isArray(out.suggestions)) {
         out.suggestions = out.suggestions.filter((s: any) => s.type !== 'profile' || !hidden.has(s.id));
     }

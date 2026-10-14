@@ -276,7 +276,7 @@ export async function deleteAccount(
     }
 
     // Their photos, videos and decks (discardUploadNames never throws).
-    await discardUploadNames(files);
+    await discardUploadNames(files, { includeShared: true });
 
     await Promise.all([
         cache.del(cacheKey.profileDetail(userId)),

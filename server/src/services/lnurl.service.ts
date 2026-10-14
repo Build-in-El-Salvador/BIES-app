@@ -8,7 +8,7 @@
  */
 
 import crypto from 'crypto';
-import { safeGet } from '../utils/safeFetch';
+import { safeGet, OUTBOUND_HEADERS } from '../utils/safeFetch';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 1024 * 1024; // 1MB cap on LNURL provider responses
@@ -140,7 +140,7 @@ function upstreamReason(data: any, fallback: string): string {
  */
 async function fetchLnurlJson(rawUrl: string, label: string): Promise<any> {
     assertSafeUrl(rawUrl); // quick refusal for bad schemes and literal internal hosts
-    const res = await safeGet(rawUrl, { timeoutMs: FETCH_TIMEOUT_MS, maxBytes: MAX_RESPONSE_BYTES });
+    const res = await safeGet(rawUrl, { timeoutMs: FETCH_TIMEOUT_MS, maxBytes: MAX_RESPONSE_BYTES, headers: OUTBOUND_HEADERS });
     if (!res) throw new Error(`${label} couldn't be reached`);
     try {
         return JSON.parse(res.body.toString('utf8'));

@@ -83,7 +83,10 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         }
 
         const { url, name } = await uploadPublicFile(media.buffer, media.mimeType);
-        await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length });
+        // ?shared=1: a GIF for the shared library (gifStore.js), which other
+        // members' posts can show, so deleting a post leaves it.
+        const shared = req.query.shared === '1' && media.mimeType === 'image/gif';
+        await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length, shared });
 
         res.json({
             url,
@@ -176,12 +179,17 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
  * hands out (storage.service.ts getPresignedUrl): the link is the permission.
  */
 export async function downloadPrivateFile(req: Request, res: Response): Promise<void> {
-    const file = privateFileFromLink(req.params.name, String(req.query.exp ?? ''), String(req.query.sig ?? ''));
-    if (!file) {
+    try {
+        const file = privateFileFromLink(req.params.name, String(req.query.exp ?? ''), String(req.query.sig ?? ''));
+        if (!file) {
+            res.status(404).json({ error: 'This link has expired' });
+            return;
+        }
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.download(file, `pitch-deck${path.extname(file)}`);
+    } catch (error) {
+        console.error('Download private file error:', error);
         res.status(404).json({ error: 'This link has expired' });
-        return;
     }
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'private, no-store');
-    res.download(file, `pitch-deck${path.extname(file)}`);
 }

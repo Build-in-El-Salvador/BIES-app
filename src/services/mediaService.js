@@ -29,8 +29,8 @@ const ALLOWED_TYPES = [
  * @param {File} file
  * @returns {Promise<{url: string, path: string, sha256: string, size: number, type: string, width?: number, height?: number}>}
  */
-async function uploadFile(file) {
-    const stored = await uploadApi.media(file);
+async function uploadFile(file, options = {}) {
+    const stored = await uploadApi.media(file, options);
     return {
         url: new URL(getAssetUrl(stored.url), window.location.origin).href,
         path: stored.url,

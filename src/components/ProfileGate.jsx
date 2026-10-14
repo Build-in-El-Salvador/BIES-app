@@ -229,6 +229,9 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
                     <button type="button" className="mod-link" onClick={onSignOut} disabled={busy}>
                         {t('moderation.terms.signOut')}
                     </button>
+                    <button type="button" className="mod-link" onClick={() => window.location.assign('/settings/delete-account')} disabled={busy}>
+                        {t('moderation.terms.deleteInstead')}
+                    </button>
                 </div>
             </form>
 

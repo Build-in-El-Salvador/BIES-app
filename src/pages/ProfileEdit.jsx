@@ -5,7 +5,8 @@ import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckC
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
-import { profilesApi, uploadApi, projectsApi } from '../services/api';
+import { profilesApi, uploadApi, projectsApi, settingsApi } from '../services/api';
+import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
@@ -322,16 +323,9 @@ const ProfileEdit = () => {
                     if (form.bio) nostrData.about = form.bio;
                     if (form.avatar) nostrData.picture = form.avatar;
                     if (form.banner) nostrData.banner = form.banner;
-                    if (form.website) nostrData.website = form.website;
-                    if (form.lightningAddress) {
-                        if (form.lightningAddress.toLowerCase().startsWith('lnurl1')) {
-                            nostrData.lud06 = form.lightningAddress;
-                        } else {
-                            nostrData.lud16 = form.lightningAddress;
-                        }
-                    }
-                    if (form.bolt12Offer) nostrData.bolt12 = form.bolt12Offer;
-                    if (form.nip05Name) nostrData.nip05 = `${form.nip05Name.toLowerCase()}@buildinelsalvador.com`;
+                    // Links as Settings → Privacy allows ("Only me" leaves them out).
+                    const privacy = await settingsApi.getPrivacy().catch(() => null);
+                    Object.assign(nostrData, nostrLinkFields(form, privacy));
                     if (publishPublic) {
                         await nostrService.updateProfile(nostrData);
                     } else {

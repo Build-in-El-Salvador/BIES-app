@@ -222,7 +222,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 
         // Listings run by a member the viewer blocked, or who blocked the
         // viewer, are left out.
-        const hidden = new Set(await hiddenFromIds(req.user?.id));
+        const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const visible = hidden.size ? listings.filter((l) => !hidden.has(listingMember(l))) : listings;
 
         res.json({
@@ -283,13 +283,13 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             return;
         }
         // The member who runs it blocked the viewer: it isn't there for them.
-        if (req.user && member && member !== req.user.id && await hasBlocked(member, { id: req.user.id })) {
+        if (req.user && member && member !== req.user.id && !isStaff(req) && await hasBlocked(member, { id: req.user.id })) {
             res.status(404).json({ error: 'Listing not found' });
             return;
         }
         // Reviews are for members: signed out, only the counts; none by
         // members blocked either way.
-        const hidden = new Set(await hiddenFromIds(req.user?.id));
+        const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
         const savedByMe = req.user
             ? !!(await prisma.savedListing.findUnique({

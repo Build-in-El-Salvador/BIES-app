@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
 import { cache, cacheKey } from '../services/redis.service';
-import { privacyOf, PRIVACY_CHOICES } from '../services/profilePrivacy';
+import { nostrProfileFor, privacyOf, PRIVACY_CHOICES } from '../services/profilePrivacy';
+import { publishProfileUpdate } from '../services/nostr.service';
 
 export const updateNotificationSettingsSchema = z.object({
     emailNotifications: z.boolean().optional(),
@@ -390,40 +391,71 @@ export async function getPrivacy(req: Request, res: Response): Promise<void> {
  */
 export async function updatePrivacy(req: Request, res: Response): Promise<void> {
     try {
-        const userId = req.user!.id;
-        const body = req.body as z.infer<typeof updatePrivacySchema>;
-        const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true, privacy: true } });
-        if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
-
-        const privacy = privacyOf(profile.privacy);
-        for (const key of Object.keys(PRIVACY_CHOICES) as (keyof typeof PRIVACY_CHOICES)[]) {
-            if (body[key] !== undefined) (privacy as Record<string, string>)[key] = body[key]!;
-        }
-        const data: Prisma.ProfileUpdateInput = { privacy: JSON.stringify(privacy) };
-        if (body.showInDirectory !== undefined) data.isPublic = body.showInDirectory;
-        if (body.postsOnProfile !== undefined) data.nostrFeedMode = body.postsOnProfile ? 'private' : 'off';
-        await prisma.profile.update({ where: { userId }, data });
-
-        if (body.browsePrivately !== undefined) {
-            await prisma.userSettings.upsert({
-                where: { userId },
-                update: { browsePrivately: body.browsePrivately },
-                create: { userId, browsePrivately: body.browsePrivately },
-            });
-        }
-
-        const user = await prisma.user.findUnique({ where: { id: userId }, select: { nostrPubkey: true } });
-        await Promise.all([
-            cache.del(cacheKey.profileDetail(userId)),
-            cache.del(cacheKey.profileDetail(profile.id)),
-            user?.nostrPubkey ? cache.del(cacheKey.profileDetail(user.nostrPubkey)) : Promise.resolve(),
-            cache.delPattern('profiles:'),
-            cache.delPattern('search:'),
-        ]);
-
-        res.json(await privacySettings(userId));
+        await oneSaveAtATime(req.user!.id, () => savePrivacy(req, res));
     } catch (error) {
         console.error('Update privacy error:', error);
-        res.status(500).json({ error: 'Failed to update privacy settings' });
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to update privacy settings' });
     }
+}
+
+// Each save reads the whole setting, changes some fields and writes it back,
+// so a member's saves go one at a time: two quick changes can't undo each
+// other. (One server process: an in-process queue per member is enough.)
+const privacySaves = new Map<string, Promise<unknown>>();
+function oneSaveAtATime<T>(userId: string, task: () => Promise<T>): Promise<T> {
+    const run = (privacySaves.get(userId) ?? Promise.resolve()).then(task, task);
+    const tail = run.catch(() => undefined);
+    privacySaves.set(userId, tail);
+    tail.then(() => { if (privacySaves.get(userId) === tail) privacySaves.delete(userId); });
+    return run;
+}
+
+async function savePrivacy(req: Request, res: Response): Promise<void> {
+    const userId = req.user!.id;
+    const body = req.body as z.infer<typeof updatePrivacySchema>;
+    const profile = await prisma.profile.findUnique({
+        where: { userId },
+        select: {
+            id: true, privacy: true, name: true, bio: true, avatar: true, banner: true,
+            website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true,
+        },
+    });
+    if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
+
+    const privacy = privacyOf(profile.privacy);
+    for (const key of Object.keys(PRIVACY_CHOICES) as (keyof typeof PRIVACY_CHOICES)[]) {
+        if (body[key] !== undefined) (privacy as Record<string, string>)[key] = body[key]!;
+    }
+    const data: Prisma.ProfileUpdateInput = { privacy: JSON.stringify(privacy) };
+    if (body.showInDirectory !== undefined) data.isPublic = body.showInDirectory;
+    if (body.postsOnProfile !== undefined) data.nostrFeedMode = body.postsOnProfile ? 'private' : 'off';
+    await prisma.profile.update({ where: { userId }, data });
+
+    if (body.browsePrivately !== undefined) {
+        await prisma.userSettings.upsert({
+            where: { userId },
+            update: { browsePrivately: body.browsePrivately },
+            create: { userId, browsePrivately: body.browsePrivately },
+        });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { nostrPubkey: true } });
+    await Promise.all([
+        cache.del(cacheKey.profileDetail(userId)),
+        cache.del(cacheKey.profileDetail(profile.id)),
+        user?.nostrPubkey ? cache.del(cacheKey.profileDetail(user.nostrPubkey)) : Promise.resolve(),
+        cache.delPattern('profiles:'),
+        cache.delPattern('search:'),
+        cache.delPattern('suggestions:'),
+    ]);
+
+    // Links shown or hidden: the Nostr profile BIES publishes on its
+    // members' relay follows (for keys BIES holds; the app does it for
+    // keys on the member's device).
+    if (body.links !== undefined) {
+        publishProfileUpdate(userId, nostrProfileFor(profile, privacy))
+            .catch((err) => console.error('[Nostr] Profile sync failed:', err));
+    }
+
+    res.json(await privacySettings(userId));
 }

@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft } from 'lucide-react';
 import './BackButton.css';
@@ -16,7 +16,6 @@ import './BackButton.css';
 export default function BackButton({ to, onClick, fallback = '/', label, overlay = false, className = '', testId }) {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const location = useLocation();
     const cls = `bies-back${overlay ? ' overlay' : ''}${className ? ` ${className}` : ''}`;
     const aria = label || t('common.back', 'Back');
     const icon = <ChevronLeft size={26} strokeWidth={2.25} aria-hidden="true" />;
@@ -25,7 +24,12 @@ export default function BackButton({ to, onClick, fallback = '/', label, overlay
     const goBack = (e) => {
         e.stopPropagation();
         if (onClick) onClick(e);
-        else navigate(location.key === 'default' ? fallback : -1);
+        // React Router counts this tab's entries in history.state.idx, and
+        // keeps it through a redirect that replaces the page (sign-in from a
+        // link), which the location key doesn't. The fallback replaces this
+        // page, so the system back doesn't bounce between the two.
+        else if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+        else navigate(fallback, { replace: true });
     };
     return <button type="button" className={cls} aria-label={aria} onClick={goBack} data-testid={testId}>{icon}</button>;
 }

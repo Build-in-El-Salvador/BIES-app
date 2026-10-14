@@ -33,7 +33,7 @@ const Investors = () => {
 
                 const list = result?.data || result || [];
                 setProfiles(Array.isArray(list) ? list : []);
-                setTotalPages(result?.totalPages || 1);
+                setTotalPages(result?.pagination?.totalPages || 1);
 
                 if (followingRes) {
                     const fList = Array.isArray(followingRes?.data) ? followingRes.data : Array.isArray(followingRes) ? followingRes : [];

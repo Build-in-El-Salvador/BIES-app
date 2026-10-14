@@ -9,10 +9,12 @@ import {
     blockMember,
     canHandleReport,
     createReport,
-    listBlocks, blockerPubkeys,
+    listBlocks,
+    blockerPubkeys,
     listReports,
     resolveReport,
     unblockMember,
+    isStaffUser,
 } from '../services/moderation.service';
 import { recomputeListingScore } from '../services/directoryReputation.service';
 import { requestEventRemoval } from '../services/relayWhitelist.service';
@@ -88,7 +90,7 @@ export async function getBlocks(req: Request, res: Response): Promise<void> {
     try {
         // hiddenPubkeys: the members who blocked this one. The app hides their
         // posts too (blocking works both ways), without listing them anywhere.
-        const [data, hiddenPubkeys] = await Promise.all([listBlocks(req.user!.id), blockerPubkeys(req.user!.id)]);
+        const [data, hiddenPubkeys] = await Promise.all([listBlocks(req.user!.id), blockerPubkeys(req.user!.id, { staff: isStaffUser(req.user) })]);
         res.json({ data, hiddenPubkeys });
     } catch (error) {
         console.error('[Moderation] List blocks failed:', error);

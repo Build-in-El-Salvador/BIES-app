@@ -40,7 +40,6 @@ export const updateInvestmentSchema = z.object({
 export async function listInvestments(req: Request, res: Response): Promise<void> {
     try {
         const userId = req.user!.id;
-        const role = req.user!.role;
         const { status, projectId } = req.query;
         const page = parseInt(req.query.page as string || '1', 10);
         const limit = Math.min(parseInt(req.query.limit as string || '20', 10), 50);
@@ -51,12 +50,10 @@ export async function listInvestments(req: Request, res: Response): Promise<void
         if (req.user!.isAdmin) {
             // Admin can filter by projectId
             if (projectId) where.projectId = projectId;
-        } else if (role === 'BUILDER') {
-            // Show investments in builder's own projects
-            where.project = { ownerId: userId };
         } else {
-            // Everyone else: only their own (a member used to see everyone's).
-            where.investorId = userId;
+            // Everyone else: the investments they made, and those in projects
+            // they own, whatever their role (a member used to see everyone's).
+            where.OR = [{ investorId: userId }, { project: { ownerId: userId } }];
         }
 
         if (status && typeof status === 'string') {

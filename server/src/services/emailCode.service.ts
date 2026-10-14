@@ -29,6 +29,7 @@ import crypto from 'crypto';
 import prisma from '../lib/prisma';
 import { config } from '../config';
 import { sendEmail, type OutgoingEmail } from './email.service';
+import { createNotification } from './notification.service';
 
 export type EmailCodePurpose = 'login' | 'delete_account' | 'export_key';
 export type EmailLang = 'en' | 'es';
@@ -53,7 +54,13 @@ const MAX_PER_IP_PER_HOUR = 50;
 const MAX_PER_IP_PER_DAY = 200;
 // The share of the daily ceiling codes for addresses with no account may use:
 // the rest is kept for members, so made-up addresses can't lock them out.
+// An account made in the last day still counts as new, so making accounts
+// doesn't buy a share of what's kept for members.
 const NEW_ADDRESS_SHARE = 2 / 3;
+const ESTABLISHED_AFTER_MS = 24 * 60 * 60 * 1000;
+// Sign-in codes stop short of the ceiling, so the emails for deleting an
+// account or taking its key still go out on a day sign-ins used it up.
+const SIGN_IN_SHARE = 0.9;
 const RETENTION_MS = DAY;
 
 const REVIEW_CODE_RE = /^\d{6}$/;
@@ -202,8 +209,9 @@ const NOT_YET_SENT = new Date(0);
 type Reservation =
     | { ok: true; id: string; createdAt: Date }
     | { ok: false; reason: 'rate_limited' | 'busy'; retryAfterSeconds: number }
-    // New addresses' share of the daily ceiling is used up (issueEmailCode).
-    | { ok: false; reason: 'quiet' };
+    // New addresses' share of the daily ceiling is used up (issueEmailCode):
+    // a row was written as for any code, but nothing will be sent.
+    | { ok: false; reason: 'quiet'; id: string; createdAt: Date };
 
 async function reserveCode(
     emailHash: string,
@@ -246,19 +254,31 @@ async function reserveCode(
     // daily total; App Review must still get in on a busy day.
     if (!review) {
         const sentToday = await prisma.emailCode.count({
-            where: { createdAt: { gte: new Date(now - DAY) } },
+            where: { quiet: false, createdAt: { gte: new Date(now - DAY) } },
         });
-        if (sentToday >= config.email.maxCodesPerDay) {
-            console.error(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; email sign-in is refusing new codes`);
+        const ceiling = purpose === 'login'
+            ? Math.floor(config.email.maxCodesPerDay * SIGN_IN_SHARE)
+            : config.email.maxCodesPerDay;
+        if (sentToday >= ceiling) {
+            console.error(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; email is refusing new ${purpose} codes`);
             return { ok: false, reason: 'busy', retryAfterSeconds: 60 * 60 };
         }
         if (newAddress) {
             const newToday = await prisma.emailCode.count({
-                where: { newAddress: true, createdAt: { gte: new Date(now - DAY) } },
+                where: { newAddress: true, quiet: false, createdAt: { gte: new Date(now - DAY) } },
             });
             if (newToday >= Math.floor(config.email.maxCodesPerDay * NEW_ADDRESS_SHARE)) {
                 console.error('[EmailCode] The share of the daily ceiling for new addresses is used up; their codes are not sent today');
-                return { ok: false, reason: 'quiet' };
+                // Written like any code (the limits count it, and verify
+                // answers as for any wrong code), but nobody receives it.
+                const row = await prisma.emailCode.create({
+                    data: {
+                        emailHash, purpose, codeHash, ipHash, newAddress, quiet: true,
+                        expiresAt: new Date(now + CODE_TTL_SECONDS * 1000),
+                    },
+                    select: { id: true, createdAt: true },
+                });
+                return { ok: false, reason: 'quiet', id: row.id, createdAt: row.createdAt };
             }
         }
     }
@@ -288,14 +308,26 @@ export async function issueEmailCode(
 
     // Only to know which share of the daily ceiling this code uses: the
     // answer to the caller is the same either way (see 'quiet' below).
-    const newAddress = !(await prisma.user.findUnique({ where: { email: address }, select: { id: true } }));
+    // Deleting an account or taking its key is asked for by its signed-in
+    // member, so those codes always use the members' share.
+    const account = purpose === 'login'
+        ? await prisma.user.findUnique({ where: { email: address }, select: { createdAt: true } })
+        : null;
+    const newAddress = purpose === 'login'
+        && (!account || account.createdAt.getTime() > Date.now() - ESTABLISHED_AFTER_MS);
     const reserved = await oneAtATime(() =>
         reserveCode(emailHash, purpose, hashCode(purpose, emailHash, code), ipHash, review, newAddress));
     if (!reserved.ok && reserved.reason === 'quiet') {
         // New addresses' share is used up: answer as if it were sent (so the
         // answer never tells whether an address has an account), send nothing,
-        // and take about as long as a send would.
+        // and take about as long as a send would. Earlier codes stop working,
+        // as when one is sent.
         await new Promise((resolve) => setTimeout(resolve, 250 + crypto.randomInt(0, 400)));
+        await prisma.emailCode.updateMany({
+            where: { emailHash, purpose, consumedAt: null, createdAt: { lt: reserved.createdAt } },
+            data: { consumedAt: new Date() },
+        });
+        alertAdminsOnce();
         return { ok: true };
     }
     if (!reserved.ok) return reserved;
@@ -325,6 +357,24 @@ export async function issueEmailCode(
         data: { consumedAt: new Date() },
     });
     return { ok: true };
+}
+
+// The admins hear when new addresses stop getting codes, at most once a day:
+// the members affected can't tell (the answer is the same for everyone).
+let alertedAt = 0;
+function alertAdminsOnce(): void {
+    if (Date.now() - alertedAt < DAY) return;
+    alertedAt = Date.now();
+    // Detached, and never able to fail the request that set it off.
+    Promise.resolve()
+        .then(() => prisma.user.findMany({ where: { isAdmin: true, isBanned: false, deletedAt: null }, select: { id: true } }))
+        .then((admins) => Promise.all(admins.map((a) => createNotification({
+            userId: a.id,
+            type: 'SYSTEM',
+            title: 'Sign-up emails are paused for today',
+            body: `New addresses have used their share of today's ${config.email.maxCodesPerDay} sign-in emails, so their codes aren't being sent. Raise EMAIL_CODES_MAX_PER_DAY (and the Resend plan) to let them in.`,
+        }))))
+        .catch((err) => console.error('[EmailCode] Admin alert failed:', err));
 }
 
 // ─── Verify ───────────────────────────────────────────────────────────────────

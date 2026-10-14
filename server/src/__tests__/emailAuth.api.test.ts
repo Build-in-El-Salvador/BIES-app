@@ -79,7 +79,7 @@ const db = vi.hoisted(() => {
             await io();
             const row = {
                 id: `code-${++state.seq}`, _seq: state.seq, attempts: 0, consumedAt: null,
-                ipHash: null, createdAt: new Date(), ...data,
+                ipHash: null, newAddress: false, quiet: false, createdAt: new Date(), ...data,
             };
             state.codes.push(row);
             return clone(row);
@@ -124,7 +124,7 @@ const db = vi.hoisted(() => {
             const id = `user-${++state.seq}`;
             const { profile, ...fields } = data;
             const row = {
-                id, isAdmin: false, isBanned: false, deletedAt: null, ...fields,
+                id, isAdmin: false, isBanned: false, deletedAt: null, createdAt: new Date(), ...fields,
                 profile: { id: `profile-${id}`, userId: id, name: '', nip05Name: null, ...profile.create },
             };
             state.users.push(row);
@@ -184,7 +184,7 @@ import { publishRelayList } from '../services/nostr.service';
 import { recordOnboardingRedemption } from '../services/voucher.service';
 import { addToRelayWhitelist } from '../services/relayWhitelist.service';
 import { decryptPrivateKey } from '../services/crypto.service';
-import { renderCodeEmail } from '../services/emailCode.service';
+import { issueEmailCode, renderCodeEmail } from '../services/emailCode.service';
 
 const mockedSend = sendEmail as ReturnType<typeof vi.fn>;
 
@@ -352,24 +352,54 @@ describe('POST /api/auth/email/start', () => {
 
     it('keeps a third of the daily ceiling for members, answers new addresses the same either way, and lets App Review in', async () => {
         const saved = config.email.maxCodesPerDay;
-        config.email.maxCodesPerDay = 6; // new addresses may use 4
-        db.state.users.push({ id: 'member-a', email: 'member.a@example.com', profile: null }, { id: 'member-b', email: 'member.b@example.com', profile: null });
+        config.email.maxCodesPerDay = 10; // new addresses may use 6, sign-ins 9
+        const longAgo = new Date(Date.now() - 2 * 86_400_000);
+        db.state.users.push(
+            { id: 'member-a', email: 'member.a@example.com', createdAt: longAgo, profile: null },
+            { id: 'member-b', email: 'member.b@example.com', createdAt: longAgo, profile: null },
+            { id: 'member-c', email: 'member.c@example.com', createdAt: longAgo, profile: null },
+            { id: 'member-d', email: 'member.d@example.com', createdAt: longAgo, profile: null },
+            // Made in the last day: still counts as a new address.
+            { id: 'member-new', email: 'member.new@example.com', createdAt: new Date(), profile: null },
+        );
         try {
-            for (const email of ['n1@example.com', 'n2@example.com', 'n3@example.com', 'n4@example.com']) await requestCode(email);
-            expect(mockedSend).toHaveBeenCalledTimes(4);
-
-            // A fifth new address: the same answer, but nothing is sent.
-            const quiet = await post('/email/start', { email: 'n5@example.com' });
-            expect(quiet.status).toBe(200);
-            expect(mockedSend).toHaveBeenCalledTimes(4);
-
-            // Members still get their codes, up to the whole ceiling.
-            await requestCode('member.a@example.com');
-            await requestCode('member.b@example.com');
+            for (let i = 1; i <= 6; i++) await requestCode(`n${i}@example.com`);
             expect(mockedSend).toHaveBeenCalledTimes(6);
-            const full = await post('/email/start', { email: 'n6@example.com' });
-            expect(full.status).toBe(429);
-            expect(full.body.reason).toBe('busy');
+
+            // New addresses' share is used up: the same answer, nothing sent,
+            // also for an account made today.
+            for (const email of ['n7@example.com', 'member.new@example.com']) {
+                const quiet = await post('/email/start', { email });
+                expect(quiet.status).toBe(200);
+            }
+            expect(mockedSend).toHaveBeenCalledTimes(6);
+
+            // Members still get theirs, and the answers can't tell them apart:
+            // a second request within the minute, and a wrong code, answer
+            // the same for both.
+            await requestCode('member.a@example.com');
+            expect(mockedSend).toHaveBeenCalledTimes(7);
+            for (const email of ['n7@example.com', 'member.a@example.com']) {
+                const again = await post('/email/start', { email });
+                expect(again.status, email).toBe(429);
+                expect(again.body.reason, email).toBe('rate_limited');
+                const wrong = await post('/email/verify', { email, code: '000000' });
+                expect(wrong.body.reason, email).toBe('invalid_code');
+            }
+
+            // Sign-ins stop at 9 of the 10, for everyone alike…
+            await requestCode('member.b@example.com');
+            await requestCode('member.c@example.com');
+            expect(mockedSend).toHaveBeenCalledTimes(9);
+            for (const email of ['member.d@example.com', 'n8@example.com']) {
+                const full = await post('/email/start', { email });
+                expect(full.status, email).toBe(429);
+                expect(full.body.reason, email).toBe('busy');
+            }
+
+            // …so deleting an account still gets its email.
+            expect(await issueEmailCode('member.d@example.com', 'delete_account')).toEqual({ ok: true });
+            expect(mockedSend).toHaveBeenCalledTimes(10);
 
             expect((await post('/email/start', { email: 'review@bies.test' })).status).toBe(200);
         } finally {

@@ -114,7 +114,10 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const banner = profile.banner || nostrProfile?.banner || '';
     const name = profile.name || t('common.unnamed', 'Unnamed');
     const projects = projectsEnabled && Array.isArray(profile.biesProjects) ? profile.biesProjects : [];
-    const experience = Array.isArray(profile.experience) ? profile.experience.filter((e) => e?.title || e?.company) : [];
+    // Edit profile → Experience → Show: Off hides it from the profile.
+    const experience = profile.showExperience !== false && Array.isArray(profile.experience)
+        ? profile.experience.filter((e) => e?.title || e?.company)
+        : [];
     const sections = Array.isArray(profile.customSections) ? profile.customSections : [];
     const links = [
         profile.website && isSafeUrl(profile.website) && { key: 'web', Icon: Globe, href: profile.website, label: profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '') },

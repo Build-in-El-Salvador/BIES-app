@@ -12,7 +12,7 @@ import { removeFromRelayWhitelist, addToRelayWhitelist } from '../services/relay
 import { revokeUserSessions } from '../services/session.service';
 import { removePushTargets } from '../services/notification.service';
 import { deleteAccount } from '../services/account.service';
-import { publishDirectoryListing } from '../services/nostr.service';
+import { moderatorsOwn } from '../services/moderation.service';
 import { isAdminPubkey } from '../middleware/auth';
 import { config } from '../config';
 import { recomputeListingScore, recomputeAllScores as recomputeAllDirectoryScores } from '../services/directoryReputation.service';
@@ -25,7 +25,7 @@ import {
 import { BADGES } from '../services/badges.catalog';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
-import { deleteListingAndFiles } from './directory.controller';
+import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
 import { withoutDeckKey } from '../utils/projectFields';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -1507,10 +1507,14 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
 
         const before = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { status: true },
+            select: { status: true, ownerId: true, memberUserId: true },
         });
         if (!before) {
             res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        if (moderatorsOwn(req.user, before.ownerId, before.memberUserId)) {
+            res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' });
             return;
         }
         const takenDown = action === 'reject' && before.status === 'active';
@@ -1531,17 +1535,9 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
 
         if (action === 'approve') {
             // Mirror to Nostr as a NIP-99 classified listing (kind:30402),
-            // signed by the linked member's key when set, else the owner's.
-            publishDirectoryListing(listing.memberUserId ?? listing.ownerId, listing)
-                .then(async (eventId) => {
-                    if (eventId) {
-                        await prisma.directoryListing.update({
-                            where: { id: listing.id },
-                            data: { nostrListingEventId: eventId },
-                        });
-                    }
-                })
-                .catch((err) => console.error('[Nostr] Directory listing sync failed:', err));
+            // signed by the owner: staff approving isn't the linked member
+            // writing it (mirrorToNostr).
+            mirrorToNostr(listing);
         }
         // Only a live listing can be BIES Trusted.
         await recomputeListingScore(listing.id).catch((err) =>
@@ -1589,6 +1585,19 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
 export async function featureDirectoryListing(req: Request, res: Response): Promise<void> {
     try {
         const { featured } = req.body;
+
+        const before = await prisma.directoryListing.findUnique({
+            where: { id: req.params.id },
+            select: { ownerId: true, memberUserId: true },
+        });
+        if (!before) {
+            res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        if (moderatorsOwn(req.user, before.ownerId, before.memberUserId)) {
+            res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' });
+            return;
+        }
 
         const listing = await prisma.directoryListing.update({
             where: { id: req.params.id },

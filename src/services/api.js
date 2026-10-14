@@ -304,10 +304,11 @@ export const marketplaceApi = {
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
 export const uploadApi = {
-    media: (file) => {
+    // shared: a GIF for the shared library, which deleting a post leaves.
+    media: (file, { shared = false } = {}) => {
         const fd = new FormData();
         fd.append('file', file);
-        return uploadFile('/upload/media', fd);
+        return uploadFile(shared ? '/upload/media?shared=1' : '/upload/media', fd);
     },
 
     deck: (file, projectId) => {

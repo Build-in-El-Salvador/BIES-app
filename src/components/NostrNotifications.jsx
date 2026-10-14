@@ -5,19 +5,30 @@ import { nostrService, BIES_RELAY } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
 import { notificationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { nip19 } from 'nostr-tools';
 
 // The app's own notices that belong in the bell beside the Feed activity:
-// a listing approved or taken down, a request to hand a listing over.
-const APP_TYPES = new Set(['SYSTEM']);
+// a listing approved or taken down, a request to hand a listing over, a new
+// follower, a profile view (Settings → Notifications: "everything also shows
+// under the bell").
+const APP_TYPES = new Set(['SYSTEM', 'FOLLOW', 'PROFILE_VIEW']);
 const appData = (n) => {
     if (n.data && typeof n.data === 'object') return n.data;
     try { return JSON.parse(n.data || '{}'); } catch { return {}; }
 };
-// Only links inside the app.
+// The member a follow or a profile view is about.
+const appActor = (n) => {
+    const { followerId, viewerId } = appData(n);
+    const id = followerId || viewerId;
+    return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
+};
+// Only links inside the app; a follow or a view opens that member's profile.
 const appLink = (n) => {
     const link = appData(n).link;
-    return typeof link === 'string' && /^\/(?!\/)/.test(link) ? link : null;
+    if (typeof link === 'string' && /^\/(?![\/\\])/.test(link)) return link;
+    const actor = appActor(n);
+    return actor ? `/builder/${actor}` : null;
 };
 
 /**
@@ -44,10 +55,15 @@ const NostrNotifications = ({ mobile = false }) => {
 
     const { notifications: appNotifications, refreshNotifications } = useAuth();
     useEffect(() => { refreshNotifications?.(); }, []);
+    // Nothing from members blocked either way, or muted on this device:
+    // filtered when shown, so a new block clears what came before too.
+    const blocks = useBlocks();
+    const muted = useMuted();
+    const hiddenActor = (pubkey) => blocks.pubkeys.has(pubkey) || muted.has(pubkey);
     const appItems = (appNotifications || [])
-        .filter((n) => APP_TYPES.has(n.type))
+        .filter((n) => APP_TYPES.has(n.type) && !(appActor(n) && blocks.ids.has(appActor(n))))
         .map((n) => ({ id: `app:${n.id}`, app: n, createdAt: Math.floor(new Date(n.createdAt).getTime() / 1000) }));
-    const items = [...notifications, ...appItems].sort((a, b) => b.createdAt - a.createdAt);
+    const items = [...notifications.filter((n) => !hiddenActor(n.actorPubkey)), ...appItems].sort((a, b) => b.createdAt - a.createdAt);
     const isUnread = (item) => (item.app ? !item.app.isRead : !readIds.has(item.id));
     const unreadCount = items.filter(isUnread).length;
 

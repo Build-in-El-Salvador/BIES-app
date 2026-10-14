@@ -237,6 +237,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         const liveQueue = new Set();
         let debounceTimer = null;
         let eoseFired = false;
+        oldestReceived.current = null;
 
         const flushLiveProfiles = async () => {
             if (liveQueue.size === 0) return;
@@ -273,6 +274,9 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 { kinds: [1, 6], limit: 50, ...(author ? { authors: [author] } : {}) },
                 {
                     onevent: (event) => {
+                        // Older pages start before the oldest event received,
+                        // replies and reposts included (loadOlderPrivate).
+                        if (oldestReceived.current === null || event.created_at < oldestReceived.current) oldestReceived.current = event.created_at;
                         // Handle reposts (kind 6) — deduplicate by original note ID
                         if (event.kind === 6) {
                             let original;
@@ -348,6 +352,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         eoseFired = true;
                         reconnectAttempts.current = 0; // Reset backoff on success
                         setLoading(false);
+                        if (author) setAuthorLoadedAt(Date.now());
                         clearTimeout(debounceTimer);
                         const toFetch = [...new Set(preEosePubkeys)].filter(pk => !fetchedProfiles.current.has(pk));
                         toFetch.forEach(pk => fetchedProfiles.current.add(pk));
@@ -423,8 +428,10 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         const userLiked = new Set();
         const userReposted = new Set();
 
+        // The BIES relay only: asking public relays would hand them the ids
+        // of members-only posts (and the member's sign-in, if one asked).
         const sub = nostrService.pool.subscribeMany(
-            [BIES_RELAY, ...nostrService.relays],
+            [BIES_RELAY],
             { kinds: [7, 6, 1], '#e': postIds, limit: 2000 },
             {
                 onevent: (event) => {
@@ -555,30 +562,55 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         const map = await nostrService.getProfiles(toFetch, [BIES_RELAY]).catch(() => new Map());
         if (map.size) setProfiles(prev => { const next = { ...prev }; for (const [pk, pr] of map) next[pk] = pr; return next; });
     }, []);
-
+    // A repost (kind 6) as the post it shares, as the live feed shows it.
+    const asRepostedPost = (ev) => {
+        let original;
+        try { original = JSON.parse(ev.content); } catch { return null; }
+        if (!isGenuineRepost(ev, original)) return null;
+        return { ...original, _reposters: [{ pubkey: ev.pubkey, timestamp: ev.created_at, repostId: ev.id }], _repostTime: ev.created_at };
+    };
 
     // Older posts in the BIES feed, page by page (the feed opens with the
-    // newest 50). olderUntil walks back even when a page is all replies.
+    // newest 50). Pages start before the oldest event received, replies and
+    // reposts included, so a page of replies, or a repost of an old note,
+    // doesn't stop or skip the walk back.
     const olderUntil = useRef(null);
+    const oldestReceived = useRef(null);
     const [olderDone, setOlderDone] = useState(false);
     useEffect(() => { olderUntil.current = null; setOlderDone(false); }, [feedMode, refreshKey]);
     const loadOlderPrivate = async () => {
-        if (olderDone || posts.length === 0) return;
+        if (olderDone || loadingMore) return;
+        const start = olderUntil.current ?? oldestReceived.current;
+        if (start === null) return;
         setLoadingMore(true);
         try {
-            const until = (olderUntil.current ?? Math.min(...posts.map(p => p.created_at))) - 1;
-            const events = await nostrService.pool.querySync([BIES_RELAY], { kinds: [1], until, limit: 40, ...(author ? { authors: [author] } : {}) }, { onauth: relayAuth });
-            if (!events.length) { setOlderDone(true); return; }
-            olderUntil.current = Math.min(...events.map(e => e.created_at));
-            const roots = events.filter(isRootNote);
-            mergePosts(roots);
-            ensureProfiles(roots.map(e => e.pubkey));
+            // Up to 5 pages, until about 10 more posts show or the relay
+            // has no more (a member who mostly replies has few per page).
+            let until = start - 1;
+            let shown = 0;
+            for (let page = 0; page < 5 && shown < 10; page++) {
+                const events = await nostrService.pool.querySync([BIES_RELAY], { kinds: [1, 6], until, limit: 40, ...(author ? { authors: [author] } : {}) }, { onauth: relayAuth });
+                if (!events.length) { setOlderDone(true); break; }
+                const oldest = Math.min(...events.map(e => e.created_at));
+                olderUntil.current = oldest;
+                until = oldest - 1;
+                const found = [...events.filter(isRootNote), ...events.filter(e => e.kind === 6).map(asRepostedPost).filter(Boolean)];
+                mergePosts(found);
+                ensureProfiles(found.flatMap(e => [e.pubkey, ...(e._reposters || []).map(r => r.pubkey)]));
+                shown += found.length;
+            }
         } catch (err) {
             console.error('[Feed] Loading older posts failed:', err);
         } finally {
             setLoadingMore(false);
         }
     };
+    // A profile's posts: when the newest events held few posts (the member
+    // mostly replies), fetch older ones at once rather than say "No posts yet".
+    const [authorLoadedAt, setAuthorLoadedAt] = useState(0);
+    useEffect(() => {
+        if (author && authorLoadedAt && posts.length < 10) loadOlderPrivate();
+    }, [authorLoadedAt]);
 
     // Load more: older BIES posts, or more of the explore feed
     const handleLoadMore = async () => {
@@ -1049,7 +1081,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 await nostrService.publishEvent(event);
                 try { await nostrService.publishToBiesRelay(event); } catch { /* best-effort */ }
             }
-            // Remove from local feed
+            // Remove from local feed (and don't put it back as a shared post)
+            if (sharedPost.current?.id === post.id) sharedPost.current = null;
             setPosts(prev => prev.filter(p => p.id !== post.id));
             // Its photos and videos go from BIES too (only mine; the server checks).
             const media = [...new Set([
@@ -1310,12 +1343,17 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     // notification does in any social app.
     const focusTarget = embedded ? null : (location.state?.scrollToPost || sharedPostId(location.search));
     const focusHandled = useRef(null);
+    // The post a shared link opened, kept: a reload (coming back to the app,
+    // a relay reconnect) fetches only the newest posts, so it's put back.
+    const sharedPost = useRef(null);
     useEffect(() => {
         if (!focusTarget || loading || feedMode !== 'private' || focusHandled.current === focusTarget) return;
         focusHandled.current = focusTarget;
+        sharedPost.current = null;
         (async () => {
             let id = focusTarget;
-            if (!posts.some(p => p.id === id)) {
+            sharedPost.current = posts.find(p => p.id === id) || null;
+            if (!sharedPost.current) {
                 try {
                     const [ev] = await nostrService.pool.querySync([BIES_RELAY], { ids: [id] }, { onauth: relayAuth });
                     if (ev) {
@@ -1327,6 +1365,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                             if (r) root = r;
                         }
                         id = root.id;
+                        sharedPost.current = root;
                         mergePosts([root]);
                         ensureProfiles([root.pubkey]);
                     }
@@ -1344,6 +1383,15 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             }, 400);
         })();
     }, [focusTarget, loading, feedMode, posts, loadComments, ensureProfiles]);
+    // After a reload: the shared post again, with its replies open, without
+    // scrolling to it again.
+    useEffect(() => {
+        const kept = sharedPost.current;
+        if (!kept || loading || feedMode !== 'private' || posts.some(p => p.id === kept.id)) return;
+        mergePosts([kept]);
+        setOpenComments(prev => new Set(prev).add(kept.id));
+        loadComments(kept.id);
+    }, [loading, posts, feedMode]);
 
     // Close repost menu and post menu on outside click
     useEffect(() => {
@@ -1901,7 +1949,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         })}
 
                         {/* Infinite scroll / load more */}
-                        {(feedMode === 'explore' || (feedMode === 'private' && !olderDone)) && rootPosts.length >= 10 && (
+                        {(feedMode === 'explore' || (feedMode === 'private' && !olderDone)) && (author || rootPosts.length >= 10) && (
                             <>
                                 <Paginator onIntersect={handleLoadMore} disabled={loadingMore} />
                                 {loadingMore && (

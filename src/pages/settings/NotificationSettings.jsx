@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Bell, Heart, MessageCircle, UserPlus, Eye, Mail, Zap, CalendarDays, Rocket } from 'lucide-react';
 import { useFeature } from '../../context/FeatureFlagsContext';
 import { settingsApi, notificationsApi } from '../../services/api';
-import { nativePushPermission, enableNativePush, openNativeAppSettings, PERMISSION_EVENT } from '../../services/pushService';
+import { nativePushPermission, enableNativePush, openNativeAppSettings, registerNativePushIfAllowed, PERMISSION_EVENT } from '../../services/pushService';
 import { requestNotificationPermission, subscribeToPush, getPushSubscriptionState } from '../../utils/notificationManager';
-import { isNativePlatform } from '../../utils/platform';
+import { isNativePlatform, getPlatform } from '../../utils/platform';
 import { SettingsPage, SettingsGroup, SettingsRow, Switch } from '../../components/settings/SettingsUI';
 
 /**
@@ -34,11 +34,12 @@ async function enableWebPush() {
 }
 
 /**
- * Settings → Notifications. Push on or off for the account (server:
- * UserSettings.pushNotifications), whether this phone or browser may show
- * them (iOS or browser permission), and what to be notified about, one
- * switch per kind (server: notification.service PUSH_CATEGORY). These
- * decide what reaches the phone; the bell lists everything regardless.
+ * Settings → Notifications. Push on or off for the account, on every phone
+ * and browser (server: UserSettings.pushNotifications); whether this phone or
+ * browser may show them (iOS or browser permission), shown on its own; and
+ * what to be notified about, one switch per kind (server:
+ * notification.service PUSH_CATEGORY). The kinds are the account's, so they
+ * can be changed from any device. The bell lists everything regardless.
  */
 const NotificationSettings = () => {
     const { t } = useTranslation();
@@ -55,7 +56,10 @@ const NotificationSettings = () => {
     const [error, setError] = useState('');
 
     const checkDevice = useCallback(async () => {
-        setDevice(await (native ? nativePushPermission() : webPushPermission()));
+        const state = await (native ? nativePushPermission() : webPushPermission());
+        setDevice(state);
+        // Allowed in iPhone Settings since: register this phone now.
+        if (native && state === 'granted') registerNativePushIfAllowed();
     }, [native]);
 
     useEffect(() => {
@@ -72,31 +76,34 @@ const NotificationSettings = () => {
         };
     }, [checkDevice]);
 
+    // A failed save puts back only what it changed, not other switches the
+    // member changed meanwhile.
     const save = async (changes) => {
-        const before = settings;
+        const before = Object.fromEntries(Object.keys(changes).map((k) => [k, settings?.[k]]));
         setSettings((s) => ({ ...s, ...changes }));
         setError('');
         try {
             await settingsApi.updateNotifications(changes);
         } catch {
-            setSettings(before);
+            setSettings((s) => ({ ...s, ...before }));
             setError(t('notificationSettings.saveFailed'));
         }
     };
 
-    const pushOn = !!settings?.pushNotifications && device === 'granted';
+    const pushOn = !!settings?.pushNotifications;
+
+    // Ask this phone or browser, or send the member to iPhone Settings.
+    const allowHere = async () => {
+        if (device === 'denied') { if (native) openNativeAppSettings(); return; }
+        if (device === 'unavailable') return;
+        setBusy(true);
+        setDevice(await (native ? enableNativePush() : enableWebPush()));
+        setBusy(false);
+    };
 
     const togglePush = async (on) => {
-        if (!on) { await save({ pushNotifications: false }); return; }
-        if (device === 'denied') {
-            if (native) openNativeAppSettings();
-            return;
-        }
-        setBusy(true);
-        const now = device === 'granted' ? 'granted' : await (native ? enableNativePush() : enableWebPush());
-        setDevice(now);
-        setBusy(false);
-        if (now === 'granted' && !settings.pushNotifications) await save({ pushNotifications: true });
+        await save({ pushNotifications: on });
+        if (on && device !== 'granted') await allowHere();
     };
 
     const kinds = [
@@ -111,24 +118,37 @@ const NotificationSettings = () => {
         flags.projects && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
     ].filter(Boolean);
 
-    const unavailable = device === 'unavailable';
-    const pushDesc = unavailable
-        ? t('notificationSettings.unavailable')
-        : t(native ? 'notificationSettings.pushDescPhone' : 'notificationSettings.pushDescBrowser');
+    const thisDevice = t(native ? 'notificationSettings.thisPhone' : 'notificationSettings.thisBrowser');
+    const unavailableText = native && getPlatform() === 'android'
+        ? t('notificationSettings.unavailableAndroid')
+        : t('notificationSettings.unavailable');
 
     return (
         <SettingsPage title={t('settings.notifications')} back="/settings">
             <SettingsGroup>
-                <SettingsRow icon={Bell} label={t('notificationSettings.push')} desc={pushDesc}>
+                <SettingsRow icon={Bell} label={t('notificationSettings.push')} desc={t('notificationSettings.pushDescAccount')}>
                     <Switch
                         checked={pushOn}
-                        disabled={!settings || busy || unavailable || (device === 'denied' && !native)}
+                        disabled={!settings || busy}
                         onChange={togglePush}
                         label={t('notificationSettings.push')}
                         testId="push-switch"
                     />
                 </SettingsRow>
-                {device === 'denied' && (
+                {pushOn && device === 'prompt' && (
+                    <SettingsRow icon={Bell} label={thisDevice} desc={t('notificationSettings.notAllowedHere')}>
+                        <button type="button" className="set-note-action" onClick={allowHere} disabled={busy} data-testid="push-allow-here">
+                            {t('notificationSettings.allowHere')}
+                        </button>
+                    </SettingsRow>
+                )}
+                {pushOn && device === 'unavailable' && (
+                    <div className="set-note" role="status">
+                        <AlertTriangle size={18} aria-hidden="true" />
+                        <div>{unavailableText}</div>
+                    </div>
+                )}
+                {pushOn && device === 'denied' && (
                     <div className="set-note" role="status">
                         <AlertTriangle size={18} aria-hidden="true" />
                         <div>

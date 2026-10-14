@@ -63,13 +63,17 @@ export async function removePushTargets(userId: string): Promise<void> {
 const ACTOR_ID_KEYS = ['actorId', 'senderId', 'followerId', 'viewerId', 'attendeeId', 'inviterId', 'buyerId'] as const;
 const ACTOR_PUBKEY_KEYS = ['actorPubkey', 'senderPubkey'] as const;
 
-/** Whoever caused the notification, when the recipient blocked them. */
+/** Whoever caused the notification, when either of them blocked the other. */
 async function fromBlockedMember(userId: string, data: Record<string, unknown>): Promise<boolean> {
     const pick = (keys: readonly string[]) => keys.map((k) => data[k]).find((v): v is string => typeof v === 'string' && !!v);
     const id = pick(ACTOR_ID_KEYS);
     const pubkey = pick(ACTOR_PUBKEY_KEYS);
     if (!id && !pubkey) return false;
-    return hasBlocked(userId, { id, pubkey });
+    if (await hasBlocked(userId, { id, pubkey })) return true;
+    // Blocking works both ways: nothing reaches the blocked member from the
+    // blocker either.
+    const actorId = id ?? (await prisma.user.findUnique({ where: { nostrPubkey: pubkey! }, select: { id: true } }))?.id;
+    return !!actorId && actorId !== userId && (await hasBlocked(actorId, { id: userId }));
 }
 
 // Which Settings → Notifications switch decides whether a type is pushed to
@@ -561,16 +565,17 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
         case 'DECK_REQUEST':
         case 'DECK_APPROVED':
         case 'DECK_DENIED':
-            return data.projectId ? `/projects/${data.projectId}` : '/projects';
+            // The app's project page is /project/:id (/projects is the API's).
+            return data.projectId ? `/project/${data.projectId}` : '/discover';
         case 'FOLLOW':
         case 'PROFILE_VIEW':
             // A member's profile, by user id.
             return data.followerId ? `/builder/${data.followerId}` :
                    data.viewerId ? `/builder/${data.viewerId}` : '/notifications';
         case 'INVESTMENT_STATUS':
-            return data.projectId ? `/projects/${data.projectId}` : '/notifications';
+            return data.projectId ? `/project/${data.projectId}` : '/notifications';
         case 'ZAP_RECEIVED':
-            return data.projectId ? `/projects/${data.projectId}` : '/notifications';
+            return data.projectId ? `/project/${data.projectId}` : '/notifications';
         case 'EVENT_RSVP':
             return data.eventId ? `/events/${data.eventId}` : '/events';
         case 'POST_COMMENT':
