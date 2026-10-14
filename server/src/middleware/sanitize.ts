@@ -59,8 +59,9 @@ function decodeHtmlEntities(str: string): string {
 
 // Strip only dangerous content from rich HTML, preserving safe formatting tags.
 function sanitizeRichHtml(str: string): string {
-    // First pass: decode entities in attribute values to catch obfuscated payloads
-    let result = str
+    // Decode entities first, so encoded attributes are caught too. Not a full
+    // sanitizer: every page that shows rich HTML runs DOMPurify too.
+    let result = decodeHtmlEntities(str)
         .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '')
         .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
@@ -68,11 +69,13 @@ function sanitizeRichHtml(str: string): string {
         .replace(/<embed[\s\S]*?>/gi, '')
         .replace(/<form[\s\S]*?<\/form>/gi, '')
         .replace(/<form[\s\S]*?>/gi, '')
-        .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')  // remove event handlers
-        .replace(/\son\w+\s*=\s*[^\s>]*/gi, '');
+        // Event handlers, after a space, slash or quote ("<img/onerror=").
+        .replace(/[\s/"']on\w+\s*=\s*"[^"]*"/gi, ' ')
+        .replace(/[\s/"']on\w+\s*=\s*'[^']*'/gi, ' ')
+        .replace(/[\s/"']on\w+\s*=\s*[^\s>]*/gi, ' ');
 
-    // Decode entities then strip javascript: protocol (catches &#106;avascript: etc.)
-    result = decodeHtmlEntities(result).replace(/javascript\s*:/gi, '');
+    // Then the javascript: protocol (catches &#106;avascript: etc.)
+    result = result.replace(/javascript\s*:/gi, '');
     // Also strip vbscript: and data: URIs in attributes (additional protocol vectors)
     result = result.replace(/vbscript\s*:/gi, '').replace(/data\s*:[^,]*;base64/gi, '');
 

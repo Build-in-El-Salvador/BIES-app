@@ -36,6 +36,10 @@ const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+// http(s) links only.
+const webLink = z.string().trim().max(2000)
+    .refine((v) => v === '' || /^https?:\/\//i.test(v), { message: 'Links must start with https://' });
+
 export const createEventSchema = z.object({
     title: z.string().min(1).max(200),
     description: z.string().min(1),
@@ -43,11 +47,11 @@ export const createEventSchema = z.object({
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
     location: z.string().optional(),
     isOnline: z.boolean().default(false),
-    onlineUrl: z.string().optional().or(z.literal('')),
+    onlineUrl: webLink.optional(),
     startDate: z.string(), // More lenient, parse in controller
     endDate: z.string().optional(),
     thumbnail: z.string().optional().or(z.literal('')),
-    ticketUrl: z.string().optional().or(z.literal('')),
+    ticketUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
     priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
     ticketCapacity: z.number().int().positive().optional().nullable(),
@@ -58,7 +62,7 @@ export const createEventSchema = z.object({
     guestList: z.array(z.object({ name: z.string(), userId: z.string().optional() })).optional(),
     locationName: z.string().optional(),
     locationAddress: z.string().optional(),
-    locationMapUrl: z.string().optional().or(z.literal('')),
+    locationMapUrl: webLink.optional(),
     customSections: z.array(z.object({
         title: z.string().default(''),
         type: z.enum(['TEXT', 'PHOTO', 'CAROUSEL', 'GRAPH']).default('TEXT'),
