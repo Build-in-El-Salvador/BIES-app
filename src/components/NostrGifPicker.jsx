@@ -3,7 +3,7 @@ import { Search, Upload, X, Loader2, Tag } from 'lucide-react';
 import { gifStore } from '../services/gifStore';
 import { mediaService } from '../services/mediaService';
 
-const NostrGifPicker = ({ onSelect, onClose, dropDown = false }) => {
+const NostrGifPicker = ({ onSelect, onClose, dropDown = false, below = false }) => {
     const [gifs, setGifs] = useState(gifStore.gifs);
     const [search, setSearch] = useState('');
     const [uploading, setUploading] = useState(false);
@@ -86,7 +86,7 @@ const NostrGifPicker = ({ onSelect, onClose, dropDown = false }) => {
     };
 
     return (
-        <div className={`gif-picker${dropDown ? ' gif-picker-dropdown' : ''}`} ref={pickerRef}>
+        <div className={`gif-picker${dropDown ? ' gif-picker-dropdown' : ''}${below ? ' picker-below' : ''}`} ref={pickerRef}>
             <div className="gif-picker-header">
                 <span className="gif-picker-title">GIF Library</span>
                 <button className="gif-picker-close" onClick={onClose}><X size={14} /></button>
@@ -210,6 +210,17 @@ const NostrGifPicker = ({ onSelect, onClose, dropDown = false }) => {
                     top: 100%;
                     margin-bottom: 0;
                     margin-top: 0.5rem;
+                }
+                /* Under the whole composer, from its left edge: a picker hung off one
+                   button near the left ran off the screen on phones. */
+                .gif-picker.picker-below {
+                    top: 100%;
+                    bottom: auto;
+                    left: 12px;
+                    right: auto;
+                    width: calc(100% - 24px);
+                    max-width: 400px;
+                    margin: 4px 0 0;
                 }
                 .gif-picker-header {
                     display: flex;

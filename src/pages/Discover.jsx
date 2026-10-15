@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Filter, SlidersHorizontal, MapPin, DollarSign, Download, Heart, Loader2, Plus, X, User, LayoutGrid, List as ListIcon, Columns } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -433,7 +433,9 @@ const Discover = ({ membersOnly = false }) => {
   const [builders, setBuilders] = useState([]);
   const [buildersLoading, setBuildersLoading] = useState(false);
   const [buildersPage, setBuildersPage] = useState(1);
-  const [buildersTotalPages, setBuildersTotalPages] = useState(1);
+  const [buildersHasMore, setBuildersHasMore] = useState(false);
+  const buildersRequest = useRef(0);
+  const buildersEnd = useRef(null);
   const [followingIds, setFollowingIds] = useState(new Set());
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -531,38 +533,61 @@ const Discover = ({ membersOnly = false }) => {
     return () => clearTimeout(debounce);
   }, [searchQuery, selectedIndustries, selectedStages, minFunding, maxFunding, page, user?.id, onlyMembers]);
 
+  // Members load 12 at a time as you scroll down; a new search, or coming
+  // back to the page, starts again from the top.
+  const loadBuilders = useCallback(async (pageToLoad) => {
+    const request = ++buildersRequest.current;
+    setBuildersLoading(true);
+    try {
+      const params = { page: pageToLoad, limit: 12 };
+      if (searchQuery) params.search = searchQuery;
+      if (selectedLocations.length === 1) params.location = selectedLocations[0];
+
+      const [result, followingRes] = await Promise.all([
+        profilesApi.list(params),
+        pageToLoad === 1 && user?.id ? profilesApi.getFollowing(user.id, { limit: 100 }).catch(() => null) : Promise.resolve(null)
+      ]);
+      if (request !== buildersRequest.current) return;
+
+      const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+      setBuilders((prev) => {
+        if (pageToLoad === 1) return list;
+        const seen = new Set(prev.map((b) => b.id));
+        return [...prev, ...list.filter((b) => !seen.has(b.id))];
+      });
+      setBuildersPage(pageToLoad);
+      setBuildersHasMore(pageToLoad < (result?.pagination?.totalPages || 1));
+
+      if (followingRes) {
+        const fList = Array.isArray(followingRes?.data) ? followingRes.data : Array.isArray(followingRes) ? followingRes : [];
+        setFollowingIds(new Set(fList.map(u => u.id)));
+      }
+    } catch (err) {
+      if (request !== buildersRequest.current) return;
+      console.error('Fetch builders error:', err);
+      if (pageToLoad === 1) setBuilders([]);
+      setBuildersHasMore(false);
+    } finally {
+      if (request === buildersRequest.current) setBuildersLoading(false);
+    }
+  }, [searchQuery, selectedLocations, user?.id]);
+
   useEffect(() => {
     if (currentView !== 'members' && currentView !== 'both') return;
-    const fetchBuilders = async () => {
-      setBuildersLoading(true);
-      try {
-        const params = { page: buildersPage, limit: 12 };
-        if (searchQuery) params.search = searchQuery;
-        if (selectedLocations.length === 1) params.location = selectedLocations[0];
-
-        const [result, followingRes] = await Promise.all([
-          profilesApi.list(params),
-          user?.id ? profilesApi.getFollowing(user.id, { limit: 100 }).catch(() => null) : Promise.resolve(null)
-        ]);
-
-        const list = result?.data || result || [];
-        setBuilders(Array.isArray(list) ? list : []);
-        setBuildersTotalPages(result?.pagination?.totalPages || 1);
-
-        if (followingRes) {
-          const fList = Array.isArray(followingRes?.data) ? followingRes.data : Array.isArray(followingRes) ? followingRes : [];
-          setFollowingIds(new Set(fList.map(u => u.id)));
-        }
-      } catch (err) {
-        console.error('Fetch builders error:', err);
-        setBuilders([]);
-      } finally {
-        setBuildersLoading(false);
-      }
-    };
-    const debounce = setTimeout(fetchBuilders, 300);
+    const debounce = setTimeout(() => loadBuilders(1), 300);
     return () => clearTimeout(debounce);
-  }, [searchQuery, buildersPage, user?.id, currentView, selectedLocations]);
+  }, [loadBuilders, currentView]);
+
+  // The next 12 once the end of the list comes near the screen.
+  useEffect(() => {
+    const end = buildersEnd.current;
+    if (!end || !buildersHasMore || buildersLoading) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadBuilders(buildersPage + 1);
+    }, { rootMargin: '600px 0px' });
+    observer.observe(end);
+    return () => observer.disconnect();
+  }, [buildersHasMore, buildersLoading, buildersPage, loadBuilders]);
 
   // Client-side multi-filter (API may not support multi-select)
   const filteredProjects = projects.filter(p => {
@@ -887,7 +912,7 @@ const Discover = ({ membersOnly = false }) => {
           {(currentView === 'members' || currentView === 'both') && (
             <>
               {currentView === 'both' && <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '2.5rem', marginBottom: '1rem' }}>{t('discover.members', 'Members')}</h3>}
-            {buildersLoading ? (
+            {buildersLoading && builders.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem' }}>
                     <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
                 </div>
@@ -1018,11 +1043,9 @@ const Discover = ({ membersOnly = false }) => {
                     })}
                 </div>
             )}
-            {buildersTotalPages > 1 && (
-                <div className="pagination">
-                    <button className="btn btn-outline" disabled={buildersPage <= 1} onClick={() => setBuildersPage(p => p - 1)}>{t('common.previous')}</button>
-                    <span>{t('common.page', { current: buildersPage, total: buildersTotalPages })}</span>
-                    <button className="btn btn-outline" disabled={buildersPage >= buildersTotalPages} onClick={() => setBuildersPage(p => p + 1)}>{t('common.next')}</button>
+            {buildersHasMore && filteredBuilders.length > 0 && (
+                <div ref={buildersEnd} className="members-more" aria-live="polite">
+                    {buildersLoading && <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} aria-label={t('common.loading', 'Loading')} />}
                 </div>
             )}
             </>
@@ -1256,6 +1279,14 @@ const Discover = ({ membersOnly = false }) => {
           gap: 1rem;
           margin-top: 2rem;
           padding: 1rem;
+        }
+
+        .members-more {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 64px;
+          color: var(--color-gray-500);
         }
         .pagination span { font-size: 0.9rem; color: var(--color-gray-500); }
 
