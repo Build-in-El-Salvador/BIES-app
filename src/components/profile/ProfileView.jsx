@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import {
-    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff,
+    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff, Plus,
 } from 'lucide-react';
-import { profilesApi, directoryApi } from '../../services/api';
+import { profilesApi, directoryApi, talentApi } from '../../services/api';
 import { useFeature } from '../../context/FeatureFlagsContext';
 import { useLightbox } from '../../context/LightboxContext';
 import { parseNoteContent } from '../../utils/noteUtils';
@@ -16,6 +16,8 @@ import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
 import BackButton from '../BackButton';
 import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
+import TalentSummary from '../talent/TalentSummary';
+import { MAX_TALENTS } from '../talent/talentOptions';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -38,10 +40,11 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
 /**
  * A member's profile, laid out like Facebook's: the cover against the top
  * bar, the photo with the name and follower counts beside it, the bio, the
- * buttons, then All / Photos. All has their details (role, the BIES
- * business they run, projects, place, links), their Network, and their
+ * buttons, then All / Photos / Talent. All has their details (role, the
+ * BIES business they run, projects, place, links), their Network, and their
  * posts in the BIES feed, as the Feed shows them (likes, reposts, replies);
- * Photos has the pictures from those posts.
+ * Photos has the pictures from those posts; Talent has what they offer to
+ * do, with their proof of work (BIES Talents), when they've listed any.
  * Used by your own profile (Profile) and everyone else's (PublicProfile).
  *
  * @param {object}    profile      GET /profiles/:id or /profiles/me
@@ -56,10 +59,12 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const { t } = useTranslation();
     const lightbox = useLightbox();
     const projectsEnabled = useFeature('projects');
+    const talentEnabled = useFeature('talent');
     const [tab, setTab] = useState('all');
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
     const [listings, setListings] = useState([]);
+    const [talents, setTalents] = useState([]);
     const [posts, setPosts] = useState({ list: [], loading: true });
 
     const userId = profile.user?.id || profile.userId;
@@ -85,6 +90,17 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         return () => { cancelled = true; };
     }, [userId]);
 
+    // What they offer to do (BIES Talents).
+    useEffect(() => {
+        setTalents([]);
+        if (!userId || !talentEnabled) return undefined;
+        let cancelled = false;
+        talentApi.list({ userId, limit: 20 })
+            .then((res) => { if (!cancelled) setTalents(res?.data || []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [userId, talentEnabled]);
+
     // Their network: everyone they're connected to, either way; people who
     // follow each other first, as close as BIES gets to Facebook friends.
     const network = useMemo(() => {
@@ -109,6 +125,12 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         () => posts.list.filter((post) => post.pubkey === pubkey).flatMap((post) => parseNoteContent(post.content).images),
         [posts.list, pubkey],
     );
+
+    // Talent beside Photos: on your own profile (to add yours), or when they listed some.
+    const showTalent = talentEnabled && (isOwn || talents.length > 0);
+    const tabs = ['all', 'photos', ...(showTalent ? ['talent'] : [])];
+    // A tab that went away while open (Talents switched off): back to All.
+    const openTab = tabs.includes(tab) ? tab : 'all';
 
     const avatar = profile.avatar || nostrProfile?.picture || '';
     const banner = profile.banner || nostrProfile?.banner || '';
@@ -179,13 +201,13 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 {actions && <div className="pv-actions">{actions}</div>}
 
                 <div className="pv-tabs" role="tablist">
-                    {['all', 'photos'].map((key) => (
+                    {tabs.map((key) => (
                         <button
                             key={key}
                             type="button"
                             role="tab"
-                            aria-selected={tab === key}
-                            className={`pv-tab${tab === key ? ' active' : ''}`}
+                            aria-selected={openTab === key}
+                            className={`pv-tab${openTab === key ? ' active' : ''}`}
                             onClick={() => setTab(key)}
                         >
                             {t(`profileView.tabs.${key}`)}
@@ -194,12 +216,34 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 </div>
             </div>
 
-            {tab === 'photos' && albums.show && (
+            {openTab === 'talent' && (talents.length > 0 ? (
+                talents.map((talent) => (
+                    <section key={talent.id} className="pv-section">
+                        <TalentSummary talent={talent} isOwn={!!isOwn} />
+                    </section>
+                ))
+            ) : (
+                <section className="pv-section">
+                    <h2 className="pv-h2">{t('profileView.tabs.talent')}</h2>
+                    <p className="pv-muted">{t('talent.profileEmptyOwn')}</p>
+                    <Link to="/talents/new" className="pv-link pv-add-talent">
+                        <Plus size={16} aria-hidden="true" /> {t('talent.add')}
+                    </Link>
+                </section>
+            ))}
+            {openTab === 'talent' && isOwn && talents.length > 0 && talents.length < MAX_TALENTS && (
+                <section className="pv-section">
+                    <Link to="/talents/new" className="pv-link pv-add-talent">
+                        <Plus size={16} aria-hidden="true" /> {t('talent.addAnother')}
+                    </Link>
+                </section>
+            )}
+            {openTab === 'photos' && albums.show && (
                 <section className="pv-section">
                     <AlbumsBlock albums={albums.albums} canManage={albums.canManage} titleStyle={H2} />
                 </section>
             )}
-            {tab === 'photos' && (
+            {openTab === 'photos' && (
                 <section className="pv-section">
                     <h2 className="pv-h2">{t(albums.albums.length ? 'profileView.photosFromPosts' : 'profileView.tabs.photos')}</h2>
                     {photos.length > 0 ? (
@@ -220,7 +264,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
             )}
 
             {/* Kept mounted on Photos, so the posts stay loaded and as they were. */}
-            <div hidden={tab !== 'all'}>
+            <div hidden={openTab !== 'all'}>
                 {hasDetails ? (
                     <section className="pv-section">
                         <h2 className="pv-h2">{t('profileView.details')}</h2>
@@ -454,6 +498,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 .pv-block { display: block; margin-top: 2px; }
                 .pv-section :global(.pv-link) { color: var(--color-primary); font-weight: 600; text-decoration: none; }
                 .pv-section :global(.pv-see-all) { font-size: 0.95rem; padding: 4px 0; }
+                .pv-section :global(.pv-add-talent) { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 4px 0; font-size: 0.95rem; }
                 .pv-details { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
                 .pv-details li { display: flex; align-items: flex-start; gap: 12px; font-size: 0.98rem; line-height: 1.4; color: var(--color-gray-800); }
                 .pv-details li :global(svg) { flex-shrink: 0; color: var(--color-gray-500); margin-top: 1px; }

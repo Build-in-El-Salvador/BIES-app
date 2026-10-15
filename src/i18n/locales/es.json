@@ -83,7 +83,8 @@
     "wallet": "Billetera",
     "more": "Más",
     "openMenu": "Abrir menú",
-    "closeMenu": "Cerrar menú"
+    "closeMenu": "Cerrar menú",
+    "talent": "Talentos"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -101,11 +102,12 @@
     "adminPanel": "Panel de Admin",
     "leaderboard": "Clasificacion",
     "farmDirectory": "Fincas regenerativas",
-    "certifiedDirectory": "Negocios",
+    "certifiedDirectory": "Directorio de negocios",
     "bounties": "Tablero de recompensas",
     "wallet": "Billetera",
     "profile": "Perfil",
-    "notifications": "Notificaciones"
+    "notifications": "Notificaciones",
+    "talent": "Talentos BIES"
   },
   "settings": {
     "title": "Configuración",
@@ -1896,6 +1898,160 @@
       "error": "No funcionó. Inténtalo de nuevo."
     }
   },
+  "talent": {
+    "search": "Buscar habilidades o personas",
+    "add": "Agregar su talento",
+    "addAnother": "Agregar otro talento",
+    "yours": "Suyos",
+    "allCategories": "Todos",
+    "categories": {
+      "tech": "Tecnología y desarrollo",
+      "design": "Diseño y creatividad",
+      "media": "Foto y video",
+      "marketing": "Marketing y redes sociales",
+      "writing": "Redacción y traducción",
+      "teaching": "Clases y tutorías",
+      "professional": "Negocios, legal y finanzas",
+      "trades": "Construcción y oficios",
+      "home": "Hogar y jardín",
+      "events": "Comida y eventos",
+      "wellness": "Salud y bienestar",
+      "transport": "Transporte y entregas",
+      "other": "Otro"
+    },
+    "workTypes": {
+      "one-off": "Trabajos puntuales",
+      "short-term": "Corto plazo",
+      "long-term": "Largo plazo"
+    },
+    "workTypeHints": {
+      "one-off": "Un solo trabajo o encargo",
+      "short-term": "Unas semanas o meses",
+      "long-term": "Continuo, medio tiempo o tiempo completo"
+    },
+    "available": "Disponible",
+    "busy": "Ocupado",
+    "availableLong": "Acepta trabajo ahora",
+    "busyLong": "No acepta trabajo por ahora",
+    "remote": "Trabaja a distancia",
+    "btc": "Acepta bitcoin",
+    "filters": {
+      "available": "Acepta trabajo ahora",
+      "remote": "Trabaja a distancia",
+      "btc": "Acepta bitcoin",
+      "workType": "Tipo de trabajo",
+      "anyWork": "Cualquiera"
+    },
+    "empty": "Nadie ha publicado su talento todavía. Muestre a los miembros lo que sabe hacer y sea el primero.",
+    "noneYours": "Usted no ha publicado ningún talento todavía.",
+    "noMatches": "Ningún talento coincide con estos filtros.",
+    "noResultsSearch": "Ningún talento coincide con \"{{query}}\".",
+    "about": "Acerca de",
+    "skills": "Habilidades",
+    "work": "Trabajo",
+    "openTo": "Disponible para",
+    "rate": "Tarifa",
+    "languages": "Idiomas",
+    "proofOfWork": "Prueba de Trabajo",
+    "noProof": "Todavía no hay prueba de trabajo.",
+    "noProofOwn": "Muestre a los miembros lo que ha hecho:",
+    "mediaCount_one": "{{count}} foto o video",
+    "mediaCount_other": "{{count}} fotos y videos",
+    "workPhoto": "{{title}}, foto {{n}}",
+    "workVideo": "{{title}}, video {{n}}",
+    "video": "Video",
+    "seeTalent": "Ver la página del talento",
+    "edit": "Editar",
+    "back": "Volver a Talentos",
+    "notFound": "Talento no encontrado",
+    "notFoundDesc": "No existe o fue eliminado.",
+    "blocked": {
+      "title": "Usted bloqueó a este miembro",
+      "body": "Desbloquéelo para volver a ver su talento."
+    },
+    "profileEmptyOwn": "Muestre a los miembros lo que puede hacer por ellos: una habilidad o un servicio que ofrece, el tipo de trabajo que acepta y ejemplos de su trabajo.",
+    "actions": {
+      "label": "Contactar y compartir",
+      "email": "Correo",
+      "website": "Sitio web",
+      "profile": "Perfil",
+      "share": "Compartir",
+      "copied": "Copiado"
+    },
+    "form": {
+      "createTitle": "Agregar su talento",
+      "editTitle": "Editar su talento",
+      "subtitle": "Muestre a los miembros lo que puede hacer por ellos. Su talento aparece en la página de Talentos y en su perfil.",
+      "offerHeading": "Lo que ofrece",
+      "titleLabel": "Su talento",
+      "titlePlaceholder": "p. ej. Fotógrafa, Clases de inglés",
+      "titleRequired": "Diga lo que ofrece.",
+      "categoryLabel": "Categoría",
+      "chooseCategory": "Elija una categoría",
+      "categoryRequired": "Elija una categoría.",
+      "skillsLabel": "Habilidades",
+      "skillsPlaceholder": "React, iOS, Nostr…",
+      "skillsHint": "Presione Enter después de cada una.",
+      "aboutLabel": "Acerca de",
+      "aboutPlaceholder": "Lo que hace, para quién y lo que recibe la gente.",
+      "workHeading": "El trabajo que acepta",
+      "workTypesLabel": "Tipo de trabajo",
+      "workTypesRequired": "Elija al menos un tipo de trabajo.",
+      "availableLabel": "Acepto trabajo ahora",
+      "availableHint": "¿Ocupado? Desactívelo: su talento sigue publicado, marcado como que no acepta trabajo.",
+      "remoteLabel": "Puedo trabajar a distancia",
+      "locationLabel": "Dónde está",
+      "locationPlaceholder": "San Salvador",
+      "rateLabel": "Tarifa",
+      "ratePlaceholder": "$40 la hora, desde $300, o pregúnteme",
+      "languagesLabel": "Idiomas",
+      "btcLabel": "Acepto bitcoin",
+      "proofHint": "Ejemplos de trabajo reciente (hasta {{max}}): lo que hizo, construyó o creó. Agregue fotos o videos, un enlace o ambos.",
+      "workN": "Trabajo {{n}}",
+      "addWork": "Agregar trabajo",
+      "addAnotherWork": "Agregar otro trabajo",
+      "moveUp": "Subir el trabajo {{n}}",
+      "removeWork": "Quitar el trabajo {{n}}",
+      "addMedia": "Agregar fotos o videos",
+      "removePhoto": "Quitar foto",
+      "removeVideo": "Quitar video",
+      "uploadingVideo": "Subiendo video…",
+      "videoWait": "Los videos pueden tardar un minuto en subir.",
+      "videoTooBig": "Ese video pesa {{size}} MB. Los videos pueden pesar hasta {{max}} MB: pruebe con un clip más corto.",
+      "videoTooLong": "Los videos pueden durar hasta {{max}} minutos: pruebe con un clip más corto.",
+      "videoTooLarge": "Los videos pueden ser de hasta 4K: pruebe con uno grabado en menor calidad.",
+      "videoBusy": "Se están subiendo muchos videos ahora. Inténtelo de nuevo en un minuto.",
+      "workTitleLabel": "Título",
+      "workTitlePlaceholder": "p. ej. App de reservas para una escuela de surf",
+      "workTitleRequired": "Póngale un título a este trabajo.",
+      "workDetailsLabel": "Lo que hizo",
+      "workDetailsPlaceholder": "El encargo, su parte y cómo resultó.",
+      "workLinkLabel": "Enlace",
+      "workYearLabel": "Año",
+      "coverHeading": "Foto de portada",
+      "coverHint": "Opcional. Sin una, su talento muestra la primera foto de su prueba de trabajo.",
+      "addCover": "Agregar foto de portada",
+      "changeCover": "Cambiar portada",
+      "removeCover": "Quitar foto de portada",
+      "contactHeading": "Cómo lo contactan los miembros",
+      "contactHint": "Se muestra a los miembros de BIES en la página de su talento. También pueden abrir su perfil.",
+      "whatsappLabel": "WhatsApp",
+      "emailLabel": "Correo",
+      "websiteLabel": "Sitio web o portafolio",
+      "submit": "Agregar talento",
+      "save": "Guardar cambios",
+      "saveFailed": "No se pudo guardar su talento. Inténtelo de nuevo.",
+      "uploadFailed": "No se pudo subir esa foto o video. Inténtelo de nuevo.",
+      "notYourPhoto": "Agregue fotos y videos subiéndolos aquí.",
+      "notYours": "Solo el miembro al que pertenece puede editar este talento.",
+      "atLimitTitle": "Ya publicó el máximo de talentos",
+      "tooMany": "Puede publicar hasta {{max}} talentos. Edite o elimine uno para agregar otro.",
+      "delete": "Eliminar este talento",
+      "deleteConfirm": "¿Eliminar este talento y su prueba de trabajo? No se puede deshacer.",
+      "deleteYes": "Eliminar",
+      "deleteFailed": "No se pudo eliminar su talento. Inténtelo de nuevo."
+    }
+  },
   "marketplace": {
     "entryLabel": "Mercado",
     "navLabel": "Mercado",
@@ -1969,11 +2125,12 @@
     "discover": "Descubrir",
     "members": "Miembros",
     "farms": "Fincas",
-    "trusted": "Negocios",
+    "trusted": "Directorio",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",
-    "cowork": "Cowork"
+    "cowork": "Cowork",
+    "talent": "Talentos"
   },
   "cowork": {
     "title": "Quién está trabajando",
@@ -2187,7 +2344,7 @@
     "title": "Funciones de la App",
     "subtitle": "Activa o desactiva funciones para todos al instante, sin redesplegar",
     "propagationNote": "Los cambios se aplican de inmediato para ti. Los demas usuarios los reciben en unos 5 minutos (cache del servidor) o al volver a la app. Las funciones desactivadas desaparecen de la navegacion, sus paginas muestran No Encontrado y sus APIs quedan bloqueadas.",
-    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas y Confianza BIES de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
+    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas, Confianza BIES y Talentos BIES de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
     "adminOnly": "Solo los administradores pueden cambiar las funciones. Los moderadores tienen acceso de solo lectura.",
     "enabled": "Activada",
     "disabled": "Desactivada",
@@ -2252,6 +2409,10 @@
       "courses": {
         "name": "Cursos",
         "description": "Catálogo de cursos, lecciones e inscripción"
+      },
+      "talent": {
+        "name": "Talentos BIES",
+        "description": "Habilidades y servicios de los miembros, con su prueba de trabajo"
       }
     }
   },
@@ -2389,7 +2550,8 @@
       "reportListing": "Reportar listado",
       "reportEvent": "Reportar evento",
       "block": "Bloquear",
-      "blockMember": "Bloquear miembro"
+      "blockMember": "Bloquear miembro",
+      "reportTalent": "Reportar talento"
     },
     "reasons": {
       "harassment": "Acoso, amenazas u odio",
@@ -2400,7 +2562,8 @@
       "private_info": "Datos personales de alguien compartidos sin permiso",
       "fake_recommendation": "Recomendación falsa, pagada o intercambiada",
       "inaccurate_listing": "Datos incorrectos, o publicado sin permiso del dueño",
-      "other": "Otra cosa"
+      "other": "Otra cosa",
+      "not_their_work": "Muestra trabajo que no es suyo"
     },
     "report": {
       "title": {
@@ -2410,7 +2573,8 @@
         "event": "Reportar este evento",
         "note": "Reportar esta publicación",
         "album": "Reportar este álbum",
-        "photo": "Reportar esta foto"
+        "photo": "Reportar esta foto",
+        "talent": "Reportar este talento"
       },
       "why": "¿Cuál es el problema?",
       "detailsLabel": "¿Algo más que debamos saber? (opcional)",
@@ -2532,6 +2696,10 @@
       "opportunities": {
         "title": "Oportunidades",
         "desc": "Explora empleos, alianzas, eventos y más."
+      },
+      "talent": {
+        "title": "Talentos BIES",
+        "desc": "Encuentra las habilidades y servicios de los miembros, u ofrece los tuyos."
       }
     }
   },
@@ -2544,7 +2712,8 @@
     "message": "Mensaje",
     "tabs": {
       "all": "Todo",
-      "photos": "Fotos"
+      "photos": "Fotos",
+      "talent": "Talentos"
     },
     "details": "Detalles",
     "at": "en",

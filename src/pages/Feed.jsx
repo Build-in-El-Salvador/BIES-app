@@ -10,7 +10,8 @@ import { primalService, EXPLORE_VIEWS } from '../services/primalService';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
-import { notificationsApi, uploadApi } from '../services/api';
+import { notificationsApi, profilesApi, uploadApi } from '../services/api';
+import { getAssetUrl } from '../utils/assets';
 import NostrIcon from '../components/NostrIcon';
 import ZapModal from '../components/ZapModal';
 import EmojiPicker from '../components/EmojiPicker';
@@ -70,6 +71,33 @@ function sharedPostId(search) {
  * `emptyText` replaces the empty message, and `onPosts(posts, loading)`
  * hands the posts to the page (the profile's Photos tab).
  */
+// Members' BIES names and photos, kept on this device for a day so the feed
+// shows them at once next time; each visit looks them up again anyway.
+const MEMBER_NAMES_KEY = 'bies_member_names';
+const MEMBER_NAMES_TTL = 24 * 3600 * 1000;
+
+function readMemberNames() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(MEMBER_NAMES_KEY) || '{}');
+        const since = Date.now() - MEMBER_NAMES_TTL;
+        return Object.fromEntries(Object.entries(stored)
+            .filter(([, m]) => m && m.ts > since && typeof m.name === 'string')
+            .map(([pk, m]) => [pk, { name: m.name, avatar: m.avatar || '' }]));
+    } catch {
+        return {};
+    }
+}
+
+function keepMemberNames(found) {
+    try {
+        const stored = JSON.parse(localStorage.getItem(MEMBER_NAMES_KEY) || '{}');
+        const now = Date.now();
+        for (const [pk, m] of Object.entries(found)) stored[pk] = { name: m.name, avatar: m.avatar, ts: now };
+        for (const pk of Object.keys(stored)) if (!(stored[pk]?.ts > now - MEMBER_NAMES_TTL)) delete stored[pk];
+        localStorage.setItem(MEMBER_NAMES_KEY, JSON.stringify(stored));
+    } catch { /* storage full or off: they're looked up each time */ }
+}
+
 const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) => {
     const embedded = !!author;
     const { user } = useAuth();
@@ -78,7 +106,23 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const { t } = useTranslation();
     const location = useLocation();
     const [posts, setPosts] = useState([]);
-    const [profiles, setProfiles] = useState({});
+    // Nostr profiles (kind 0) of who appears here, from the relays or the cache.
+    const [nostrProfiles, setProfiles] = useState({});
+    // Members' own BIES names and photos (POST /profiles/lookup). They win
+    // over a Nostr profile, which can be missing from the BIES relay, an old
+    // copy, or what the member's other Nostr apps say.
+    const [members, setMembers] = useState(readMemberNames);
+    const lookedUp = useRef(new Set());
+    const profiles = useMemo(() => {
+        const keys = Object.keys(members);
+        if (keys.length === 0) return nostrProfiles;
+        const merged = { ...nostrProfiles };
+        for (const pk of keys) {
+            const { name, avatar } = members[pk];
+            merged[pk] = { ...nostrProfiles[pk], name, display_name: name, ...(avatar ? { picture: getAssetUrl(avatar) } : {}) };
+        }
+        return merged;
+    }, [nostrProfiles, members]);
     const [noteStats, setNoteStats] = useState({});
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -477,6 +521,35 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         fetchedReactionIds.current.clear();
     }, [feedMode]);
 
+    // The BIES members among who appears on the BIES feed (authors, reposters,
+    // repliers): their BIES names and photos, a hundred at a time.
+    useEffect(() => {
+        if (feedMode !== 'private') return undefined;
+        const shown = new Set();
+        for (const post of posts) {
+            shown.add(post.pubkey);
+            for (const r of post._reposters || []) shown.add(r.pubkey);
+        }
+        for (const list of Object.values(comments)) for (const c of list || []) shown.add(c.pubkey);
+        const toLookUp = [...shown].filter((pk) => /^[0-9a-f]{64}$/.test(pk || '') && !lookedUp.current.has(pk));
+        if (toLookUp.length === 0) return undefined;
+        const timer = setTimeout(() => {
+            toLookUp.forEach((pk) => lookedUp.current.add(pk));
+            for (let i = 0; i < toLookUp.length; i += 100) {
+                const batch = toLookUp.slice(i, i + 100);
+                profilesApi.lookup(batch)
+                    .then((res) => {
+                        if (res?.data && Object.keys(res.data).length > 0) {
+                            setMembers((prev) => ({ ...prev, ...res.data }));
+                            keepMemberNames(res.data);
+                        }
+                    })
+                    .catch(() => batch.forEach((pk) => lookedUp.current.delete(pk))); // tried again next time
+            }
+        }, 150);
+        return () => clearTimeout(timer);
+    }, [feedMode, posts, comments]);
+
     // Ensure profiles are loaded for repost authors (catches missed/failed fetches)
     const repostProfileRetries = useRef(new Set());
     useEffect(() => {
@@ -669,7 +742,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
 
         const newAttachments = [];
         for (const file of files) {
-            const err = mediaService.validateFile(file, attachedFiles.length + newAttachments.length);
+            const err = mediaService.validateFile(file, attachedFiles.length + newAttachments.length)
+                || await mediaService.validateVideoLength(file);
             if (err) {
                 setPostError(err);
                 break;

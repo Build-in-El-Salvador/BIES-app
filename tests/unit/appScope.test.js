@@ -21,6 +21,7 @@ test('the app turns off everything outside its scope', () => {
         assert.equal(scoped[slug], APP_FEATURES.includes(slug), slug);
     }
     assert.equal(scoped.directories, true);
+    assert.equal(scoped.talent, true);
     assert.equal(scoped.events, false);
     assert.equal(scoped.dashboard, false);
 });

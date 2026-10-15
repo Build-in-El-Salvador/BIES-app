@@ -14,10 +14,11 @@ const REASONS = {
     note: ['harassment', 'sexual', 'violence_illegal', 'scam_spam', 'impersonation', 'private_info', 'other'],
     album: ['sexual', 'harassment', 'violence_illegal', 'private_info', 'scam_spam', 'impersonation', 'other'],
     photo: ['sexual', 'harassment', 'violence_illegal', 'private_info', 'scam_spam', 'impersonation', 'other'],
+    talent: ['scam_spam', 'not_their_work', 'impersonation', 'sexual', 'harassment', 'violence_illegal', 'private_info', 'other'],
 };
 
 /**
- * Report a profile, listing, recommendation, event, post, album or photo to BIES's
+ * Report a profile, listing, recommendation, event, post, album, photo or talent to BIES's
  * moderators (server/src/services/moderation.service.ts). Private: the
  * member reported isn't told who sent it.
  *

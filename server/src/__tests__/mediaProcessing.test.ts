@@ -1,13 +1,24 @@
 /**
  * What happens to an upload before it is stored (services/mediaProcessing.ts):
  * photos come out upright, at most 1600px a side, without their location
- * and camera details; phone videos lose their metadata boxes and keep
- * everything else; GIFs and WebM pass through once checked.
+ * and camera details; videos are made again as a smaller 720p MP4 without
+ * their metadata; GIFs pass through once checked.
+ *
+ * The video tests need ffmpeg (CI installs it; FFMPEG_PATH and FFPROBE_PATH
+ * point elsewhere) and are skipped without it.
  */
 
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import sharp from 'sharp';
-import { MAX_SIDE, prepareMedia, stripVideoMetadata, UnreadableMediaError } from '../services/mediaProcessing';
+import {
+    MAX_SIDE, MAX_VIDEO_SECONDS, MediaAbortedError, MediaToolError, prepareMedia, stripVideoMetadata, UnreadableMediaError,
+    VideoTooLargeError, VideoTooLongError,
+} from '../services/mediaProcessing';
+import { FFMPEG, FFPROBE, HAS_FFMPEG } from './helpers/videos';
 
 const solid = (width: number, height: number, channels: 3 | 4 = 3) =>
     sharp({ create: { width, height, channels, background: { r: 120, g: 160, b: 80, alpha: 0.5 } } });
@@ -105,29 +116,208 @@ const phoneVideo = () => Buffer.concat([
     largeBox('mdat', latin1('the frames themselves')),
 ]);
 
-describe('videos', () => {
-    it('lose their location and other metadata; nothing else moves', async () => {
+describe('video metadata boxes', () => {
+    it('are blanked: the location and other metadata go, nothing else moves', () => {
         const input = phoneVideo();
-        const out = await prepareMedia(Buffer.from(input), 'video/quicktime');
-        expect(out.buffer.length).toBe(input.length);
-        expect(out.buffer.includes(PLACE)).toBe(false);
-        expect(out.buffer.includes('com.apple.quicktime.location')).toBe(false);
+        const out = Buffer.from(input);
+        stripVideoMetadata(out);
+        expect(out.length).toBe(input.length);
+        expect(out.includes(PLACE)).toBe(false);
+        expect(out.includes('com.apple.quicktime.location')).toBe(false);
         for (const kept of ['ftyp', 'wide', 'moov', 'mvhd', 'trak', 'tkhd', 'mdat', 'the frames themselves']) {
-            expect(out.buffer.indexOf(kept), kept).toBe(input.indexOf(kept));
+            expect(out.indexOf(kept), kept).toBe(input.indexOf(kept));
         }
-        const frees = out.buffer.toString('latin1').split('free').length - 1;
+        const frees = out.toString('latin1').split('free').length - 1;
         expect(frees).toBe(4); // moov/udta, trak/meta, moov/meta, the XMP
     });
 
-    it('a file that isn\'t a movie, or is cut short, is turned away', () => {
+    it('a file that isn\'t a movie, or is cut short, is turned away before ffmpeg sees it', async () => {
         expect(() => stripVideoMetadata(Buffer.from('just some text, no boxes'))).toThrow(UnreadableMediaError);
         const cut = phoneVideo().subarray(0, 60);
         expect(() => stripVideoMetadata(Buffer.from(cut))).toThrow(UnreadableMediaError);
         expect(() => stripVideoMetadata(box('ftyp', latin1('isom')))).toThrow(UnreadableMediaError); // no movie in it
+        await expect(prepareMedia(Buffer.from('<html><script>alert(1)</script></html>'), 'video/mp4')).rejects.toBeInstanceOf(UnreadableMediaError);
+        await expect(prepareMedia(latin1('not a WebM at all'), 'video/webm')).rejects.toBeInstanceOf(UnreadableMediaError);
     });
 
-    it('WebM passes through', async () => {
-        const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), latin1('rest of it')]);
-        expect((await prepareMedia(webm, 'video/webm')).buffer.equals(webm)).toBe(true);
+    it('ffmpeg gets none of the server\'s settings, its secrets among them', async () => {
+        const seen = scratch('env.txt');
+        const probe = scratch('ffprobe.sh');
+        fs.writeFileSync(probe, `#!/bin/sh\nenv > '${seen}'\nexit 1\n`, { mode: 0o755 });
+        const before = { probe: process.env.FFPROBE_PATH, secret: process.env.JWT_SECRET };
+        process.env.FFPROBE_PATH = probe;
+        process.env.JWT_SECRET = 'not-for-ffmpeg-1234';
+        try {
+            await expect(prepareMedia(phoneVideo(), 'video/quicktime')).rejects.toBeInstanceOf(UnreadableMediaError);
+            const env = fs.readFileSync(seen, 'utf8');
+            expect(env).toContain('PATH=');
+            expect(env).not.toContain('not-for-ffmpeg-1234');
+            expect(env).not.toContain('JWT_SECRET');
+        } finally {
+            for (const [name, value] of [['FFPROBE_PATH', before.probe], ['JWT_SECRET', before.secret]] as const) {
+                if (value === undefined) delete process.env[name];
+                else process.env[name] = value;
+            }
+            fs.rmSync(seen, { force: true });
+            fs.rmSync(probe, { force: true });
+        }
+    });
+
+    it('without ffmpeg, a video fails as the server\'s problem, not the member\'s file', async () => {
+        const before = process.env.FFPROBE_PATH;
+        process.env.FFPROBE_PATH = path.join(os.tmpdir(), 'no-ffprobe-here');
+        try {
+            await expect(prepareMedia(phoneVideo(), 'video/quicktime')).rejects.toBeInstanceOf(MediaToolError);
+        } finally {
+            if (before === undefined) delete process.env.FFPROBE_PATH;
+            else process.env.FFPROBE_PATH = before;
+        }
+    });
+});
+
+// ─── Videos, made again ───────────────────────────────────────────────────────
+
+const scratch = (name: string) => path.join(os.tmpdir(), `bies-media-test-${process.pid}-${name}`);
+
+/** A made-up clip from ffmpeg's test pattern; `remux` runs over it again (to turn it, say). */
+function clip(name: string, args: string[], remux?: string[]): Buffer {
+    const file = scratch(name);
+    execFileSync(FFMPEG, ['-v', 'error', '-y', ...args, '-threads', '1', file]);
+    if (remux) {
+        const turned = scratch(`turned-${name}`);
+        execFileSync(FFMPEG, ['-v', 'error', '-y', ...remux, '-i', file, '-c', 'copy', '-movflags', 'use_metadata_tags', turned]);
+        fs.renameSync(turned, file);
+    }
+    const buffer = fs.readFileSync(file);
+    fs.rmSync(file, { force: true });
+    return buffer;
+}
+
+/** What ffprobe says of a stored video. */
+function probe(buffer: Buffer): { streams: any[]; format: any } {
+    const file = scratch('probe.mp4');
+    fs.writeFileSync(file, buffer);
+    try {
+        return JSON.parse(execFileSync(FFPROBE, ['-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', file]).toString());
+    } finally {
+        fs.rmSync(file, { force: true });
+    }
+}
+const pictureOf = (info: { streams: any[] }) => info.streams.find((s) => s.codec_type === 'video');
+const PATTERN = (size: string, rate: number) => ['-f', 'lavfi', '-i', `testsrc2=size=${size}:rate=${rate}`];
+const TONE = ['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000'];
+
+/** An iPhone-like clip: bigger than 720p, 60 frames a second, shown portrait, with where and when it was taken. */
+const phoneClip = () => clip('phone.mov',
+    [...PATTERN('1600x900', 60), ...TONE, '-t', '2', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+        '-metadata', `location=${PLACE}`, '-metadata', 'com.apple.quicktime.make=TestPhone', '-metadata', 'title=Ana at the beach',
+        '-metadata', 'creation_time=2026-01-02T03:04:05Z', '-movflags', 'use_metadata_tags', '-f', 'mov'],
+    ['-display_rotation', '90']);
+
+// ffmpeg makes each video: more than the usual 5 seconds on a busy machine.
+describe.skipIf(!HAS_FFMPEG)('videos', { timeout: 60_000 }, () => {
+    it('come out as a smaller 720p MP4, upright, at most 30 frames a second, without where or when they were taken', async () => {
+        const input = phoneClip();
+        expect(input.includes(PLACE)).toBe(true);
+        expect(input.includes('TestPhone')).toBe(true);
+        expect(input.includes('Ana at the beach')).toBe(true);
+
+        const out = await prepareMedia(Buffer.from(input), 'video/quicktime');
+        expect(out.mimeType).toBe('video/mp4');
+        expect({ width: out.width, height: out.height }).toEqual({ width: 720, height: 1280 });
+        expect(out.duration).toBeCloseTo(2, 0);
+        expect(out.buffer.length).toBeLessThan(input.length);
+        expect(out.buffer.includes(PLACE)).toBe(false);
+        expect(out.buffer.includes('TestPhone')).toBe(false);
+        expect(out.buffer.includes('Ana at the beach')).toBe(false);
+        expect(out.poster).toBeUndefined();
+
+        const info = probe(out.buffer);
+        const picture = pictureOf(info);
+        expect({ codec: picture.codec_name, width: picture.width, height: picture.height, pixels: picture.pix_fmt })
+            .toEqual({ codec: 'h264', width: 720, height: 1280, pixels: 'yuv420p' });
+        const [frames, per] = String(picture.r_frame_rate).split('/').map(Number);
+        expect(frames / per).toBeLessThanOrEqual(30);
+        // Turned already: nothing left for a player to turn.
+        expect((picture.side_data_list ?? []).some((d: any) => d.side_data_type === 'Display Matrix')).toBe(false);
+        expect(info.streams.some((s) => s.codec_type === 'audio' && s.codec_name === 'aac')).toBe(true);
+        expect(info.format.tags?.location).toBeUndefined();
+        expect(info.format.tags?.title).toBeUndefined();
+        expect(info.format.tags?.creation_time).toBeUndefined(); // when it was filmed
+    });
+
+    it('a still from it comes too when asked for: a JPEG poster the size of the video', async () => {
+        const out = await prepareMedia(phoneClip(), 'video/quicktime', { poster: true });
+        expect(out.poster?.mimeType).toBe('image/jpeg');
+        expect({ width: out.poster?.width, height: out.poster?.height }).toEqual({ width: 720, height: 1280 });
+        const meta = await sharp(out.poster!.buffer).metadata();
+        expect(meta.format).toBe('jpeg');
+        expect(meta.exif).toBeUndefined();
+    });
+
+    it('HDR (HLG, what iPhones record) comes out in ordinary colour; a silent one stays silent', async () => {
+        const hdr = clip('hdr.mp4', [...PATTERN('640x360', 30), '-t', '1', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+            '-vf', 'setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc', '-f', 'mp4']);
+        expect(pictureOf(probe(hdr)).color_transfer).toBe('arib-std-b67');
+
+        const info = probe((await prepareMedia(hdr, 'video/mp4')).buffer);
+        const picture = pictureOf(info);
+        expect({ transfer: picture.color_transfer, primaries: picture.color_primaries, pixels: picture.pix_fmt })
+            .toEqual({ transfer: 'bt709', primaries: 'bt709', pixels: 'yuv420p' });
+        expect(info.streams.some((s) => s.codec_type === 'audio')).toBe(false);
+    });
+
+    it('WebM, what browsers record, becomes an MP4 too; a small one keeps its size', async () => {
+        const webm = clip('browser.webm', [...PATTERN('640x360', 30), ...TONE, '-t', '1',
+            '-c:v', 'libvpx', '-deadline', 'realtime', '-cpu-used', '8', '-b:v', '500k', '-c:a', 'libopus', '-f', 'webm']);
+        const out = await prepareMedia(webm, 'video/webm');
+        expect(out.mimeType).toBe('video/mp4');
+        expect({ width: out.width, height: out.height }).toEqual({ width: 640, height: 360 });
+        expect(pictureOf(probe(out.buffer)).codec_name).toBe('h264');
+    });
+
+    it(`longer than ${MAX_VIDEO_SECONDS / 60} minutes is turned away`, async () => {
+        const long = clip('long.mp4', ['-f', 'lavfi', '-i', 'color=c=gray:size=32x32:rate=1', '-t', String(MAX_VIDEO_SECONDS + 5),
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'mp4']);
+        await expect(prepareMedia(long, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLongError);
+    });
+
+    it('frames bigger than 4K, or more of them than two minutes at 120 a second, are turned away', async () => {
+        const huge = clip('huge.mp4', ['-f', 'lavfi', '-i', 'color=c=black:size=4352x2448:rate=1', '-t', '1',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-f', 'mp4']);
+        await expect(prepareMedia(huge, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLargeError);
+        const fast = clip('fast.mp4', ['-f', 'lavfi', '-i', 'color=c=gray:size=32x32:rate=1000', '-t', '15',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-f', 'mp4']);
+        await expect(prepareMedia(fast, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLargeError);
+    });
+
+    it('a picture that ends before the sound still gives a poster', async () => {
+        const short = clip('short-picture.mp4', [...PATTERN('320x240', 25), ...TONE, '-frames:v', '1', '-t', '3',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4']);
+        const out = await prepareMedia(short, 'video/mp4', { poster: true });
+        expect(out.mimeType).toBe('video/mp4');
+        expect(out.poster?.mimeType).toBe('image/jpeg');
+    });
+
+    it('a WebM that doesn\'t say how long it is (as browsers record them) is made too', async () => {
+        const webm = execFileSync(FFMPEG, ['-v', 'error', ...PATTERN('320x240', 30), '-t', '2', '-c:v', 'libvpx', '-deadline', 'realtime',
+            '-cpu-used', '8', '-b:v', '300k', '-threads', '1', '-f', 'webm', 'pipe:1'], { maxBuffer: 50_000_000 });
+        const out = await prepareMedia(webm, 'video/webm');
+        expect(out.mimeType).toBe('video/mp4');
+        expect(out.duration).toBeCloseTo(2, 0);
+    });
+
+    it('a video isn\'t made, or stops being made, once its member has left', async () => {
+        const gone = new AbortController();
+        gone.abort();
+        await expect(prepareMedia(phoneClip(), 'video/quicktime', { signal: gone.signal })).rejects.toBeInstanceOf(MediaAbortedError);
+        const leaving = new AbortController();
+        const making = prepareMedia(phoneClip(), 'video/quicktime', { signal: leaving.signal });
+        setTimeout(() => leaving.abort(), 50);
+        await expect(making).rejects.toBeInstanceOf(MediaAbortedError);
+    });
+
+    it('a movie with no picture in it is turned away', async () => {
+        await expect(prepareMedia(phoneVideo(), 'video/quicktime')).rejects.toBeInstanceOf(UnreadableMediaError);
     });
 });

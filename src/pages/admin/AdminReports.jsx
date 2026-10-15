@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Flag, ExternalLink, Trash2, UserX, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
-import { adminApi, albumsApi, eventsApi } from '../../services/api';
+import { adminApi, albumsApi, eventsApi, talentApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { openExternal } from '../../utils/openExternal';
 
@@ -20,6 +20,7 @@ const TARGET_LABELS = {
     note: 'Post',
     album: 'Album',
     photo: 'Photo',
+    talent: 'Talent',
 };
 
 // The terms promise a review within 24 hours (§6): flag what is getting close.
@@ -90,6 +91,7 @@ const AdminReports = () => {
         album: { label: 'album', confirm: 'Delete this album and its photos for good?', action: (r) => albumsApi.delete(r.targetId) },
         // The report's link is the photo's album (/albums/:id).
         photo: { label: 'photo', confirm: 'Delete this photo for good?', action: (r) => albumsApi.deletePhoto(r.link.split('/').pop(), r.targetId) },
+        talent: { label: 'talent', confirm: 'Remove this talent and its proof of work for good?', action: (r) => talentApi.delete(r.targetId) },
     };
 
     const removeContent = (r) => {

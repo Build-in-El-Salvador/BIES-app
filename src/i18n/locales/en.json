@@ -83,7 +83,8 @@
     "wallet": "Wallet",
     "more": "More",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "talent": "Talents"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -101,11 +102,12 @@
     "adminPanel": "Admin Panel",
     "leaderboard": "Leaderboard",
     "farmDirectory": "Regenerative Farms",
-    "certifiedDirectory": "Businesses",
+    "certifiedDirectory": "Business Directory",
     "bounties": "Bounty Board",
     "wallet": "Wallet",
     "profile": "Profile",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "talent": "BIES Talents"
   },
   "settings": {
     "title": "Settings",
@@ -1895,6 +1897,160 @@
       "error": "That didn't work. Please try again."
     }
   },
+  "talent": {
+    "search": "Search skills or people",
+    "add": "Add your talent",
+    "addAnother": "Add another talent",
+    "yours": "Yours",
+    "allCategories": "All",
+    "categories": {
+      "tech": "Tech & development",
+      "design": "Design & creative",
+      "media": "Photo & video",
+      "marketing": "Marketing & social media",
+      "writing": "Writing & translation",
+      "teaching": "Teaching & tutoring",
+      "professional": "Business, legal & finance",
+      "trades": "Building & trades",
+      "home": "Home & garden",
+      "events": "Food & events",
+      "wellness": "Health & wellness",
+      "transport": "Driving & delivery",
+      "other": "Other"
+    },
+    "workTypes": {
+      "one-off": "One-off jobs",
+      "short-term": "Short-term",
+      "long-term": "Long-term"
+    },
+    "workTypeHints": {
+      "one-off": "A single job or gig",
+      "short-term": "A few weeks or months",
+      "long-term": "Ongoing, part-time or full-time"
+    },
+    "available": "Available",
+    "busy": "Busy",
+    "availableLong": "Taking on work now",
+    "busyLong": "Not taking on work right now",
+    "remote": "Works remotely",
+    "btc": "Accepts bitcoin",
+    "filters": {
+      "available": "Taking on work now",
+      "remote": "Works remotely",
+      "btc": "Accepts bitcoin",
+      "workType": "Kind of work",
+      "anyWork": "Any"
+    },
+    "empty": "No one has listed their talent yet. Show members what you can do, and be the first.",
+    "noneYours": "You haven't listed any talents yet.",
+    "noMatches": "No talents match these filters.",
+    "noResultsSearch": "No talents match \"{{query}}\".",
+    "about": "About",
+    "skills": "Skills",
+    "work": "Work",
+    "openTo": "Open to",
+    "rate": "Rate",
+    "languages": "Languages",
+    "proofOfWork": "Proof of Work",
+    "noProof": "No proof of work yet.",
+    "noProofOwn": "Show members what you've done:",
+    "mediaCount_one": "{{count}} photo or video",
+    "mediaCount_other": "{{count}} photos and videos",
+    "workPhoto": "{{title}}, photo {{n}}",
+    "workVideo": "{{title}}, video {{n}}",
+    "video": "Video",
+    "seeTalent": "View talent page",
+    "edit": "Edit",
+    "back": "Back to Talents",
+    "notFound": "Talent not found",
+    "notFoundDesc": "It doesn't exist or it was removed.",
+    "blocked": {
+      "title": "You blocked this member",
+      "body": "Unblock them to see their talent again."
+    },
+    "profileEmptyOwn": "Show members what you can do for them: a skill or service you offer, the kind of work you take on, and examples of your work.",
+    "actions": {
+      "label": "Contact and share",
+      "email": "Email",
+      "website": "Website",
+      "profile": "Profile",
+      "share": "Share",
+      "copied": "Copied"
+    },
+    "form": {
+      "createTitle": "Add your talent",
+      "editTitle": "Edit your talent",
+      "subtitle": "Show members what you can do for them. Your talent shows on the Talents page and on your profile.",
+      "offerHeading": "What you offer",
+      "titleLabel": "Your talent",
+      "titlePlaceholder": "e.g. App developer, Spanish lessons",
+      "titleRequired": "Say what you offer.",
+      "categoryLabel": "Category",
+      "chooseCategory": "Choose a category",
+      "categoryRequired": "Choose a category.",
+      "skillsLabel": "Skills",
+      "skillsPlaceholder": "React, iOS, Nostr…",
+      "skillsHint": "Press Enter after each one.",
+      "aboutLabel": "About",
+      "aboutPlaceholder": "What you do, who it's for, and what people get.",
+      "workHeading": "Work you're open to",
+      "workTypesLabel": "Kind of work",
+      "workTypesRequired": "Choose at least one kind of work.",
+      "availableLabel": "I'm taking on work now",
+      "availableHint": "Busy? Turn this off: your talent stays up, marked as not taking on work.",
+      "remoteLabel": "I can work remotely",
+      "locationLabel": "Where you're based",
+      "locationPlaceholder": "San Salvador",
+      "rateLabel": "Rate",
+      "ratePlaceholder": "$40 an hour, from $300, or ask me",
+      "languagesLabel": "Languages",
+      "btcLabel": "I accept bitcoin",
+      "proofHint": "Examples of recent work (up to {{max}}): what you made, built or did. Add photos or videos, a link, or both.",
+      "workN": "Work {{n}}",
+      "addWork": "Add work",
+      "addAnotherWork": "Add more work",
+      "moveUp": "Move work {{n}} up",
+      "removeWork": "Remove work {{n}}",
+      "addMedia": "Add photos or videos",
+      "removePhoto": "Remove photo",
+      "removeVideo": "Remove video",
+      "uploadingVideo": "Uploading video…",
+      "videoWait": "Videos can take a minute to upload.",
+      "videoTooBig": "That video is {{size}} MB. Videos can be up to {{max}} MB: try a shorter clip.",
+      "videoTooLong": "Videos can be up to {{max}} minutes long: try a shorter clip.",
+      "videoTooLarge": "Videos can be up to 4K: try one recorded at a lower quality.",
+      "videoBusy": "Lots of videos are uploading right now. Please try again in a minute.",
+      "workTitleLabel": "Title",
+      "workTitlePlaceholder": "e.g. Booking app for a surf school",
+      "workTitleRequired": "Give this work a title.",
+      "workDetailsLabel": "What you did",
+      "workDetailsPlaceholder": "The brief, your part in it, and how it turned out.",
+      "workLinkLabel": "Link",
+      "workYearLabel": "Year",
+      "coverHeading": "Cover photo",
+      "coverHint": "Optional. Without one, your talent shows the first photo of your proof of work.",
+      "addCover": "Add a cover photo",
+      "changeCover": "Change cover",
+      "removeCover": "Remove cover photo",
+      "contactHeading": "How members reach you",
+      "contactHint": "Shown to BIES members on your talent page. They can always open your profile too.",
+      "whatsappLabel": "WhatsApp",
+      "emailLabel": "Email",
+      "websiteLabel": "Website or portfolio",
+      "submit": "Add talent",
+      "save": "Save changes",
+      "saveFailed": "Your talent couldn't be saved. Please try again.",
+      "uploadFailed": "That photo or video couldn't be uploaded. Please try again.",
+      "notYourPhoto": "Add photos and videos by uploading them here.",
+      "notYours": "Only the member it belongs to can edit this talent.",
+      "atLimitTitle": "You've listed the most talents you can",
+      "tooMany": "You can list up to {{max}} talents. Edit or delete one to add another.",
+      "delete": "Delete this talent",
+      "deleteConfirm": "Delete this talent and its proof of work? This can't be undone.",
+      "deleteYes": "Delete",
+      "deleteFailed": "Your talent couldn't be deleted. Please try again."
+    }
+  },
   "marketplace": {
     "entryLabel": "Marketplace",
     "navLabel": "Market",
@@ -1968,11 +2124,12 @@
     "discover": "Discover",
     "members": "Members",
     "farms": "Farms",
-    "trusted": "Businesses",
+    "trusted": "Directory",
     "events": "Events",
     "news": "News",
     "dashboard": "Dashboard",
-    "cowork": "Cowork"
+    "cowork": "Cowork",
+    "talent": "Talents"
   },
   "cowork": {
     "title": "Who's coworking",
@@ -2186,7 +2343,7 @@
     "title": "Feature Toggles",
     "subtitle": "Turn app features on or off for everyone, instantly - no redeploy needed",
     "propagationNote": "Changes apply to you immediately. Other users pick them up within about 5 minutes (server cache) or on their next app focus. Disabled features disappear from navigation, their pages show Not Found and their APIs are blocked.",
-    "appNote": "The iOS and Android apps show only the Farm Directory and BIES Trusted from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
+    "appNote": "The iOS and Android apps show only the Farm Directory, BIES Trusted and BIES Talents from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
     "adminOnly": "Only administrators can change feature toggles. Moderators have read-only access.",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -2251,6 +2408,10 @@
       "courses": {
         "name": "Courses",
         "description": "Course catalog, lessons and enrolment"
+      },
+      "talent": {
+        "name": "BIES Talents",
+        "description": "Members' skills and services, with their proof of work"
       }
     }
   },
@@ -2388,7 +2549,8 @@
       "reportListing": "Report listing",
       "reportEvent": "Report event",
       "block": "Block",
-      "blockMember": "Block member"
+      "blockMember": "Block member",
+      "reportTalent": "Report talent"
     },
     "reasons": {
       "harassment": "Harassment, threats or hate",
@@ -2399,7 +2561,8 @@
       "private_info": "Someone's personal details shared without permission",
       "fake_recommendation": "Fake, paid or traded recommendation",
       "inaccurate_listing": "Wrong details, or listed without the owner's permission",
-      "other": "Something else"
+      "other": "Something else",
+      "not_their_work": "Shows work that isn't theirs"
     },
     "report": {
       "title": {
@@ -2409,7 +2572,8 @@
         "event": "Report this event",
         "note": "Report this post",
         "album": "Report this album",
-        "photo": "Report this photo"
+        "photo": "Report this photo",
+        "talent": "Report this talent"
       },
       "why": "What's wrong with it?",
       "detailsLabel": "Anything else we should know? (optional)",
@@ -2531,6 +2695,10 @@
       "opportunities": {
         "title": "Opportunities",
         "desc": "Explore jobs, partnerships, events, and more."
+      },
+      "talent": {
+        "title": "BIES Talents",
+        "desc": "Find members' skills and services, or offer your own."
       }
     }
   },
@@ -2543,7 +2711,8 @@
     "message": "Message",
     "tabs": {
       "all": "All",
-      "photos": "Photos"
+      "photos": "Photos",
+      "talent": "Talents"
     },
     "details": "Details",
     "at": "at",

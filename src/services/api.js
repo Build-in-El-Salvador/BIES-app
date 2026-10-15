@@ -120,6 +120,7 @@ async function uploadFile(path, formData) {
     if (!res.ok) {
         const error = new Error(data.error || 'Upload failed');
         error.status = res.status;
+        error.data = data; // reason: 'too_long', a video over its length
         throw error;
     }
     return data;
@@ -214,6 +215,9 @@ export const profilesApi = {
     // NIP-05 availability check
     checkNip05: (name) => get('/profiles/check-nip05', { name }),
 
+    // Members' BIES names and photos by Nostr key (up to 100): { data: { [pubkey]: { name, avatar } } }
+    lookup: (pubkeys) => post('/profiles/lookup', { pubkeys }),
+
     // Follow system
     follow: (id) => post(`/profiles/${id}/follow`),
     unfollow: (id) => del(`/profiles/${id}/follow`),
@@ -305,10 +309,13 @@ export const marketplaceApi = {
 
 export const uploadApi = {
     // shared: a GIF for the shared library, which deleting a post leaves.
-    media: (file, { shared = false } = {}) => {
+    // poster: for a video, a still from it too (the answer's `poster`).
+    // A video takes a while: the server makes it smaller first.
+    media: (file, { shared = false, poster = false } = {}) => {
         const fd = new FormData();
         fd.append('file', file);
-        return uploadFile(shared ? '/upload/media?shared=1' : '/upload/media', fd);
+        const query = [shared && 'shared=1', poster && 'poster=1'].filter(Boolean).join('&');
+        return uploadFile(query ? `/upload/media?${query}` : '/upload/media', fd);
     },
 
     deck: (file, projectId) => {
@@ -731,6 +738,20 @@ export const settingsApi = {
     updateNotifications: (data) => put('/settings/notifications', data),
     getPrivacy: () => get('/settings/privacy'),
     updatePrivacy: (data) => put('/settings/privacy', data),
+};
+
+// BIES Talents: what members offer to do, with their proof of work (members only).
+export const talentApi = {
+    list: (params = {}) => get('/talent', params),
+    // params: { search, category, workType, available, remote, btc, userId, page, limit }
+
+    get: (id) => get(`/talent/${id}`),
+
+    create: (data) => post('/talent', data),
+
+    update: (id, data) => put(`/talent/${id}`, data),
+
+    delete: (id) => del(`/talent/${id}`),
 };
 
 // Photo albums: a member's, or a farm's or business's (server: album.controller.ts)

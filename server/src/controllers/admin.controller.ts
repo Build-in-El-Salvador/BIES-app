@@ -26,6 +26,8 @@ import { BADGES } from '../services/badges.catalog';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
+import { filesOf } from './talent.controller';
+import { uploadNameOf } from '../services/uploads.service';
 import { withoutDeckKey } from '../utils/projectFields';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -799,6 +801,20 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
             });
             syncResults.push('Following transferred');
         }
+
+        // 8b. Transfer talent (BIES Talents): the same person's skills and work,
+        // and the records of its photos and videos, so the target member can
+        // change or remove them (ownsUploads, discardUploads).
+        const talentFiles = (await prisma.talentListing.findMany({ where: { userId: sourceUserId }, select: { photo: true, works: true } }))
+            .flatMap(filesOf).map(uploadNameOf).filter((name): name is string => !!name);
+        if (talentFiles.length) {
+            await prisma.upload.updateMany({ where: { userId: sourceUserId, name: { in: talentFiles } }, data: { userId: targetUserId } });
+        }
+        const talent = await prisma.talentListing.updateMany({
+            where: { userId: sourceUserId },
+            data: { userId: targetUserId },
+        });
+        if (talent.count > 0) syncResults.push(`${talent.count} talent listings transferred`);
 
         // 9. Optionally soft-delete source account (moves to trash)
         if (deleteSource) {

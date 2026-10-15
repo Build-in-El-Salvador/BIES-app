@@ -9,6 +9,8 @@ import {
     updateMyProfile,
     updateProfileSchema,
     checkNip05,
+    lookupProfiles,
+    lookupProfilesSchema,
 } from '../controllers/profile.controller';
 import {
     followUser,
@@ -27,6 +29,9 @@ const PROFILE_TEXT = [
 
 // NIP-05 availability check (before /:id to avoid being swallowed)
 router.get('/check-nip05', optionalAuth, checkNip05);
+
+// Members' names and photos by Nostr key, for the Feed (members only).
+router.post('/lookup', authenticate, validate(lookupProfilesSchema), lookupProfiles);
 
 // /me routes MUST come before /:id to avoid being swallowed as an id param
 router.get('/me', authenticate, getMyProfile);

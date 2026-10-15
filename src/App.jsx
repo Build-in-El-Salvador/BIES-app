@@ -70,6 +70,10 @@ import DirectoryList from './pages/directory/DirectoryList';
 import ListingDetail from './pages/directory/ListingDetail';
 import CreateListing from './pages/directory/CreateListing';
 
+import TalentList from './pages/talent/TalentList';
+import TalentDetail from './pages/talent/TalentDetail';
+import TalentForm from './pages/talent/TalentForm';
+
 import MarketplaceList from './pages/marketplace/MarketplaceList';
 import MarketListingDetail from './pages/marketplace/MarketListingDetail';
 import CreateMarketListing from './pages/marketplace/CreateMarketListing';
@@ -231,6 +235,11 @@ const AppContent = () => {
                     <Route path="/trusted/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing key="new-business" type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/trusted/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/trusted/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
+                    {/* BIES Talents: members' skills and services, with their proof of work */}
+                    <Route path="/talents" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentList /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/talents/new" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm key="new-talent" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/talents/:id" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/talents/:id/edit" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* Marketplace: its own page too */}
                     {MARKETPLACE_ENABLED && (
                         <>

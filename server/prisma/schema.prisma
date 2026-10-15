@@ -67,6 +67,7 @@ model User {
   albums                Album[]
   uploads               Upload[]
   directoryEndorsements DirectoryEndorsement[]
+  talentListings        TalentListing[]
   savedListings         SavedListing[]
   listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
   listingTransfersTo    ListingTransfer[]      @relation("ListingTransfersTo")
@@ -966,6 +967,42 @@ model DirectoryListing {
   albums       Album[]
   @@index([type, status])
   @@map("directory_listings")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BIES Talent: what a member offers to do for others (a skill or a service),
+// the kinds of work they take on, and examples of what they've done (their
+// proof of work). Always the member's own: nobody lists someone else.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TalentListing {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  title       String                                     // "App developer", "Spanish lessons"
+  category    String   @default("")                      // TALENT_CATEGORIES in talent.controller.ts
+  about       String   @default("")
+  skills      String   @default("[]")                    // JSON array of strings
+  workTypes   String   @default("[]") @map("work_types") // JSON: one-off | short-term | long-term
+  // Taking on work now; off keeps the listing up, marked as busy.
+  available   Boolean  @default(true)
+  remote      Boolean  @default(false)
+  location    String   @default("")
+  rate        String   @default("")                      // free text: "$40 an hour", "ask me"
+  btcAccepted Boolean  @default(false) @map("btc_accepted")
+  languages   String   @default("[]")
+  photo       String   @default("")                      // cover (the app falls back to the first work's photo)
+  // Proof of work, JSON: [{ title, details, link, year, photos: [] }]
+  works       String   @default("[]")
+  whatsapp    String   @default("")
+  email       String   @default("")
+  website     String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("talent_listings")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

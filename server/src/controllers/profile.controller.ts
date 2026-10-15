@@ -212,6 +212,45 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
  * member the viewer blocked comes back as just a name, with `blocked: true`;
  * to a member they blocked, it isn't there at all (404), as on Facebook.
  */
+export const lookupProfilesSchema = z.object({
+    pubkeys: z.array(z.string().regex(/^[0-9a-f]{64}$/)).min(1).max(100),
+});
+
+/**
+ * POST /profiles/lookup { pubkeys }
+ * Members' BIES names and photos by Nostr key, for the Feed: the name a
+ * member set here, not whatever their Nostr profile says elsewhere (or an old
+ * copy of it). Members with a name only; not suspended or deleted ones, nor
+ * anyone blocked either way. Name and photo are what any member sees on a
+ * profile (profileForViewer).
+ */
+export async function lookupProfiles(req: Request, res: Response): Promise<void> {
+    try {
+        const { pubkeys } = req.body as z.infer<typeof lookupProfilesSchema>;
+        const hidden = await hiddenFromIds(req.user!.id, { staff: isStaffUser(req.user) });
+        const users = await prisma.user.findMany({
+            where: {
+                nostrPubkey: { in: [...new Set(pubkeys)] },
+                isBanned: false,
+                deletedAt: null,
+                ...(hidden.length ? { id: { notIn: hidden } } : {}),
+            },
+            select: { nostrPubkey: true, profile: { select: { name: true, avatar: true } } },
+        });
+        const data: Record<string, { name: string; avatar: string }> = {};
+        for (const user of users) {
+            const name = user.profile?.name?.trim();
+            // Unnamed: the app's own stand-in ("nostr:…"); their Nostr profile shows instead.
+            if (!name || name.startsWith('nostr:')) continue;
+            data[user.nostrPubkey] = { name, avatar: user.profile?.avatar || '' };
+        }
+        res.json({ data });
+    } catch (error) {
+        console.error('Lookup profiles error:', error);
+        res.status(500).json({ error: 'Failed to look up profiles' });
+    }
+}
+
 export async function getProfile(req: Request, res: Response): Promise<void> {
     const viewerBlocked = (ownerId: string) =>
         !!req.user && req.user.id !== ownerId ? hasBlocked(req.user.id, { id: ownerId }) : Promise.resolve(false);

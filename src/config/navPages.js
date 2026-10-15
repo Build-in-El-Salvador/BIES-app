@@ -21,6 +21,8 @@ import {
   Leaf,
   Building2,
   Users,
+  Briefcase,
+  CircleUser,
 } from 'lucide-react';
 import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags.js';
 
@@ -35,9 +37,13 @@ export const NAV_PAGES = [
   // Discover is projects + members; with projects off it's the same as Members.
   { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover', flag: 'projects' },
   { id: 'members', path: '/members', icon: Users, labelKey: 'mobileNav.members', auth: true },
+  // Your own profile: in the side menu, and a tab members can add.
+  { id: 'profile', path: '/profile', icon: CircleUser, labelKey: 'nav.profile', auth: true },
   { id: 'farms', path: '/farms', icon: Leaf, labelKey: 'mobileNav.farms', auth: true, flag: 'directories' },
   // Businesses (route /trusted): "BIES Trusted" is the badge a listing earns there.
   { id: 'trusted', path: '/trusted', icon: Building2, labelKey: 'mobileNav.trusted', auth: true, flag: 'directories' },
+  // BIES Talents: members' skills and services, with their proof of work.
+  { id: 'talent', path: '/talents', icon: Briefcase, labelKey: 'mobileNav.talent', auth: true, flag: 'talent' },
   // Spread conditionally so the entry is absent (not just hidden) when the
   // build-time constant is off; the `flag:` key layers the runtime toggle on top.
   ...(MARKETPLACE_ENABLED
@@ -62,28 +68,30 @@ export const NAV_PAGES = [
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));
 
-// Profile is in the side menu, not the bar (Oct 2026).
+// Profile is in the side menu, not the default bar (Oct 2026); members can
+// add it to theirs.
 export const DEFAULT_BOTTOM_NAV = ['home', 'feed', 'members', 'farms', 'trusted'];
 
-// Bars saved before Home: the old default becomes the new one, and a
-// customized bar's Profile tab becomes Home.
+// Bars saved before Home: the old default becomes the new one. A bar saved
+// since ends with SAVED_MARK (savedTabs), so a member who picks those same
+// tabs again keeps them: only an unmarked one is the old default.
 const PREVIOUS_DEFAULT = ['feed', 'members', 'farms', 'trusted', 'profile'];
-const RETIRED = { profile: 'home' };
+export const SAVED_MARK = 'v2';
 
 export const MAX_TABS = 5;
 export const MIN_TABS = 1;
 
 /**
  * Sanitize a stored/received list of tab ids into a valid bottom-nav config.
- * Pure function: filters unknown ids, dedupes (first occurrence wins),
- * caps at MAX_TABS, and falls back to the defaults when invalid or empty.
+ * Pure function: filters unknown ids (SAVED_MARK among them), dedupes (first
+ * occurrence wins), caps at MAX_TABS, and falls back to the defaults when
+ * invalid or empty.
  */
 export function sanitizeTabs(ids) {
   if (!Array.isArray(ids)) return [...DEFAULT_BOTTOM_NAV];
-  if (ids.join() === PREVIOUS_DEFAULT.join()) return [...DEFAULT_BOTTOM_NAV];
   const seen = new Set();
   const result = [];
-  for (const id of ids.map((i) => RETIRED[i] || i)) {
+  for (const id of ids) {
     if (NAV_PAGES_BY_ID[id] && !seen.has(id)) {
       seen.add(id);
       result.push(id);
@@ -92,6 +100,17 @@ export function sanitizeTabs(ids) {
   const sliced = result.slice(0, MAX_TABS);
   if (sliced.length < MIN_TABS) return [...DEFAULT_BOTTOM_NAV];
   return sliced;
+}
+
+/** A bar read back from this device or the server: an old saved default becomes today's. */
+export function restoreTabs(stored) {
+  if (Array.isArray(stored) && stored.join() === PREVIOUS_DEFAULT.join()) return [...DEFAULT_BOTTOM_NAV];
+  return sanitizeTabs(stored);
+}
+
+/** A bar as it's saved, marked as chosen now (see SAVED_MARK). */
+export function savedTabs(ids) {
+  return [...sanitizeTabs(ids), SAVED_MARK];
 }
 
 /**

@@ -40,7 +40,8 @@ RUN npm run build
 # ─────────────────────────────────────────────────────────────────────────────
 FROM node:24-alpine AS server
 
-RUN apk add --no-cache tini openssl sqlite python3 py3-pip \
+# ffmpeg makes members' videos smaller (server/src/services/mediaProcessing.ts).
+RUN apk add --no-cache tini openssl sqlite python3 py3-pip ffmpeg \
     && pip3 install --no-cache-dir --break-system-packages gallery-dl
 
 WORKDIR /app

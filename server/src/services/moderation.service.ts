@@ -25,7 +25,7 @@ import { nip19 } from 'nostr-tools';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
 import { linksIn, uploadNameOf } from './uploads.service';
 
-export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo'] as const;
+export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo', 'talent'] as const;
 export const REPORT_REASONS = [
     'harassment',
     'sexual',
@@ -35,6 +35,7 @@ export const REPORT_REASONS = [
     'private_info',
     'fake_recommendation',
     'inaccurate_listing',
+    'not_their_work',
     'other',
 ] as const;
 export const REPORT_STATUSES = ['OPEN', 'ACTIONED', 'DISMISSED'] as const;
@@ -52,6 +53,7 @@ export const REASON_LABELS: Record<ReportReason, string> = {
     private_info: "Someone's personal data shared without permission",
     fake_recommendation: 'Fake, paid or traded recommendation',
     inaccurate_listing: 'Listing is wrong, or listed without permission',
+    not_their_work: "Shows work that isn't theirs",
     other: 'Something else',
 };
 
@@ -79,6 +81,8 @@ async function responsibleMember(type: ReportTarget, id: string, pubkey?: string
         }
         case 'endorsement':
             return (await prisma.directoryEndorsement.findUnique({ where: { id }, select: { userId: true } }))?.userId;
+        case 'talent':
+            return (await prisma.talentListing.findUnique({ where: { id }, select: { userId: true } }))?.userId;
         case 'event':
             return (await prisma.event.findUnique({ where: { id }, select: { hostId: true } }))?.hostId;
         case 'note': {
@@ -197,6 +201,10 @@ async function describeTarget(type: string, id: string, pubkey: string | null, s
             return e
                 ? { text: `${kind} on ${e.listing.name}: "${e.comment}"`, link: listingPath(e.listing.type, e.listingId) }
                 : { text: 'Review (deleted)', link: null };
+        }
+        case 'talent': {
+            const talent = await prisma.talentListing.findUnique({ where: { id }, select: { title: true } });
+            return { text: `Talent: ${talent?.title ?? '(deleted)'}`, link: talent ? `/talents/${id}` : null };
         }
         case 'event': {
             const event = await prisma.event.findUnique({ where: { id }, select: { title: true } });
