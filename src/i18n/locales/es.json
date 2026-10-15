@@ -2332,6 +2332,8 @@
       "keyTitle": "Su clave secreta",
       "keyWarning": "Cualquiera que tenga esta clave puede actuar como usted en Nostr. No la comparta nunca, ni la pegue en un sitio en el que no confíe.",
       "reveal": "Mostrar",
+      "deviceReason": "Confirme que es usted para ver su clave secreta",
+      "deviceNoLock": "Primero configure un código en este teléfono. BIES muestra su clave secreta solo después de que confirme su identidad con su rostro, su huella o su código.",
       "hide": "Ocultar",
       "copy": "Copiar",
       "copied": "Copiada",

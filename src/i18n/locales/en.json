@@ -2331,6 +2331,8 @@
       "keyTitle": "Your secret key",
       "keyWarning": "Anyone with this key can act as you on Nostr. Never share it, and never paste it into a site you don't trust.",
       "reveal": "Show",
+      "deviceReason": "Confirm it's you to see your secret key",
+      "deviceNoLock": "Set a passcode on this phone first. BIES shows your secret key only after you confirm it's you with your face, fingerprint or passcode.",
       "hide": "Hide",
       "copy": "Copy",
       "copied": "Copied",

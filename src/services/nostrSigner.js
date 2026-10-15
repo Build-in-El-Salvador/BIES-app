@@ -19,10 +19,10 @@
 
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import * as nip44 from 'nostr-tools/nip44';
+import { secureGet, secureRemove, secureSet } from './secureStore.js';
 
 const LOGIN_METHOD_KEY = 'bies_login_method'; // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted'
 const HOSTED_PUBKEY_KEY = 'bies_hosted_pubkey';
-const SESSION_SK_KEY = 'bies_sk_session'; // sessionStorage — survives refresh, cleared on tab close
 const HOSTED_NIP44_ERROR = 'Encrypted messages are not available for email accounts yet.';
 
 class NostrSigner {
@@ -32,19 +32,27 @@ class NostrSigner {
         this._mode = null;     // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted' | null
         this._reacquirePromise = null; // dedup concurrent _tryReacquire calls
 
-        // Restore key from sessionStorage so page refreshes don't lose it.
+        // Restore a pasted key so page refreshes don't lose it.
         this._restoreFromSession();
     }
 
-    /** Restore secret key from sessionStorage (page refresh recovery). */
+    /**
+     * Restore a pasted key: from sessionStorage in a browser (lost when the tab
+     * closes), or from the Keychain in the phone app (kept between launches).
+     * Called again once the Keychain has been read (authService.restoreSession).
+     */
+    restore() {
+        if (!this._sk) this._restoreFromSession();
+    }
+
     _restoreFromSession() {
         try {
-            let hex = sessionStorage.getItem(SESSION_SK_KEY);
+            let hex = secureGet('nsec');
             // A key from an nsec sign-in only counts while that is still the
             // method: after a sign-out, or another sign-in in this tab, it is
             // someone else's leftover.
             if (hex && this.storedMethod !== 'nsec') {
-                sessionStorage.removeItem(SESSION_SK_KEY);
+                secureRemove('nsec');
                 hex = null;
             }
             if (!hex) {
@@ -72,23 +80,21 @@ class NostrSigner {
             this._pubkey = getPublicKey(sk);
             this._mode = 'nsec';
         } catch {
-            sessionStorage.removeItem(SESSION_SK_KEY);
+            secureRemove('nsec');
         }
     }
 
-    /** Persist secret key hex to sessionStorage. */
+    /** Keep the key for this tab (browser) or this phone (Keychain). */
     _persistToSession(sk) {
-        try {
-            const hex = Array.from(sk).map(b => b.toString(16).padStart(2, '0')).join('');
-            sessionStorage.setItem(SESSION_SK_KEY, hex);
-        } catch { /* quota exceeded or unavailable — silent fail */ }
+        const hex = Array.from(sk).map(b => b.toString(16).padStart(2, '0')).join('');
+        secureSet('nsec', hex);
     }
 
     // ─── Configuration ──────────────────────────────────────────────────────
 
     /**
      * Configure signer with an nsec (passkey/nsec/seed login).
-     * The secret key is held in memory only — never persisted.
+     * Kept for this tab in a browser, and in the Keychain in the phone app.
      */
     setNsec(nsecOrSk) {
         if (typeof nsecOrSk === 'string') {
@@ -108,7 +114,7 @@ class NostrSigner {
     _dropLocalKey() {
         if (this._sk instanceof Uint8Array) this._sk.fill(0);
         this._sk = null;
-        try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
+        secureRemove('nsec');
     }
 
     /** Configure signer to use browser extension */
@@ -155,7 +161,7 @@ class NostrSigner {
         this._mode = null;
         localStorage.removeItem(LOGIN_METHOD_KEY);
         localStorage.removeItem(HOSTED_PUBKEY_KEY);
-        try { sessionStorage.removeItem(SESSION_SK_KEY); } catch { /* ignore */ }
+        secureRemove('nsec');
         // Disconnect bunker if active
         import('./nostrConnectService.js').then(({ nostrConnectService }) => {
             nostrConnectService.disconnect();
