@@ -68,6 +68,9 @@ export const authService = {
             return null;
         }
 
+        // A key pasted in the phone app comes back from the Keychain.
+        nostrSigner.restore();
+
         try {
             const user = await authApi.me();
             authService.setCachedUser(user);
@@ -79,8 +82,8 @@ export const authService = {
             // A device that can't sign for the account any more signs in
             // again, rather than failing at every signature: it signed
             // through BIES, which no longer holds the key (the member took it
-            // and the answer never arrived), or with a pasted key that the
-            // native app forgets when it closes.
+            // and the answer never arrived), or with a pasted key the phone
+            // no longer has (the Keychain couldn't be read).
             const cantSign = (method === 'hosted' && !user.hostedKey)
                 || (method === 'nsec' && !nostrSigner.hasKey && isNativePlatform());
             if (cantSign) {

@@ -304,6 +304,7 @@
 
 /* ---------- Compose box ------------------------------------------------- */
 .primal-compose {
+  position: relative; /* the emoji and GIF pickers open under it */
   border-bottom: 1px solid var(--feed-divider);
   padding: 16px 20px 12px;
 }
@@ -543,7 +544,7 @@
     padding-left: 46px;
   }
   .primal-note {
-    padding: 10px 14px;
+    padding: 10px 14px 2px;
   }
   .primal-note-content-grid {
     grid-template-columns: 44px 1fr;
@@ -654,7 +655,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 12px 20px;
+  padding: 12px 20px 4px; /* little space under the action icons */
   border-bottom: 1px solid var(--feed-divider);
   background: var(--feed-bg);
   text-decoration: none;
@@ -918,7 +919,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 4px;
+  padding: 6px 4px 2px;
   border: none;
   background: none;
   color: var(--feed-text-tertiary);
@@ -1542,4 +1543,9 @@
 .picker-anchor {
   position: relative;
   display: inline-flex;
+}
+
+/* In the composer they hang off the composer itself (.primal-compose). */
+.primal-compose-actions .picker-anchor {
+  position: static;
 }

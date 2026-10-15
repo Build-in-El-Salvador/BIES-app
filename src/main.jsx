@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import { loadSecureStore } from './services/secureStore.js'
 
 // Error Boundary for debugging white screen
 class ErrorBoundary extends React.Component {
@@ -41,10 +42,14 @@ window.onerror = function (message, source, lineno, colno, error) {
     console.error('[Global]', message, `${source}:${lineno}:${colno}`, error);
 };
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
-        <ErrorBoundary>
-            <App />
-        </ErrorBoundary>
-    </React.StrictMode>,
-)
+// The phone app reads its Keychain first, so a member stays signed in after
+// closing the app (secureStore.js). In a browser this returns at once.
+loadSecureStore().finally(() => {
+    ReactDOM.createRoot(document.getElementById('root')).render(
+        <React.StrictMode>
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        </React.StrictMode>,
+    )
+})

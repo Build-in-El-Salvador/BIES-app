@@ -20,6 +20,7 @@ import {
     unlockBackup,
 } from '../../services/accountKey';
 import { isNativePlatform } from '../../utils/platform';
+import { confirmDeviceOwner } from '../../services/deviceAuth';
 import { getSavedKey, saveKey, savedKeyAvailable } from '../../services/savedKey';
 import CodeField, { isCompleteCode, useCountdown } from '../../components/account/CodeField';
 import { accountErrorMessage } from '../../components/account/accountErrors';
@@ -145,6 +146,10 @@ const TakeYourKey = () => {
     };
 
     const showKey = async () => {
+        // In the phone app, only for the phone's owner: Face ID or the passcode.
+        const owner = await confirmDeviceOwner({ reason: t('account.key.deviceReason'), cancelTitle: t('common.cancel') });
+        if (owner === 'no-lock') { setError(t('account.key.deviceNoLock')); return; }
+        if (owner !== 'ok') return;
         if (!begin()) return;
         try {
             const res = await accountApi.exportKey(code);

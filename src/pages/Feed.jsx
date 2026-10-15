@@ -1639,6 +1639,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                         <EmojiPicker
                                             onSelect={(emoji) => handleComposeEmoji(emoji)}
                                             onClose={() => setShowEmojiPicker(false)}
+                                            below
                                         />
                                     )}
                                 </div>
@@ -1654,7 +1655,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                         <NostrGifPicker
                                             onSelect={handleComposeGif}
                                             onClose={() => setShowGifPicker(false)}
-                                            dropDown
+                                            below
                                         />
                                     )}
                                 </div>

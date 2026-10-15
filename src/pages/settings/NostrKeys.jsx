@@ -8,6 +8,7 @@ import { nostrSigner } from '../../services/nostrSigner';
 import { keytrService, isLikelyExtensionInterference, isPrfUnsupportedError } from '../../services/keytrService';
 import { PASSKEY_ENABLED } from '../../config/featureFlags';
 import { isNativePlatform } from '../../utils/platform';
+import { confirmDeviceOwner } from '../../services/deviceAuth';
 import { SettingsPage, SettingsGroup } from '../../components/settings/SettingsUI';
 
 const EXTENSION_HINT = "This error is usually caused by a password manager browser extension (such as Bitwarden, 1Password, or Dashlane) intercepting the passkey request. Try disabling your password manager's passkey/WebAuthn feature and retry.";
@@ -57,6 +58,10 @@ const NostrKeys = () => {
 
     const handleRevealNsec = useCallback(async () => {
         setNsecError('');
+        // In the phone app, only for the phone's owner: Face ID or the passcode.
+        const owner = await confirmDeviceOwner({ reason: t('account.key.deviceReason'), cancelTitle: t('common.cancel') });
+        if (owner === 'no-lock') { setNsecError(t('account.key.deviceNoLock')); return; }
+        if (owner !== 'ok') return;
         // Key already in memory
         const inMemory = nostrSigner.getNsec();
         if (inMemory) {
@@ -80,7 +85,7 @@ const NostrKeys = () => {
             return;
         }
         setNsecError('Your secret key is not available in this session. Log in with your nsec or seed phrase, or use your passkey to reveal it.');
-    }, []);
+    }, [t]);
 
     const handleHideNsec = useCallback(() => {
         setNsecRevealed(false);

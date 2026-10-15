@@ -6,21 +6,20 @@
  *    every tab uses the newest one.
  *  - Refresh token, web: an httpOnly cookie the server sets. Scripts on the
  *    page never see it; the browser sends it to /api/auth only.
- *  - Refresh token, native app: returned in the response body and kept on
- *    the device ('bies_refresh').
- *    TODO(store build): move it to the Keychain/Keystore with the
- *    secure-storage plugin, together with pasted Nostr keys.
+ *  - Refresh token, native app: returned in the response body and kept in
+ *    the phone's Keychain or Keystore (secureStore.js), so the member stays
+ *    signed in after closing the app.
  *
  * Each refresh replaces the refresh token. The server ends the session if an
  * old one is used again, which is how a stolen copy shows up.
  */
 
 import { isNativePlatform } from '../utils/platform.js';
+import { secureGet, secureRemove, secureSet } from './secureStore.js';
 
 export const API_BASE = import.meta.env?.VITE_API_URL || '/api';
 
 const ACCESS_KEY = 'bies_token';
-const REFRESH_KEY = 'bies_refresh';
 const USER_KEY = 'bies_user';
 const SKEW_KEY = 'bies_clock_skew';
 const LOGOUT_PENDING_KEY = 'bies_logout_pending';
@@ -52,13 +51,13 @@ export function saveSession({ token, refreshToken }) {
         const { iat } = claims(token);
         if (Number.isFinite(iat)) localStorage.setItem(SKEW_KEY, String(iat - Math.floor(Date.now() / 1000)));
     }
-    if (refreshToken && isNativePlatform()) localStorage.setItem(REFRESH_KEY, refreshToken);
+    if (refreshToken && isNativePlatform()) secureSet('refresh', refreshToken);
 }
 
 export function clearSession() {
     generation++;
     localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+    secureRemove('refresh');
     localStorage.removeItem(USER_KEY);
 }
 
@@ -127,7 +126,7 @@ async function doRefresh() {
     const startedIn = generation;
     const stale = getAccessToken();
     const native = isNativePlatform();
-    const refreshToken = native ? localStorage.getItem(REFRESH_KEY) : undefined;
+    const refreshToken = native ? secureGet('refresh') : undefined;
     if (native && !refreshToken) {
         endSession();
         return null;
@@ -193,7 +192,7 @@ export function waitForLogout() {
 export function logoutSession({ pushToken = null } = {}) {
     const record = {
         token: getAccessToken(),
-        refreshToken: isNativePlatform() ? localStorage.getItem(REFRESH_KEY) : null,
+        refreshToken: isNativePlatform() ? secureGet('refresh') : null,
         pushToken,
     };
     generation++;
@@ -207,7 +206,7 @@ export function logoutSession({ pushToken = null } = {}) {
             writePending([...readPending(), record].slice(-5));
         }
         // Unless a new sign-in has replaced it meanwhile.
-        if (localStorage.getItem(REFRESH_KEY) === record.refreshToken) localStorage.removeItem(REFRESH_KEY);
+        if (secureGet('refresh') === record.refreshToken) secureRemove('refresh');
     })().finally(() => { logoutInFlight = null; });
     return logoutInFlight;
 }

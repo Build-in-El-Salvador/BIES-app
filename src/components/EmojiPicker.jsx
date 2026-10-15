@@ -9,7 +9,7 @@ const EMOJI_CATEGORIES = {
     'Flags': ['🇸🇻','🇺🇸','🇧🇷','🇬🇧','🇩🇪','🇯🇵','🇰🇷','🇮🇳','🇳🇬','🇿🇦','🇦🇷','🇲🇽','🇨🇴','🇨🇷','🇵🇦','🏴‍☠️','🏳️‍🌈','🏁'],
 };
 
-const EmojiPicker = ({ onSelect, onClose }) => {
+const EmojiPicker = ({ onSelect, onClose, below = false }) => {
     const [activeCategory, setActiveCategory] = useState('Smileys');
     const ref = useRef(null);
 
@@ -24,7 +24,7 @@ const EmojiPicker = ({ onSelect, onClose }) => {
     }, [onClose]);
 
     return (
-        <div className="emoji-picker" ref={ref}>
+        <div className={`emoji-picker${below ? ' picker-below' : ''}`} ref={ref}>
             <div className="emoji-tabs">
                 {Object.keys(EMOJI_CATEGORIES).map(cat => (
                     <button
@@ -61,6 +61,17 @@ const EmojiPicker = ({ onSelect, onClose }) => {
                     max-width: calc(100vw - 2rem);
                     z-index: 1000;
                     overflow: hidden;
+                }
+                /* Under the whole composer, from its left edge: a picker hung off one
+                   button near the left ran off the screen on phones. */
+                .emoji-picker.picker-below {
+                    top: 100%;
+                    bottom: auto;
+                    left: 12px;
+                    right: auto;
+                    width: calc(100% - 24px);
+                    max-width: 400px;
+                    margin: 4px 0 0;
                 }
                 .emoji-tabs {
                     display: flex;
