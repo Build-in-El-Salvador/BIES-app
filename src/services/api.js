@@ -215,6 +215,9 @@ export const profilesApi = {
     // NIP-05 availability check
     checkNip05: (name) => get('/profiles/check-nip05', { name }),
 
+    // Members' BIES names and photos by Nostr key (up to 100): { data: { [pubkey]: { name, avatar } } }
+    lookup: (pubkeys) => post('/profiles/lookup', { pubkeys }),
+
     // Follow system
     follow: (id) => post(`/profiles/${id}/follow`),
     unfollow: (id) => del(`/profiles/${id}/follow`),

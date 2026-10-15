@@ -15,7 +15,8 @@ import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import {
-    MAX_SIDE, MAX_VIDEO_SECONDS, MediaToolError, prepareMedia, stripVideoMetadata, UnreadableMediaError, VideoTooLongError,
+    MAX_SIDE, MAX_VIDEO_SECONDS, MediaAbortedError, MediaToolError, prepareMedia, stripVideoMetadata, UnreadableMediaError,
+    VideoTooLargeError, VideoTooLongError,
 } from '../services/mediaProcessing';
 import { FFMPEG, FFPROBE, HAS_FFMPEG } from './helpers/videos';
 
@@ -139,6 +140,29 @@ describe('video metadata boxes', () => {
         await expect(prepareMedia(latin1('not a WebM at all'), 'video/webm')).rejects.toBeInstanceOf(UnreadableMediaError);
     });
 
+    it('ffmpeg gets none of the server\'s settings, its secrets among them', async () => {
+        const seen = scratch('env.txt');
+        const probe = scratch('ffprobe.sh');
+        fs.writeFileSync(probe, `#!/bin/sh\nenv > '${seen}'\nexit 1\n`, { mode: 0o755 });
+        const before = { probe: process.env.FFPROBE_PATH, secret: process.env.JWT_SECRET };
+        process.env.FFPROBE_PATH = probe;
+        process.env.JWT_SECRET = 'not-for-ffmpeg-1234';
+        try {
+            await expect(prepareMedia(phoneVideo(), 'video/quicktime')).rejects.toBeInstanceOf(UnreadableMediaError);
+            const env = fs.readFileSync(seen, 'utf8');
+            expect(env).toContain('PATH=');
+            expect(env).not.toContain('not-for-ffmpeg-1234');
+            expect(env).not.toContain('JWT_SECRET');
+        } finally {
+            for (const [name, value] of [['FFPROBE_PATH', before.probe], ['JWT_SECRET', before.secret]] as const) {
+                if (value === undefined) delete process.env[name];
+                else process.env[name] = value;
+            }
+            fs.rmSync(seen, { force: true });
+            fs.rmSync(probe, { force: true });
+        }
+    });
+
     it('without ffmpeg, a video fails as the server\'s problem, not the member\'s file', async () => {
         const before = process.env.FFPROBE_PATH;
         process.env.FFPROBE_PATH = path.join(os.tmpdir(), 'no-ffprobe-here');
@@ -256,6 +280,41 @@ describe.skipIf(!HAS_FFMPEG)('videos', { timeout: 60_000 }, () => {
         const long = clip('long.mp4', ['-f', 'lavfi', '-i', 'color=c=gray:size=32x32:rate=1', '-t', String(MAX_VIDEO_SECONDS + 5),
             '-c:v', 'libx264', '-preset', 'ultrafast', '-f', 'mp4']);
         await expect(prepareMedia(long, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLongError);
+    });
+
+    it('frames bigger than 4K, or more of them than two minutes at 120 a second, are turned away', async () => {
+        const huge = clip('huge.mp4', ['-f', 'lavfi', '-i', 'color=c=black:size=4352x2448:rate=1', '-t', '1',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-f', 'mp4']);
+        await expect(prepareMedia(huge, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLargeError);
+        const fast = clip('fast.mp4', ['-f', 'lavfi', '-i', 'color=c=gray:size=32x32:rate=1000', '-t', '15',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-f', 'mp4']);
+        await expect(prepareMedia(fast, 'video/mp4')).rejects.toBeInstanceOf(VideoTooLargeError);
+    });
+
+    it('a picture that ends before the sound still gives a poster', async () => {
+        const short = clip('short-picture.mp4', [...PATTERN('320x240', 25), ...TONE, '-frames:v', '1', '-t', '3',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-f', 'mp4']);
+        const out = await prepareMedia(short, 'video/mp4', { poster: true });
+        expect(out.mimeType).toBe('video/mp4');
+        expect(out.poster?.mimeType).toBe('image/jpeg');
+    });
+
+    it('a WebM that doesn\'t say how long it is (as browsers record them) is made too', async () => {
+        const webm = execFileSync(FFMPEG, ['-v', 'error', ...PATTERN('320x240', 30), '-t', '2', '-c:v', 'libvpx', '-deadline', 'realtime',
+            '-cpu-used', '8', '-b:v', '300k', '-threads', '1', '-f', 'webm', 'pipe:1'], { maxBuffer: 50_000_000 });
+        const out = await prepareMedia(webm, 'video/webm');
+        expect(out.mimeType).toBe('video/mp4');
+        expect(out.duration).toBeCloseTo(2, 0);
+    });
+
+    it('a video isn\'t made, or stops being made, once its member has left', async () => {
+        const gone = new AbortController();
+        gone.abort();
+        await expect(prepareMedia(phoneClip(), 'video/quicktime', { signal: gone.signal })).rejects.toBeInstanceOf(MediaAbortedError);
+        const leaving = new AbortController();
+        const making = prepareMedia(phoneClip(), 'video/quicktime', { signal: leaving.signal });
+        setTimeout(() => leaving.abort(), 50);
+        await expect(making).rejects.toBeInstanceOf(MediaAbortedError);
     });
 
     it('a movie with no picture in it is turned away', async () => {

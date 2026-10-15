@@ -117,11 +117,20 @@ function talentData(body: Record<string, any>): Record<string, unknown> {
 }
 
 /** A listing's files: its cover, and its works' photos, videos and posters, stored (JSON) or as sent. */
-function filesOf(listing: { photo?: string | null; works?: string | Work[] | null }): string[] {
+export function filesOf(listing: { photo?: string | null; works?: string | Work[] | null }): string[] {
     const works = typeof listing.works === 'string' ? parseJson<Work[]>(listing.works, []) : listing.works ?? [];
     const media = works.flatMap((w) => (Array.isArray(w?.media) ? w.media : []));
     return [listing.photo, ...media.flatMap((m) => [m?.url, m?.poster])]
         .filter((url): url is string => typeof url === 'string' && !!url);
+}
+
+/**
+ * In a list, without the member's WhatsApp and email: those come only with
+ * one talent (GET /talent/:id), so a list can't gather everyone's.
+ */
+function listedTalent(talent: any) {
+    const { whatsapp: _whatsapp, email: _email, ...listed } = parseTalent(talent);
+    return listed;
 }
 
 /** As the app gets it: lists parsed, and only the member's name and photo. */
@@ -190,7 +199,7 @@ export async function listTalent(req: Request, res: Response): Promise<void> {
         ]);
 
         res.json({
-            data: talents.map(parseTalent),
+            data: talents.map(listedTalent),
             pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
         });
     } catch (error) {
@@ -251,6 +260,16 @@ export async function createTalent(req: Request, res: Response): Promise<void> {
             data: { ...talentData(req.body), userId } as any,
             include: { user: memberSelect },
         });
+        // Counted again: requests sent at once all passed the count above.
+        if (await prisma.talentListing.count({ where: { userId } }) > MAX_TALENTS_PER_MEMBER) {
+            await prisma.talentListing.delete({ where: { id: talent.id } });
+            res.status(409).json({
+                error: `You can list up to ${MAX_TALENTS_PER_MEMBER} talents`,
+                reason: 'too_many',
+                max: MAX_TALENTS_PER_MEMBER,
+            });
+            return;
+        }
         res.status(201).json(parseTalent(talent));
     } catch (error) {
         console.error('Create talent error:', error);

@@ -16,11 +16,12 @@ export const MAX_WORKS = 8;
 export const MAX_WORK_MEDIA = 4;
 export const MAX_SKILLS = 15;
 export const MAX_LANGUAGES = 10;
+// The longest skill and language the server takes (talent.controller.ts).
+export const MAX_SKILL_LENGTH = 40;
+export const MAX_LANGUAGE_LENGTH = 30;
 
-// A video the server takes: its size (upload.controller.ts) and length
-// (mediaProcessing.ts MAX_VIDEO_SECONDS).
-export const MAX_VIDEO_MB = 50;
-export const MAX_VIDEO_SECONDS = 120;
+// A video the server takes: its size and length.
+export { MAX_VIDEO_MB, MAX_VIDEO_SECONDS } from '../../config/mediaLimits.js';
 
 /** A link to a video (stored as .mp4), not a photo. */
 export function isVideo(url) {

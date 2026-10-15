@@ -47,6 +47,7 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { HAS_FFMPEG, testClip } from './helpers/videos';
 import { MAX_TALENTS_PER_MEMBER } from '../controllers/talent.controller';
+import { syncAccounts } from '../controllers/admin.controller';
 
 let server: http.Server;
 let base: string;
@@ -152,7 +153,12 @@ describe('listing a talent', () => {
         expect(seen.body.user).toMatchObject({ id: ana.id, profile: { name: 'Ana Developer' } });
         // Only the member's name and photo come with it.
         expect(seen.body.user.isBanned).toBeUndefined();
-        expect(ids(await call('GET', '/api/talent', { token: ben.token }))).toContain(talent.id);
+        const listed = await call('GET', '/api/talent', { token: ben.token });
+        expect(ids(listed)).toContain(talent.id);
+        // Contact details come with the talent, not in lists.
+        const inList = listed.body.data.find((t: any) => t.id === talent.id);
+        expect([inList.whatsapp, inList.email]).toEqual([undefined, undefined]);
+        expect(seen.body.email).toBe('ana@example.com');
     });
 
     it('is for members only', async () => {
@@ -186,6 +192,14 @@ describe('listing a talent', () => {
         const extra = await call('POST', '/api/talent', { token: ana.token, body: TALENT });
         expect(extra.status).toBe(409);
         expect(extra.body).toMatchObject({ reason: 'too_many', max: MAX_TALENTS_PER_MEMBER });
+    });
+
+    it('holds the limit when several are sent at once', async () => {
+        const ana = await member();
+        const all = await Promise.all(Array.from({ length: 8 }, () => call('POST', '/api/talent', { token: ana.token, body: TALENT })));
+        expect(await prisma.talentListing.count({ where: { userId: ana.id } })).toBeLessThanOrEqual(MAX_TALENTS_PER_MEMBER);
+        expect(all.filter((r) => r.status === 409).every((r) => r.body.reason === 'too_many')).toBe(true);
+        expect(all.filter((r) => r.status === 201).length).toBeLessThanOrEqual(MAX_TALENTS_PER_MEMBER);
     });
 
     it('needs the terms of use accepted', async () => {
@@ -290,6 +304,19 @@ describe("a talent's photos and videos", () => {
         expect(stored(cover)).toBe(false);
         expect(stored(w1)).toBe(false);
         expect(stored(avatar)).toBe(false);
+    });
+
+    it('move with their talent when two accounts are merged, so the member can still change them', async () => {
+        const [source, target, admin] = [await member(), await member(), await member()];
+        const cover = await uploaded(source);
+        await addTalent(source, { photo: cover });
+        const res: any = { status(code: number) { this.code = code; return this; }, json(body: unknown) { this.body = body; return this; } };
+        await syncAccounts({ body: { sourceUserId: source.id, targetUserId: target.id, deleteSource: false }, user: { id: admin.id, isAdmin: true } } as any, res);
+        expect(res.code ?? 200).toBe(200);
+        expect((await prisma.upload.findUnique({ where: { name: cover.split('/').pop()! } }))?.userId).toBe(target.id);
+        const moved = await prisma.talentListing.findFirstOrThrow({ where: { userId: target.id } });
+        expect((await call('PUT', `/api/talent/${moved.id}`, { token: target.token, body: { photo: '' } })).status).toBe(200);
+        expect(stored(cover)).toBe(false);
     });
 
     it('go with the account', async () => {

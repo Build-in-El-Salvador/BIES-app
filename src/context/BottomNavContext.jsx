@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
-import { sanitizeTabs, DEFAULT_BOTTOM_NAV } from '../config/navPages';
+import { sanitizeTabs, restoreTabs, savedTabs, DEFAULT_BOTTOM_NAV } from '../config/navPages';
 import { preferencesApi } from '../services/api';
 
 const STORAGE_KEY = 'bies_bottom_nav';
@@ -17,7 +17,7 @@ export const BottomNavProvider = ({ children }) => {
     const [tabs, setTabs] = useState(() => {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) return sanitizeTabs(JSON.parse(stored));
+            if (stored) return restoreTabs(JSON.parse(stored));
         } catch {
             // corrupt JSON → fall back to defaults
         }
@@ -35,9 +35,9 @@ export const BottomNavProvider = ({ children }) => {
         const clean = sanitizeTabs(ids);
         if (JSON.stringify(clean) === JSON.stringify(tabsRef.current)) return; // nothing changed → skip the save
         setTabs(clean);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedTabs(clean)));
         setSaveError(false);
-        preferencesApi.save({ bottomNavTabs: clean }).catch((err) => {
+        preferencesApi.save({ bottomNavTabs: savedTabs(clean) }).catch((err) => {
             // Keep the local change, but surface that it did not reach the server.
             console.warn('[BottomNav] Failed to save navbar layout to the server:', err && err.message ? err.message : err);
             setSaveError(true);
@@ -46,9 +46,9 @@ export const BottomNavProvider = ({ children }) => {
 
     // Server-initiated restore (login): localStorage only — no echo back to the server.
     const applyServerTabs = useCallback((ids) => {
-        const clean = sanitizeTabs(ids);
+        const clean = restoreTabs(ids);
         setTabs(clean);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(savedTabs(clean)));
     }, []);
 
     const resetTabs = useCallback(() => {

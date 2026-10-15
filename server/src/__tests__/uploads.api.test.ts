@@ -171,7 +171,8 @@ describe('uploading', () => {
 
         const records = await prisma.upload.findMany({ where: { name: { in: [body.url, body.poster].map((u: string) => u.split('/').pop()!) } } });
         expect(records.map((r) => [r.userId, r.mimeType]).sort()).toEqual([[ana.id, 'image/jpeg'], [ana.id, 'video/mp4']]);
-        expect(fs.readdirSync(path.join(env.dir, 'uploads', 'processing'))).toEqual([]);
+        // Nothing left mid-way, the file sent included (removed once it's answered).
+        await vi.waitFor(() => expect(fs.readdirSync(path.join(env.dir, 'uploads', 'processing'))).toEqual([]));
 
         // Without ?poster=1, just the video.
         const plain = new FormData();
@@ -179,6 +180,24 @@ describe('uploading', () => {
         const again = await (await fetch(`${base}/api/upload/media`, { method: 'POST', headers: { Authorization: `Bearer ${ana.token}` }, body: plain })).json() as any;
         expect(again.type).toBe('video/mp4');
         expect(again.poster).toBeUndefined();
+    });
+
+    it.skipIf(!HAS_FFMPEG)('one member\'s videos wait four at a time; more are turned away until those are done', { timeout: 60_000 }, async () => {
+        const ana = await member('Ana Q');
+        const clipFile = testClip(2);
+        const send = () => {
+            const form = new FormData();
+            form.append('file', new Blob([new Uint8Array(clipFile)], { type: 'video/mp4' }), 'clip.mp4');
+            return fetch(`${base}/api/upload/media`, { method: 'POST', headers: { Authorization: `Bearer ${ana.token}` }, body: form })
+                .then(async (r) => ({ status: r.status, body: await r.json() as any }));
+        };
+        const all = await Promise.all([send(), send(), send(), send(), send(), send()]);
+        const turnedAway = all.filter((r) => r.status === 429);
+        expect(all.filter((r) => r.status === 200).length).toBeGreaterThanOrEqual(4);
+        expect(turnedAway.length).toBeGreaterThanOrEqual(1);
+        expect(turnedAway[0].body.reason).toBe('busy');
+        // Their turns are given back.
+        expect((await send()).status).toBe(200);
     });
 });
 

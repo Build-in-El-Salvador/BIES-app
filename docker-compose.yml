@@ -36,7 +36,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          # ffmpeg making a 4K video takes about 450 MB on its own (mediaProcessing.ts)
+          memory: 1G
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
       interval: 30s

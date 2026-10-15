@@ -1,5 +1,6 @@
 import { uploadApi } from './api';
 import { getAssetUrl } from '../utils/assets';
+import { MAX_VIDEO_MB, MAX_VIDEO_SECONDS } from '../config/mediaLimits';
 
 /**
  * Photos and videos members add (feed posts, profile photos, GIFs, albums)
@@ -17,7 +18,7 @@ import { getAssetUrl } from '../utils/assets';
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB, a photo
 // A video, before the server makes it smaller: what nginx lets through, with
 // room for the form around it (deploy/nginx.conf, upload.controller.ts).
-const MAX_VIDEO_SIZE = 50 * 1000 * 1000;
+const MAX_VIDEO_SIZE = MAX_VIDEO_MB * 1000 * 1000;
 const MAX_ATTACHMENTS = 4;
 
 // What the server takes (upload.controller.ts MEDIA_TYPES).
@@ -76,7 +77,7 @@ function validateFile(file, currentCount) {
     }
     const video = file.type.startsWith('video/');
     if (file.size > (video ? MAX_VIDEO_SIZE : MAX_FILE_SIZE)) {
-        return `File "${file.name}" is too large (${(file.size / 1000 / 1000).toFixed(1)}MB). Maximum is ${video ? 50 : 25}MB.`;
+        return `File "${file.name}" is too large (${(file.size / 1000 / 1000).toFixed(1)}MB). Maximum is ${video ? MAX_VIDEO_MB : 25}MB.`;
     }
     if (currentCount >= MAX_ATTACHMENTS) {
         return `Maximum ${MAX_ATTACHMENTS} attachments allowed.`;
@@ -131,10 +132,25 @@ function getVideoDuration(file) {
     });
 }
 
+/**
+ * A video longer than the server keeps, said before it's sent; null when it
+ * isn't one, or this browser can't tell (the server checks it too).
+ * @returns {Promise<string|null>}
+ */
+async function validateVideoLength(file) {
+    if (!file.type.startsWith('video/')) return null;
+    const seconds = await getVideoDuration(file);
+    const minutes = MAX_VIDEO_SECONDS / 60;
+    return seconds > MAX_VIDEO_SECONDS + 1
+        ? `Video "${file.name}" is longer than ${minutes} minutes. Videos can be up to ${minutes} minutes long.`
+        : null;
+}
+
 export const mediaService = {
     uploadFile,
     buildImetaTag,
     validateFile,
+    validateVideoLength,
     getImageDimensions,
     getVideoDuration,
     MAX_FILE_SIZE,

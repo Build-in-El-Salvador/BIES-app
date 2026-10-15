@@ -72,20 +72,23 @@ export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]
 // add it to theirs.
 export const DEFAULT_BOTTOM_NAV = ['home', 'feed', 'members', 'farms', 'trusted'];
 
-// Bars saved before Home: the old default becomes the new one.
+// Bars saved before Home: the old default becomes the new one. A bar saved
+// since ends with SAVED_MARK (savedTabs), so a member who picks those same
+// tabs again keeps them: only an unmarked one is the old default.
 const PREVIOUS_DEFAULT = ['feed', 'members', 'farms', 'trusted', 'profile'];
+export const SAVED_MARK = 'v2';
 
 export const MAX_TABS = 5;
 export const MIN_TABS = 1;
 
 /**
  * Sanitize a stored/received list of tab ids into a valid bottom-nav config.
- * Pure function: filters unknown ids, dedupes (first occurrence wins),
- * caps at MAX_TABS, and falls back to the defaults when invalid or empty.
+ * Pure function: filters unknown ids (SAVED_MARK among them), dedupes (first
+ * occurrence wins), caps at MAX_TABS, and falls back to the defaults when
+ * invalid or empty.
  */
 export function sanitizeTabs(ids) {
   if (!Array.isArray(ids)) return [...DEFAULT_BOTTOM_NAV];
-  if (ids.join() === PREVIOUS_DEFAULT.join()) return [...DEFAULT_BOTTOM_NAV];
   const seen = new Set();
   const result = [];
   for (const id of ids) {
@@ -97,6 +100,17 @@ export function sanitizeTabs(ids) {
   const sliced = result.slice(0, MAX_TABS);
   if (sliced.length < MIN_TABS) return [...DEFAULT_BOTTOM_NAV];
   return sliced;
+}
+
+/** A bar read back from this device or the server: an old saved default becomes today's. */
+export function restoreTabs(stored) {
+  if (Array.isArray(stored) && stored.join() === PREVIOUS_DEFAULT.join()) return [...DEFAULT_BOTTOM_NAV];
+  return sanitizeTabs(stored);
+}
+
+/** A bar as it's saved, marked as chosen now (see SAVED_MARK). */
+export function savedTabs(ids) {
+  return [...sanitizeTabs(ids), SAVED_MARK];
 }
 
 /**

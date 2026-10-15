@@ -61,7 +61,7 @@ const Navbar = () => {
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/' || path === '/feed') return t('pageTitles.biesFeed');
-    if (path.startsWith('/farms')) return t('mobileNav.farms');
+    if (path.startsWith('/farms')) return t('pageTitles.farmDirectory');
     if (path.startsWith('/trusted')) return t('pageTitles.certifiedDirectory');
     if (path.startsWith('/talents')) return t('pageTitles.talent');
     if (path.startsWith('/market')) return t('marketplace.title');
@@ -305,8 +305,8 @@ const Navbar = () => {
               {[
                 { to: '/profile', label: t('nav.profile') },
                 ...(featureOn('directories') ? [
-                  { to: '/farms', label: t('directory.farmTitle') },
-                  { to: '/trusted', label: t('directory.certifiedTitle') },
+                  { to: '/farms', label: t('pageTitles.farmDirectory') },
+                  { to: '/trusted', label: t('pageTitles.certifiedDirectory') },
                 ] : []),
                 ...(featureOn('talent') ? [{ to: '/talents', label: t('pageTitles.talent') }] : []),
                 ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),

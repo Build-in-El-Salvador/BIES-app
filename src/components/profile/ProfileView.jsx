@@ -129,6 +129,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     // Talent beside Photos: on your own profile (to add yours), or when they listed some.
     const showTalent = talentEnabled && (isOwn || talents.length > 0);
     const tabs = ['all', 'photos', ...(showTalent ? ['talent'] : [])];
+    // A tab that went away while open (Talents switched off): back to All.
+    const openTab = tabs.includes(tab) ? tab : 'all';
 
     const avatar = profile.avatar || nostrProfile?.picture || '';
     const banner = profile.banner || nostrProfile?.banner || '';
@@ -204,8 +206,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                             key={key}
                             type="button"
                             role="tab"
-                            aria-selected={tab === key}
-                            className={`pv-tab${tab === key ? ' active' : ''}`}
+                            aria-selected={openTab === key}
+                            className={`pv-tab${openTab === key ? ' active' : ''}`}
                             onClick={() => setTab(key)}
                         >
                             {t(`profileView.tabs.${key}`)}
@@ -214,7 +216,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 </div>
             </div>
 
-            {tab === 'talent' && showTalent && (talents.length > 0 ? (
+            {openTab === 'talent' && (talents.length > 0 ? (
                 talents.map((talent) => (
                     <section key={talent.id} className="pv-section">
                         <TalentSummary talent={talent} isOwn={!!isOwn} />
@@ -229,19 +231,19 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     </Link>
                 </section>
             ))}
-            {tab === 'talent' && isOwn && talents.length > 0 && talents.length < MAX_TALENTS && (
+            {openTab === 'talent' && isOwn && talents.length > 0 && talents.length < MAX_TALENTS && (
                 <section className="pv-section">
                     <Link to="/talents/new" className="pv-link pv-add-talent">
                         <Plus size={16} aria-hidden="true" /> {t('talent.addAnother')}
                     </Link>
                 </section>
             )}
-            {tab === 'photos' && albums.show && (
+            {openTab === 'photos' && albums.show && (
                 <section className="pv-section">
                     <AlbumsBlock albums={albums.albums} canManage={albums.canManage} titleStyle={H2} />
                 </section>
             )}
-            {tab === 'photos' && (
+            {openTab === 'photos' && (
                 <section className="pv-section">
                     <h2 className="pv-h2">{t(albums.albums.length ? 'profileView.photosFromPosts' : 'profileView.tabs.photos')}</h2>
                     {photos.length > 0 ? (
@@ -262,7 +264,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
             )}
 
             {/* Kept mounted on Photos, so the posts stay loaded and as they were. */}
-            <div hidden={tab !== 'all'}>
+            <div hidden={openTab !== 'all'}>
                 {hasDetails ? (
                     <section className="pv-section">
                         <h2 className="pv-h2">{t('profileView.details')}</h2>

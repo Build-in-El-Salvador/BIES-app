@@ -29,8 +29,10 @@ const TalentList = () => {
     const [btcOnly, setBtcOnly] = useState(false);
     const [workType, setWorkType] = useState('');
 
-    // Fetch talent (same 300ms debounce pattern as the directories)
+    // Fetch talent (same 300ms debounce pattern as the directories). An answer
+    // that arrives after the search or filters changed again is dropped.
     useEffect(() => {
+        let current = true;
         const fetchTalent = async () => {
             setLoading(true);
             try {
@@ -43,19 +45,24 @@ const TalentList = () => {
                 if (btcOnly) params.btc = 'true';
                 if (workType) params.workType = workType;
                 const result = await talentApi.list(params);
-                setTalents(Array.isArray(result?.data) ? result.data : []);
+                if (current) setTalents(Array.isArray(result?.data) ? result.data : []);
             } catch {
-                setTalents([]);
+                if (current) setTalents([]);
             } finally {
-                setLoading(false);
+                if (current) setLoading(false);
             }
         };
         const debounce = setTimeout(fetchTalent, 300);
-        return () => clearTimeout(debounce);
+        return () => {
+            current = false;
+            clearTimeout(debounce);
+        };
     }, [searchQuery, category, mineOnly, availableOnly, remoteOnly, btcOnly, workType, user?.id]);
 
     const activeFilterCount = [availableOnly, remoteOnly, btcOnly, !!workType].filter(Boolean).length;
     const filtering = !!(searchQuery || category || mineOnly || activeFilterCount);
+    // "Yours" alone and nothing found: they haven't listed any talent yet.
+    const noneOfYours = mineOnly && !searchQuery && !category && !activeFilterCount;
 
     return (
         <div className="talent-page container">
@@ -175,10 +182,10 @@ const TalentList = () => {
                         <p className="tal-empty-text">
                             {searchQuery
                                 ? t('talent.noResultsSearch', { query: searchQuery })
-                                : mineOnly ? t('talent.noneYours')
+                                : noneOfYours ? t('talent.noneYours')
                                     : filtering ? t('talent.noMatches') : t('talent.empty')}
                         </p>
-                        {(!filtering || mineOnly) && (
+                        {(!filtering || noneOfYours) && (
                             <Link to="/talents/new" className="tal-empty-cta">
                                 <Plus size={16} /> {t('talent.add')}
                             </Link>

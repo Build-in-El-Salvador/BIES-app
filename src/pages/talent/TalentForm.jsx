@@ -14,7 +14,7 @@ import BackButton from '../../components/BackButton';
 import { getAssetUrl } from '../../utils/assets';
 import {
     TALENT_CATEGORIES, WORK_TYPES, MAX_TALENTS, MAX_WORKS, MAX_WORK_MEDIA, MAX_SKILLS, MAX_LANGUAGES,
-    MAX_VIDEO_MB, MAX_VIDEO_SECONDS, asWebLink, isVideo, mediaOf, pictureOf,
+    MAX_SKILL_LENGTH, MAX_LANGUAGE_LENGTH, MAX_VIDEO_MB, MAX_VIDEO_SECONDS, asWebLink, isVideo, mediaOf, pictureOf,
 } from '../../components/talent/talentOptions';
 
 const emptyForm = {
@@ -75,6 +75,8 @@ const TalentForm = ({ editMode = false }) => {
     const [fieldError, setFieldError] = useState(null); // { id, message }
     const [uploading, setUploading] = useState(null); // 'photo' | a work's key | null
     const [uploadingVideo, setUploadingVideo] = useState(false);
+    // An upload that went wrong, said next to it: { key: a work's key, or 'cover', message }.
+    const [mediaError, setMediaError] = useState(null);
     const [cropImage, setCropImage] = useState(null); // { src }
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -159,16 +161,23 @@ const TalentForm = ({ editMode = false }) => {
         URL.revokeObjectURL(cropImage.src);
         setCropImage(null);
         setUploading('photo');
-        setSubmitError('');
+        setMediaError(null);
         try {
             const result = await uploadApi.media(croppedFile);
             setForm((prev) => ({ ...prev, photo: result.url }));
         } catch (err) {
-            setSubmitError(err.message || t('talent.form.uploadFailed'));
+            setMediaError({ key: 'cover', message: uploadProblem(err) });
         } finally {
             setUploading(null);
         }
     };
+
+    // A photo being cropped when the member leaves the form: its copy is let go.
+    const cropRef = useRef(null);
+    cropRef.current = cropImage;
+    useEffect(() => () => {
+        if (cropRef.current) URL.revokeObjectURL(cropRef.current.src);
+    }, []);
 
     const handleCropCancel = () => {
         if (cropImage) URL.revokeObjectURL(cropImage.src);
@@ -198,40 +207,51 @@ const TalentForm = ({ editMode = false }) => {
         return seconds > MAX_VIDEO_SECONDS + 1 ? t('talent.form.videoTooLong', { max: MAX_VIDEO_SECONDS / 60 }) : null;
     };
 
-    // A work's photos and videos upload one after another. The server makes
-    // a video smaller first, and sends back a still from it, its poster.
+    // What the member is told when an upload fails.
+    const uploadProblem = (err) => {
+        const reason = err?.data?.reason;
+        if (reason === 'too_long') return t('talent.form.videoTooLong', { max: MAX_VIDEO_SECONDS / 60 });
+        if (reason === 'too_large') return t('talent.form.videoTooLarge');
+        if (reason === 'busy') return t('talent.form.videoBusy');
+        return err?.message || t('talent.form.uploadFailed');
+    };
+
+    // A work's photos and videos upload one after another, each on its own:
+    // one that fails, or is too big or long, doesn't stop the rest, and the
+    // free places go to those that can go. The server makes a video smaller
+    // first, and sends back a still from it, its poster.
     const handleWorkMedia = async (e, key) => {
         const work = works.find((w) => w.key === key);
-        const files = Array.from(e.target.files || []).slice(0, MAX_WORK_MEDIA - (work?.media.length || 0));
+        const files = Array.from(e.target.files || []);
         e.target.value = '';
         if (!files.length) return;
         setUploading(key);
-        setSubmitError('');
-        try {
-            for (const file of files) {
-                const video = file.type.startsWith('video/');
-                if (video) {
-                    const problem = await videoProblem(file);
-                    if (problem) {
-                        setSubmitError(problem);
-                        continue;
-                    }
-                }
-                setUploadingVideo(video);
+        setMediaError(null);
+        let room = MAX_WORK_MEDIA - (work?.media.length || 0);
+        let problem = null;
+        for (const file of files) {
+            if (room <= 0) break;
+            const video = file.type.startsWith('video/');
+            const tooMuch = video ? await videoProblem(file) : null;
+            if (tooMuch) {
+                problem = problem || tooMuch;
+                continue;
+            }
+            setUploadingVideo(video);
+            try {
                 const result = await uploadApi.media(file, { poster: video });
                 const item = result.poster ? { url: result.url, poster: result.poster } : { url: result.url };
                 setWorks((prev) => prev.map((w) => (
                     w.key === key && w.media.length < MAX_WORK_MEDIA ? { ...w, media: [...w.media, item] } : w
                 )));
+                room -= 1;
+            } catch (err) {
+                problem = problem || uploadProblem(err);
             }
-        } catch (err) {
-            setSubmitError(err.data?.reason === 'too_long'
-                ? t('talent.form.videoTooLong', { max: MAX_VIDEO_SECONDS / 60 })
-                : err.message || t('talent.form.uploadFailed'));
-        } finally {
-            setUploading(null);
-            setUploadingVideo(false);
         }
+        setUploading(null);
+        setUploadingVideo(false);
+        if (problem) setMediaError({ key, message: problem });
     };
     const removeWorkMedia = (key, url) =>
         setWorks((prev) => prev.map((w) => (w.key === key ? { ...w, media: w.media.filter((m) => m.url !== url) } : w)));
@@ -290,8 +310,11 @@ const TalentForm = ({ editMode = false }) => {
         try {
             const payload = buildPayload();
             const talent = editMode ? await talentApi.update(id, payload) : await talentApi.create(payload);
-            // Back from the talent goes to where they came from, not to this form.
-            navigate(`/talents/${talent.id}`, { replace: !editMode });
+            // Back never reopens this form: a new talent takes the form's place;
+            // an edited one returns to where the form was opened from (its page,
+            // or the profile), or opens its page when the form was opened directly.
+            if (editMode && window.history.state?.idx > 0) navigate(-1);
+            else navigate(`/talents/${talent.id}`, { replace: true });
         } catch (err) {
             const reason = err?.data?.reason;
             if (objectionableMessage(t, err)) showError(objectionableMessage(t, err));
@@ -413,7 +436,7 @@ const TalentForm = ({ editMode = false }) => {
                             <TagInput
                                 id="tf-skills"
                                 tags={skills}
-                                onChange={(list) => setSkills(list.slice(0, MAX_SKILLS))}
+                                onChange={(list) => setSkills(list.slice(0, MAX_SKILLS).map((skill) => skill.slice(0, MAX_SKILL_LENGTH)))}
                                 placeholder={t('talent.form.skillsPlaceholder')}
                             />
                             <p className="tf-hint">{t('talent.form.skillsHint')}</p>
@@ -491,7 +514,7 @@ const TalentForm = ({ editMode = false }) => {
                             <TagInput
                                 id="tf-languages"
                                 tags={languages}
-                                onChange={(list) => setLanguages(list.slice(0, MAX_LANGUAGES))}
+                                onChange={(list) => setLanguages(list.slice(0, MAX_LANGUAGES).map((language) => language.slice(0, MAX_LANGUAGE_LENGTH)))}
                                 placeholder="English, Español…"
                             />
                         </div>
@@ -557,6 +580,9 @@ const TalentForm = ({ editMode = false }) => {
                                     </div>
                                     {uploading === work.key && uploadingVideo && (
                                         <p className="tf-hint" role="status" style={{ marginTop: '-0.4rem' }}>{t('talent.form.videoWait')}</p>
+                                    )}
+                                    {mediaError?.key === work.key && (
+                                        <p className="tf-field-error" role="alert" style={{ marginTop: '-0.4rem', marginBottom: '0.8rem' }}>{mediaError.message}</p>
                                     )}
 
                                     <div className="tf-group">
@@ -651,6 +677,7 @@ const TalentForm = ({ editMode = false }) => {
                                 )}
                             </div>
                         </div>
+                        {mediaError?.key === 'cover' && <p className="tf-field-error" role="alert">{mediaError.message}</p>}
                     </div>
 
                     {/* How members reach them */}
@@ -816,11 +843,14 @@ const TalentForm = ({ editMode = false }) => {
                     line-height: 1.45;
                     color: var(--color-gray-500);
                 }
-                .tf-field-error {
+                .talent-form-page :global(.tf-field-error) {
                     margin: 0.4rem 0 0;
                     font-size: 0.82rem;
                     font-weight: 600;
                     color: #b91c1c;
+                }
+                .tf-input[aria-invalid="true"] {
+                    border-color: #b91c1c;
                 }
 
                 .tf-worktypes {

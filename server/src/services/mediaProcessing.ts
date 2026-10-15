@@ -42,8 +42,14 @@ sharp.cache(false);
 export const VIDEO_MAX_SIDE = 1280;
 /** The longest video kept, in seconds. */
 export const MAX_VIDEO_SECONDS = 120;
-// A video taking longer than this to make is given up (ffmpeg stuck).
-const VIDEO_TIME_LIMIT_MS = 5 * 60_000;
+// What a video sent may hold: frames up to 4K (phones record 4K at most, and
+// decoding 4K takes ffmpeg about 360 MB), and as many frames as two minutes
+// at 120 a second. A file of a few MB can claim far more of either.
+export const MAX_VIDEO_PIXELS = 4096 * 2304;
+const MAX_VIDEO_FRAMES = MAX_VIDEO_SECONDS * 120;
+// A video taking longer than this to make is given up (ffmpeg stuck). A real
+// one of 50 MB takes well under a minute.
+const VIDEO_TIME_LIMIT_MS = 3 * 60_000;
 // Read when used, so a test can point them elsewhere.
 const ffmpeg = () => process.env.FFMPEG_PATH || 'ffmpeg';
 const ffprobe = () => process.env.FFPROBE_PATH || 'ffprobe';
@@ -78,6 +84,22 @@ export class VideoTooLongError extends Error {
     }
 }
 
+/** A video with bigger frames than 4K, or more of them than two minutes holds. */
+export class VideoTooLargeError extends Error {
+    constructor() {
+        super('Videos can be up to 4K, at up to 120 frames a second');
+        this.name = 'VideoTooLargeError';
+    }
+}
+
+/** The member left before their video was made (MediaOptions.signal): it isn't made, or stops. */
+export class MediaAbortedError extends Error {
+    constructor() {
+        super('The upload was left before the video was made');
+        this.name = 'MediaAbortedError';
+    }
+}
+
 /** ffmpeg couldn't be run, or was stopped: the server's problem, not the file's. */
 export class MediaToolError extends Error {
     constructor(message: string) {
@@ -102,6 +124,8 @@ export interface MediaOptions {
     poster?: boolean;
     /** Where a video waits while it's made (storage.service.ts PROCESSING_DIR). */
     workDir?: string;
+    /** Aborted when the member leaves: a video still waiting isn't made, one being made stops. */
+    signal?: AbortSignal;
 }
 
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -116,13 +140,46 @@ export async function prepareMedia(input: Buffer, mimeType: string, options: Med
         }
         case 'video/mp4':
         case 'video/quicktime':
-            // Checked to be a movie, its metadata blanked, before ffmpeg reads it.
+        case 'video/webm': {
+            // Checked first; then it waits for its turn on disk, not in memory.
+            const container = checkVideo(input, mimeType);
+            const file = path.join(options.workDir ?? os.tmpdir(), `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.in`);
+            await fs.promises.writeFile(file, input);
+            try {
+                return await oneVideoAtATime(() => prepareVideo(file, container, options));
+            } finally {
+                await fs.promises.rm(file, { force: true });
+            }
+        }
+        default:
+            throw new UnreadableMediaError();
+    }
+}
+
+/**
+ * A video an upload left on disk (upload.controller.ts), made in its turn
+ * straight from the file, so it never waits in memory. The file stays the
+ * caller's to delete.
+ */
+export async function prepareVideoFile(file: string, mimeType: string, options: MediaOptions = {}): Promise<PreparedMedia> {
+    const container = checkVideo(await fs.promises.readFile(file), mimeType);
+    return oneVideoAtATime(() => prepareVideo(file, container, options));
+}
+
+/**
+ * The container a video was sent as, once checked to be one: an MP4 or
+ * QuickTime movie's boxes are walked (stripVideoMetadata, on this copy), and
+ * a WebM starts with the EBML header every Matroska file does.
+ */
+function checkVideo(input: Buffer, mimeType: string): Container {
+    switch (mimeType) {
+        case 'video/mp4':
+        case 'video/quicktime':
             stripVideoMetadata(input);
-            return oneVideoAtATime(() => prepareVideo(input, options));
+            return 'mov';
         case 'video/webm':
-            // The EBML header every Matroska/WebM file starts with.
             if (input.length < 4 || input.readUInt32BE(0) !== 0x1a45dfa3) throw new UnreadableMediaError();
-            return oneVideoAtATime(() => prepareVideo(input, options));
+            return 'matroska';
         default:
             throw new UnreadableMediaError();
     }
@@ -155,41 +212,75 @@ async function preparePhoto(input: Buffer, mimeType: string): Promise<PreparedMe
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
 
-async function prepareVideo(input: Buffer, { poster = false, workDir = os.tmpdir() }: MediaOptions): Promise<PreparedMedia> {
+/**
+ * ffmpeg reads a file as the container it was checked to be, never guessing
+ * from its contents (a playlist, say), and only from local files: nothing a
+ * file names elsewhere is fetched or opened.
+ */
+type Container = 'mov' | 'matroska';
+const reading = (container: Container, file: string) => ['-protocol_whitelist', 'file', '-f', container, '-i', file];
+
+/** The stored video (and its poster) made from the file sent, which is left as it is. */
+async function prepareVideo(source: string, container: Container, { poster = false, workDir = os.tmpdir(), signal }: MediaOptions): Promise<PreparedMedia> {
+    // They left while it waited for its turn: not made.
+    if (signal?.aborted) throw new MediaAbortedError();
     const base = path.join(workDir, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`);
-    const source = `${base}.in`;
     const made = `${base}.mp4`;
     const still = `${base}.jpg`;
     try {
-        await fs.promises.writeFile(source, input);
-        const original = await probeVideo(source);
+        const original = await probeVideo(source, container, signal);
+        // A WebM a browser recorded may not say how long it is (NaN): it's cut at the limit instead (-t).
         if (original.duration > MAX_VIDEO_SECONDS + 1) throw new VideoTooLongError(original.duration);
-        await run(ffmpeg(), videoArgs(source, made, original));
+        if (original.width * original.height > MAX_VIDEO_PIXELS || original.frames > MAX_VIDEO_FRAMES) throw new VideoTooLargeError();
+        await run(ffmpeg(), videoArgs(source, container, made, original), signal);
 
         const buffer = await fs.promises.readFile(made);
         stripVideoMetadata(buffer); // all that's left is ffmpeg's name
-        const video = await probeVideo(made);
+        const video = await probeVideo(made, 'mov', signal);
+        if (!(video.duration > 0)) throw new UnreadableMediaError();
         const result: PreparedMedia = { buffer, mimeType: 'video/mp4', width: video.width, height: video.height, duration: video.duration };
-        if (poster) {
-            await run(ffmpeg(), ['-hide_banner', '-nostdin', '-v', 'error', '-y', '-ss', String(Math.min(1, video.duration / 2)), '-i', made, '-frames:v', '1', '-q:v', '2', still]);
-            result.poster = await preparePhoto(await fs.promises.readFile(still), 'image/jpeg');
-        }
+        if (poster) result.poster = await stillFrom(made, video, still, signal);
         return result;
     } finally {
-        await Promise.all([source, made, still].map((file) => fs.promises.rm(file, { force: true })));
+        await Promise.all([made, still].map((file) => fs.promises.rm(file, { force: true })));
     }
+}
+
+/**
+ * The poster: a frame a second in (half way through a shorter picture), else
+ * the first frame. A video is still kept without one: the app shows a dark
+ * tile with a play mark instead.
+ */
+async function stillFrom(made: string, video: VideoInfo, still: string, signal?: AbortSignal): Promise<PreparedMedia | undefined> {
+    const at = Math.min(1, video.pictureDuration / 2);
+    for (const seek of at > 0 ? [at, 0] : [0]) {
+        try {
+            await run(ffmpeg(), ['-hide_banner', '-nostdin', '-v', 'error', '-y', '-ss', String(seek), ...reading('mov', made), '-frames:v', '1', '-q:v', '2', still], signal);
+            return await preparePhoto(await fs.promises.readFile(still), 'image/jpeg');
+        } catch (err) {
+            if (err instanceof MediaAbortedError) throw err;
+        }
+    }
+    console.warn('[media] no poster could be taken from a video');
+    return undefined;
 }
 
 interface VideoInfo {
     width: number;
     height: number;
+    /** Its length in seconds; NaN when the file doesn't say. */
     duration: number;
+    /** How long the picture lasts, which can be less than the sound. */
+    pictureDuration: number;
+    /** How many frames: counted in the file, or worked out from its frame rate. */
+    frames: number;
     /** The picture's transfer function: HLG and PQ are HDR. */
     transfer?: string;
 }
 
-async function probeVideo(file: string): Promise<VideoInfo> {
-    const { stdout } = await run(ffprobe(), ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file]);
+async function probeVideo(file: string, container: Container, signal?: AbortSignal): Promise<VideoInfo> {
+    // As ffmpeg reads it (reading() above); ffprobe takes the file without -i.
+    const { stdout } = await run(ffprobe(), ['-v', 'error', '-protocol_whitelist', 'file', '-f', container, '-print_format', 'json', '-show_format', '-show_streams', file], signal);
     let info: any;
     try {
         info = JSON.parse(stdout);
@@ -198,15 +289,26 @@ async function probeVideo(file: string): Promise<VideoInfo> {
     }
     // The picture, not a cover image some files carry as a video stream.
     const picture = (info.streams ?? []).find((s: any) => s.codec_type === 'video' && !s.disposition?.attached_pic);
-    const duration = Number(info.format?.duration ?? picture?.duration);
-    if (!picture || !(picture.width > 0) || !(picture.height > 0) || !(duration > 0)) throw new UnreadableMediaError();
-    return { width: picture.width, height: picture.height, duration, transfer: picture.color_transfer };
+    if (!picture || !(picture.width > 0) || !(picture.height > 0)) throw new UnreadableMediaError();
+    const duration = Number(info.format?.duration ?? picture.duration);
+    const ownDuration = Number(picture.duration);
+    const [per, second] = String(picture.avg_frame_rate || '0/0').split('/').map(Number);
+    const counted = Number(picture.nb_frames);
+    const frames = counted > 0 ? counted : (second > 0 ? per / second : 0) * (duration > 0 ? duration : 0);
+    return {
+        width: picture.width,
+        height: picture.height,
+        duration,
+        pictureDuration: ownDuration > 0 ? ownDuration : duration,
+        frames,
+        transfer: picture.color_transfer,
+    };
 }
 
 const HDR_TRANSFERS = new Set(['arib-std-b67', 'smpte2084']); // HLG (iPhones), PQ
 
 /** ffmpeg's arguments to make the stored video from the original. */
-function videoArgs(source: string, out: string, original: VideoInfo): string[] {
+function videoArgs(source: string, container: Container, out: string, original: VideoInfo): string[] {
     // Upright first (ffmpeg turns it as the phone said), then fitted inside
     // 1280x1280 without growing, with even sides as H.264 needs.
     const filters = [`scale=w='min(${VIDEO_MAX_SIDE},iw)':h='min(${VIDEO_MAX_SIDE},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`];
@@ -224,7 +326,7 @@ function videoArgs(source: string, out: string, original: VideoInfo): string[] {
     filters.push('format=yuv420p');
     return [
         '-hide_banner', '-nostdin', '-v', 'error', '-y',
-        '-threads', '2', '-i', source,
+        '-threads', '2', ...reading(container, source),
         // The picture and the first sound; no metadata, chapters, subtitles or data tracks.
         '-map', '0:V:0', '-map', '0:a:0?', '-map_metadata', '-1', '-map_chapters', '-1', '-dn', '-sn',
         '-vf', filters.join(','),
@@ -241,12 +343,16 @@ function videoArgs(source: string, out: string, original: VideoInfo): string[] {
 
 /**
  * Run ffmpeg or ffprobe, at low priority, and as what goes first if the
- * server runs out of memory, so it's never the server. It ends badly:
- * UnreadableMediaError; it can't run, or is stopped: MediaToolError.
+ * server runs out of memory, so it's never the server. It gets none of the
+ * server's settings (its secrets among them), only where programs are.
+ * It ends badly: UnreadableMediaError; it can't run, or is stopped:
+ * MediaToolError.
  */
-function run(command: string, args: string[]): Promise<{ stdout: string }> {
+function run(command: string, args: string[], signal?: AbortSignal): Promise<{ stdout: string }> {
     return new Promise((resolve, reject) => {
-        const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        if (signal?.aborted) return reject(new MediaAbortedError());
+        const env = { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', HOME: process.env.HOME ?? '/' };
+        const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
         let stdout = '';
         let stderr = '';
         child.stdout.on('data', (chunk) => { if (stdout.length < 1_000_000) stdout += chunk; });
@@ -265,6 +371,12 @@ function run(command: string, args: string[]): Promise<{ stdout: string }> {
             outcome();
         };
         const name = path.basename(command);
+        const stop = () => settle(() => {
+            child.kill('SIGKILL');
+            reject(new MediaAbortedError());
+        });
+        signal?.addEventListener('abort', stop, { once: true });
+        child.on('exit', () => signal?.removeEventListener('abort', stop));
         child.on('error', (err) => settle(() => reject(new MediaToolError(`${name} can't run: ${err.message}`))));
         child.on('close', (code, signal) => settle(() => {
             if (code === 0) return resolve({ stdout });
