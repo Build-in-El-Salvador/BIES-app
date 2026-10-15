@@ -4,6 +4,7 @@
 // holds BUILD-TIME dev flags — these are flipped by admins at runtime.
 export const FEATURE_SLUGS = [
     'directories', // farm + certified provider directories
+    'talent',      // BIES Talents: members' skills and services, with proof of work
     'points',      // leaderboard, profile points UI, gamification toasts
     'events',      // ecosystem events
     'media',       // media page

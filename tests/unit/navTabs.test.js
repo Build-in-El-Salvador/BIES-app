@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { visibleTabs, DEFAULT_BOTTOM_NAV, sanitizeTabs } from '../../src/config/navPages.js';
+import { visibleTabs, DEFAULT_BOTTOM_NAV, NAV_PAGES_BY_ID, sanitizeTabs } from '../../src/config/navPages.js';
 
 const ids = (pages) => pages.map((p) => p.id);
 const allOn = () => true;
@@ -35,8 +35,15 @@ test('a deliberately short bar is not padded', () => {
     assert.deepEqual(ids(visibleTabs(['farms', 'events'], offFlags('events'))), ['farms', 'home']);
 });
 
-test('Profile left the bar for the side menu; Home takes its place in saved bars', () => {
+test('the old default bar becomes the new one; Profile is a tab members can choose', () => {
     assert.deepEqual(sanitizeTabs(['feed', 'members', 'farms', 'trusted', 'profile']), DEFAULT_BOTTOM_NAV);
-    assert.deepEqual(sanitizeTabs(['farms', 'profile', 'feed']), ['farms', 'home', 'feed']);
-    assert.deepEqual(sanitizeTabs(['home', 'profile']), ['home']);
+    assert.equal(DEFAULT_BOTTOM_NAV.includes('profile'), false);
+    assert.deepEqual(sanitizeTabs(['farms', 'profile', 'feed']), ['farms', 'profile', 'feed']);
+    assert.deepEqual(sanitizeTabs(['home', 'profile']), ['home', 'profile']);
+    assert.equal(NAV_PAGES_BY_ID.profile.path, '/profile');
+});
+
+test('Talents is a tab members can choose, at /talents', () => {
+    assert.equal(NAV_PAGES_BY_ID.talent.path, '/talents');
+    assert.deepEqual(sanitizeTabs(['talent', 'profile']), ['talent', 'profile']);
 });

@@ -39,6 +39,15 @@ const BusinessIcon = () => (
     </svg>
 );
 
+// A briefcase with an orange spark: what members can do.
+const TalentIcon = () => (
+    <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
+        <path d="M18 15v-3.5A2.5 2.5 0 0 1 20.5 9h7a2.5 2.5 0 0 1 2.5 2.5V15" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+        <rect x="5" y="15" width="38" height="25" rx="5" fill="currentColor" />
+        <path d="M24 19.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z" fill={ORANGE} />
+    </svg>
+);
+
 const OpportunityIcon = () => (
     <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
         <path d="M24 13a10.5 10.5 0 0 0-6.4 18.8c1.3 1 2.1 2.5 2.1 4.2h8.6c0-1.7.8-3.2 2.1-4.2A10.5 10.5 0 0 0 24 13z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
@@ -61,6 +70,7 @@ const Home = () => {
         { key: 'community', to: '/members', Icon: CommunityIcon, tint: 'rgba(255, 91, 0, 0.10)' },
         { key: 'farms', to: '/farms', Icon: FarmIcon, tint: 'rgba(22, 163, 74, 0.10)', flag: 'directories' },
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
+        { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },
         // Michael's idea: Projects (investment opportunities) now, jobs later.
         { key: 'opportunities', to: '/discover', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
     ].filter((card) => !card.flag || flags?.[card.flag]);

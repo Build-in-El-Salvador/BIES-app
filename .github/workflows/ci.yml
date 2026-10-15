@@ -66,6 +66,9 @@ jobs:
       - run: npm ci
       - run: npx prisma generate # required before tsc, as in Dockerfile stage 2
       - run: npm run build
+      # ffmpeg makes uploaded videos smaller (the server image has it too);
+      # without it the video tests are skipped.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm test
 
   relay-proxy:

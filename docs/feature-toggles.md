@@ -10,6 +10,7 @@ them pauses.
 | Slug | Covers | Server gate |
 |---|---|---|
 | `directories` | Farm + certified provider directories | `/api/directory` |
+| `talent` | BIES Talents: members' skills and services with their proof of work (`/talents`, the profile's Talents tab) | `/api/talent` |
 | `points` | Leaderboard, profile points/badges UI, gamification toasts, scorer, NIP-58 publishing | `/api/points` + scorer/maintenance/badge boot |
 | `events` | Events pages | `/api/events` |
 | `media` | Media page | `/api/media` |

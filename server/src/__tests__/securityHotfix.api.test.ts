@@ -41,6 +41,7 @@ import { servableUploadsOnly } from '../middleware/uploads';
 import { sanitize } from '../middleware/sanitize';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
+import { HAS_FFMPEG, testClip } from './helpers/videos';
 
 let server: http.Server;
 let base: string;
@@ -85,23 +86,17 @@ async function send(m: Member, form: FormData) {
 }
 
 describe('uploads', () => {
-    it('a "video" named x.html is stored as .mp4 (or refused if it isn\'t one), and served as a video that runs nothing', async () => {
+    it('a web page sent as a video isn\'t one: refused (services/mediaProcessing.ts)', async () => {
         const ana = await member('Ana');
-        // A web page sent as a video isn't one: refused (services/mediaProcessing.ts).
-        let form = new FormData();
+        const form = new FormData();
         form.append('file', new Blob(['<html><script>alert(document.cookie)</script></html>'], { type: 'video/mp4' }), 'x.html');
         expect((await send(ana, form)).status).toBe(400);
+    });
 
-        // A real (tiny) movie with an .html name keeps .mp4.
-        const box = (type: string, body = Buffer.alloc(0)) => {
-            const head = Buffer.alloc(8);
-            head.writeUInt32BE(8 + body.length, 0);
-            head.write(type, 4, 'latin1');
-            return Buffer.concat([head, body]);
-        };
-        const movie = Buffer.concat([box('ftyp', Buffer.from('isom\0\0\0\0isom', 'latin1')), box('moov', box('mvhd', Buffer.alloc(100))), box('mdat', Buffer.from('frames'))]);
-        form = new FormData();
-        form.append('file', new Blob([new Uint8Array(movie)], { type: 'video/mp4' }), 'x.html');
+    it.skipIf(!HAS_FFMPEG)('a real video named x.html is stored as .mp4, and served as a video that runs nothing', { timeout: 60_000 }, async () => {
+        const ana = await member('Ana V');
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(testClip())], { type: 'video/mp4' }), 'x.html');
         const res = await send(ana, form);
         expect(res.status).toBe(200);
         expect(res.body.url).toMatch(/^\/uploads\/public\/\d{13}-[0-9a-f]{32}\.mp4$/);

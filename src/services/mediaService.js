@@ -8,12 +8,16 @@ import { getAssetUrl } from '../utils/assets';
  * the members-only relay while its photos sat on the open internet with
  * outside companies. URLs come back absolute, as Nostr events need them.
  *
- * The server shrinks photos and takes out their location and other
- * metadata, so what it stores isn't the file sent: its size, type, SHA-256
- * and pixel size come back with the link, for the post's imeta tag.
+ * The server shrinks photos, makes videos again as a smaller MP4 (which
+ * takes a while), and takes out their location and other metadata, so what
+ * it stores isn't the file sent: its size, type, SHA-256 and pixel size come
+ * back with the link, for the post's imeta tag.
  */
 
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB, a photo
+// A video, before the server makes it smaller: what nginx lets through, with
+// room for the form around it (deploy/nginx.conf, upload.controller.ts).
+const MAX_VIDEO_SIZE = 50 * 1000 * 1000;
 const MAX_ATTACHMENTS = 4;
 
 // What the server takes (upload.controller.ts MEDIA_TYPES).
@@ -70,8 +74,9 @@ function validateFile(file, currentCount) {
     if (!ALLOWED_TYPES.includes(file.type)) {
         return `Unsupported file type: ${file.type}. Only images and videos are allowed.`;
     }
-    if (file.size > MAX_FILE_SIZE) {
-        return `File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is 25MB.`;
+    const video = file.type.startsWith('video/');
+    if (file.size > (video ? MAX_VIDEO_SIZE : MAX_FILE_SIZE)) {
+        return `File "${file.name}" is too large (${(file.size / 1000 / 1000).toFixed(1)}MB). Maximum is ${video ? 50 : 25}MB.`;
     }
     if (currentCount >= MAX_ATTACHMENTS) {
         return `Maximum ${MAX_ATTACHMENTS} attachments allowed.`;
@@ -101,11 +106,38 @@ function getImageDimensions(file) {
     });
 }
 
+/**
+ * A video's length in seconds, read here before it's sent; null when this
+ * browser can't read it (the server checks it too).
+ * @returns {Promise<number|null>}
+ */
+function getVideoDuration(file) {
+    return new Promise((resolve) => {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        let timer;
+        const done = (seconds) => {
+            clearTimeout(timer);
+            video.removeAttribute('src');
+            URL.revokeObjectURL(url);
+            resolve(seconds);
+        };
+        timer = setTimeout(() => done(null), 5000);
+        video.preload = 'metadata';
+        video.muted = true;
+        video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? video.duration : null);
+        video.onerror = () => done(null);
+        video.src = url;
+    });
+}
+
 export const mediaService = {
     uploadFile,
     buildImetaTag,
     validateFile,
     getImageDimensions,
+    getVideoDuration,
     MAX_FILE_SIZE,
+    MAX_VIDEO_SIZE,
     MAX_ATTACHMENTS,
 };

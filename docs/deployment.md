@@ -358,6 +358,16 @@ The NIP-42 auth proxy sits between Nginx and strfry:
 
 Files are stored in the `bies-uploads` Docker volume, served directly by Nginx at `/uploads/*`.
 
+### Photos and videos
+
+Photos are shrunk to 1600px a side; videos are made again as a 720p MP4
+(H.264 and AAC, up to 2 minutes) with ffmpeg, which the server image installs.
+Both lose their metadata, location included (`server/src/services/mediaProcessing.ts`).
+A video waits in `uploads/processing/` while it's made, one at a time, and the
+upload's answer waits for it: nginx gives `/api/upload/media` 300 seconds.
+Uploads are up to 50 MB, at both nginx layers and in the server. Outside
+Docker, ffmpeg must be on the PATH, or set `FFMPEG_PATH` and `FFPROBE_PATH`.
+
 ### S3-Compatible (Recommended for Production)
 
 Set `S3_*` environment variables to use Cloudflare R2, DigitalOcean Spaces, or AWS S3:

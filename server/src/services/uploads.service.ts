@@ -86,6 +86,7 @@ export async function ownsUploads(userId: string, urls: string[]): Promise<boole
 const REFERENCES: [model: string, fields: string[]][] = [
     ['profile', ['avatar', 'banner', 'biesProjects', 'customSections']],
     ['directoryListing', ['photo', 'logo', 'photos']],
+    ['talentListing', ['photo', 'works']],
     ['albumPhoto', ['url']],
     ['event', ['thumbnail', 'customSections']],
     ['project', ['thumbnail', 'deckKey', 'customSections', 'teamInfo']],

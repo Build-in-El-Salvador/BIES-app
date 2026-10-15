@@ -36,13 +36,27 @@ if (config.s3.endpoint && config.s3.accessKey) {
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
 const PUBLIC_DIR = path.join(UPLOAD_DIR, 'public');
 const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
+/**
+ * Where a video waits while it's made smaller (mediaProcessing.ts): on the
+ * uploads volume, as /tmp in the container is memory. Never served.
+ */
+export const PROCESSING_DIR = path.join(UPLOAD_DIR, 'processing');
 
 // Ensure upload directories exist
-[PUBLIC_DIR, PRIVATE_DIR].forEach((dir) => {
+[PUBLIC_DIR, PRIVATE_DIR, PROCESSING_DIR].forEach((dir) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
 });
+
+// What a restart left half made. Only files an hour old: another copy of the
+// server (a test run) may be making one now.
+for (const name of fs.readdirSync(PROCESSING_DIR)) {
+    const file = path.join(PROCESSING_DIR, name);
+    try {
+        if (Date.now() - fs.statSync(file).mtimeMs > 60 * 60_000) fs.rmSync(file, { force: true });
+    } catch { /* gone already */ }
+}
 
 /**
  * Map of MIME types to safe extensions. Used instead of trusting user-provided filenames.

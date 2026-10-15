@@ -25,6 +25,7 @@ import { cache, TTL, cacheKey } from './redis.service';
 
 export const FEATURE_SLUGS = [
     'directories', // farm + certified provider directories
+    'talent',      // BIES Talents: members' skills and services, with proof of work
     'points',      // leaderboard, profile points UI, scorer, NIP-58 badges
     'events',      // ecosystem events
     'media',       // media page (YouTube/Substack feeds)

@@ -47,6 +47,7 @@ import moderationRoutes from '../routes/moderation.routes';
 import { deleteAccount } from '../services/account.service';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
+import { HAS_FFMPEG, testClip } from './helpers/videos';
 
 let server: http.Server;
 let base: string;
@@ -147,6 +148,37 @@ describe('uploading', () => {
         const res = await upload(ana, Buffer.from('<html><script>alert(1)</script></html>'));
         expect(res.status).toBe(400);
         expect(await prisma.upload.count()).toBe(before);
+    });
+
+    it.skipIf(!HAS_FFMPEG)('makes a video a smaller MP4, with a still from it when asked; both recorded as the member\'s, nothing left mid-way', { timeout: 60_000 }, async () => {
+        const ana = await member('Ana V');
+        const input = testClip(1, '1600x900');
+        const form = new FormData();
+        form.append('file', new Blob([new Uint8Array(input)], { type: 'video/quicktime' }), 'IMG_0001.MOV');
+        const res = await fetch(`${base}/api/upload/media?poster=1`, { method: 'POST', headers: { Authorization: `Bearer ${ana.token}` }, body: form });
+        const body = await res.json() as any;
+        expect(res.status).toBe(200);
+        expect(body).toMatchObject({ type: 'video/mp4', width: 1280, height: 720 });
+        expect(body.duration).toBeCloseTo(1, 0);
+        expect(body.url).toMatch(/^\/uploads\/public\/\d{13}-[0-9a-f]{32}\.mp4$/);
+        expect(body.poster).toMatch(/^\/uploads\/public\/\d{13}-[0-9a-f]{32}\.jpg$/);
+
+        const file = fs.readFileSync(fileOf(body.url));
+        expect(file.length).toBe(body.size);
+        expect(file.length).toBeLessThan(input.length);
+        expect(body.sha256).toBe(crypto.createHash('sha256').update(file).digest('hex'));
+        expect((await sharp(fs.readFileSync(fileOf(body.poster))).metadata()).width).toBe(1280);
+
+        const records = await prisma.upload.findMany({ where: { name: { in: [body.url, body.poster].map((u: string) => u.split('/').pop()!) } } });
+        expect(records.map((r) => [r.userId, r.mimeType]).sort()).toEqual([[ana.id, 'image/jpeg'], [ana.id, 'video/mp4']]);
+        expect(fs.readdirSync(path.join(env.dir, 'uploads', 'processing'))).toEqual([]);
+
+        // Without ?poster=1, just the video.
+        const plain = new FormData();
+        plain.append('file', new Blob([new Uint8Array(testClip())], { type: 'video/mp4' }), 'clip.mp4');
+        const again = await (await fetch(`${base}/api/upload/media`, { method: 'POST', headers: { Authorization: `Bearer ${ana.token}` }, body: plain })).json() as any;
+        expect(again.type).toBe('video/mp4');
+        expect(again.poster).toBeUndefined();
     });
 });
 

@@ -800,6 +800,13 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
             syncResults.push('Following transferred');
         }
 
+        // 8b. Transfer talent (BIES Talents): the same person's skills and work
+        const talent = await prisma.talentListing.updateMany({
+            where: { userId: sourceUserId },
+            data: { userId: targetUserId },
+        });
+        if (talent.count > 0) syncResults.push(`${talent.count} talent listings transferred`);
+
         // 9. Optionally soft-delete source account (moves to trash)
         if (deleteSource) {
             removeFromRelayWhitelist(sourceUser.nostrPubkey);

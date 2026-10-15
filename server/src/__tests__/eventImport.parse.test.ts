@@ -14,11 +14,14 @@ describe('jsonLdBlocks', () => {
     });
 
     it('stays fast on a 2 MB page of unclosed tags', () => {
+        // About a second alone; a scan that went back over the page from each
+        // tag would take minutes. 5 seconds leaves room for a busy machine:
+        // the other test files run at the same time, ffmpeg's among them.
         for (const piece of ['<script type="application/ld+json">', '<script ', '<script type="application/ld+json">x</scrip']) {
             const page = piece.repeat(Math.ceil((2 * 1024 * 1024) / piece.length));
             const started = Date.now();
             jsonLdBlocks(page);
-            expect(Date.now() - started, piece).toBeLessThan(1500);
+            expect(Date.now() - started, piece).toBeLessThan(5000);
         }
     });
 });

@@ -43,6 +43,7 @@ const Navbar = () => {
     { label: t('nav.discover'), path: '/discover' },
     { label: t('mobileNav.farms'), path: '/farms', flag: 'directories' },
     { label: t('nav.trusted'), path: '/trusted', flag: 'directories' },
+    { label: t('nav.talent'), path: '/talents', flag: 'talent' },
     ...(MARKETPLACE_ENABLED ? [{ label: t('marketplace.entryLabel'), path: '/market', flag: 'marketplace' }] : []),
     { label: t('nav.events'), path: '/events', flag: 'events', squeeze: true },
     { label: t('nav.media'), path: '/media', flag: 'media', squeeze: true },
@@ -62,6 +63,7 @@ const Navbar = () => {
     if (path === '/' || path === '/feed') return t('pageTitles.biesFeed');
     if (path.startsWith('/farms')) return t('mobileNav.farms');
     if (path.startsWith('/trusted')) return t('pageTitles.certifiedDirectory');
+    if (path.startsWith('/talents')) return t('pageTitles.talent');
     if (path.startsWith('/market')) return t('marketplace.title');
     if (path.startsWith('/discover')) return t('pageTitles.discover', 'Discover');
     if (path.startsWith('/events')) return t('pageTitles.ecosystemEvents');
@@ -306,6 +308,7 @@ const Navbar = () => {
                   { to: '/farms', label: t('directory.farmTitle') },
                   { to: '/trusted', label: t('directory.certifiedTitle') },
                 ] : []),
+                ...(featureOn('talent') ? [{ to: '/talents', label: t('pageTitles.talent') }] : []),
                 ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),
                 ...(featureOn('messages') ? [{ to: '/messages', label: t('nav.messages') }] : []),
                 ...(COWORK_ENABLED && featureOn('cowork') ? [{ to: '/cowork', label: t('nav.cowork') }] : []),

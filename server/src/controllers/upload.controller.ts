@@ -4,14 +4,14 @@ import multer from 'multer';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
 import path from 'path';
-import { privateFileFromLink, uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
-import { prepareMedia, UnreadableMediaError } from '../services/mediaProcessing';
+import { PROCESSING_DIR, privateFileFromLink, uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
+import { MAX_VIDEO_SECONDS, prepareMedia, UnreadableMediaError, VideoTooLongError } from '../services/mediaProcessing';
 import { discardUploadNames, discardUploads, recordUpload } from '../services/uploads.service';
 
 // ─── Multer config (memory storage — files stay in buffer) ───
 
-// Photos and videos members add (feed posts, profile photos, albums): what
-// phones and browsers make, including iPhone videos (QuickTime).
+// Photos and videos members add (feed posts, profile photos, albums,
+// Talents): what phones and browsers make, including iPhone videos (QuickTime).
 const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
 
 // One file and nothing else. The last two are multer 2's own limits, which
@@ -51,12 +51,14 @@ export const uploadMiddleware = upload.single('file');
 // ─── Controllers ───
 
 /**
- * POST /upload/media
- * Upload a public image/video. Photos are shrunk and lose their metadata,
- * videos their location (services/mediaProcessing.ts); the upload is
- * recorded as the member's (services/uploads.service.ts). Returns the public
- * URL, and what a Nostr event's imeta tag says of the stored file: its type,
- * size, SHA-256 and, for a photo, its size in pixels.
+ * POST /upload/media?poster=1
+ * Upload a public image/video. Photos are shrunk and lose their metadata;
+ * videos are made again as a smaller MP4 without theirs, which takes a while
+ * (services/mediaProcessing.ts). The upload is recorded as the member's
+ * (services/uploads.service.ts). Returns the public URL, and what a Nostr
+ * event's imeta tag says of the stored file: its type, size, SHA-256 and
+ * size in pixels; for a video its length, and with ?poster=1 a still from
+ * it (stored and recorded too), to show before it plays.
  */
 export async function uploadMedia(req: Request, res: Response): Promise<void> {
     try {
@@ -73,10 +75,14 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
 
         let media;
         try {
-            media = await prepareMedia(req.file.buffer, req.file.mimetype);
+            media = await prepareMedia(req.file.buffer, req.file.mimetype, { poster: req.query.poster === '1', workDir: PROCESSING_DIR });
         } catch (err) {
             if (err instanceof UnreadableMediaError) {
                 res.status(400).json({ error: err.message });
+                return;
+            }
+            if (err instanceof VideoTooLongError) {
+                res.status(400).json({ error: err.message, reason: 'too_long', max: MAX_VIDEO_SECONDS });
                 return;
             }
             throw err;
@@ -88,12 +94,21 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         const shared = req.query.shared === '1' && media.mimeType === 'image/gif';
         await recordUpload(req.user!.id, { name, mimeType: media.mimeType, size: media.buffer.length, shared });
 
+        let poster: string | undefined;
+        if (media.poster) {
+            const still = await uploadPublicFile(media.poster.buffer, media.poster.mimeType);
+            await recordUpload(req.user!.id, { name: still.name, mimeType: media.poster.mimeType, size: media.poster.buffer.length });
+            poster = still.url;
+        }
+
         res.json({
             url,
             type: media.mimeType,
             size: media.buffer.length,
             sha256: crypto.createHash('sha256').update(media.buffer).digest('hex'),
             ...(media.width && media.height ? { width: media.width, height: media.height } : {}),
+            ...(media.duration ? { duration: Math.round(media.duration * 10) / 10 } : {}),
+            ...(poster ? { poster } : {}),
         });
     } catch (error) {
         console.error('Upload media error:', error);
