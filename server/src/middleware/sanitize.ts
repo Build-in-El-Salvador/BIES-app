@@ -10,6 +10,86 @@
 
 import { Request, Response, NextFunction } from 'express';
 
+/**
+ * Takes out every stretch from a match of `open` to the first match of
+ * `close` after it, as `.replace(/open[\s\S]*?close/g, '')` does. Both carry
+ * the g flag: their lastIndex says where to look.
+ */
+function removeSpans(str: string, open: RegExp, close: RegExp): string {
+    let out = '';
+    let kept = 0;
+    open.lastIndex = 0;
+    for (let start = open.exec(str); start; start = open.exec(str)) {
+        close.lastIndex = start.index + start[0].length;
+        const end = close.exec(str);
+        // Nothing closes this one, so nothing closes a later one either.
+        if (!end) break;
+        out += str.slice(kept, start.index);
+        kept = end.index + end[0].length;
+        open.lastIndex = kept;
+    }
+    return out + str.slice(kept);
+}
+
+/** Takes out every tag: a "<", at least one character, and the first ">" after it (`<[^>]+>`). */
+function removeTags(str: string): string {
+    let out = '';
+    let kept = 0;
+    for (let lt = str.indexOf('<'); lt !== -1;) {
+        const gt = str.indexOf('>', lt + 1);
+        // No ">" after this "<", so none after a later one either.
+        if (gt === -1) break;
+        if (gt > lt + 1) {
+            out += str.slice(kept, lt);
+            kept = gt + 1;
+            lt = str.indexOf('<', kept);
+        } else {
+            // "<>" isn't a tag.
+            lt = str.indexOf('<', lt + 1);
+        }
+    }
+    return out + str.slice(kept);
+}
+
+const DATA_URI = /data\s*:/gi;
+const BASE64 = /;base64/gi;
+
+/**
+ * Takes out "data:" up to the last ";base64" before the next comma, as
+ * `.replace(/data\s*:[^,]*;base64/gi, '')` does.
+ */
+function removeBase64DataUris(str: string): string {
+    let out = '';
+    let kept = 0;
+    DATA_URI.lastIndex = 0;
+    for (let start = DATA_URI.exec(str); start; start = DATA_URI.exec(str)) {
+        const from = DATA_URI.lastIndex;
+        const comma = str.indexOf(',', from);
+        const until = comma === -1 ? str.length : comma;
+        // Looked for only up to that comma, so no stretch is searched twice.
+        const stretch = str.slice(from, until);
+        let end = -1;
+        BASE64.lastIndex = 0;
+        for (let found = BASE64.exec(stretch); found; found = BASE64.exec(stretch)) end = from + BASE64.lastIndex;
+        if (end !== -1) {
+            out += str.slice(kept, start.index);
+            kept = end;
+        }
+        // A later "data:" before that comma ends at the same comma, with no
+        // ";base64" left before it.
+        DATA_URI.lastIndex = until;
+    }
+    return out + str.slice(kept);
+}
+
+const TAG_END = />/g;
+
+// Blocks that go with what's in them.
+const SCRIPT_AND_STYLE: ReadonlyArray<[RegExp, RegExp]> = [
+    [/<script/gi, /<\/script>/gi],
+    [/<style/gi, /<\/style>/gi],
+];
+
 // Lightweight HTML tag stripper — applied recursively, handles nested tag reconstruction
 function stripTags(str: string): string {
     let prev = '';
@@ -17,10 +97,9 @@ function stripTags(str: string): string {
     // Loop to handle nested/reconstructed tags (e.g. <scr<script>ipt>)
     while (result !== prev) {
         prev = result;
-        result = result
-            .replace(/<script[\s\S]*?<\/script>/gi, '')  // Remove script blocks
-            .replace(/<style[\s\S]*?<\/style>/gi, '')     // Remove style blocks
-            .replace(/<[^>]+>/g, '');                      // Remove remaining tags
+        // Script and style blocks, then the remaining tags.
+        for (const [open, close] of SCRIPT_AND_STYLE) result = removeSpans(result, open, close);
+        result = removeTags(result);
     }
     return result;
 }
@@ -57,18 +136,24 @@ function decodeHtmlEntities(str: string): string {
         .replace(/&tab;|&newline;/gi, '');
 }
 
+// What rich HTML loses, in this order: blocks with what's in them, and tags
+// up to their ">".
+const DANGEROUS_HTML: ReadonlyArray<[RegExp, RegExp]> = [
+    ...SCRIPT_AND_STYLE,
+    [/<iframe/gi, /<\/iframe>/gi],
+    [/<object/gi, TAG_END],
+    [/<embed/gi, TAG_END],
+    [/<form/gi, /<\/form>/gi],
+    [/<form/gi, TAG_END],
+];
+
 // Strip only dangerous content from rich HTML, preserving safe formatting tags.
 function sanitizeRichHtml(str: string): string {
     // Decode entities first, so encoded attributes are caught too. Not a full
     // sanitizer: every page that shows rich HTML runs DOMPurify too.
-    let result = decodeHtmlEntities(str)
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-        .replace(/<object[\s\S]*?>/gi, '')
-        .replace(/<embed[\s\S]*?>/gi, '')
-        .replace(/<form[\s\S]*?<\/form>/gi, '')
-        .replace(/<form[\s\S]*?>/gi, '')
+    let result = decodeHtmlEntities(str);
+    for (const [open, close] of DANGEROUS_HTML) result = removeSpans(result, open, close);
+    result = result
         // Event handlers, after a space, slash or quote ("<img/onerror=").
         .replace(/[\s/"']on\w+\s*=\s*"[^"]*"/gi, ' ')
         .replace(/[\s/"']on\w+\s*=\s*'[^']*'/gi, ' ')
@@ -77,7 +162,7 @@ function sanitizeRichHtml(str: string): string {
     // Then the javascript: protocol (catches &#106;avascript: etc.)
     result = result.replace(/javascript\s*:/gi, '');
     // Also strip vbscript: and data: URIs in attributes (additional protocol vectors)
-    result = result.replace(/vbscript\s*:/gi, '').replace(/data\s*:[^,]*;base64/gi, '');
+    result = removeBase64DataUris(result.replace(/vbscript\s*:/gi, ''));
 
     return result.trim();
 }
