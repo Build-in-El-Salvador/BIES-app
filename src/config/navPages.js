@@ -3,7 +3,7 @@
 import {
   Home,
   MessageSquare,
-  Compass,
+  Lightbulb,
   Calendar,
   Play,
   User,
@@ -34,8 +34,8 @@ import { MARKETPLACE_ENABLED, BOUNTIES_ENABLED } from './featureFlags.js';
 export const NAV_PAGES = [
   { id: 'home', path: '/home', icon: Home, labelKey: 'mobileNav.homePage', auth: true },
   { id: 'feed', path: '/feed', icon: MessageSquare, labelKey: 'mobileNav.home' },
-  // Discover is projects + members; with projects off it's the same as Members.
-  { id: 'discover', path: '/discover', icon: Compass, labelKey: 'mobileNav.discover', flag: 'projects' },
+  // Opportunities: investments, businesses for sale, jobs, partnerships, programs.
+  { id: 'opportunities', path: '/opportunities', icon: Lightbulb, labelKey: 'mobileNav.opportunities', auth: true, flag: 'projects' },
   { id: 'members', path: '/members', icon: Users, labelKey: 'mobileNav.members', auth: true },
   // Your own profile: in the side menu, and a tab members can add.
   { id: 'profile', path: '/profile', icon: CircleUser, labelKey: 'nav.profile', auth: true },
@@ -78,20 +78,24 @@ export const DEFAULT_BOTTOM_NAV = ['home', 'feed', 'members', 'farms', 'trusted'
 const PREVIOUS_DEFAULT = ['feed', 'members', 'farms', 'trusted', 'profile'];
 export const SAVED_MARK = 'v2';
 
+// Tabs that became another page: Discover (projects and members) is Opportunities.
+const RENAMED = { discover: 'opportunities' };
+
 export const MAX_TABS = 5;
 export const MIN_TABS = 1;
 
 /**
  * Sanitize a stored/received list of tab ids into a valid bottom-nav config.
- * Pure function: filters unknown ids (SAVED_MARK among them), dedupes (first
- * occurrence wins), caps at MAX_TABS, and falls back to the defaults when
- * invalid or empty.
+ * Pure function: renames a tab whose page was renamed (RENAMED), filters
+ * unknown ids (SAVED_MARK among them), dedupes (first occurrence wins), caps
+ * at MAX_TABS, and falls back to the defaults when invalid or empty.
  */
 export function sanitizeTabs(ids) {
   if (!Array.isArray(ids)) return [...DEFAULT_BOTTOM_NAV];
   const seen = new Set();
   const result = [];
-  for (const id of ids) {
+  for (const saved of ids) {
+    const id = RENAMED[saved] || saved;
     if (NAV_PAGES_BY_ID[id] && !seen.has(id)) {
       seen.add(id);
       result.push(id);

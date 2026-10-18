@@ -27,7 +27,7 @@ const Dashboard = () => {
     const { flags } = useFeatureFlags();
     const mainTabs = [
         { to: '/dashboard', label: t('dashboard.overview'), icon: LayoutDashboard, end: true },
-        { to: '/dashboard/projects', label: t('dashboard.projects') || 'Projects', icon: Folder, flag: 'projects' },
+        { to: '/opportunities?mine=1', label: t('dashboard.myOpportunities'), icon: Folder, flag: 'projects' },
         { to: '/dashboard/events', label: t('dashboard.eventsTab') || 'Events', icon: CalendarDays, flag: 'events' },
         { to: '/dashboard/courses', label: t('dashboard.courses') || 'Courses', icon: BookOpen },
         { to: '/dashboard/following', label: t('dashboard.following') || 'Following', icon: Heart },

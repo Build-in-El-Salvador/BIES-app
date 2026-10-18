@@ -290,7 +290,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                                     <Rocket size={20} aria-hidden="true" />
                                     <span>
                                         {p.role ? `${p.role} · ` : `${t('profileView.workingOn')} `}
-                                        <Link to={`/project/${p.id}`} className="pv-link">{p.name}</Link>
+                                        <Link to={`/opportunities/${p.id}`} className="pv-link">{p.name}</Link>
                                     </span>
                                 </li>
                             ))}

@@ -7,6 +7,7 @@ import {
     addToWatchlistSchema,
     removeFromWatchlist,
     updateWatchlistNote,
+    watchlistNoteSchema,
     checkWatchlist,
 } from '../controllers/watchlist.controller';
 
@@ -18,6 +19,6 @@ router.get('/', getWatchlist);
 router.post('/', validate(addToWatchlistSchema), addToWatchlist);
 router.get('/check/:projectId', checkWatchlist);
 router.delete('/:projectId', removeFromWatchlist);
-router.put('/:projectId/note', updateWatchlistNote);
+router.put('/:projectId/note', validate(watchlistNoteSchema), updateWatchlistNote);
 
 export default router;

@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { authenticate, optionalAuth, requireRole } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import {
-    recordProjectView,
     getBuilderDashboard,
     getInvestorDashboard,
     getProjectAnalytics,
@@ -9,9 +8,6 @@ import {
 } from '../controllers/analytics.controller';
 
 const router = Router();
-
-// View tracking (public with optional auth)
-router.post('/view/:projectId', optionalAuth, recordProjectView);
 
 // Protected analytics
 router.get('/dashboard', authenticate, requireRole('BUILDER'), getBuilderDashboard);

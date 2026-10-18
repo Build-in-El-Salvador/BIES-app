@@ -13,7 +13,7 @@ export const FEATURE_SLUGS = [
     'zaps',        // zap buttons + wallet
     'feedback',    // bug/feedback tracker
     'investors',   // investor features + vetting
-    'projects',    // project listings
+    'projects',    // Opportunities: investments, businesses for sale, jobs, partnerships, programs
     'cowork',      // Cowork check-in page
     'marketplace', // Shopstr-compatible NIP-99 marketplace
     'bounties',    // bounty board (sats/points escrow)

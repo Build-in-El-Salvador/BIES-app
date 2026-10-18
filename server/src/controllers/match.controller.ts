@@ -3,6 +3,8 @@ import prisma from '../lib/prisma';
 import { cache, TTL } from '../services/redis.service';
 import { withoutDeckKey } from '../utils/projectFields';
 import { privacyOf } from '../services/profilePrivacy';
+import { hiddenFromIds } from '../services/moderation.service';
+import { openNow } from './project.controller';
 
 /**
  * GET /match/projects/:id/matches
@@ -140,7 +142,16 @@ export async function getInvestorRecommendations(req: Request, res: Response): P
         });
         const investedProjectIds = existingInvestments.map((i) => i.projectId);
 
-        const whereClause: any = { isPublished: true };
+        // Open investments, as the Opportunities list has them: not of
+        // suspended or deleted members, nor of members blocked either way.
+        const hidden = await hiddenFromIds(userId);
+        const whereClause: any = {
+            type: 'investment',
+            isPublished: true,
+            owner: { isBanned: false, deletedAt: null },
+            ...openNow(),
+        };
+        if (hidden.length) whereClause.ownerId = { notIn: hidden };
         if (investedProjectIds.length > 0) {
             whereClause.id = { notIn: investedProjectIds };
         }
@@ -182,8 +193,10 @@ export async function getInvestorRecommendations(req: Request, res: Response): P
                 }
             }
 
+            // Its member's WhatsApp and email come only with the opportunity itself.
+            const { whatsapp: _whatsapp, email: _email, ...rest } = withoutDeckKey(project);
             return {
-                project: { ...withoutDeckKey(project), tags: JSON.parse(project.tags || '[]') },
+                project: { ...rest, tags: JSON.parse(project.tags || '[]') },
                 score,
                 reasons,
             };

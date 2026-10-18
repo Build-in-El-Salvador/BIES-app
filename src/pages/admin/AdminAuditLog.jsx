@@ -61,6 +61,7 @@ const AdminAuditLog = () => {
                         <option value="PROJECT_APPROVED">Project Approved</option>
                         <option value="PROJECT_REJECTED">Project Rejected</option>
                         <option value="PROJECT_HARD_DELETED">Project Deleted</option>
+                        <option value="OPPORTUNITY_REMOVED">Opportunity Removed (report)</option>
                     </select>
                 </div>
             </div>

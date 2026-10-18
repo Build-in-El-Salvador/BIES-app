@@ -227,9 +227,10 @@ export const profilesApi = {
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 
+// Opportunities: the API keeps the name it had when they were all projects.
 export const projectsApi = {
     list: (params = {}) => get('/projects', params),
-    // params: { category, stage, ownerId, search, featured, sort, page, limit }
+    // params: { type, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, page, limit }
 
     get: (id) => get(`/projects/${id}`),
 
@@ -241,19 +242,12 @@ export const projectsApi = {
 
     getDeck: (id) => get(`/projects/${id}/deck`),
 
-    submit: (id) => put(`/projects/${id}/submit`, {}),
-
-    expressInterest: (id) => post(`/projects/${id}/interest`, {}),
-
     requestDeck: (id, data) => post(`/projects/${id}/deck/request`, data),
 
-    getAllDeckRequests: () => get('/projects/builder/deck-requests'),
+    getDeckRequests: (id) => get(`/projects/${id}/deck/requests`),
 
     reviewDeckRequest: (projectId, requestId, status) =>
         put(`/projects/${projectId}/deck/requests/${requestId}`, { status }),
-
-    postUpdate: (id, title, content) =>
-        post(`/projects/${id}/updates`, { title, content }),
 };
 
 // ─── Directory (Farms & Certified Providers) ─────────────────────────────────
@@ -543,8 +537,6 @@ export const coworkApi = {
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
-    recordView: (projectId) => post(`/analytics/view/${projectId}`, {}),
-
     builderDashboard: () => get('/analytics/dashboard'),
 
     investorDashboard: () => get('/analytics/investor-dashboard'),

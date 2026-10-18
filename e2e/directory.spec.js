@@ -8,7 +8,7 @@
  * Covers:
  *  - /farms renders the section header, search input, and add button
  *  - links from before the move (/discover/farms, /discover/certified) redirect
- *  - /discover no longer carries the directory cards, and keeps its 2 tabs
+ *  - /discover (now the members directory) carries no directory cards
  *  - a member's listing goes live at once and lands on its own page
  *  - desktop /trusted renders the Businesses section header
  */
@@ -71,14 +71,12 @@ test.describe('Directories', () => {
         await expect(page).toHaveURL(/\/trusted\/new$/);
     });
 
-    test('mobile: /discover has its 2 tabs and no directory cards', async ({ page }) => {
+    test('mobile: /discover opens the members directory, with no directory cards', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await loginAs(page, token);
         await page.goto('/discover');
+        await expect(page).toHaveURL(/\/members$/);
         await page.waitForLoadState('networkidle');
-
-        const tabs = page.locator('.discover-mobile-tabs .discover-tab');
-        await expect(tabs).toHaveCount(2);
         await expect(page.locator('.directory-entry-card')).toHaveCount(0);
     });
 

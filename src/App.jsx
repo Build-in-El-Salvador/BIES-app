@@ -52,7 +52,6 @@ import Wallet from './pages/Wallet';
 import Bounties from './pages/Bounties';
 import BountyDetail from './pages/BountyDetail';
 import CreateBounty from './pages/CreateBounty';
-import ProjectDetails from './pages/ProjectDetails';
 import Notifications from './pages/Notifications';
 import ArticleDetail from './pages/ArticleDetail';
 import Login from './pages/Login';
@@ -73,14 +72,15 @@ import CreateListing from './pages/directory/CreateListing';
 import TalentList from './pages/talent/TalentList';
 import TalentDetail from './pages/talent/TalentDetail';
 import TalentForm from './pages/talent/TalentForm';
+import OpportunityList from './pages/opportunities/OpportunityList';
+import OpportunityDetail from './pages/opportunities/OpportunityDetail';
+import OpportunityForm from './pages/opportunities/OpportunityForm';
 
 import MarketplaceList from './pages/marketplace/MarketplaceList';
 import MarketListingDetail from './pages/marketplace/MarketListingDetail';
 import CreateMarketListing from './pages/marketplace/CreateMarketListing';
 
-import MyProjects from './pages/builder/MyProjects';
 import Analytics from './pages/builder/Analytics';
-import NewProject from './pages/builder/NewProject';
 import MyCourses from './pages/educator/MyCourses';
 import NewCourse from './pages/educator/NewCourse';
 import CourseBuilder from './pages/educator/CourseBuilder';
@@ -170,6 +170,18 @@ const LegacyNewListing = () => {
     return <Navigate to={new URLSearchParams(search).get('type') === 'provider' ? '/trusted/new' : '/farms/new'} replace />;
 };
 
+/** A project's old page, /project/:id: it's an opportunity now. */
+const ProjectMoved = () => {
+    const { id } = useParams();
+    return <Navigate to={`/opportunities/${id}`} replace />;
+};
+
+/** The old "new project" form (?edit=<id> to edit one): the opportunity form. */
+const LegacyNewProject = () => {
+    const edit = new URLSearchParams(useLocation().search).get('edit');
+    return <Navigate to={edit ? `/opportunities/${edit}/edit` : '/opportunities/new?type=investment'} replace />;
+};
+
 const AppContent = () => {
     const { user } = useAuth();
     const location = useLocation();
@@ -240,6 +252,11 @@ const AppContent = () => {
                     <Route path="/talents/new" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm key="new-talent" /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/talents/:id" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentDetail /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/talents/:id/edit" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm editMode /></ProtectedRoute></FeatureRoute>} />
+                    {/* Opportunities: investments, businesses for sale, jobs, partnerships, programs (the projects flag) */}
+                    <Route path="/opportunities" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityList /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/opportunities/new" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityForm key="new-opportunity" /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/opportunities/:id" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/opportunities/:id/edit" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityForm editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* Marketplace: its own page too */}
                     {MARKETPLACE_ENABLED && (
                         <>
@@ -256,7 +273,8 @@ const AppContent = () => {
                     <Route path="/discover/market/*" element={<Moved to="/market" />} />
                     <Route path="/discover/directory/new" element={<LegacyNewListing />} />
                     <Route path="/discover/directory/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/discover" element={<ProtectedRoute><Discover key="discover" /></ProtectedRoute>} />
+                    {/* Discover was projects and members: now Opportunities and Members (a search goes along) */}
+                    <Route path="/discover" element={<Moved to="/members" />} />
                     <Route path="/events" element={<FeatureRoute flag="events"><ProtectedRoute><Events /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/events/create" element={
                         <FeatureRoute flag="events"><ProtectedRoute><CreateEvent /></ProtectedRoute></FeatureRoute>
@@ -268,13 +286,13 @@ const AppContent = () => {
                         <FeatureRoute flag="events"><ProtectedRoute><EditEvent /></ProtectedRoute></FeatureRoute>
                     } />
                     <Route path="/events/:id" element={<FeatureRoute flag="events"><ProtectedRoute><EventDetail /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/members" element={<ProtectedRoute><Discover key="members" membersOnly /></ProtectedRoute>} />
+                    <Route path="/members" element={<ProtectedRoute><Discover key="members" /></ProtectedRoute>} />
                     <Route path="/members/:userId/followers" element={<ProtectedRoute><FollowList key="followers" kind="followers" /></ProtectedRoute>} />
                     <Route path="/members/:userId/following" element={<ProtectedRoute><FollowList key="following" kind="following" /></ProtectedRoute>} />
                     <Route path="/members/:userId/network" element={<ProtectedRoute><FollowList key="network" kind="network" /></ProtectedRoute>} />
-                    <Route path="/builders" element={<Navigate to="/discover" replace />} />
+                    <Route path="/builders" element={<Navigate to="/members" replace />} />
                     <Route path="/builder/:id" element={<ProtectedRoute><PublicProfile type="builder" /></ProtectedRoute>} />
-                    <Route path="/investors" element={<Navigate to="/discover" replace />} />
+                    <Route path="/investors" element={<Navigate to="/members" replace />} />
                     <Route path="/investor/:id" element={<ProtectedRoute><PublicProfile type="investor" /></ProtectedRoute>} />
                     <Route path="/leaderboard" element={<FeatureRoute flag="points"><ProtectedRoute><Leaderboard /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/media" element={<FeatureRoute flag="media"><ProtectedRoute><Media /></ProtectedRoute></FeatureRoute>} />
@@ -315,7 +333,7 @@ const AppContent = () => {
                         </FeatureRoute>
                     }>
                         <Route index element={<Overview />} />
-                        <Route path="projects" element={<FeatureRoute flag="projects"><MyProjects /></FeatureRoute>} />
+                        <Route path="projects" element={<Navigate to="/opportunities?mine=1" replace />} />
                         <Route path="events" element={<FeatureRoute flag="events"><MyEvents /></FeatureRoute>} />
                         <Route path="courses" element={<MyCourses />} />
                         <Route path="following" element={<Following />} />
@@ -323,7 +341,7 @@ const AppContent = () => {
                         <Route path="analytics" element={<Analytics />} />
                         <Route path="settings" element={<Settings />} />
                         {/* Sub-routes */}
-                        <Route path="builder/new-project" element={<FeatureRoute flag="projects"><NewProject /></FeatureRoute>} />
+                        <Route path="builder/new-project" element={<LegacyNewProject />} />
                         {COURSES_ENABLED && (
                             <>
                                 <Route path="builder/new-course" element={<NewCourse />} />
@@ -357,13 +375,7 @@ const AppContent = () => {
                         <Route path="bounties" element={<AdminBounties />} />
                     </Route>
 
-                    <Route path="/project/:id" element={
-                        <FeatureRoute flag="projects">
-                            <ProtectedRoute>
-                                <ProjectDetails />
-                            </ProtectedRoute>
-                        </FeatureRoute>
-                    } />
+                    <Route path="/project/:id" element={<ProjectMoved />} />
 
                     {/* Old link: the name-and-photo step now opens over the app (ProfileGate). */}
                     <Route path="/profile-setup" element={<Navigate to="/home" replace />} />

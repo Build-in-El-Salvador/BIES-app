@@ -116,85 +116,6 @@ export async function publishProfileUpdate(
 }
 
 /**
- * Publish a project as a long-form content event (Kind 30023).
- */
-export async function publishProject(
-    userId: string,
-    project: {
-        id: string;
-        title: string;
-        description: string;
-        category: string;
-        stage: string;
-        thumbnail?: string;
-    }
-): Promise<string | null> {
-    const event: EventTemplate = {
-        kind: 30023,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [
-            ['d', project.id], // unique identifier for replaceable event
-            ['title', project.title],
-            ['t', project.category.toLowerCase()],
-            ['t', project.stage.toLowerCase()],
-            ['t', 'bies'], // tag all BIES projects
-            ['summary', project.description.substring(0, 200)],
-            ...(project.thumbnail ? [['image', project.thumbnail]] : []),
-        ],
-        content: project.description,
-    };
-
-    return publishEvent(userId, event);
-}
-
-/**
- * Publish a project as a NIP-99 classified listing (Kind 30402).
- * Discoverable in Nostr clients with marketplace/classified support.
- */
-export async function publishProjectListing(
-    userId: string,
-    project: {
-        id: string;
-        title: string;
-        description: string;
-        category: string;
-        stage: string;
-        fundingGoal?: number | null;
-        thumbnail?: string;
-        location?: string;
-    }
-): Promise<string | null> {
-    const tags: string[][] = [
-        ['d', project.id],
-        ['title', project.title],
-        ['summary', project.description.substring(0, 200)],
-        ['t', project.category.toLowerCase()],
-        ['t', project.stage.toLowerCase()],
-        ['t', 'bies'],
-        ['t', 'investment'],
-    ];
-
-    if (project.fundingGoal) {
-        tags.push(['price', String(project.fundingGoal), 'USD']);
-    }
-    if (project.thumbnail) {
-        tags.push(['image', project.thumbnail]);
-    }
-    if (project.location) {
-        tags.push(['location', project.location]);
-    }
-
-    const event: EventTemplate = {
-        kind: 30402,
-        created_at: Math.floor(Date.now() / 1000),
-        tags,
-        content: project.description,
-    };
-
-    return publishEvent(userId, event);
-}
-
-/**
  * Publish a directory listing as a NIP-99 classified listing (Kind 30402).
  * Signed with the linked member's custodial key (call sites pass
  * memberUserId ?? ownerId). Returns the event id, or null for
@@ -589,7 +510,7 @@ export async function publishRelayList(userId: string): Promise<string | null> {
 
 /**
  * Publish a Kind 1 announcement note to the BIES relay on behalf of a user.
- * Used for system events: new user joined, project created, lightning address added.
+ * Used for system events: an event a member hosts, a Lightning address added.
  * Only works for custodial-key users; Nostr-native users handle this client-side.
  */
 export async function publishAnnouncement(

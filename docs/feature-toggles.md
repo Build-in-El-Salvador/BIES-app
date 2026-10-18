@@ -19,12 +19,12 @@ them pauses.
 | `zaps` | Zap buttons, Coinos wallet | `/api/wallet` |
 | `feedback` | Bug/feedback tracker | `/api/feedback` |
 | `investors` | Investor features + vetting | `/api/investors`, `/api/investments` |
-| `projects` | Project listings/pages | `/api/projects` |
+| `projects` | Opportunities (`/opportunities`): investments, businesses for sale, jobs, partnerships, grants and programs | `/api/projects`, `/api/watchlist`, `/api/match` |
 | `cowork` | Cowork check-in page | none — pure client-side Nostr (kind 31980 on the private relay); UI gate only |
 | `marketplace` | Shopstr-compatible NIP-99 marketplace + moderation blocklist | `/api/marketplace` |
 | `bounties` | Bounty board, submissions, escrow/payout + maintenance loop | `/api/bounties` |
 
-Feed, Discover, profiles, auth, courses and admin are core and **not**
+Feed, Members, profiles, auth, courses and admin are core and **not**
 toggleable.
 
 `marketplace` and `bounties` are **additionally** guarded by the build-time

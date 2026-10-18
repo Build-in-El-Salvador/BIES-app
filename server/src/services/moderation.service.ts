@@ -25,7 +25,7 @@ import { nip19 } from 'nostr-tools';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
 import { linksIn, uploadNameOf } from './uploads.service';
 
-export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo', 'talent'] as const;
+export const REPORT_TARGETS = ['user', 'listing', 'endorsement', 'event', 'note', 'album', 'photo', 'talent', 'opportunity'] as const;
 export const REPORT_REASONS = [
     'harassment',
     'sexual',
@@ -83,6 +83,8 @@ async function responsibleMember(type: ReportTarget, id: string, pubkey?: string
             return (await prisma.directoryEndorsement.findUnique({ where: { id }, select: { userId: true } }))?.userId;
         case 'talent':
             return (await prisma.talentListing.findUnique({ where: { id }, select: { userId: true } }))?.userId;
+        case 'opportunity': // a project, by its model's name
+            return (await prisma.project.findUnique({ where: { id }, select: { ownerId: true } }))?.ownerId;
         case 'event':
             return (await prisma.event.findUnique({ where: { id }, select: { hostId: true } }))?.hostId;
         case 'note': {
@@ -205,6 +207,10 @@ async function describeTarget(type: string, id: string, pubkey: string | null, s
         case 'talent': {
             const talent = await prisma.talentListing.findUnique({ where: { id }, select: { title: true } });
             return { text: `Talent: ${talent?.title ?? '(deleted)'}`, link: talent ? `/talents/${id}` : null };
+        }
+        case 'opportunity': {
+            const project = await prisma.project.findUnique({ where: { id }, select: { title: true } });
+            return { text: `Opportunity: ${project?.title ?? '(deleted)'}`, link: project ? `/opportunities/${id}` : null };
         }
         case 'event': {
             const event = await prisma.event.findUnique({ where: { id }, select: { title: true } });

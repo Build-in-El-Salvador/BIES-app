@@ -1,28 +1,43 @@
 /**
- * Watchlist controller — investors save and manage projects they are tracking.
+ * Watchlist controller: the opportunities a member saved (Save on an
+ * opportunity's page). Saving is private: its member isn't told.
  */
 
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
-import { notifyWatchlistAdd } from '../services/notification.service';
 import { withoutDeckKey } from '../utils/projectFields';
+import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
 
 export const addToWatchlistSchema = z.object({
     projectId: z.string().min(1),
     note: z.string().max(500).optional(),
 });
 
+export const watchlistNoteSchema = z.object({
+    note: z.string().max(500).optional(),
+});
+
 /**
  * GET /watchlist
- * Get the current user's watchlist with full project details.
+ * What the member saved, closed ones too, as a list shows them: without its
+ * member's WhatsApp and email. Not those staff took down, nor those of
+ * suspended or deleted members or of members blocked either way.
  */
 export async function getWatchlist(req: Request, res: Response): Promise<void> {
     try {
         const userId = req.user!.id;
+        const hidden = await hiddenFromIds(userId, { staff: isStaffUser(req.user) });
 
         const items = await prisma.watchlistItem.findMany({
-            where: { userId },
+            where: {
+                userId,
+                project: {
+                    isPublished: true,
+                    owner: { isBanned: false, deletedAt: null },
+                    ...(hidden.length ? { ownerId: { notIn: hidden } } : {}),
+                },
+            },
             orderBy: { addedAt: 'desc' },
             include: {
                 project: {
@@ -38,13 +53,10 @@ export async function getWatchlist(req: Request, res: Response): Promise<void> {
             },
         });
 
-        const parsed = items.map((item) => ({
-            ...item,
-            project: {
-                ...withoutDeckKey(item.project),
-                tags: JSON.parse(item.project.tags || '[]'),
-            },
-        }));
+        const parsed = items.map((item) => {
+            const { whatsapp: _whatsapp, email: _email, ...project } = withoutDeckKey(item.project);
+            return { ...item, project: { ...project, tags: JSON.parse(item.project.tags || '[]') } };
+        });
 
         res.json({ data: parsed });
     } catch (error) {
@@ -62,17 +74,14 @@ export async function addToWatchlist(req: Request, res: Response): Promise<void>
         const userId = req.user!.id;
         const { projectId, note } = req.body;
 
-        // Verify project exists
+        // One that's up, of a member who is still one, and whom they haven't
+        // blocked (or been blocked by).
         const project = await prisma.project.findUnique({
             where: { id: projectId },
-            include: {
-                owner: {
-                    include: { profile: { select: { name: true } } },
-                },
-            },
+            select: { isPublished: true, ownerId: true, owner: { select: { isBanned: true, deletedAt: true } } },
         });
 
-        if (!project || !project.isPublished) {
+        if (!project || !project.isPublished || project.owner.isBanned || project.owner.deletedAt || (await hiddenFromIds(userId)).includes(project.ownerId)) {
             res.status(404).json({ error: 'Project not found' });
             return;
         }
@@ -85,20 +94,6 @@ export async function addToWatchlist(req: Request, res: Response): Promise<void>
                 },
             },
         });
-
-        // Notify the builder
-        if (project.ownerId !== userId) {
-            const investor = await prisma.user.findUnique({
-                where: { id: userId },
-                include: { profile: { select: { name: true } } },
-            });
-            await notifyWatchlistAdd({
-                builderId: project.ownerId,
-                investorName: investor?.profile?.name || 'An investor',
-                projectTitle: project.title,
-                projectId: project.id,
-            });
-        }
 
         res.status(201).json(item);
     } catch (error: any) {
