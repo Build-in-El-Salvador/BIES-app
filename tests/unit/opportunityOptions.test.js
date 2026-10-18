@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import {
     OPPORTUNITY_TYPES, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN, TYPE_FIELDS,
     amountOf, daysLeft, elSalvadorToday, formatDay, fullDollars, hasField, industryOf, isOpen, parseDollars,
-    plainText, shortDollars, summaryOf, typeLine,
+    plainText, shortDollars, summaryOf, typeLine, typesShown, isTypeShown,
 } from '../../src/components/opportunities/opportunityOptions.js';
 
 const server = readFileSync(new URL('../../server/src/controllers/project.controller.ts', import.meta.url), 'utf8');
@@ -140,4 +140,14 @@ test("a card's lines: its type and kind, then what matters for its type", () => 
     assert.equal(summaryOf({ type: 'program', kind: 'grant', price: 10000 }, t), 'opportunities.kinds.program.grant · opportunities.card.upTo($10K)');
     // A kind that isn't its type's isn't shown.
     assert.equal(summaryOf({ type: 'program', kind: 'full-time' }, t), '');
+});
+
+test('the phone app leaves investments out; the website shows every type', () => {
+    assert.deepEqual(typesShown(false), OPPORTUNITY_TYPES);
+    assert.deepEqual(typesShown(true), ['business-for-sale', 'job', 'partnership', 'program']);
+    assert.equal(isTypeShown('job', true), true);
+    assert.equal(isTypeShown('investment', true), false);
+    // An older project, with no type, is an investment.
+    assert.equal(isTypeShown(undefined, true), false);
+    assert.equal(isTypeShown(undefined, false), true);
 });

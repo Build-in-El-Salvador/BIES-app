@@ -2,6 +2,7 @@
 // project.controller.ts (keep both in sync). Pure, so tests can import it.
 
 import { htmlToText } from '../../utils/text.js';
+import { APP_HIDDEN_OPPORTUNITY_TYPES } from '../../config/appScope.js';
 
 export { asWebLink, shortLink } from '../talent/talentOptions.js';
 
@@ -15,6 +16,16 @@ export const plainText = (text) => (EDITOR_TAG.test(text || '') ? htmlToText(tex
 
 /** What an opportunity is (labels: opportunities.types.*). */
 export const OPPORTUNITY_TYPES = ['investment', 'business-for-sale', 'job', 'partnership', 'program'];
+
+/**
+ * The types shown here: the phone app leaves some out
+ * (APP_HIDDEN_OPPORTUNITY_TYPES), the website shows them all. An older
+ * project with no type is an investment.
+ */
+export const typesShown = (native) => (native
+    ? OPPORTUNITY_TYPES.filter((ty) => !APP_HIDDEN_OPPORTUNITY_TYPES.includes(ty))
+    : OPPORTUNITY_TYPES);
+export const isTypeShown = (type, native) => typesShown(native).includes(type || 'investment');
 
 /**
  * The kinds within each type (labels: opportunities.kinds.<type>.*): an

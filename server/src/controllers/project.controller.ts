@@ -269,7 +269,7 @@ function amountRange(min: unknown, max: unknown): { gte?: number; lte?: number }
 export async function listProjects(req: Request, res: Response): Promise<void> {
     try {
         const viewer = req.user!;
-        const { type, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, featured } = req.query;
+        const { type, types, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, featured } = req.query;
         const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
         const take = Math.min(Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20), 50);
 
@@ -287,6 +287,10 @@ export async function listProjects(req: Request, res: Response): Promise<void> {
             where.type = theType;
             if (typeof kind === 'string' && OPPORTUNITY_KINDS[theType].includes(kind)) where.kind = kind;
             if (theType === 'investment' && typeof stage === 'string' && (STAGES as readonly string[]).includes(stage)) where.stage = stage;
+        }
+        // Only the types the asker shows (?types=job,program): the phone app leaves investments out.
+        if (typeof types === 'string' && types) {
+            and.push({ type: { in: types.split(',').filter((ty) => (OPPORTUNITY_TYPES as readonly string[]).includes(ty)) } });
         }
         if (typeof category === 'string' && (INDUSTRIES as readonly string[]).includes(category)) where.category = category;
         if (btc === 'true') where.btcAccepted = true;

@@ -2056,6 +2056,7 @@
   },
   "opportunities": {
     "intro": "Investments, businesses for sale, jobs, partnerships, and grants and programs, posted by BIES members.",
+    "introApp": "Businesses for sale, jobs, partnerships, and grants and programs, posted by BIES members.",
     "search": "Search opportunities",
     "add": "Post an opportunity",
     "yours": "Yours",
@@ -2181,6 +2182,7 @@
       "clear": "Clear filters"
     },
     "empty": "No opportunities yet. Post the first one: an investment, a business for sale, a job, a partnership or a program.",
+    "emptyApp": "No opportunities yet. Post the first one: a business for sale, a job, a partnership or a program.",
     "noneYours": "You haven't posted any opportunities yet.",
     "noneSaved": "Opportunities you save show here. Tap Save on one to keep it.",
     "noMatches": "No opportunities match these filters.",
@@ -2372,6 +2374,7 @@
       "seeYours": "See yours",
       "delete": "Delete this opportunity",
       "deleteConfirm": "Delete this opportunity for good? Its photos and pitch deck go with it.",
+      "deleteConfirmNoDeck": "Delete this opportunity for good? Its photos go with it.",
       "deleteYes": "Delete",
       "tooLong": "Keep it to {{max}} characters.",
       "closesOnPassed": "That day has passed. Pick today or a later day.",
@@ -3027,7 +3030,8 @@
       },
       "opportunities": {
         "title": "Opportunities",
-        "desc": "Investments, businesses for sale, jobs, partnerships and more."
+        "desc": "Investments, businesses for sale, jobs, partnerships and more.",
+        "descApp": "Businesses for sale, jobs, partnerships and more."
       },
       "talent": {
         "title": "BIES Talents",

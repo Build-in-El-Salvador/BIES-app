@@ -260,6 +260,10 @@ describe('finding opportunities', () => {
         expect(await find('')).toEqual(sorted(job.id, raise.id, sale.id, partner.id, grant.id));
         expect(await find('type=job')).toEqual([job.id]);
         expect(await find('type=job&kind=full-time')).toEqual([]);
+        // Only some types, as the phone app asks (no investments); a type outside them finds none.
+        expect(await find('types=business-for-sale,job,partnership,program')).toEqual(sorted(job.id, sale.id, partner.id, grant.id));
+        expect(await find('types=job,program&type=investment')).toEqual([]);
+        expect(await find('types=business-for-sale,job&minAmount=100000')).toEqual([sale.id]);
         expect(await find('type=partnership&kind=distributor')).toEqual([partner.id]);
         expect(await find('type=investment&stage=GROWTH')).toEqual([raise.id]);
         expect(await find('type=investment&stage=IDEA')).toEqual([]);

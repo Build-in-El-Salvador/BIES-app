@@ -6,13 +6,18 @@ import { projectsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import OpportunityCard from '../../components/opportunities/OpportunityCard';
 import {
-    OPPORTUNITY_TYPES, OPPORTUNITY_KINDS, INDUSTRIES, STAGES, amountOf, hasField, shortDollars,
+    OPPORTUNITY_KINDS, INDUSTRIES, STAGES, amountOf, hasField, shortDollars, typesShown, isTypeShown,
 } from '../../components/opportunities/opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
 
 /** The amounts the price filter offers, in dollars. */
 const AMOUNTS = [10000, 50000, 100000, 250000, 500000, 1000000, 5000000];
 
-const typeFrom = (value) => (OPPORTUNITY_TYPES.includes(value) ? value : '');
+// The phone app leaves some types out (config/appScope.js).
+const NATIVE = isNativePlatform();
+const TYPES = typesShown(NATIVE);
+
+const typeFrom = (value) => (TYPES.includes(value) ? value : '');
 
 /** The search and filters, as the address keeps them; what doesn't fit the type is left out. */
 function filtersFrom(params) {
@@ -131,8 +136,10 @@ const OpportunityList = () => {
                 if (btcOnly) request.btc = 'true';
                 if (mineOnly && user?.id) request.ownerId = user.id;
                 if (savedOnly) request.saved = 'true';
+                if (NATIVE) request.types = TYPES.join(',');
                 const result = await projectsApi.list(request);
-                if (current) setOpportunities(Array.isArray(result?.data) ? result.data : []);
+                const found = Array.isArray(result?.data) ? result.data : [];
+                if (current) setOpportunities(found.filter((o) => isTypeShown(o.type, NATIVE)));
             } catch {
                 if (current) setOpportunities([]);
             } finally {
@@ -150,7 +157,7 @@ const OpportunityList = () => {
     const emptyText = query ? t('opportunities.noResultsSearch', { query })
         : mineOnly && !type && !activeFilterCount ? t('opportunities.noneYours')
             : savedOnly && !type && !activeFilterCount ? t('opportunities.noneSaved')
-                : filtering ? t('opportunities.noMatches') : t('opportunities.empty');
+                : filtering ? t('opportunities.noMatches') : t(NATIVE ? 'opportunities.emptyApp' : 'opportunities.empty');
     const offerToPost = !filtering || (mineOnly && !activeFilterCount && !query);
 
     const chip = (active, onClick, label, key, extra = {}) => (
@@ -165,7 +172,7 @@ const OpportunityList = () => {
             <h1 className="page-header" style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
                 {t('pageTitles.opportunities')}
             </h1>
-            <p className="opp-intro">{t('opportunities.intro')}</p>
+            <p className="opp-intro">{t(NATIVE ? 'opportunities.introApp' : 'opportunities.intro')}</p>
 
             <div className="opp-content">
                 {/* Search row */}
@@ -303,7 +310,7 @@ const OpportunityList = () => {
                         <Bookmark size={14} aria-hidden="true" /> {t('opportunities.saved')}
                     </button>
                     {chip(!type, () => chooseType(''), t('opportunities.allTypes'), 'all')}
-                    {OPPORTUNITY_TYPES.map((ty) => chip(type === ty, () => chooseType(ty), t(`opportunities.typesPlural.${ty}`), ty))}
+                    {TYPES.map((ty) => chip(type === ty, () => chooseType(ty), t(`opportunities.typesPlural.${ty}`), ty))}
                 </div>
 
                 {loading ? (
