@@ -302,14 +302,15 @@ const Navbar = () => {
               <button onClick={() => setIsMenuOpen(false)} aria-label={t('nav.closeMenu')} style={{ display: 'flex', color: 'white', background: 'none', border: 'none', padding: '10px', cursor: 'pointer' }}><X size={24} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
-              {/* Top Section: Profile, Messages, News, About */}
+              {/* Top Section: Profile, Messages, News, About. The pages go by
+                  their short names, as in the bottom bar, so each fits on one line. */}
               {[
                 { to: '/profile', label: t('nav.profile') },
                 ...(featureOn('directories') ? [
-                  { to: '/farms', label: t('pageTitles.farmDirectory') },
-                  { to: '/trusted', label: t('pageTitles.certifiedDirectory') },
+                  { to: '/farms', label: t('mobileNav.farms') },
+                  { to: '/trusted', label: t('mobileNav.trusted') },
                 ] : []),
-                ...(featureOn('talent') ? [{ to: '/talents', label: t('pageTitles.talent') }] : []),
+                ...(featureOn('talent') ? [{ to: '/talents', label: t('mobileNav.talent') }] : []),
                 ...(featureOn('projects') ? [{ to: '/opportunities', label: t('mobileNav.opportunities') }] : []),
                 ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),
                 ...(featureOn('messages') ? [{ to: '/messages', label: t('nav.messages') }] : []),
