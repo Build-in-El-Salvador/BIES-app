@@ -42,6 +42,9 @@ export const getAccessToken = () => localStorage.getItem(ACCESS_KEY);
 // flight can't write its tokens back afterwards.
 let generation = 0;
 
+/** Which sign-in this is: it changes whenever this device signs out. */
+export const sessionGeneration = () => generation;
+
 /** Store what sign-in or a refresh returned. */
 export function saveSession({ token, refreshToken }) {
     if (token) {

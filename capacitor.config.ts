@@ -26,6 +26,15 @@ const config: CapacitorConfig = {
         // never flashes white behind the boot splash.
         backgroundColor: '#0A192F',
     },
+    plugins: {
+        // The launch screen (the BIES logo, LaunchScreen.storyboard) stays up
+        // while the app starts: until it knows who's signed in and has drawn
+        // its first page, Home or signing in (App.jsx hides it). index.html
+        // hides it too on a boot error, at the Reload prompt, and after 15 s.
+        SplashScreen: {
+            launchAutoHide: false,
+        },
+    },
 };
 
 export default config;

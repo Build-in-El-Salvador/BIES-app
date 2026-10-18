@@ -21,6 +21,24 @@ import { API_BASE, clearSession, getAccessToken, logoutSession, retryPendingLogo
 
 const USER_KEY = 'bies_user';
 
+// At launch, how long to wait for the server before carrying on as the member
+// this device last had, as it does offline: the phone app's launch screen
+// stays up while it waits (App.jsx). With no member to carry on as, it waits
+// longer, then shows signing in.
+const RESTORE_WAIT_MS = 6000;
+const RESTORE_LIMIT_MS = 12000;
+
+/** The promise's answer, or a rejection (`timedOut`) once `ms` have passed (the request carries on). */
+function withinTime(promise, ms) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(Object.assign(new Error('Timed out'), { timedOut: true })), ms);
+        promise.then(
+            (value) => { clearTimeout(timer); resolve(value); },
+            (error) => { clearTimeout(timer); reject(error); },
+        );
+    });
+}
+
 /**
  * NIP-98 tags for a sign-in (kind 27235): it names BIES's login endpoint, so
  * the signer shows where it's going, and a sign-in another site asked for
@@ -58,10 +76,12 @@ export const authService = {
     // ─── Session restore ────────────────────────────────────────────────────
 
     /**
-     * Called on app mount. Returns the user if the token is still valid.
-     * Makes a real network request to /auth/me.
+     * Returns the user if the token is still valid. Makes a real network
+     * request to /auth/me. `atLaunch` (the app starting) doesn't wait long for
+     * a slow server; after a change (refreshUser) it waits for the answer, as
+     * the cached member is out of date.
      */
-    restoreSession: async () => {
+    restoreSession: async ({ atLaunch = false } = {}) => {
         const token = authService.getToken();
         if (!token) {
             retryPendingLogout();
@@ -72,7 +92,18 @@ export const authService = {
         nostrSigner.restore();
 
         try {
-            const user = await authApi.me();
+            const me = authApi.me();
+            const user = await (!atLaunch ? me : withinTime(me, authService.getCachedUser() ? RESTORE_WAIT_MS : RESTORE_LIMIT_MS)
+                .catch((error) => {
+                    // Too slow: the app carries on (below). The answer, when
+                    // it comes, is kept for next time, if it's still this member.
+                    if (error?.timedOut) {
+                        me.then((late) => {
+                            if (late?.id && late.id === authService.getCachedUser()?.id) authService.setCachedUser(late);
+                        }, () => {});
+                    }
+                    throw error;
+                }));
             authService.setCachedUser(user);
             // Email accounts sign through the server; the key stays there.
             const method = nostrSigner.storedMethod;
@@ -93,9 +124,9 @@ export const authService = {
             return user;
         } catch {
             // The API client has already signed out if the server said the
-            // session is over. Anything else (offline, a server hiccup) keeps
-            // the session: carry on as the cached user and let the next
-            // request decide.
+            // session is over. Anything else (offline, a server hiccup, no
+            // answer in time at launch) keeps the session: carry on as the
+            // cached user and let the next request decide.
             if (!authService.getToken()) return null;
             const cached = authService.getCachedUser();
             if (cached?.hostedKey && (!nostrSigner.storedMethod || nostrSigner.storedMethod === 'hosted')) {

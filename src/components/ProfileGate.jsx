@@ -167,6 +167,9 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
                 }).catch((err) => console.warn('[ProfileGate] Welcome post failed:', err));
             }
             await onDone();
+            // Still here if the account couldn't be checked again just now:
+            // the buttons work again, to try once more or sign out.
+            setBusy(false);
         } catch (err) {
             setError(objectionableMessage(t, err) || t('profileGate.saveFailed'));
             setBusy(false);

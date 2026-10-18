@@ -17,6 +17,7 @@ import {
     freshAccessToken,
     isSessionOver,
     refreshSession,
+    sessionGeneration,
     waitForLogout,
 } from './session.js';
 
@@ -50,6 +51,7 @@ async function sendAuthorized(path, init) {
         return send(null);
     }
 
+    const startedIn = sessionGeneration();
     let res = await send(await freshAccessToken());
     if (res.status === 401) {
         let { reason } = await res.clone().json().catch(() => ({}));
@@ -67,8 +69,10 @@ async function sendAuthorized(path, init) {
         }
         // The server has just said this session is over: sign out even if
         // another tab already cleared the shared storage. A missing token
-        // only means this request went out signed out.
-        if (isSessionOver(reason)) endSession({ force: reason !== 'missing_token' });
+        // only means this request went out signed out. Not when this device
+        // has signed out since the request went out: that session is gone
+        // here already, and one signed in since stays.
+        if (isSessionOver(reason) && startedIn === sessionGeneration()) endSession({ force: reason !== 'missing_token' });
     }
     return res;
 }

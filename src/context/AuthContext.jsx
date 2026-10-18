@@ -130,7 +130,7 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         let mounted = true;
 
-        authService.restoreSession()
+        authService.restoreSession({ atLaunch: true })
             .then((user) => {
                 if (!mounted) return;
                 if (user) {

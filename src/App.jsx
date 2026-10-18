@@ -16,6 +16,8 @@ import ModeSelectionModal from './components/ModeSelectionModal';
 import VersionIndicator from './components/VersionIndicator';
 import GamificationToast from './components/GamificationToast';
 import SignerToast from './components/SignerToast';
+import BootSplash from './components/BootSplash';
+import { hideLaunchScreen } from './utils/launchScreen';
 
 // Pages
 import Landing from './pages/Landing';
@@ -183,7 +185,7 @@ const LegacyNewProject = () => {
 };
 
 const AppContent = () => {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
     const location = useLocation();
     const { setTheme } = useTheme();
     const { setDefaultView } = useViewPreference();
@@ -216,8 +218,23 @@ const AppContent = () => {
         window.scrollTo(0, 0);
     }, [location.pathname]);
 
+    // The phone app's launch screen (the BIES logo) goes once it's known who's
+    // signed in and their first page has drawn: Home, or signing in, with
+    // nothing in between. "/" only sends them on, so it waits for that page.
+    useEffect(() => {
+        if (loading || location.pathname === '/') return undefined;
+        const frame = requestAnimationFrame(hideLaunchScreen);
+        return () => cancelAnimationFrame(frame);
+    }, [loading, location.pathname]);
+
+    // Until it's known who's signed in, no page: the logo (in a browser too,
+    // where there's no launch screen). It stays over "/" while that sends
+    // them on to Home or to sign in.
+    if (loading) return <BootSplash />;
+
     return (
         <>
+            {location.pathname === '/' && <BootSplash />}
             {user && <Navbar />}
             <div className="app-content">
                 <Routes>
