@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useFeature } from '../context/FeatureFlagsContext';
 import { Link } from 'react-router-dom';
 import { Users, Folder, Loader2, Search, LayoutGrid, List as ListIcon, Columns, X, UserCheck, UserPlus } from 'lucide-react';
 import { useApiQuery } from '../hooks/useApi';
@@ -23,7 +24,9 @@ const profileLink = (item) => {
 
 const Following = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState('projects');
+    // Saved opportunities, while Opportunities is on.
+    const opportunitiesOn = useFeature('projects');
+    const [activeTab, setActiveTab] = useState(opportunitiesOn ? 'projects' : 'following');
     const [viewMode, setViewMode] = useState('standard');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchExpanded, setSearchExpanded] = useState(false);
@@ -35,7 +38,11 @@ const Following = () => {
     const searchInputRef = useRef(null);
 
     // ── Data fetching (skip when no user id) ────────────────────────────
-    const { data: watchlist, loading: watchlistLoading } = useApiQuery(watchlistApi.list);
+    const { data: watchlist, loading: watchlistLoading } = useApiQuery(watchlistApi.list, undefined, { skip: !opportunitiesOn });
+
+    useEffect(() => {
+        if (!opportunitiesOn && activeTab === 'projects') setActiveTab('following');
+    }, [opportunitiesOn, activeTab]);
     const { data: followingRaw, loading: followingLoading } = useApiQuery(
         profilesApi.getFollowing, user?.id, { skip: !user?.id }
     );
@@ -61,10 +68,10 @@ const Following = () => {
 
     // ── Tab config with live counts ─────────────────────────────────────
     const tabs = [
-        { id: 'projects', label: 'Projects', icon: Folder, count: projectsList.length },
+        opportunitiesOn && { id: 'projects', label: 'Opportunities', icon: Folder, count: projectsList.length },
         { id: 'following', label: 'Following', icon: UserCheck, count: followingList.length },
         { id: 'followers', label: 'Followers', icon: UserPlus, count: followersList.length },
-    ];
+    ].filter(Boolean);
 
     // ── Per-tab loading (only show spinner for the active tab) ───────────
     const loading =
@@ -117,7 +124,7 @@ const Following = () => {
         const isProject = activeTab === 'projects';
         const data = isProject ? (item.project || item) : item;
         const title = isProject ? data.title : (data.name || 'Unknown');
-        const link = isProject ? `/project/${data.id}` : profileLink(data);
+        const link = isProject ? `/opportunities/${data.id}` : profileLink(data);
         const image = isProject
             ? (data.thumbnail || data.coverImage)
             : (data.avatar || data.profilePic);
@@ -143,7 +150,7 @@ const Following = () => {
                     </div>
                     <div className="list-info">
                         <h3>{title}</h3>
-                        <p>{isProject ? data.tagline : (data.company || data.role || 'Member')}</p>
+                        <p>{isProject ? stripHtml(data.description || '') : (data.company || data.role || 'Member')}</p>
                     </div>
                 </Link>
             );
@@ -162,7 +169,7 @@ const Following = () => {
                     <div className="card-info">
                         <h3>{title}</h3>
                         <p className="tagline">
-                            {isProject ? data.tagline : stripHtml(data.bio || data.company || '')}
+                            {stripHtml((isProject ? data.description : data.bio || data.company) || '')}
                         </p>
                     </div>
                 </div>
@@ -174,13 +181,13 @@ const Following = () => {
     const emptyMessage = searchQuery
         ? `No results for "${searchQuery}"`
         : activeTab === 'projects'
-            ? "You haven't saved any projects to your watchlist yet."
+            ? "You haven't saved any opportunities yet."
             : activeTab === 'following'
                 ? "You aren't following anyone yet."
                 : "No one is following you yet.";
 
     const emptyAction = activeTab === 'projects'
-        ? { to: '/discover', label: 'Discover Projects' }
+        ? { to: '/opportunities', label: 'Find Opportunities' }
         : { to: '/members', label: 'Discover Members' };
 
     return (

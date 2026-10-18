@@ -1,5 +1,7 @@
 /**
- * Unified search controller — searches across projects, profiles, and events.
+ * Unified search controller — searches across projects (opportunities),
+ * profiles, and events. Opportunities are for members: only signed-in
+ * searches find them, and only open ones.
  */
 
 import { Request, Response } from 'express';
@@ -7,6 +9,8 @@ import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
 import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { matchesVisibly, profileForViewer, type Viewer } from '../services/profilePrivacy';
+import { openNow } from './project.controller';
+import { isEnabled } from '../services/featureFlags.service';
 
 const viewerOf = (req: Request, userId: string): Viewer =>
     !req.user ? 'public' : req.user.id === userId ? 'self' : 'member';
@@ -20,6 +24,12 @@ const viewerOf = (req: Request, userId: string): Viewer =>
 async function withoutBlocked(req: Request, results: any): Promise<any> {
     const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) }));
     const out = { ...results };
+    // Opportunities are for members (the cache is shared with signed-in
+    // searches), and only while they're switched on.
+    if (!req.user || !(await isEnabled('projects'))) {
+        if (Array.isArray(out.projects)) { out.projects = []; out.projectTotal = 0; }
+        if (Array.isArray(out.suggestions)) out.suggestions = out.suggestions.filter((s: any) => s.type !== 'project');
+    }
     if (Array.isArray(out.profiles)) {
         const q = String(out.query ?? req.query.q ?? '');
         const visible = out.profiles
@@ -38,7 +48,7 @@ async function withoutBlocked(req: Request, results: any): Promise<any> {
     if (Array.isArray(out.projects)) out.projects = out.projects.filter((p: any) => !hidden.has(p.owner?.id ?? p.ownerId));
     if (Array.isArray(out.events)) out.events = out.events.filter((e: any) => !hidden.has(e.host?.id ?? e.hostId));
     if (Array.isArray(out.suggestions)) {
-        out.suggestions = out.suggestions.filter((s: any) => s.type !== 'profile' || !hidden.has(s.id));
+        out.suggestions = out.suggestions.filter((s: any) => !hidden.has(s.type === 'project' ? s.ownerId : s.id));
     }
     return out;
 }
@@ -73,17 +83,18 @@ export async function search(req: Request, res: Response): Promise<void> {
                 prisma.project.findMany({
                     where: {
                         isPublished: true,
-                        OR: [
+                        owner: { isBanned: false, deletedAt: null },
+                        AND: [openNow(), { OR: [
                             { title: searchTerm },
                             { description: searchTerm },
                             { category: searchTerm },
-                        ],
+                        ] }],
                     },
                     take: limit,
                     skip,
                     orderBy: { viewCount: 'desc' },
                     select: {
-                        id: true, title: true, description: true, category: true,
+                        id: true, type: true, kind: true, title: true, description: true, category: true,
                         stage: true, thumbnail: true, viewCount: true,
                         fundingGoal: true, raisedAmount: true,
                         owner: {
@@ -97,7 +108,8 @@ export async function search(req: Request, res: Response): Promise<void> {
                 prisma.project.count({
                     where: {
                         isPublished: true,
-                        OR: [{ title: searchTerm }, { description: searchTerm }],
+                        owner: { isBanned: false, deletedAt: null },
+                        AND: [openNow(), { OR: [{ title: searchTerm }, { description: searchTerm }, { category: searchTerm }] }],
                     },
                 }),
             ]);
@@ -198,9 +210,9 @@ export async function getSuggestions(req: Request, res: Response): Promise<void>
 
         const [projects, profiles] = await Promise.all([
             prisma.project.findMany({
-                where: { isPublished: true, title: searchTerm },
+                where: { isPublished: true, title: searchTerm, owner: { isBanned: false, deletedAt: null }, ...openNow() },
                 take: 5,
-                select: { id: true, title: true },
+                select: { id: true, title: true, ownerId: true },
             }),
             prisma.profile.findMany({
                 where: { isPublic: true, name: searchTerm },
@@ -210,7 +222,7 @@ export async function getSuggestions(req: Request, res: Response): Promise<void>
         ]);
 
         const suggestions = [
-            ...projects.map((p) => ({ type: 'project', id: p.id, label: p.title })),
+            ...projects.map((p) => ({ type: 'project', id: p.id, label: p.title, ownerId: p.ownerId })),
             ...profiles.map((p) => ({ type: 'profile', id: p.userId, label: p.name })),
         ].slice(0, 8);
 

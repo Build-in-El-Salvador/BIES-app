@@ -91,6 +91,60 @@ test('startup: a full outage keeps the session', async () => {
     assert.equal(store.has('bies_token'), true);
 });
 
+test('startup: a slow answer doesn’t hold the launch; a check after a change waits for it', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    store.set('bies_token', tokenExpiringIn(600));
+    store.set('bies_user', JSON.stringify({ id: 'u1', name: '' }));
+    const answers = [];
+    server = (url) => (url === '/auth/me' ? new Promise((answer) => answers.push(answer)) : {});
+
+    // At launch: carries on as the cached member after 6 s, and keeps the late answer for next time.
+    const launch = authService.restoreSession({ atLaunch: true });
+    while (!answers.length) await tick();
+    t.mock.timers.tick(6000);
+    assert.deepEqual(await launch, { id: 'u1', name: '' });
+    answers.shift()({ body: { id: 'u1', name: 'Ana' } });
+    for (let i = 0; i < 50 && JSON.parse(store.get('bies_user')).name !== 'Ana'; i++) await tick();
+    assert.equal(JSON.parse(store.get('bies_user')).name, 'Ana');
+
+    // After a change (refreshUser): waits for the real answer, however slow.
+    let refreshed = null;
+    authService.restoreSession().then((user) => { refreshed = user; });
+    while (!answers.length) await tick();
+    t.mock.timers.tick(60000);
+    await tick();
+    assert.equal(refreshed, null);
+    answers.shift()({ body: { id: 'u1', name: 'Ana B' } });
+    while (!refreshed) await tick();
+    assert.equal(refreshed.name, 'Ana B');
+});
+
+test('startup: with no member to carry on as, a server that never answers ends at signing in', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    store.set('bies_token', tokenExpiringIn(600));
+    let asked = false;
+    server = (url) => (url === '/auth/me' ? (asked = true, new Promise(() => {})) : {});
+    const launch = authService.restoreSession({ atLaunch: true });
+    while (!asked) await tick();
+    t.mock.timers.tick(12000);
+    assert.equal(await launch, null);
+});
+
+test('a “session over” answer to a request sent before signing out and in again leaves the new session', async () => {
+    store.set('bies_token', tokenExpiringIn(600, 'old'));
+    let answer;
+    server = (url) => (url.startsWith('/notifications') ? new Promise((r) => { answer = r; }) : {});
+    const pending = api.notificationsApi.list({ limit: 20 }).catch((e) => e);
+    while (!answer) await tick();
+    session.clearSession();
+    const fresh = tokenExpiringIn(600, 'new');
+    session.saveSession({ token: fresh });
+    answer({ status: 401, body: { reason: 'session_ended' } });
+    assert.equal((await pending).status, 401);
+    assert.equal(store.get('bies_token'), fresh);
+    assert.deepEqual(events, []);
+});
+
 test('a request whose refresh can’t reach the server fails as "try again", not "signed out"', async () => {
     store.set('bies_token', tokenExpiringIn(600));
     server = (url) => (url === '/auth/refresh' ? new TypeError('Failed to fetch') : { status: 401, body: { reason: 'token_expired' } });

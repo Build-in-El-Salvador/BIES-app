@@ -29,7 +29,7 @@ const Navbar = () => {
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/discover?q=${encodeURIComponent(searchQuery.trim())}`);
+      navigate(`/members?q=${encodeURIComponent(searchQuery.trim())}`);
       setIsSearchOpen(false);
       setSearchQuery('');
     }
@@ -40,7 +40,8 @@ const Navbar = () => {
   // `more:` links sit under "More" on desktop, so the bar fits; `squeeze:`
   // links join them there on narrow desktops (under 1024px).
   const navLinks = [
-    { label: t('nav.discover'), path: '/discover' },
+    { label: t('nav.members'), path: '/members' },
+    { label: t('nav.opportunities'), path: '/opportunities', flag: 'projects' },
     { label: t('mobileNav.farms'), path: '/farms', flag: 'directories' },
     { label: t('nav.trusted'), path: '/trusted', flag: 'directories' },
     { label: t('nav.talent'), path: '/talents', flag: 'talent' },
@@ -65,7 +66,7 @@ const Navbar = () => {
     if (path.startsWith('/trusted')) return t('pageTitles.certifiedDirectory');
     if (path.startsWith('/talents')) return t('pageTitles.talent');
     if (path.startsWith('/market')) return t('marketplace.title');
-    if (path.startsWith('/discover')) return t('pageTitles.discover', 'Discover');
+    if (path.startsWith('/opportunities')) return t('pageTitles.opportunities');
     if (path.startsWith('/events')) return t('pageTitles.ecosystemEvents');
     if (path.startsWith('/bounties')) return t('pageTitles.bounties');
     if (path.startsWith('/leaderboard')) return t('pageTitles.leaderboard');
@@ -301,14 +302,16 @@ const Navbar = () => {
               <button onClick={() => setIsMenuOpen(false)} aria-label={t('nav.closeMenu')} style={{ display: 'flex', color: 'white', background: 'none', border: 'none', padding: '10px', cursor: 'pointer' }}><X size={24} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
-              {/* Top Section: Profile, Messages, News, About */}
+              {/* Top Section: Profile, Messages, News, About. The pages go by
+                  their short names, as in the bottom bar, so each fits on one line. */}
               {[
                 { to: '/profile', label: t('nav.profile') },
                 ...(featureOn('directories') ? [
-                  { to: '/farms', label: t('pageTitles.farmDirectory') },
-                  { to: '/trusted', label: t('pageTitles.certifiedDirectory') },
+                  { to: '/farms', label: t('mobileNav.farms') },
+                  { to: '/trusted', label: t('mobileNav.trusted') },
                 ] : []),
-                ...(featureOn('talent') ? [{ to: '/talents', label: t('pageTitles.talent') }] : []),
+                ...(featureOn('talent') ? [{ to: '/talents', label: t('mobileNav.talent') }] : []),
+                ...(featureOn('projects') ? [{ to: '/opportunities', label: t('mobileNav.opportunities') }] : []),
                 ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),
                 ...(featureOn('messages') ? [{ to: '/messages', label: t('nav.messages') }] : []),
                 ...(COWORK_ENABLED && featureOn('cowork') ? [{ to: '/cowork', label: t('nav.cowork') }] : []),

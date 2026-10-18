@@ -84,7 +84,8 @@
     "more": "More",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "talent": "Talents"
+    "talent": "Talents",
+    "opportunities": "Opportunities"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -107,7 +108,8 @@
     "wallet": "Wallet",
     "profile": "Profile",
     "notifications": "Notifications",
-    "talent": "BIES Talents"
+    "talent": "BIES Talents",
+    "opportunities": "Opportunities"
   },
   "settings": {
     "title": "Settings",
@@ -1033,7 +1035,8 @@
     "unknownProject": "Unknown Project",
     "discoverProjectsLink": "Discover projects",
     "labelPlaceholder": "Label (e.g. 2024)",
-    "valuePlaceholder": "Value"
+    "valuePlaceholder": "Value",
+    "myOpportunities": "My opportunities"
   },
   "admin": {
     "overview": "Overview",
@@ -2051,6 +2054,333 @@
       "deleteFailed": "Your talent couldn't be deleted. Please try again."
     }
   },
+  "opportunities": {
+    "intro": "Investments, businesses for sale, jobs, partnerships, and grants and programs, posted by BIES members.",
+    "search": "Search opportunities",
+    "add": "Post an opportunity",
+    "yours": "Yours",
+    "saved": "Saved",
+    "allTypes": "All",
+    "typeLabel": "Kinds of opportunity",
+    "types": {
+      "investment": "Investment",
+      "business-for-sale": "Business for sale",
+      "job": "Job",
+      "partnership": "Partnership",
+      "program": "Grant or program"
+    },
+    "typesPlural": {
+      "investment": "Investments",
+      "business-for-sale": "Businesses for sale",
+      "job": "Jobs",
+      "partnership": "Partnerships",
+      "program": "Grants & programs"
+    },
+    "typeHints": {
+      "investment": "Raise money for a project or a company.",
+      "business-for-sale": "Sell a business, or a share of one.",
+      "job": "Hire someone: a job, contract work, an internship or a volunteer role.",
+      "partnership": "Find a co-founder, a business partner, a distributor, a supplier or a sponsor.",
+      "program": "Offer a grant, an accelerator, a competition or another program."
+    },
+    "kinds": {
+      "investment": {
+        "equity": "Equity",
+        "convertible": "SAFE or note",
+        "loan": "Loan",
+        "revenue-share": "Revenue share",
+        "other": "Other"
+      },
+      "job": {
+        "full-time": "Full-time",
+        "part-time": "Part-time",
+        "contract": "Contract or freelance",
+        "internship": "Internship",
+        "volunteer": "Volunteer"
+      },
+      "partnership": {
+        "co-founder": "Co-founder",
+        "partner": "Business partner",
+        "distributor": "Distributor",
+        "supplier": "Supplier",
+        "sponsor": "Sponsor",
+        "other": "Other"
+      },
+      "program": {
+        "grant": "Grant",
+        "accelerator": "Accelerator",
+        "competition": "Competition",
+        "other": "Other"
+      }
+    },
+    "industries": {
+      "AGRICULTURE": "Agriculture and farming",
+      "CONSTRUCTION": "Construction",
+      "EDUCATION": "Education",
+      "ENERGY": "Energy",
+      "ENTERTAINMENT": "Media and entertainment",
+      "FINTECH": "Bitcoin and finance",
+      "FOOD": "Food and drink",
+      "HEALTH": "Health and fitness",
+      "INFRASTRUCTURE": "Infrastructure",
+      "LOGISTICS": "Transport and logistics",
+      "REAL_ESTATE": "Real estate",
+      "RETAIL": "Retail and e-commerce",
+      "SERVICES": "Professional services",
+      "TECHNOLOGY": "Technology and software",
+      "TOURISM": "Tourism and hospitality",
+      "OTHER": "Other"
+    },
+    "stages": {
+      "IDEA": "Idea",
+      "MVP": "First product",
+      "GROWTH": "Growing",
+      "SCALING": "Scaling"
+    },
+    "stage": "Stage",
+    "industry": "Industry",
+    "remote": "Remote OK",
+    "remoteLong": "Can be done remotely",
+    "closed": "Closed",
+    "closedLong": "Closed",
+    "closedOn": "Closed on {{day}}",
+    "openLong": "Open",
+    "openUntil": "Open until {{day}}",
+    "closesToday": "Closes today",
+    "closesIn_one": "Closes tomorrow",
+    "closesIn_other": "Closes in {{count}} days",
+    "card": {
+      "raising": "Raising {{amount}}",
+      "asking": "Asking {{amount}}",
+      "priceOnRequest": "Price on request",
+      "upTo": "Up to {{amount}}"
+    },
+    "filters": {
+      "kind": {
+        "investment": "Deal",
+        "job": "Type of job",
+        "partnership": "Looking for",
+        "program": "Kind of program"
+      },
+      "any": "Any",
+      "amount": {
+        "investment": "Raising",
+        "business-for-sale": "Asking price",
+        "program": "Up to"
+      },
+      "min": "Min",
+      "max": "Max",
+      "anyIndustry": "All industries",
+      "remote": "Can be done remotely",
+      "btc": {
+        "any": "Bitcoin accepted",
+        "investment": "Takes bitcoin",
+        "business-for-sale": "Sells for bitcoin",
+        "job": "Pays in bitcoin"
+      },
+      "clear": "Clear filters"
+    },
+    "empty": "No opportunities yet. Post the first one: an investment, a business for sale, a job, a partnership or a program.",
+    "noneYours": "You haven't posted any opportunities yet.",
+    "noneSaved": "Opportunities you save show here. Tap Save on one to keep it.",
+    "noMatches": "No opportunities match these filters.",
+    "noResultsSearch": "No opportunities match \"{{query}}\".",
+    "notFound": "Opportunity not found",
+    "notFoundDesc": "It may have been taken down, or the link is wrong.",
+    "back": "Back to Opportunities",
+    "blocked": {
+      "title": "You blocked this member",
+      "body": "Unblock them to see their opportunities."
+    },
+    "edit": "Edit",
+    "postedBy": "Posted by {{name}}",
+    "photos": "Photos",
+    "about": "About",
+    "actions": {
+      "label": "Contact, save and share",
+      "apply": "Apply",
+      "website": "Website",
+      "email": "Email",
+      "profile": "Profile",
+      "save": "Save",
+      "saved": "Saved",
+      "share": "Share",
+      "copied": "Copied"
+    },
+    "ownOpen": "Taken? Close it, so it stops showing in Opportunities.",
+    "ownClosed": "It's closed: members don't see it in Opportunities.",
+    "close": "Close it",
+    "reopen": "Open it again",
+    "factsTitle": {
+      "investment": "The raise",
+      "business-for-sale": "The business",
+      "job": "The job",
+      "partnership": "The partnership",
+      "program": "The program",
+      "default": "Details"
+    },
+    "facts": {
+      "raising": "Raising",
+      "raised": "Raised so far",
+      "deal": "Deal",
+      "asking": "Asking price",
+      "revenue": "Yearly revenue",
+      "jobType": "Type of job",
+      "pay": "Pay",
+      "lookingFor": "Looking for",
+      "programKind": "Kind",
+      "upTo": "Up to",
+      "where": "Where",
+      "progress": "{{percent}}% raised"
+    },
+    "btc": {
+      "investment": "Takes investment in bitcoin",
+      "business-for-sale": "Accepts bitcoin for the sale",
+      "job": "Pays in bitcoin",
+      "default": "Bitcoin accepted"
+    },
+    "safety": {
+      "investment": "BIES doesn't check opportunities. Do your own research before you invest, and never send money to someone you haven't met.",
+      "business-for-sale": "BIES doesn't check opportunities. Visit the business and check its papers before you pay anything.",
+      "job": "BIES doesn't check opportunities. Never pay to apply for a job.",
+      "program": "BIES doesn't check opportunities. Real grants and programs never ask you to pay to apply.",
+      "default": "BIES doesn't check opportunities. Take care before you pay or share anything."
+    },
+    "deck": {
+      "title": "Pitch deck",
+      "open": "Open the pitch deck",
+      "openOwn": "Open your pitch deck",
+      "openFailed": "The pitch deck didn't open. Try again.",
+      "askFailed": "Your request didn't send. Try again.",
+      "answerFailed": "That didn't save. Try again.",
+      "ownAsk": "Members ask you for it, and can open it once you say yes.",
+      "ownShared": "Every member can open it.",
+      "sharedWithMembers": "Shared with every member.",
+      "approved": "{{name}} shared it with you.",
+      "askText": "{{name}} shares it with the members who ask.",
+      "ask": "Ask for the pitch deck",
+      "noteLabel": "A note to them (optional)",
+      "notePlaceholder": "Who you are, and why you're interested",
+      "send": "Send",
+      "pending": "You asked for it. {{name}} will say yes or no.",
+      "denied": "The pitch deck isn't shared with you.",
+      "yes": "Share",
+      "no": "No",
+      "shared": "Shared",
+      "notShared": "Not shared"
+    },
+    "form": {
+      "createTitle": "Post an opportunity",
+      "chooseType": "What are you posting?",
+      "createTitles": {
+        "investment": "Post an investment",
+        "business-for-sale": "Sell a business",
+        "job": "Post a job",
+        "partnership": "Find a partner",
+        "program": "Post a grant or program"
+      },
+      "editTitle": "Edit opportunity",
+      "changeType": "Change",
+      "basicsHeading": "What it is",
+      "titleLabel": "Title",
+      "titlePlaceholder": {
+        "investment": "e.g. Solar power for farms in La Libertad",
+        "business-for-sale": "e.g. Surf hostel in El Zonte",
+        "job": "e.g. Bilingual bartender",
+        "partnership": "e.g. Technical co-founder for a payments app",
+        "program": "e.g. Builders grant 2027"
+      },
+      "kindLabel": {
+        "investment": "Deal (optional)",
+        "job": "Type of job",
+        "partnership": "Looking for",
+        "program": "Kind of program"
+      },
+      "kindRequired": {
+        "job": "Choose the type of job.",
+        "partnership": "Choose who you're looking for.",
+        "program": "Choose what kind of program it is."
+      },
+      "chooseIndustry": "Choose an industry",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": {
+        "investment": "What it is, the team, how far it's got, what the money is for, and the terms.",
+        "business-for-sale": "What the business does, how long it has run, why you're selling, and what's included: the premises, equipment, stock.",
+        "job": "The work, the hours, who you're looking for, and how to apply.",
+        "partnership": "What you're building, who you're looking for, and what you bring.",
+        "program": "What it gives, who can apply, how to apply, and the dates."
+      },
+      "titleRequired": "Give it a title.",
+      "descriptionRequired": "Say what it is.",
+      "stageRequired": "Choose its stage.",
+      "amountInvalid": "Type an amount in dollars, like 250000 or 250k.",
+      "raisingRequired": "Say how much it's raising.",
+      "contactRequired": "Add at least one way to reach you.",
+      "raiseHeading": "The raise",
+      "raisingLabel": "Raising",
+      "raisedLabel": "Raised so far",
+      "deckHint": "A PDF or PowerPoint. It's private: only you, and the members you share it with, can open it.",
+      "deckAdd": "Add a pitch deck",
+      "deckReplace": "Replace the pitch deck",
+      "deckRemove": "Don't upload this file",
+      "deckUploaded": "Uploaded",
+      "deckAskFirst": "Members ask me before they can open it",
+      "deckFailed": "It's posted, but the pitch deck didn't upload. Try adding it again.",
+      "saleHeading": "The business",
+      "askingLabel": "Asking price",
+      "askingHint": "Leave it empty to show \"Price on request\".",
+      "revenueLabel": "Yearly revenue",
+      "jobHeading": "The job",
+      "payPlaceholder": "e.g. $900 a month, $8 an hour",
+      "programHeading": "The program",
+      "upToLabel": "Up to",
+      "upToHint": "The most it gives: a grant's size, or the prize.",
+      "btcLabel": {
+        "investment": "Takes investment in bitcoin",
+        "business-for-sale": "Accepts bitcoin for the sale",
+        "job": "Pays in bitcoin"
+      },
+      "whereHeading": "Where, and until when",
+      "locationLabel": "Where",
+      "locationPlaceholder": "e.g. San Salvador, El Zonte",
+      "closesLabel": "Closes on (optional)",
+      "closesHint": "After that day it stops showing in Opportunities. You can also close it yourself once it's taken.",
+      "remoteLabel": {
+        "job": "It can be done remotely",
+        "partnership": "It can be done remotely",
+        "program": "Online, or open to people anywhere"
+      },
+      "photosHint": "Up to {{max}}. The first is the cover: tap the star on another to make it the cover.",
+      "cover": "Cover",
+      "makeCover": "Make this the cover",
+      "removePhoto": "Remove photo",
+      "addPhotos": "Add photos",
+      "uploadFailed": "That photo didn't upload. Try again.",
+      "contactHeading": "How members reach you",
+      "contactHint": "Add at least one. Your WhatsApp and email show only on this opportunity's page, to members.",
+      "emailLabel": "Email",
+      "websiteLabel": "Website",
+      "applyLinkLabel": "Link to apply",
+      "submit": "Post",
+      "save": "Save changes",
+      "saveFailed": "It didn't save. Try again.",
+      "deleteFailed": "It wasn't deleted. Try again.",
+      "tooMany": "You can have up to {{max}} open opportunities. Close one that's taken first.",
+      "notYourPhoto": "Add photos by uploading them here.",
+      "notYours": "Only the member who posted it can edit it.",
+      "atLimitTitle": "Too many open opportunities",
+      "seeYours": "See yours",
+      "delete": "Delete this opportunity",
+      "deleteConfirm": "Delete this opportunity for good? Its photos and pitch deck go with it.",
+      "deleteYes": "Delete",
+      "tooLong": "Keep it to {{max}} characters.",
+      "closesOnPassed": "That day has passed. Pick today or a later day.",
+      "whatsappInvalid": "Use numbers, spaces and +, like +503 6123 4567.",
+      "emailInvalid": "Check the email address.",
+      "fieldInvalid": "Check this.",
+      "deckFailedEdit": "Your changes are saved, but the pitch deck didn't upload. Press Save changes to try again."
+    }
+  },
   "marketplace": {
     "entryLabel": "Marketplace",
     "navLabel": "Market",
@@ -2129,7 +2459,8 @@
     "news": "News",
     "dashboard": "Dashboard",
     "cowork": "Cowork",
-    "talent": "Talents"
+    "talent": "Talents",
+    "opportunities": "Opportunities"
   },
   "cowork": {
     "title": "Who's coworking",
@@ -2386,8 +2717,8 @@
         "description": "Investor features, investments and vetting"
       },
       "projects": {
-        "name": "Projects",
-        "description": "Project listings and project pages"
+        "name": "Opportunities",
+        "description": "Investments, businesses for sale, jobs, partnerships, and grants and programs"
       },
       "cowork": {
         "name": "Cowork",
@@ -2550,7 +2881,8 @@
       "reportEvent": "Report event",
       "block": "Block",
       "blockMember": "Block member",
-      "reportTalent": "Report talent"
+      "reportTalent": "Report talent",
+      "reportOpportunity": "Report opportunity"
     },
     "reasons": {
       "harassment": "Harassment, threats or hate",
@@ -2573,7 +2905,8 @@
         "note": "Report this post",
         "album": "Report this album",
         "photo": "Report this photo",
-        "talent": "Report this talent"
+        "talent": "Report this talent",
+        "opportunity": "Report this opportunity"
       },
       "why": "What's wrong with it?",
       "detailsLabel": "Anything else we should know? (optional)",
@@ -2694,7 +3027,7 @@
       },
       "opportunities": {
         "title": "Opportunities",
-        "desc": "Explore jobs, partnerships, events, and more."
+        "desc": "Investments, businesses for sale, jobs, partnerships and more."
       },
       "talent": {
         "title": "BIES Talents",
@@ -2756,8 +3089,8 @@
     "zaps": "Zaps",
     "events": "Events",
     "eventsDesc": "RSVPs to events you host",
-    "projects": "Projects",
-    "projectsDesc": "Interest, deck requests and updates",
+    "projects": "Opportunities",
+    "projectsDesc": "Pitch deck requests and answers",
     "footer": "Notices about your account and your listings always come through. Everything also shows under the bell.",
     "loadFailed": "Couldn't load your settings. Try again.",
     "saveFailed": "Couldn't save that. Try again."

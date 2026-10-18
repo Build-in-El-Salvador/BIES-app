@@ -60,7 +60,8 @@ const OpportunityIcon = () => (
  * The app's home page, from Michael's mockup: the BIES logo over a view of
  * El Salvador, "Explore the Ecosystem", and a card for each part of BIES.
  * A card shows only when its page is on (in the store app, Opportunities
- * waits for Projects: an empty or "coming soon" card gets an app rejected).
+ * waits until it's in the app: an empty or "coming soon" card gets an app
+ * rejected).
  */
 const Home = () => {
     const { t } = useTranslation();
@@ -71,8 +72,8 @@ const Home = () => {
         { key: 'farms', to: '/farms', Icon: FarmIcon, tint: 'rgba(22, 163, 74, 0.10)', flag: 'directories' },
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
         { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },
-        // Michael's idea: Projects (investment opportunities) now, jobs later.
-        { key: 'opportunities', to: '/discover', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
+        // Michael's idea: investments, businesses for sale, jobs, partnerships and programs.
+        { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
     ].filter((card) => !card.flag || flags?.[card.flag]);
 
     return (

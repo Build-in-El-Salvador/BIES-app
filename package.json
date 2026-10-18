@@ -23,6 +23,7 @@
     "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.5.3",
     "@capacitor/push-notifications": "^8.1.3",
+    "@capacitor/splash-screen": "^8.0.2",
     "@sovit.xyz/keytr": "0.8.0",
     "buffer": "^6.0.3",
     "dompurify": "^3.3.1",

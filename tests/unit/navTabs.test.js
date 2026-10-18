@@ -19,13 +19,13 @@ test('the default bar is Home, Feed, Members, Farms, Businesses', () => {
 });
 
 test("a member's own bar stays as they set it while its features are on", () => {
-    const bar = ['discover', 'events', 'media'];
+    const bar = ['opportunities', 'events', 'media'];
     assert.deepEqual(ids(visibleTabs(bar, allOn)), bar);
 });
 
 test('switched-off pages give their slots to the default bar', () => {
-    // The old default bar, in the store app (projects, events, media, dashboard off)
-    const bar = ['feed', 'discover', 'events', 'media', 'dashboard'];
+    // The old default bar (its Discover is Opportunities now), in the store app (projects, events, media, dashboard off)
+    const bar = sanitizeTabs(['feed', 'discover', 'events', 'media', 'dashboard']);
     const shown = ids(visibleTabs(bar, offFlags('projects', 'events', 'media', 'dashboard')));
     assert.deepEqual(shown, ['feed', 'home', 'members', 'farms', 'trusted']);
 });
@@ -49,6 +49,16 @@ test('Profile is a tab members can choose, not in the default bar', () => {
     assert.deepEqual(sanitizeTabs(['farms', 'profile', 'feed']), ['farms', 'profile', 'feed']);
     assert.deepEqual(sanitizeTabs(['home', 'profile']), ['home', 'profile']);
     assert.equal(NAV_PAGES_BY_ID.profile.path, '/profile');
+});
+
+test('a saved Discover tab is the Opportunities tab now', () => {
+    assert.equal(NAV_PAGES_BY_ID.opportunities.path, '/opportunities');
+    assert.equal(NAV_PAGES_BY_ID.opportunities.flag, 'projects');
+    assert.equal(NAV_PAGES_BY_ID.discover, undefined);
+    assert.deepEqual(sanitizeTabs(['feed', 'discover', 'members']), ['feed', 'opportunities', 'members']);
+    assert.deepEqual(restoreTabs(savedTabs(['discover', 'talent'])), ['opportunities', 'talent']);
+    // Once, not twice, when both are there.
+    assert.deepEqual(sanitizeTabs(['discover', 'opportunities', 'feed']), ['opportunities', 'feed']);
 });
 
 test('Talents is a tab members can choose, at /talents', () => {

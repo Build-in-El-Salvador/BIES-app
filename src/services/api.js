@@ -17,6 +17,7 @@ import {
     freshAccessToken,
     isSessionOver,
     refreshSession,
+    sessionGeneration,
     waitForLogout,
 } from './session.js';
 
@@ -50,6 +51,7 @@ async function sendAuthorized(path, init) {
         return send(null);
     }
 
+    const startedIn = sessionGeneration();
     let res = await send(await freshAccessToken());
     if (res.status === 401) {
         let { reason } = await res.clone().json().catch(() => ({}));
@@ -67,8 +69,10 @@ async function sendAuthorized(path, init) {
         }
         // The server has just said this session is over: sign out even if
         // another tab already cleared the shared storage. A missing token
-        // only means this request went out signed out.
-        if (isSessionOver(reason)) endSession({ force: reason !== 'missing_token' });
+        // only means this request went out signed out. Not when this device
+        // has signed out since the request went out: that session is gone
+        // here already, and one signed in since stays.
+        if (isSessionOver(reason) && startedIn === sessionGeneration()) endSession({ force: reason !== 'missing_token' });
     }
     return res;
 }
@@ -227,9 +231,10 @@ export const profilesApi = {
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 
+// Opportunities: the API keeps the name it had when they were all projects.
 export const projectsApi = {
     list: (params = {}) => get('/projects', params),
-    // params: { category, stage, ownerId, search, featured, sort, page, limit }
+    // params: { type, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, page, limit }
 
     get: (id) => get(`/projects/${id}`),
 
@@ -241,19 +246,12 @@ export const projectsApi = {
 
     getDeck: (id) => get(`/projects/${id}/deck`),
 
-    submit: (id) => put(`/projects/${id}/submit`, {}),
-
-    expressInterest: (id) => post(`/projects/${id}/interest`, {}),
-
     requestDeck: (id, data) => post(`/projects/${id}/deck/request`, data),
 
-    getAllDeckRequests: () => get('/projects/builder/deck-requests'),
+    getDeckRequests: (id) => get(`/projects/${id}/deck/requests`),
 
     reviewDeckRequest: (projectId, requestId, status) =>
         put(`/projects/${projectId}/deck/requests/${requestId}`, { status }),
-
-    postUpdate: (id, title, content) =>
-        post(`/projects/${id}/updates`, { title, content }),
 };
 
 // ─── Directory (Farms & Certified Providers) ─────────────────────────────────
@@ -543,8 +541,6 @@ export const coworkApi = {
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
 export const analyticsApi = {
-    recordView: (projectId) => post(`/analytics/view/${projectId}`, {}),
-
     builderDashboard: () => get('/analytics/dashboard'),
 
     investorDashboard: () => get('/analytics/investor-dashboard'),

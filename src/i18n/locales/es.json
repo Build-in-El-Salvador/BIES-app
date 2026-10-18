@@ -84,7 +84,8 @@
     "more": "Más",
     "openMenu": "Abrir menú",
     "closeMenu": "Cerrar menú",
-    "talent": "Talentos"
+    "talent": "Talentos",
+    "opportunities": "Oportunidades"
   },
   "pageTitles": {
     "biesFeed": "BIES Feed",
@@ -107,7 +108,8 @@
     "wallet": "Billetera",
     "profile": "Perfil",
     "notifications": "Notificaciones",
-    "talent": "Talentos BIES"
+    "talent": "Talentos BIES",
+    "opportunities": "Oportunidades"
   },
   "settings": {
     "title": "Configuración",
@@ -992,7 +994,8 @@
     "unknownProject": "Proyecto Desconocido",
     "discoverProjectsLink": "Descubrir proyectos",
     "labelPlaceholder": "Etiqueta (ej. 2024)",
-    "valuePlaceholder": "Valor"
+    "valuePlaceholder": "Valor",
+    "myOpportunities": "Mis oportunidades"
   },
   "admin": {
     "overview": "Resumen",
@@ -2052,6 +2055,333 @@
       "deleteFailed": "No se pudo eliminar su talento. Inténtelo de nuevo."
     }
   },
+  "opportunities": {
+    "intro": "Inversiones, negocios en venta, empleos, alianzas, y fondos y programas, publicados por miembros de BIES.",
+    "search": "Buscar oportunidades",
+    "add": "Publicar una oportunidad",
+    "yours": "Suyas",
+    "saved": "Guardadas",
+    "allTypes": "Todas",
+    "typeLabel": "Tipos de oportunidad",
+    "types": {
+      "investment": "Inversión",
+      "business-for-sale": "Negocio en venta",
+      "job": "Empleo",
+      "partnership": "Alianza",
+      "program": "Fondo o programa"
+    },
+    "typesPlural": {
+      "investment": "Inversiones",
+      "business-for-sale": "Negocios en venta",
+      "job": "Empleos",
+      "partnership": "Alianzas",
+      "program": "Fondos y programas"
+    },
+    "typeHints": {
+      "investment": "Consiga dinero para un proyecto o una empresa.",
+      "business-for-sale": "Venda un negocio, o una parte de uno.",
+      "job": "Contrate a alguien: un empleo, un trabajo por contrato, una pasantía o un voluntariado.",
+      "partnership": "Encuentre un cofundador, un socio, un distribuidor, un proveedor o un patrocinador.",
+      "program": "Ofrezca un fondo, una aceleradora, un concurso u otro programa."
+    },
+    "kinds": {
+      "investment": {
+        "equity": "Participación",
+        "convertible": "SAFE o nota",
+        "loan": "Préstamo",
+        "revenue-share": "Parte de los ingresos",
+        "other": "Otro"
+      },
+      "job": {
+        "full-time": "Tiempo completo",
+        "part-time": "Medio tiempo",
+        "contract": "Por contrato o freelance",
+        "internship": "Pasantía",
+        "volunteer": "Voluntariado"
+      },
+      "partnership": {
+        "co-founder": "Cofundador",
+        "partner": "Socio",
+        "distributor": "Distribuidor",
+        "supplier": "Proveedor",
+        "sponsor": "Patrocinador",
+        "other": "Otro"
+      },
+      "program": {
+        "grant": "Fondo",
+        "accelerator": "Aceleradora",
+        "competition": "Concurso",
+        "other": "Otro"
+      }
+    },
+    "industries": {
+      "AGRICULTURE": "Agricultura y fincas",
+      "CONSTRUCTION": "Construcción",
+      "EDUCATION": "Educación",
+      "ENERGY": "Energía",
+      "ENTERTAINMENT": "Medios y entretenimiento",
+      "FINTECH": "Bitcoin y finanzas",
+      "FOOD": "Comida y bebida",
+      "HEALTH": "Salud y deporte",
+      "INFRASTRUCTURE": "Infraestructura",
+      "LOGISTICS": "Transporte y logística",
+      "REAL_ESTATE": "Bienes raíces",
+      "RETAIL": "Comercio y tiendas en línea",
+      "SERVICES": "Servicios profesionales",
+      "TECHNOLOGY": "Tecnología y software",
+      "TOURISM": "Turismo y hotelería",
+      "OTHER": "Otra"
+    },
+    "stages": {
+      "IDEA": "Idea",
+      "MVP": "Primer producto",
+      "GROWTH": "Creciendo",
+      "SCALING": "Escalando"
+    },
+    "stage": "Etapa",
+    "industry": "Industria",
+    "remote": "Remoto",
+    "remoteLong": "Se puede hacer a distancia",
+    "closed": "Cerrada",
+    "closedLong": "Cerrada",
+    "closedOn": "Cerró el {{day}}",
+    "openLong": "Abierta",
+    "openUntil": "Abierta hasta el {{day}}",
+    "closesToday": "Cierra hoy",
+    "closesIn_one": "Cierra mañana",
+    "closesIn_other": "Cierra en {{count}} días",
+    "card": {
+      "raising": "Busca {{amount}}",
+      "asking": "Precio {{amount}}",
+      "priceOnRequest": "Precio a consultar",
+      "upTo": "Hasta {{amount}}"
+    },
+    "filters": {
+      "kind": {
+        "investment": "Tipo de inversión",
+        "job": "Tipo de empleo",
+        "partnership": "Busca",
+        "program": "Tipo de programa"
+      },
+      "any": "Cualquiera",
+      "amount": {
+        "investment": "Busca",
+        "business-for-sale": "Precio",
+        "program": "Hasta"
+      },
+      "min": "Mín.",
+      "max": "Máx.",
+      "anyIndustry": "Todas las industrias",
+      "remote": "Se puede hacer a distancia",
+      "btc": {
+        "any": "Acepta bitcoin",
+        "investment": "Acepta bitcoin",
+        "business-for-sale": "Se vende por bitcoin",
+        "job": "Paga en bitcoin"
+      },
+      "clear": "Quitar filtros"
+    },
+    "empty": "Todavía no hay oportunidades. Publique la primera: una inversión, un negocio en venta, un empleo, una alianza o un programa.",
+    "noneYours": "Usted no ha publicado ninguna oportunidad todavía.",
+    "noneSaved": "Las oportunidades que guarde aparecen aquí. Toque Guardar en una para conservarla.",
+    "noMatches": "Ninguna oportunidad coincide con estos filtros.",
+    "noResultsSearch": "Ninguna oportunidad coincide con \"{{query}}\".",
+    "notFound": "Oportunidad no encontrada",
+    "notFoundDesc": "Puede que la hayan quitado, o el enlace está mal.",
+    "back": "Volver a Oportunidades",
+    "blocked": {
+      "title": "Usted bloqueó a este miembro",
+      "body": "Desbloquéelo para ver sus oportunidades."
+    },
+    "edit": "Editar",
+    "postedBy": "Publicada por {{name}}",
+    "photos": "Fotos",
+    "about": "Acerca de",
+    "actions": {
+      "label": "Contactar, guardar y compartir",
+      "apply": "Postularse",
+      "website": "Sitio web",
+      "email": "Correo",
+      "profile": "Perfil",
+      "save": "Guardar",
+      "saved": "Guardada",
+      "share": "Compartir",
+      "copied": "Copiado"
+    },
+    "ownOpen": "¿Ya se tomó? Ciérrela para que deje de aparecer en Oportunidades.",
+    "ownClosed": "Está cerrada: los miembros no la ven en Oportunidades.",
+    "close": "Cerrarla",
+    "reopen": "Abrirla de nuevo",
+    "factsTitle": {
+      "investment": "La inversión",
+      "business-for-sale": "El negocio",
+      "job": "El empleo",
+      "partnership": "La alianza",
+      "program": "El programa",
+      "default": "Detalles"
+    },
+    "facts": {
+      "raising": "Busca",
+      "raised": "Conseguido hasta ahora",
+      "deal": "Tipo de inversión",
+      "asking": "Precio",
+      "revenue": "Ingresos al año",
+      "jobType": "Tipo de empleo",
+      "pay": "Pago",
+      "lookingFor": "Busca",
+      "programKind": "Tipo",
+      "upTo": "Hasta",
+      "where": "Dónde",
+      "progress": "{{percent}}% conseguido"
+    },
+    "btc": {
+      "investment": "Acepta inversión en bitcoin",
+      "business-for-sale": "Acepta bitcoin por la venta",
+      "job": "Paga en bitcoin",
+      "default": "Acepta bitcoin"
+    },
+    "safety": {
+      "investment": "BIES no revisa las oportunidades. Investigue antes de invertir, y nunca envíe dinero a alguien que no conoce en persona.",
+      "business-for-sale": "BIES no revisa las oportunidades. Visite el negocio y revise sus papeles antes de pagar algo.",
+      "job": "BIES no revisa las oportunidades. Nunca pague para postularse a un empleo.",
+      "program": "BIES no revisa las oportunidades. Los fondos y programas reales nunca cobran por postularse.",
+      "default": "BIES no revisa las oportunidades. Tenga cuidado antes de pagar o compartir algo."
+    },
+    "deck": {
+      "title": "Presentación para inversionistas",
+      "open": "Abrir la presentación",
+      "openOwn": "Abrir su presentación",
+      "openFailed": "La presentación no se abrió. Inténtelo de nuevo.",
+      "askFailed": "Su solicitud no se envió. Inténtelo de nuevo.",
+      "answerFailed": "No se guardó. Inténtelo de nuevo.",
+      "ownAsk": "Los miembros se la piden, y pueden abrirla cuando usted dice que sí.",
+      "ownShared": "Todos los miembros pueden abrirla.",
+      "sharedWithMembers": "Compartida con todos los miembros.",
+      "approved": "{{name}} la compartió con usted.",
+      "askText": "{{name}} la comparte con los miembros que la piden.",
+      "ask": "Pedir la presentación",
+      "noteLabel": "Un mensaje (opcional)",
+      "notePlaceholder": "Quién es usted y por qué le interesa",
+      "send": "Enviar",
+      "pending": "Usted la pidió. {{name}} dirá que sí o que no.",
+      "denied": "La presentación no está compartida con usted.",
+      "yes": "Compartir",
+      "no": "No",
+      "shared": "Compartida",
+      "notShared": "No compartida"
+    },
+    "form": {
+      "createTitle": "Publicar una oportunidad",
+      "chooseType": "¿Qué va a publicar?",
+      "createTitles": {
+        "investment": "Publicar una inversión",
+        "business-for-sale": "Vender un negocio",
+        "job": "Publicar un empleo",
+        "partnership": "Buscar un socio",
+        "program": "Publicar un fondo o programa"
+      },
+      "editTitle": "Editar oportunidad",
+      "changeType": "Cambiar",
+      "basicsHeading": "Lo que es",
+      "titleLabel": "Título",
+      "titlePlaceholder": {
+        "investment": "p. ej. Energía solar para fincas en La Libertad",
+        "business-for-sale": "p. ej. Hostal de surf en El Zonte",
+        "job": "p. ej. Bartender bilingüe",
+        "partnership": "p. ej. Cofundador técnico para una app de pagos",
+        "program": "p. ej. Fondo para emprendedores 2027"
+      },
+      "kindLabel": {
+        "investment": "Tipo de inversión (opcional)",
+        "job": "Tipo de empleo",
+        "partnership": "Busca",
+        "program": "Tipo de programa"
+      },
+      "kindRequired": {
+        "job": "Elija el tipo de empleo.",
+        "partnership": "Elija a quién busca.",
+        "program": "Elija qué tipo de programa es."
+      },
+      "chooseIndustry": "Elija una industria",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": {
+        "investment": "Qué es, el equipo, cuánto ha avanzado, para qué es el dinero, y las condiciones.",
+        "business-for-sale": "Qué hace el negocio, cuánto tiempo lleva, por qué lo vende, y qué incluye: el local, el equipo, el inventario.",
+        "job": "El trabajo, el horario, a quién busca, y cómo postularse.",
+        "partnership": "Qué está construyendo, a quién busca, y qué aporta usted.",
+        "program": "Qué da, quién puede postularse, cómo hacerlo, y las fechas."
+      },
+      "titleRequired": "Póngale un título.",
+      "descriptionRequired": "Diga lo que es.",
+      "stageRequired": "Elija su etapa.",
+      "amountInvalid": "Escriba un monto en dólares, como 250000 o 250k.",
+      "raisingRequired": "Diga cuánto busca.",
+      "contactRequired": "Agregue al menos una forma de contactarle.",
+      "raiseHeading": "La inversión",
+      "raisingLabel": "Busca",
+      "raisedLabel": "Conseguido hasta ahora",
+      "deckHint": "Un PDF o PowerPoint. Es privada: solo usted, y los miembros con quienes la comparta, pueden abrirla.",
+      "deckAdd": "Agregar una presentación",
+      "deckReplace": "Cambiar la presentación",
+      "deckRemove": "No subir este archivo",
+      "deckUploaded": "Subida",
+      "deckAskFirst": "Los miembros me la piden antes de poder abrirla",
+      "deckFailed": "Está publicada, pero la presentación no se subió. Intente agregarla de nuevo.",
+      "saleHeading": "El negocio",
+      "askingLabel": "Precio",
+      "askingHint": "Déjelo vacío para mostrar \"Precio a consultar\".",
+      "revenueLabel": "Ingresos al año",
+      "jobHeading": "El empleo",
+      "payPlaceholder": "p. ej. $900 al mes, $8 la hora",
+      "programHeading": "El programa",
+      "upToLabel": "Hasta",
+      "upToHint": "Lo máximo que da: el monto de un fondo, o el premio.",
+      "btcLabel": {
+        "investment": "Acepta inversión en bitcoin",
+        "business-for-sale": "Acepta bitcoin por la venta",
+        "job": "Paga en bitcoin"
+      },
+      "whereHeading": "Dónde, y hasta cuándo",
+      "locationLabel": "Dónde",
+      "locationPlaceholder": "p. ej. San Salvador, El Zonte",
+      "closesLabel": "Cierra el (opcional)",
+      "closesHint": "Después de ese día deja de aparecer en Oportunidades. También puede cerrarla usted cuando se tome.",
+      "remoteLabel": {
+        "job": "Se puede hacer a distancia",
+        "partnership": "Se puede hacer a distancia",
+        "program": "En línea, o abierto a personas de cualquier lugar"
+      },
+      "photosHint": "Hasta {{max}}. La primera es la portada: toque la estrella en otra para hacerla la portada.",
+      "cover": "Portada",
+      "makeCover": "Hacer esta la portada",
+      "removePhoto": "Quitar foto",
+      "addPhotos": "Agregar fotos",
+      "uploadFailed": "Esa foto no se subió. Inténtelo de nuevo.",
+      "contactHeading": "Cómo le contactan los miembros",
+      "contactHint": "Agregue al menos una. Su WhatsApp y su correo solo aparecen en la página de esta oportunidad, para miembros.",
+      "emailLabel": "Correo",
+      "websiteLabel": "Sitio web",
+      "applyLinkLabel": "Enlace para postularse",
+      "submit": "Publicar",
+      "save": "Guardar cambios",
+      "saveFailed": "No se guardó. Inténtelo de nuevo.",
+      "deleteFailed": "No se eliminó. Inténtelo de nuevo.",
+      "tooMany": "Puede tener hasta {{max}} oportunidades abiertas. Primero cierre una que ya se tomó.",
+      "notYourPhoto": "Agregue fotos subiéndolas aquí.",
+      "notYours": "Solo el miembro que la publicó puede editarla.",
+      "atLimitTitle": "Demasiadas oportunidades abiertas",
+      "seeYours": "Ver las suyas",
+      "delete": "Eliminar esta oportunidad",
+      "deleteConfirm": "¿Eliminar esta oportunidad para siempre? Sus fotos y su presentación se van con ella.",
+      "deleteYes": "Eliminar",
+      "tooLong": "Use como máximo {{max}} caracteres.",
+      "closesOnPassed": "Ese día ya pasó. Elija hoy o un día posterior.",
+      "whatsappInvalid": "Use números, espacios y +, como +503 6123 4567.",
+      "emailInvalid": "Revise el correo electrónico.",
+      "fieldInvalid": "Revise este dato.",
+      "deckFailedEdit": "Sus cambios se guardaron, pero la presentación para inversionistas no se subió. Pulse Guardar cambios para intentarlo de nuevo."
+    }
+  },
   "marketplace": {
     "entryLabel": "Mercado",
     "navLabel": "Mercado",
@@ -2130,7 +2460,8 @@
     "news": "Noticias",
     "dashboard": "Panel",
     "cowork": "Cowork",
-    "talent": "Talentos"
+    "talent": "Talentos",
+    "opportunities": "Oportunidades"
   },
   "cowork": {
     "title": "Quién está trabajando",
@@ -2387,8 +2718,8 @@
         "description": "Funciones de inversores, inversiones y verificacion"
       },
       "projects": {
-        "name": "Proyectos",
-        "description": "Listados y paginas de proyectos"
+        "name": "Oportunidades",
+        "description": "Inversiones, negocios en venta, empleos, alianzas, y fondos y programas"
       },
       "cowork": {
         "name": "Cowork",
@@ -2551,7 +2882,8 @@
       "reportEvent": "Reportar evento",
       "block": "Bloquear",
       "blockMember": "Bloquear miembro",
-      "reportTalent": "Reportar talento"
+      "reportTalent": "Reportar talento",
+      "reportOpportunity": "Reportar oportunidad"
     },
     "reasons": {
       "harassment": "Acoso, amenazas u odio",
@@ -2574,7 +2906,8 @@
         "note": "Reportar esta publicación",
         "album": "Reportar este álbum",
         "photo": "Reportar esta foto",
-        "talent": "Reportar este talento"
+        "talent": "Reportar este talento",
+        "opportunity": "Reportar esta oportunidad"
       },
       "why": "¿Cuál es el problema?",
       "detailsLabel": "¿Algo más que debamos saber? (opcional)",
@@ -2695,7 +3028,7 @@
       },
       "opportunities": {
         "title": "Oportunidades",
-        "desc": "Explora empleos, alianzas, eventos y más."
+        "desc": "Inversiones, negocios en venta, empleos, alianzas y más."
       },
       "talent": {
         "title": "Talentos BIES",
@@ -2757,8 +3090,8 @@
     "zaps": "Zaps",
     "events": "Eventos",
     "eventsDesc": "Confirmaciones a los eventos que organiza",
-    "projects": "Proyectos",
-    "projectsDesc": "Interés, solicitudes de presentación y novedades",
+    "projects": "Oportunidades",
+    "projectsDesc": "Solicitudes de presentación y sus respuestas",
     "footer": "Los avisos sobre su cuenta y sus fichas siempre llegan. Todo aparece también en la campana.",
     "loadFailed": "No se pudo cargar su configuración. Inténtelo de nuevo.",
     "saveFailed": "No se pudo guardar. Inténtelo de nuevo."

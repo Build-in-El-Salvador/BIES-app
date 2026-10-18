@@ -7,6 +7,8 @@ import { hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.s
 import { matchesVisibly, nostrProfileFor, privacyOf, profileForViewer, type Viewer } from '../services/profilePrivacy';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
+import { isEnabled } from '../services/featureFlags.service';
+import { openNow } from './project.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -277,7 +279,9 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             return;
         }
         recordView(result);
-        res.json(profileForViewer(result, viewerOf(req, result.userId)));
+        // Their open opportunities, while Opportunities is on.
+        const shown = (await isEnabled('projects')) ? result : { ...result, user: result.user && { ...result.user, projects: [] } };
+        res.json(profileForViewer(shown, viewerOf(req, result.userId)));
     };
     // Each view (cached or not): the count, and "X viewed your profile" once
     // an hour per viewer, unless they browse privately (Settings → Privacy).
@@ -313,7 +317,8 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                     select: {
                         id: true, nostrPubkey: true, role: true, isAdmin: true, isVerified: true,
                         projects: {
-                            where: { isPublished: true },
+                            // Open ones, and none while their member is suspended or deleted (as on /opportunities).
+                            where: { isPublished: true, ...openNow(), owner: { isBanned: false, deletedAt: null } },
                             select: {
                                 id: true, title: true, category: true, stage: true,
                                 thumbnail: true, viewCount: true, raisedAmount: true,

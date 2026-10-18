@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { Eye, MessageSquare, Plus, Loader2, Zap, FolderPlus, BarChart2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import { useFeature } from '../context/FeatureFlagsContext';
 import { useApiQuery } from '../hooks/useApi';
 import { projectsApi, analyticsApi, zapsApi, eventsApi, coursesApi } from '../services/api';
 
 const Overview = () => {
     const { t } = useTranslation();
     const { user } = useAuth();
+    const opportunitiesOn = useFeature('projects');
     
     // Fetch builder/project data
     const { data: projects, loading: projectsLoading } = useApiQuery(projectsApi.list, { ownerId: user?.id });
@@ -141,13 +143,15 @@ const Overview = () => {
                 <h2>Ecosystem Hubs</h2>
             </div>
             <div className="hubs-grid">
-                <Link to="/dashboard/projects" className="hub-card">
-                    <div className="hub-icon"><FolderPlus size={24} /></div>
-                    <div className="hub-info">
-                        <h3>My Projects</h3>
-                        <p>{hasProjects ? `${projectList.length} projects active.` : 'Kickstart your first project.'}</p>
-                    </div>
-                </Link>
+                {opportunitiesOn && (
+                    <Link to="/opportunities?mine=1" className="hub-card">
+                        <div className="hub-icon"><FolderPlus size={24} /></div>
+                        <div className="hub-info">
+                            <h3>My Opportunities</h3>
+                            <p>{hasProjects ? `${projectList.length} posted.` : 'Post an investment, a job, a partnership…'}</p>
+                        </div>
+                    </Link>
+                )}
                 <Link to="/dashboard/events" className="hub-card">
                     <div className="hub-icon" style={{ background: 'var(--color-secondary-light)', color: 'var(--color-secondary-dark)' }}><Plus size={24} /></div>
                     <div className="hub-info">
@@ -168,10 +172,10 @@ const Overview = () => {
                 <div className="investor-section mt-4">
                     <div className="section-header">
                         <h2>Investor Insights</h2>
-                        <Link to="/discover" className="btn btn-outline btn-sm" style={{ textDecoration: 'none' }}>Find Projects</Link>
+                        {opportunitiesOn && <Link to="/opportunities?type=investment" className="btn btn-outline btn-sm" style={{ textDecoration: 'none' }}>Find Investments</Link>}
                     </div>
                     <div className="stat-box" style={{ background: 'var(--color-blue-tint)', border: '1px solid var(--color-primary-light)' }}>
-                        <p style={{ color: 'var(--color-primary-dark)', fontWeight: 500 }}>You are a verified Investor. Check the discover page to find the next big thing in El Salvador.</p>
+                        <p style={{ color: 'var(--color-primary-dark)', fontWeight: 500 }}>You are a verified Investor. Check Opportunities to find the next big thing in El Salvador.</p>
                     </div>
                 </div>
             )}

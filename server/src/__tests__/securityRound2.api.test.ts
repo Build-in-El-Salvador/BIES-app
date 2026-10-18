@@ -173,19 +173,23 @@ describe('projects, decks and investments', () => {
         expect((await call('PUT', `/api/projects/${own.id}/deck/requests/${request.id}`, { token: investor.token, body: { status: 'APPROVED' } })).status).toBe(404);
         expect((await prisma.deckRequest.findUnique({ where: { id: request.id } }))?.status).toBe('PENDING');
 
-        const seen = await call('GET', `/api/projects/${victim.id}`);
+        // Opportunities are for members (signed in).
+        expect((await call('GET', `/api/projects/${victim.id}`)).status).toBe(401);
+        const seen = await call('GET', `/api/projects/${victim.id}`, { token: investor.token });
         expect(seen.status).toBe(200);
         expect(seen.body.deckKey).toBeUndefined();
         expect(seen.body.hasDeck).toBe(true);
-        const listed = await call('GET', '/api/projects?limit=50');
+        const listed = await call('GET', '/api/projects?limit=50', { token: investor.token });
+        expect(listed.body.data.length).toBeGreaterThan(0);
         expect(listed.body.data.every((p: any) => p.deckKey === undefined)).toBe(true);
     });
 
-    it('an unpublished project stays hidden even once cached', async () => {
+    it('an unpublished project stays hidden from other members', async () => {
         const owner = await member('Founder B');
+        const other = await member('Someone else');
         const draft = await prisma.project.create({ data: { title: 'Draft', description: 'x', ownerId: owner.id, isPublished: false } });
-        expect((await call('GET', `/api/projects/${draft.id}`, { token: owner.token })).status).toBe(200); // caches it
-        expect((await call('GET', `/api/projects/${draft.id}`)).status).toBe(404);
+        expect((await call('GET', `/api/projects/${draft.id}`, { token: owner.token })).status).toBe(200);
+        expect((await call('GET', `/api/projects/${draft.id}`, { token: other.token })).status).toBe(404);
     });
 
     it('a member lists only their own investments', async () => {

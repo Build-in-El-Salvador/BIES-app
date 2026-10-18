@@ -67,7 +67,7 @@ test.describe('Runtime feature toggles', () => {
         await expect(page.locator('.desktop-links')).toBeVisible();
         // Trophy/leaderboard link gone; a core link is still there.
         await expect(page.locator('.desktop-links a[href="/leaderboard"]')).toHaveCount(0);
-        await expect(page.locator('.desktop-links a[href="/discover"]')).toBeVisible();
+        await expect(page.locator('.desktop-links a[href="/members"]')).toBeVisible();
 
         // Route renders the standard 404 page.
         await page.goto('/leaderboard');

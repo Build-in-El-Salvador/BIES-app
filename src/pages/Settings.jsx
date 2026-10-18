@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    Bell, Moon, Globe, Smartphone, LayoutGrid, Users, Play, CalendarDays, Mail, AtSign, Key, Lock, Trash2, LogOut,
+    Bell, Moon, Globe, Smartphone, Users, Play, CalendarDays, Mail, AtSign, Key, Lock, Trash2, LogOut,
     Wallet, FileText, Shield, LifeBuoy, User, ChevronRight,
 } from 'lucide-react';
 import WalletConnect from '../components/WalletConnect';
@@ -33,7 +33,6 @@ const Settings = () => {
     const { theme, setTheme } = useTheme();
     const { defaultView, setDefaultView } = useViewPreference();
     const zapsOn = useFeature('zaps');
-    const projectsOn = useFeature('projects');
     const eventsOn = useFeature('events');
     const mediaOn = useFeature('media');
 
@@ -86,7 +85,6 @@ const Settings = () => {
     const name = user?.profile?.name && !isPlaceholderName(user.profile.name) ? user.profile.name : t('settings.yourProfile');
     const avatar = user?.profile?.avatar;
     const layouts = [
-        projectsOn && { key: 'projectsView', Icon: LayoutGrid, label: t('settings.projectsLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutGrid')]] },
         { key: 'membersView', Icon: Users, label: t('settings.membersLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutCards')], ['icons', t('settings.layoutIcons')]] },
         eventsOn && { key: 'eventsView', Icon: CalendarDays, label: t('settings.eventsLayout'), options: [['list', t('settings.layoutList')], ['standard', t('settings.layoutGrid')]] },
         mediaOn && { key: 'mediaView', Icon: Play, label: t('settings.mediaLayout'), options: [['card', t('settings.layoutCards')], ['list', t('settings.layoutList')], ['icon', t('settings.layoutIcons')]] },

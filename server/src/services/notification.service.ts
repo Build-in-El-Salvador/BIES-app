@@ -215,21 +215,6 @@ export async function notifyInvestmentInterest(params: {
     });
 }
 
-export async function notifyWatchlistAdd(params: {
-    builderId: string;
-    investorName: string;
-    projectTitle: string;
-    projectId: string;
-}): Promise<void> {
-    await createNotification({
-        userId: params.builderId,
-        type: 'WATCHLIST_ADD',
-        title: `"${params.projectTitle}" was saved to a watchlist`,
-        body: `${params.investorName} added your project to their watchlist.`,
-        data: { projectId: params.projectId },
-    });
-}
-
 export async function notifyFollow(params: {
     followedId: string;
     followerName: string;
@@ -244,34 +229,16 @@ export async function notifyFollow(params: {
     });
 }
 
-export async function notifyProjectUpdate(params: {
-    projectId: string;
-    projectTitle: string;
-    updateTitle: string;
-    watcherIds: string[];
-}): Promise<void> {
-    // Fan out to all watchers
-    const promises = params.watcherIds.map((userId) =>
-        createNotification({
-            userId,
-            type: 'PROJECT_UPDATE',
-            title: `Update: "${params.projectTitle}"`,
-            body: params.updateTitle,
-            data: { projectId: params.projectId },
-        })
-    );
-    await Promise.allSettled(promises);
-}
-
 export async function notifyDeckRequest(params: {
     builderId: string;
+    investorId: string;
     investorName: string;
     projectTitle: string;
     projectId: string;
     requestId: string;
     message?: string;
 }): Promise<void> {
-    const defaultBody = `An investor wants to view the pitch deck for "${params.projectTitle}".`;
+    const defaultBody = `They'd like to see the pitch deck for "${params.projectTitle}".`;
     const finalBody = params.message
         ? `${defaultBody} Message: "${params.message}"`
         : defaultBody;
@@ -279,37 +246,39 @@ export async function notifyDeckRequest(params: {
     await createNotification({
         userId: params.builderId,
         type: 'DECK_REQUEST',
-        title: `${params.investorName} requested your pitch deck`,
+        title: `${params.investorName} asked for your pitch deck`,
         body: finalBody,
-        data: { projectId: params.projectId, requestId: params.requestId },
+        data: { projectId: params.projectId, requestId: params.requestId, actorId: params.investorId },
     });
 }
 
 export async function notifyDeckApproved(params: {
     investorId: string;
+    ownerId: string;
     projectTitle: string;
     projectId: string;
 }): Promise<void> {
     await createNotification({
         userId: params.investorId,
         type: 'DECK_APPROVED',
-        title: `Pitch deck access approved for "${params.projectTitle}"`,
-        body: 'You can now download the pitch deck.',
-        data: { projectId: params.projectId },
+        title: `Pitch deck shared: "${params.projectTitle}"`,
+        body: 'You can open the pitch deck now.',
+        data: { projectId: params.projectId, actorId: params.ownerId },
     });
 }
 
 export async function notifyDeckDenied(params: {
     investorId: string;
+    ownerId: string;
     projectTitle: string;
     projectId: string;
 }): Promise<void> {
     await createNotification({
         userId: params.investorId,
         type: 'DECK_DENIED',
-        title: `Pitch deck access denied for "${params.projectTitle}"`,
-        body: 'The project builder declined your deck request.',
-        data: { projectId: params.projectId },
+        title: `Pitch deck not shared: "${params.projectTitle}"`,
+        body: 'Its member chose not to share the pitch deck.',
+        data: { projectId: params.projectId, actorId: params.ownerId },
     });
 }
 
@@ -569,17 +538,17 @@ function getNotificationUrl(type: string, data: Record<string, unknown>): string
         case 'DECK_REQUEST':
         case 'DECK_APPROVED':
         case 'DECK_DENIED':
-            // The app's project page is /project/:id (/projects is the API's).
-            return data.projectId ? `/project/${data.projectId}` : '/discover';
+            // A project is an opportunity in the app: /opportunities/:id (/projects is the API's).
+            return data.projectId ? `/opportunities/${data.projectId}` : '/opportunities';
         case 'FOLLOW':
         case 'PROFILE_VIEW':
             // A member's profile, by user id.
             return data.followerId ? `/builder/${data.followerId}` :
                    data.viewerId ? `/builder/${data.viewerId}` : '/notifications';
         case 'INVESTMENT_STATUS':
-            return data.projectId ? `/project/${data.projectId}` : '/notifications';
+            return data.projectId ? `/opportunities/${data.projectId}` : '/notifications';
         case 'ZAP_RECEIVED':
-            return data.projectId ? `/project/${data.projectId}` : '/notifications';
+            return data.projectId ? `/opportunities/${data.projectId}` : '/notifications';
         case 'EVENT_RSVP':
             return data.eventId ? `/events/${data.eventId}` : '/events';
         case 'POST_COMMENT':

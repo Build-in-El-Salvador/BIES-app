@@ -2,7 +2,6 @@
  * Analytics controller — view tracking and dashboard statistics.
  *
  * Tracks:
- *  - Project page views (with dedup within 1 hour per IP/user)
  *  - Builder dashboard stats (projects, views, watchlist, investments)
  *  - Investor dashboard stats (portfolio value, watchlist activity)
  *  - Platform-wide stats (admin only)
@@ -11,63 +10,8 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
-import { createNotification } from '../services/notification.service';
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
-
-/**
- * POST /analytics/view/:projectId
- * Record a project page view (deduped per IP/user per hour).
- */
-export async function recordProjectView(req: Request, res: Response): Promise<void> {
-    try {
-        const { projectId } = req.params;
-        const userId = req.user?.id || null;
-        const ipAddress = req.ip || req.socket.remoteAddress || '';
-
-        // Dedup key: prevent spam views within 1 hour
-        const dedupKey = `view:${projectId}:${userId || ipAddress}`;
-        const alreadyViewed = await cache.get(dedupKey);
-
-        if (!alreadyViewed) {
-            const project = await prisma.project.findUnique({
-                where: { id: projectId },
-                select: { ownerId: true, title: true },
-            });
-
-            await Promise.all([
-                prisma.projectView.create({
-                    data: { projectId, userId, ipAddress },
-                }),
-                prisma.project.update({
-                    where: { id: projectId },
-                    data: { viewCount: { increment: 1 } },
-                }),
-                cache.set(dedupKey, '1', 3600), // 1 hour cooldown
-            ]);
-
-            // Notify project owner (don't notify yourself)
-            if (project && userId && project.ownerId !== userId) {
-                const viewer = await prisma.user.findUnique({
-                    where: { id: userId },
-                    select: { profile: { select: { name: true } } },
-                });
-                createNotification({
-                    userId: project.ownerId,
-                    type: 'PROJECT_VIEW',
-                    title: `Someone viewed "${project.title}"`,
-                    body: `${viewer?.profile?.name || 'A visitor'} checked out your project.`,
-                    data: { projectId, viewerId: userId },
-                }).catch(() => {});
-            }
-        }
-
-        res.json({ recorded: !alreadyViewed });
-    } catch (error) {
-        // Don't fail the request if analytics recording fails
-        res.json({ recorded: false });
-    }
-}
 
 /**
  * GET /analytics/dashboard

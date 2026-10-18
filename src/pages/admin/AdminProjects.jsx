@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle, XCircle, Star, ExternalLink, Trash2, Loader2, Search, ArrowRightLeft } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import TypeBadge from '../../components/opportunities/TypeBadge';
 
 const MoveOwnerModal = ({ project, onClose, onSuccess }) => {
     const [userSearch, setUserSearch] = useState('');
@@ -91,15 +92,15 @@ const MoveOwnerModal = ({ project, onClose, onSuccess }) => {
     );
 };
 
+// Opportunities go up at once (no review), so All comes first.
 const TABS = [
-    { key: 'pending-review', label: 'Pending Review' },
+    { key: '', label: 'All' },
     { key: 'active', label: 'Active' },
     { key: 'draft', label: 'Draft' },
-    { key: '', label: 'All' },
 ];
 
 const AdminProjects = () => {
-    const [tab, setTab] = useState('pending-review');
+    const [tab, setTab] = useState('');
     const [search, setSearch] = useState('');
     const [projects, setProjects] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
@@ -174,8 +175,8 @@ const AdminProjects = () => {
         <>
             <div className="header">
                 <div>
-                    <h1>Project Management</h1>
-                    <p className="subtitle">Review and manage project submissions</p>
+                    <h1>Opportunities</h1>
+                    <p className="subtitle">Investments, businesses for sale, jobs, partnerships and programs members post</p>
                 </div>
             </div>
 
@@ -195,7 +196,7 @@ const AdminProjects = () => {
                     <Search size={16} />
                     <input
                         type="text"
-                        placeholder="Search projects..."
+                        placeholder="Search opportunities..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />
@@ -208,16 +209,16 @@ const AdminProjects = () => {
                 </div>
             ) : projects.length === 0 ? (
                 <div className="empty-state">
-                    <p>No projects found{tab ? ` with status "${tab}"` : ''}.</p>
+                    <p>No opportunities found{tab ? ` with status "${tab}"` : ''}.</p>
                 </div>
             ) : (
                 <div className="table-container">
                     <table className="data-table">
                         <thead>
                             <tr>
-                                <th>Project</th>
+                                <th>Opportunity</th>
                                 <th>Owner</th>
-                                <th>Category</th>
+                                <th>Type</th>
                                 <th>Status</th>
                                 <th>Featured</th>
                                 <th>Created</th>
@@ -229,7 +230,7 @@ const AdminProjects = () => {
                                 <tr key={p.id}>
                                     <td className="font-semibold">{p.title}</td>
                                     <td data-label="Owner">{p.owner?.profile?.name || p.owner?.email || '—'}</td>
-                                    <td data-label="Category">{p.category}</td>
+                                    <td data-label="Type"><TypeBadge opportunity={p} withKind /></td>
                                     <td data-label="Status">{statusBadge(p.status)}</td>
                                     <td data-label="Featured" className="mobile-hide">
                                         <button
@@ -276,7 +277,7 @@ const AdminProjects = () => {
                                             >
                                                 <ArrowRightLeft size={16} />
                                             </button>
-                                            <Link to={`/project/${p.id}`} className="icon-btn" title="View">
+                                            <Link to={`/opportunities/${p.id}`} className="icon-btn" title="View">
                                                 <ExternalLink size={16} />
                                             </Link>
                                             <button

@@ -35,6 +35,18 @@
     </div>
   </div>
   <script>
+    // The phone app's launch screen (the BIES logo) stays up until the app
+    // hides it once its first page has drawn (src/utils/launchScreen.js).
+    // These hide it too: a boot error, the Reload prompt, and after 15 s
+    // whatever happens, so the app can't be stuck behind it.
+    function __biesHideLaunchScreen() {
+      try {
+        var s = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SplashScreen;
+        if (s && s.hide) Promise.resolve(s.hide()).catch(function () {});
+      } catch (e) { /* not the phone app */ }
+    }
+    setTimeout(__biesHideLaunchScreen, 15000);
+
     // Capture fatal JS errors that prevent React from mounting.
     // window.onerror masks cross-origin module errors to a bare "Script error."
     // with no file/line — but the real Error object (e.error) usually still
@@ -43,6 +55,7 @@
       var s = document.getElementById('splash');
       if (!s || s._errShown) return;
       s._errShown = true;
+      __biesHideLaunchScreen();
       var d = document.createElement('div');
       d.style.cssText = 'margin-top:2rem;padding:1rem;text-align:left;color:#ff6b6b;font:12px/1.45 monospace;max-width:92vw;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:60vh';
       d.textContent = label + ': ' + detail;
@@ -73,6 +86,7 @@
       var t = setTimeout(function () {
         var s = document.getElementById('splash');
         if (s) {
+          __biesHideLaunchScreen();
           var d = document.createElement('div');
           d.style.cssText = 'margin-top:2rem;text-align:center;color:rgba(255,255,255,0.7);font:14px system-ui,sans-serif';
           d.innerHTML = '<p>Taking longer than expected\u2026</p>'

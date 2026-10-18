@@ -236,26 +236,27 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
             return;
         }
 
+        // For one of the member's own investments (pitch decks are theirs alone).
+        const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
+        const project = projectId
+            ? await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true, deckKey: true, type: true } })
+            : null;
+        if (projectId && (!project || project.ownerId !== req.user!.id || project.type !== 'investment')) {
+            res.status(404).json({ error: 'Opportunity not found' });
+            return;
+        }
+
         const { key, name } = await uploadPrivateFile(req.file.buffer, req.file.mimetype);
         await recordUpload(req.user!.id, { name, mimeType: req.file.mimetype, size: req.file.size, isPrivate: true });
 
-        // Associate with project if projectId is provided
-        const projectId = req.query.projectId as string;
-        if (projectId) {
-            const project = await prisma.project.findUnique({
+        if (project) {
+            await prisma.project.update({
                 where: { id: projectId },
-                select: { ownerId: true, deckKey: true },
+                data: { deckKey: key },
             });
-
-            if (project && project.ownerId === req.user!.id) {
-                await prisma.project.update({
-                    where: { id: projectId },
-                    data: { deckKey: key },
-                });
-                // The deck it replaces goes.
-                const old = project.deckKey?.split('/').pop();
-                if (old) await discardUploadNames([old], { uploadedBy: [req.user!.id] });
-            }
+            // The deck it replaces goes.
+            const old = project.deckKey?.split('/').pop();
+            if (old) await discardUploadNames([old], { uploadedBy: [req.user!.id] });
         }
 
         res.json({ key, message: 'Deck uploaded successfully' });

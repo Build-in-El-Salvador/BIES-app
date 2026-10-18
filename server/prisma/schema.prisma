@@ -214,20 +214,40 @@ model Profile {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Project
+// Project: an opportunity
 // ─────────────────────────────────────────────────────────────────────────────
 
+// An opportunity on the Opportunities page. The model keeps the name it had
+// when every one was a project raising money; those are the investment type
+// now. Its lists and rules: project.controller.ts.
 model Project {
   id           String   @id @default(cuid())
+  // investment | business-for-sale | job | partnership | program (OPPORTUNITY_TYPES)
+  type         String   @default("investment")
+  // The kind within its type (OPPORTUNITY_KINDS): a job's hours, who a
+  // partnership is looking for, a program's kind, an investment's deal; "" for none.
+  kind         String   @default("")
   title        String
   description  String
-  category     String   @default("OTHER")
-  // ENERGY | FINTECH | EDUCATION | AGRICULTURE | REAL_ESTATE | INFRASTRUCTURE | TOURISM | TECHNOLOGY | OTHER
-  stage        String   @default("IDEA")
-  // IDEA | MVP | GROWTH | SCALING
-  fundingGoal  Float?   @map("funding_goal")
+  category     String   @default("OTHER") // the industry: INDUSTRIES
+  stage        String   @default("IDEA")  // investment: IDEA | MVP | GROWTH | SCALING
+  fundingGoal  Float?   @map("funding_goal") // investment: what it's raising, in dollars
   raisedAmount Float    @default(0) @map("raised_amount")
-  thumbnail    String   @default("")
+  price        Float?                     // business-for-sale: the asking price; program: the most it gives
+  revenue      Float?                     // business-for-sale: a year's revenue
+  pay          String   @default("")      // job: free text, "$900 a month"
+  location     String   @default("")
+  remote       Boolean  @default(false)   // job, partnership, program: can be done from anywhere
+  // investment: takes bitcoin; business-for-sale: sells for bitcoin; job: pays in bitcoin
+  btcAccepted  Boolean  @default(false) @map("btc_accepted")
+  photos       String   @default("[]")    // JSON: the member's BIES uploads; the first is the cover
+  whatsapp     String   @default("")
+  email        String   @default("")
+  // Open until this day ends in El Salvador ("YYYY-MM-DD"; "" when it has no
+  // end date), or until its member closes it (closedAt).
+  closesOn     String   @default("") @map("closes_on")
+  closedAt     DateTime? @map("closed_at")
+  thumbnail    String   @default("")      // the cover (its first photo), for older pages
   deckKey      String?  @map("deck_key")
   requiresDeckApproval Boolean  @default(true) @map("requires_deck_approval")
   demoUrl      String   @default("") @map("demo_url")
@@ -256,6 +276,7 @@ model Project {
   deckRequests DeckRequest[]
   zapReceipts  ZapReceipt[]
 
+  @@index([type])
   @@map("projects")
 }
 

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { loadSecureStore } from './services/secureStore.js'
+import { hideLaunchScreen } from './utils/launchScreen.js'
 
 // Error Boundary for debugging white screen
 class ErrorBoundary extends React.Component {
@@ -18,6 +19,8 @@ class ErrorBoundary extends React.Component {
     componentDidCatch(error, errorInfo) {
         console.error("Uncaught error:", error, errorInfo);
         this.setState({ errorInfo });
+        // The phone app's launch screen would hide this message.
+        hideLaunchScreen();
     }
 
     render() {

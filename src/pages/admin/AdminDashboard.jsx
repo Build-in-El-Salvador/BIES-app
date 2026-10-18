@@ -26,7 +26,7 @@ const AdminDashboard = () => {
   const allTabs = [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
     { to: '/admin/reports', label: 'Reports', icon: Flag },
-    { to: '/admin/projects', label: 'Projects', icon: Folder },
+    { to: '/admin/projects', label: 'Opportunities', icon: Folder },
     { to: '/admin/events', label: 'Events', icon: Calendar },
     { to: '/admin/directory', label: 'Directory', icon: Store },
     { to: '/admin/courses', label: 'Courses', icon: GraduationCap },

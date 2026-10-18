@@ -879,43 +879,6 @@ class NostrService {
     }
 
     /**
-     * Publish a NIP-99 classified listing (kind:30402) for a project.
-     * For Nostr-native users — signs via browser extension.
-     */
-    async publishProjectListing(project) {
-        const pubkey = await nostrSigner.getPublicKey();
-        const tags = [
-            ['d', project.id],
-            ['title', project.title],
-            ['summary', (project.description || '').substring(0, 200)],
-            ['t', (project.category || 'other').toLowerCase()],
-            ['t', (project.stage || 'idea').toLowerCase()],
-            ['t', 'bies'],
-            ['t', 'investment'],
-        ];
-
-        if (project.fundingGoal) {
-            tags.push(['price', String(project.fundingGoal), 'USD']);
-        }
-        if (project.thumbnail) {
-            tags.push(['image', project.thumbnail]);
-        }
-        if (project.location) {
-            tags.push(['location', project.location]);
-        }
-
-        const event = {
-            kind: 30402,
-            pubkey,
-            created_at: Math.floor(Date.now() / 1000),
-            tags,
-            content: project.description || '',
-        };
-
-        return this.publishEvent(event);
-    }
-
-    /**
      * Publish a directory listing as a NIP-99 classified listing (kind:30402).
      * For Nostr-native users — signs via browser extension. Twin of the
      * server's publishDirectoryListing (nostr.service.ts): same kind, tags,

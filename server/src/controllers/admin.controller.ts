@@ -27,6 +27,7 @@ import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
 import { filesOf } from './talent.controller';
+import { discardOpportunityFiles, opportunityFileNames } from './project.controller';
 import { uploadNameOf } from '../services/uploads.service';
 import { withoutDeckKey } from '../utils/projectFields';
 
@@ -275,8 +276,9 @@ export async function featureProject(req: Request, res: Response): Promise<void>
  */
 export async function hardDeleteProject(req: Request, res: Response): Promise<void> {
     try {
-        await prisma.project.delete({ where: { id: req.params.id } });
+        const project = await prisma.project.delete({ where: { id: req.params.id } });
         await cache.delPattern('projects:');
+        await discardOpportunityFiles(project);
 
         await prisma.auditLog.create({
             data: {
@@ -332,6 +334,13 @@ export async function moveProjectOwnership(req: Request, res: Response): Promise
             res.status(404).json({ error: 'New owner not found' }); return;
         }
 
+        // The records of its photos and pitch deck go with it, so the new
+        // owner can change or remove them.
+        const files = await prisma.project.findUniqueOrThrow({ where: { id: project.id }, select: { photos: true, thumbnail: true, deckKey: true } });
+        const names = opportunityFileNames(files);
+        if (names.length) {
+            await prisma.upload.updateMany({ where: { userId: project.ownerId, name: { in: names } }, data: { userId: newOwnerId } });
+        }
         await prisma.project.update({
             where: { id: req.params.id },
             data: { ownerId: newOwnerId },
@@ -704,8 +713,14 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
             }
         }
 
-        // 2. Transfer projects ownership
+        // 2. Transfer projects (opportunities), and the records of their photos
+        // and pitch decks, so the target member can change or remove them.
         if (sourceUser.projects.length > 0) {
+            const projectFiles = (await prisma.project.findMany({ where: { ownerId: sourceUserId }, select: { photos: true, thumbnail: true, deckKey: true } }))
+                .flatMap(opportunityFileNames);
+            if (projectFiles.length) {
+                await prisma.upload.updateMany({ where: { userId: sourceUserId, name: { in: projectFiles } }, data: { userId: targetUserId } });
+            }
             await prisma.project.updateMany({
                 where: { ownerId: sourceUserId },
                 data: { ownerId: targetUserId },
@@ -1087,10 +1102,10 @@ export async function reviewProject(req: Request, res: Response): Promise<void> 
             data: {
                 userId: project.ownerId,
                 type: 'SYSTEM',
-                title: action === 'approve' ? 'Project Approved' : 'Project Not Approved',
+                title: action === 'approve' ? 'Opportunity approved' : 'Opportunity taken down',
                 body: action === 'approve'
-                    ? `Your project "${project.title}" has been approved and is now live on the Discover page.`
-                    : `Your project "${project.title}" was not approved for the Discover page. Please review and resubmit.`,
+                    ? `Your opportunity "${project.title}" is live on Opportunities.`
+                    : `Your opportunity "${project.title}" was taken down from Opportunities.`,
                 data: JSON.stringify({ projectId: project.id }),
             },
         });

@@ -34,7 +34,7 @@ export const FEATURE_SLUGS = [
     'zaps',        // zap buttons + Coinos wallet
     'feedback',    // bug/feedback tracker
     'investors',   // investor features + vetting (investors/investments APIs)
-    'projects',    // project listings
+    'projects',    // Opportunities: investments, businesses for sale, jobs, partnerships, programs (the API is /api/projects)
     'cowork',      // Cowork check-in page (client-side Nostr — UI gate only)
     'marketplace', // Shopstr-compatible NIP-99 marketplace (also build-time MARKETPLACE_ENABLED)
     'bounties',    // bounty board + escrow/maintenance loop (also build-time BOUNTIES_ENABLED)
