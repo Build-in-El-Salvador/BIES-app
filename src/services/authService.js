@@ -15,6 +15,7 @@ import { authApi } from './api.js';
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
+import { toSignerError, isDeadSessionError, SIGNER_ERROR } from './signerError.js';
 import { isNativePlatform } from '../utils/platform.js';
 import { nwcClient } from './nwcService.js';
 import { API_BASE, clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
@@ -27,6 +28,11 @@ const USER_KEY = 'bies_user';
 // longer, then shows signing in.
 const RESTORE_WAIT_MS = 6000;
 const RESTORE_LIMIT_MS = 12000;
+
+// A remote signer answers get_public_key at once; sign_event may wait on a
+// human approving it in the signer app, so it gets longer.
+const SIGNER_PUBKEY_WAIT_MS = 30000;
+const SIGNER_SIGN_WAIT_MS = 60000;
 
 /** The promise's answer, or a rejection (`timedOut`) once `ms` have passed (the request carries on). */
 function withinTime(promise, ms) {
@@ -259,15 +265,15 @@ export const authService = {
      * Returns { user, pubkey }.
      */
     _completeSignerLogin: async (signer) => {
-        const pubkey = await signer.getPublicKey();
+        const pubkey = await authService._fromSigner(signer.getPublicKey(), SIGNER_PUBKEY_WAIT_MS);
         const { challenge } = await authApi.nostrChallenge(pubkey);
 
-        const signedEvent = await signer.signEvent({
+        const signedEvent = await authService._fromSigner(signer.signEvent({
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: loginTags(),
             content: challenge,
-        });
+        }), SIGNER_SIGN_WAIT_MS);
 
         const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
@@ -284,11 +290,16 @@ export const authService = {
      */
     loginWithBunker: async (bunkerInput) => {
         const { nostrConnectService } = await import('./nostrConnectService.js');
-        const bunkerSigner = await nostrConnectService.connect(bunkerInput);
-
-        const { user, pubkey } = await authService._completeSignerLogin(bunkerSigner);
-        nostrSigner.setBunkerMode(pubkey);
-        return user;
+        // Pressing login again with the same URI reuses the signer paired by
+        // the previous attempt: bunker:// secrets are single-use, so a fresh
+        // connect with that URI would be refused as an unknown client.
+        let bunkerSigner;
+        try {
+            bunkerSigner = await nostrConnectService.connect(bunkerInput);
+        } catch (err) {
+            throw toSignerError(err);
+        }
+        return authService._loginWithPairedSigner(bunkerSigner, nostrConnectService);
     },
 
     /**
@@ -296,9 +307,38 @@ export const authService = {
      * nostrconnect:// client-initiated pairing (see NostrConnectQR).
      */
     loginWithConnectedBunker: async (bunkerSigner) => {
-        const { user, pubkey } = await authService._completeSignerLogin(bunkerSigner);
-        nostrSigner.setBunkerMode(pubkey);
-        return user;
+        const { nostrConnectService } = await import('./nostrConnectService.js');
+        return authService._loginWithPairedSigner(bunkerSigner, nostrConnectService);
+    },
+
+    /**
+     * Challenge-response login over an already-paired BunkerSigner. A signer
+     * refusal (e.g. no permission for kind 27235) keeps the pairing so the
+     * user can allow it and retry; a dead session (link used, revoked) drops
+     * it so the next attempt pairs afresh.
+     */
+    _loginWithPairedSigner: async (bunkerSigner, nostrConnectService) => {
+        try {
+            const { user, pubkey } = await authService._completeSignerLogin(bunkerSigner);
+            nostrSigner.setBunkerMode(pubkey);
+            return user;
+        } catch (err) {
+            const error = toSignerError(err);
+            if (isDeadSessionError(error)) nostrConnectService.disconnect();
+            throw error;
+        }
+    },
+
+    /** A signer call bounded in time, so a lost relay message can't hang login. */
+    _fromSigner: async (promise, ms) => {
+        try {
+            return await withinTime(promise, ms);
+        } catch (err) {
+            if (err?.timedOut) {
+                throw Object.assign(new Error('The remote signer did not respond.'), { code: SIGNER_ERROR.NO_RESPONSE });
+            }
+            throw err;
+        }
     },
 
     // ─── Amber login (NIP-55 Android intents) ───────────────────────────────

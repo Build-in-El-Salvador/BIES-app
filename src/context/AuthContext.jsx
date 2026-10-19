@@ -5,6 +5,8 @@ import { notifyIncomingMessage, subscribeToPush, unsubscribeFromPush } from '../
 import { isNativePlatform } from '../utils/platform';
 import { initNativePush, nativePushToken, forgetNativePushToken } from '../services/pushService';
 import { nostrSigner } from '../services/nostrSigner';
+import { toSignerError, signerErrorKey } from '../services/signerError';
+import i18n from '../i18n';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
 import PasskeySavePrompt from '../components/PasskeySavePrompt';
@@ -13,6 +15,13 @@ import PushPermissionPrompt from '../components/PushPermissionPrompt';
 import TermsGate from '../components/moderation/TermsGate';
 import ProfileGate from '../components/ProfileGate';
 import { needsProfile } from '../utils/profileComplete';
+
+/** Login-screen text for a remote-signer failure (string rejections included). */
+function signerErrorText(err) {
+    const error = toSignerError(err);
+    const known = signerErrorKey(error);
+    return known ? i18n.t(known.key, known.params) : error.message;
+}
 
 const AuthContext = createContext();
 
@@ -344,7 +353,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: signerErrorText(error) };
         }
     };
 
@@ -371,7 +380,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: signerErrorText(error) };
         }
     };
 

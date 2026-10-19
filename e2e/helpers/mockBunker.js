@@ -2,7 +2,7 @@
  * mockBunker — minimal NIP-46 remote signer for E2E tests.
  *
  * Plays the role of Amber/nsecBunker: listens for kind-24133 requests on a
- * relay, auto-approves them, and signs with an in-memory test key. Wire
+ * relay, approves them (except kinds passed to denyKinds), and signs with an in-memory test key. Wire
  * format verified against nostr-tools/nip46 (nostr-tools 2.23.3):
  *   request:  kind 24133, author=clientPubkey, p-tag=bunkerPubkey,
  *             content = nip44(JSON{id, method, params}, conv(client, bunker))
@@ -26,6 +26,9 @@ export async function startMockBunker(relayUrl) {
     const bunkerSk = generateSecretKey();
     const bunkerPubkey = getPublicKey(bunkerSk);
     const requests = []; // { method, params, clientPubkey } — assertion log
+    // Kinds sign_event refuses (like Bunker46's default permission seed,
+    // which omits the 27235 login kind). Mutable via denyKinds().
+    let deniedKinds = new Set();
     let ws;
 
     const send = (payload) => ws.send(JSON.stringify(payload));
@@ -63,6 +66,10 @@ export async function startMockBunker(relayUrl) {
             case 'sign_event': {
                 try {
                     const template = JSON.parse(params[0]);
+                    if (deniedKinds.has(template.kind)) {
+                        respond(clientPubkey, { id, error: `Permission denied for sign_event kind:${template.kind}` });
+                        break;
+                    }
                     const signed = finalizeEvent({
                         kind: template.kind,
                         created_at: template.created_at ?? Math.floor(Date.now() / 1000),
@@ -112,6 +119,11 @@ export async function startMockBunker(relayUrl) {
     return {
         pubkey: bunkerPubkey,
         requests,
+
+        /** Refuse sign_event for these kinds (empty list = allow all). */
+        denyKinds(kinds = []) {
+            deniedKinds = new Set(kinds);
+        },
 
         /** bunker:// URI for the paste-login flow. */
         bunkerUri(secret = 'e2e-secret') {
