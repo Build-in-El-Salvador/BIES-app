@@ -8,9 +8,17 @@
 - **KiH mode** (legacy, decrypt-only) — random 256-bit key in passkey `user.id` (`v=3`). Registration was removed in 0.8.0 because the key travels through the JS-readable `userHandle` (interceptable via XSS or a malicious extension). Existing KiH credentials still log in and are auto-offered migration — see "KiH → PRF migration" below.
 - Encrypted keys stored as **kind:31777 events** on public Nostr relays
 - Cross-device recovery via WebAuthn discoverable credentials
-- Gateway-based registration (app.buildinelsalvador.com primary; keytr.org, nostkey.org backups). On `localhost` the sole rpId is `localhost` so passkeys work in dev/E2E (WebAuthn rejects cross-origin rpIds from a localhost origin).
+- Gateway-based registration (the serving domain is the primary rpId, e.g. `app.buildinelsalvador.com` or `bies.sovit.xyz`; keytr.org, nostkey.org are backups via Related Origin Requests — see `gatewayOrder.js`). On `localhost` the sole rpId is `localhost` so passkeys work in dev/E2E (WebAuthn rejects cross-origin rpIds from a localhost origin).
 
-**PRF requirement:** authenticators without PRF (password-manager extensions like 1Password/Bitwarden, Firefox on Android, some older security keys) cannot *register* new passkeys (`PrfNotSupportedError`); login with existing credentials — including legacy KiH — needs only WebAuthn. UI gates registration surfaces on `keytrService.checkPrfSupport()` / `canRegisterPasskey()`, which are advisory (optimistic without `getClientCapabilities()`); the registration-time error is authoritative.
+**PRF requirement:** authenticators without PRF (password-manager extensions like 1Password/Bitwarden, Firefox on Android, some older security keys) cannot *register* new passkeys (`PrfNotSupportedError`); login with existing credentials — including legacy KiH — needs only WebAuthn. UI gates registration surfaces on `keytrService.checkPrfSupport()`, which is advisory (optimistic without `getClientCapabilities()`); the registration-time error is authoritative.
+
+## Where passkeys appear (de-emphasised)
+
+Because PRF-only registration fails on many browsers and password managers, passkeys are **opt-in, not promoted**:
+
+- **Saving** a passkey happens only in **Settings → Nostr key** (`/settings/nostr`). Signup no longer offers it, and there is no post-login "Save with Passkey" modal.
+- **Logging in** with an existing passkey is a small link on the Nostr login screen (`/login/nostr`), always shown on the web so a returning user on a new device can still use discovery. It never creates a passkey.
+- The KiH → PRF **migration prompt** is unchanged: it appears only after a passkey login that used a legacy `v=3` credential.
 
 Current version: `@sovit.xyz/keytr@0.8.0` (pinned exact)
 
@@ -21,11 +29,12 @@ Current version: `@sovit.xyz/keytr@0.8.0` (pinned exact)
 | File | Role |
 |---|---|
 | `src/services/keytrService.js` | Adapter layer — wraps keytr library for BIES-specific flows |
+| `src/services/keytrGuards.js` | Pure helpers (Node-testable): account check on re-acquire, NIP-09 deletion templates, hex-pubkey check |
+| `src/services/gatewayOrder.js` | rpId ordering + discoverable fall-through across gateways |
 | `src/services/authService.js` | `loginWithPasskey()` — dynamic imports keytrService, chains to `loginWithNsec()` |
 | `src/services/nostrSigner.js` | Session restore — `_tryReacquire()` re-decrypts nsec via passkey on page refresh |
-| `src/pages/Login.jsx` | UI — passkey button always visible when `PASSKEY_ENABLED = true` |
-| `src/pages/Settings.jsx` | Passkey management — save, add backup gateway, remove |
-| `src/components/PasskeySavePrompt.jsx` | Post-login modal offering to save a passkey |
+| `src/pages/Login.jsx` | UI — small "Login with Passkey" link on `/login/nostr` when `PASSKEY_ENABLED = true` |
+| `src/pages/settings/NostrKeys.jsx` | Passkey management — save, add backup gateways, remove (the only place to save one) |
 | `src/components/PasskeyMigratePrompt.jsx` | Post-login modal offering KiH → PRF migration |
 | `src/config/featureFlags.js` | `PASSKEY_ENABLED` flag (currently `true`) |
 | `vite.config.js` | `resolve.dedupe: ['@scure/base']` — prevents dual-bundle crash |
@@ -81,9 +90,9 @@ One biometric prompt. Handles credentials transparently.
 
 ## Registration Flow
 
-### Primary Gateway (keytr.org)
+### Primary Gateway (the serving domain)
 
-Called via `keytrService.saveWithPasskey(nsec, pubkey)`:
+Called via `keytrService.saveWithPasskey(nsec, pubkey)` from Settings → Nostr key:
 
 1. Decode nsec to bytes
 2. `registerPasskey()` — WebAuthn credential creation on gateway rpId with the PRF extension; `pubkey` (hex) is required since 0.8.0 and stored as `user.id`. Returns `{ credential, keyMaterial }` (keyMaterial = PRF output). Handles the YubiKey create→get fallback internally and cleans up orphaned credentials via the Signal API before throwing `PrfNotSupportedError`.
@@ -95,9 +104,13 @@ Called via `keytrService.saveWithPasskey(nsec, pubkey)`:
 
 `loginWithKeytr(events)` dispatches per event by its `v` tag: `v=1` authenticates via PRF, `v=3` via the legacy KiH path. `discover()` handles both transparently.
 
-### Backup Gateway (nostkey.org)
+### Backup Gateways (keytr.org, nostkey.org)
 
-Called via `keytrService.addBackupGateway(nsec, pubkey)` — same flow but uses `KEYTR_GATEWAYS[1]` as rpId. Separate WebAuthn prompt.
+Called via `keytrService.addBackupGateway(nsec, pubkey)` — same flow once per backup gateway (keytr.org, then nostkey.org), one WebAuthn prompt each.
+
+### Removal
+
+`keytrService.removePasskey(pubkey)` fetches the account's kind:31777 events, publishes a NIP-09 `kind:5` deletion for each (all gateways, `a` + `e` tags), then drops the local index entry. The passkey itself stays on the user's authenticator; the UI tells them to delete it there.
 
 ---
 
@@ -107,8 +120,8 @@ When the page refreshes, `nostrSigner._tryReacquire()`:
 
 1. Checks `storedMethod === 'nsec'` (passkey/nsec/seed all store as 'nsec')
 2. Checks `PASSKEY_ENABLED === true`
-3. Checks `keytrService.hasCredential()` — any credential in index
-4. If all pass: calls `keytrService.loginWithPasskey()` → WebAuthn prompt
+3. Reads the session account's pubkey (`bies_user.nostrPubkey`) and checks `keytrService.hasCredential(pubkey)` — a credential for **that** account
+4. If all pass: calls `keytrService.loginWithPasskey({ expectedPubkey })` → WebAuthn prompt. Only that account's credentials are tried first, and a key for any other account is rejected (`err.pubkeyMismatch`), so a shared browser can never load another member's key under this session. Settings → Nostr key "Reveal" uses the same check.
 5. Sets nsec in memory via `nostrSigner.setNsec()`
 
 This runs lazily — only triggered when an operation actually needs the signing key (getPubkey, signEvent, encrypt, decrypt).
@@ -151,7 +164,7 @@ resolve: {
 
 ## Security Properties
 
-- **nsec never persisted** — only held in memory during active session
+- **nsec not persisted by keytr** — the decrypted nsec goes to `nostrSigner`, which (like every nsec login) keeps it for the tab session (`sessionStorage` on the web, Keychain/Keystore in the app); the page CSP (`vite.config.js`) is the main guard for that
 - **nsecBytes zeroed** after use (`.fill(0)` in `finally` blocks)
 - **keyMaterial zeroed** after encryption
 - **No server involvement** — backend only sees signed Nostr events, never keys
@@ -177,3 +190,4 @@ resolve: {
 | 0.5.0 | KiH mode support (PRF-first with automatic fallback), unified discover() for login, expanded authenticator compatibility (password managers, all browsers) |
 | 0.7.1 | Removed PRF mode (KiH-only), dropped `registerKihPasskey`/`PrfNotSupportedError`/`checkPrfSupport`, `registerPasskey` now returns `keyMaterial`, `KEYTR_KIH_VERSION` → `KEYTR_VERSION`, `nsecToHexPubkey` → `nsecToPublicKey` |
 | 0.8.0 | PRF-only registration (KiH register throws `KihRegistrationDisabledError`; decrypt still works, deprecated). `KEYTR_VERSION` → `1` (PRF), `KEYTR_KIH_VERSION` = `3`. `RegisterOptions.pubkey` required. Added `migrateFromKih`, `buildKeytrDeletionEvent`, `checkPrfSupport`/`checkCapabilities`, Signal APIs, restored `PrfNotSupportedError`. BIES: KiH→PRF auto-migration prompt, PRF gating on registration UI, localhost rpId for dev/E2E. |
+| 0.8.0 (BIES, 2026-10) | Passkeys de-emphasised: save only from Settings (signup section + post-login modal removed; no silent save from the login screen), login is a small link. Re-acquire/Reveal check the account, Remove publishes NIP-09 deletions, tier-2 login stores a hex pubkey (it stored bytes from `nsecToPublicKey`), malformed index entries are dropped. |

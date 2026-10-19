@@ -5,7 +5,7 @@ import { nip19 } from 'nostr-tools';
 import { AlertTriangle, CheckCircle, Copy, Eye, EyeOff, Fingerprint } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { nostrSigner } from '../../services/nostrSigner';
-import { keytrService, isLikelyExtensionInterference, isPrfUnsupportedError } from '../../services/keytrService';
+import { keytrService, isLikelyExtensionInterference, isPrfUnsupportedError, isUserCancellation } from '../../services/keytrService';
 import { PASSKEY_ENABLED } from '../../config/featureFlags';
 import { isNativePlatform } from '../../utils/platform';
 import { confirmDeviceOwner } from '../../services/deviceAuth';
@@ -38,6 +38,7 @@ const NostrKeys = () => {
     const [savingPasskey, setSavingPasskey] = useState(false);
     const [savingBackup, setSavingBackup] = useState(false);
     const [removingPasskey, setRemovingPasskey] = useState(false);
+    const [confirmRemove, setConfirmRemove] = useState(false);
     const [passkeyError, setPasskeyError] = useState('');
     const [passkeySuccess, setPasskeySuccess] = useState('');
 
@@ -70,22 +71,26 @@ const NostrKeys = () => {
             return;
         }
         // Try re-acquiring via passkey (unavailable in the native WKWebView shell)
-        if (PASSKEY_ENABLED && typeof PublicKeyCredential !== 'undefined' && !isNativePlatform() && keytrService.hasCredential()) {
+        if (PASSKEY_ENABLED && typeof PublicKeyCredential !== 'undefined' && !isNativePlatform() && keytrService.hasCredential(user?.nostrPubkey)) {
             setNsecLoading(true);
             try {
-                const nsec = await keytrService.loginWithPasskey();
+                // Only this account's key — never another account's passkey.
+                const nsec = await keytrService.loginWithPasskey({ expectedPubkey: user.nostrPubkey });
                 nostrSigner.setNsec(nsec);
                 setNsecValue(nsec);
                 setNsecRevealed(true);
-            } catch {
-                setNsecError('Passkey authentication failed. Try logging in again with your nsec or seed phrase to access your key.');
+            } catch (err) {
+                if (isUserCancellation(err)) return;
+                setNsecError(err.pubkeyMismatch
+                    ? 'That passkey belongs to a different account. Choose the passkey for this account, or log in again with your nsec or seed phrase.'
+                    : 'Passkey authentication failed. Try logging in again with your nsec or seed phrase to access your key.');
             } finally {
                 setNsecLoading(false);
             }
             return;
         }
         setNsecError('Your secret key is not available in this session. Log in with your nsec or seed phrase, or use your passkey to reveal it.');
-    }, [t]);
+    }, [t, user?.nostrPubkey]);
 
     const handleHideNsec = useCallback(() => {
         setNsecRevealed(false);
@@ -113,7 +118,7 @@ const NostrKeys = () => {
             setPasskeySuccess('Passkey saved! Your key is encrypted and stored on Nostr relays.');
         } catch (err) {
             if (isPrfUnsupportedError(err)) setPasskeyError(NO_PRF);
-            else if (!err.cancelled) setPasskeyError(err.message || 'Failed to save passkey.');
+            else if (!isUserCancellation(err)) setPasskeyError(err.message || 'Failed to save passkey.');
         } finally {
             setSavingPasskey(false);
         }
@@ -126,30 +131,33 @@ const NostrKeys = () => {
         if (!nsec) return;
         setSavingBackup(true);
         try {
-            await keytrService.addBackupGateway(nsec, user.nostrPubkey);
-            setPasskeySuccess('Backup gateway added (nostkey.org). You now have redundant passkey recovery.');
+            const added = await keytrService.addBackupGateway(nsec, user.nostrPubkey);
+            setPasskeySuccess(`Backup gateways added (${added.map(a => a.gateway).join(', ')}). You now have redundant passkey recovery.`);
         } catch (err) {
             if (isPrfUnsupportedError(err)) setPasskeyError(NO_PRF);
-            else if (!err.cancelled) setPasskeyError(err.message || 'Failed to add backup gateway.');
+            else if (!isUserCancellation(err)) setPasskeyError(err.message || 'Failed to add backup gateway.');
         } finally {
             setSavingBackup(false);
         }
     }, [getNsecForPasskey, user?.nostrPubkey]);
 
-    const handleRemovePasskey = useCallback(() => {
+    // Two clicks: the first arms the button, the second retracts the backup.
+    const handleRemovePasskey = useCallback(async () => {
         setPasskeyError('');
         setPasskeySuccess('');
+        if (!confirmRemove) { setConfirmRemove(true); return; }
+        setConfirmRemove(false);
         setRemovingPasskey(true);
         try {
-            keytrService.removeCredential(user.nostrPubkey);
+            await keytrService.removePasskey(user.nostrPubkey);
             setHasPasskey(false);
-            setPasskeySuccess('Passkey credential removed from this device.');
+            setPasskeySuccess('Passkey backup removed: a deletion request was sent to the relays. Also delete the "BIES Account" passkey from your device or password manager.');
         } catch (err) {
-            setPasskeyError(err.message || 'Failed to remove passkey.');
+            if (!isUserCancellation(err)) setPasskeyError(err.message || 'Failed to remove passkey.');
         } finally {
             setRemovingPasskey(false);
         }
-    }, [user?.nostrPubkey]);
+    }, [confirmRemove, user?.nostrPubkey]);
 
     const keyHeldElsewhere = {
         extension: 'Your secret key lives in your Nostr browser extension. Check your extension settings to export it.',
@@ -233,8 +241,8 @@ const NostrKeys = () => {
                         signers (extension/bunker/amber) and email accounts (hosted). */}
                     {PASSKEY_ENABLED && !isNativePlatform() && !keyHeldElsewhere && loginMethod !== 'hosted' && (
                         <SettingsGroup
-                            title="Passkey quick login"
-                            footer="Your key is encrypted with your passkey and stored on Nostr relays via keytr.org. You can recover it from any device using the same passkey."
+                            title="Passkey quick login (optional)"
+                            footer="Your key is encrypted with your passkey (NIP-K1) and the encrypted copy is stored on Nostr relays. Saving a new passkey needs a device or browser with passkey PRF support; most password-manager extensions don't have it. Always keep your nsec or seed phrase backup too."
                         >
                             <div className="set-pad">
                                 {!passkeySupported ? (
@@ -254,7 +262,7 @@ const NostrKeys = () => {
                                                 <Fingerprint size={14} style={{ marginRight: '0.4rem' }} /> {savingBackup ? 'Saving...' : 'Add Backup Gateway'}
                                             </button>
                                             <button onClick={handleRemovePasskey} disabled={removingPasskey} className="btn btn-outline btn-sm btn-danger-outline">
-                                                Remove Passkey
+                                                {removingPasskey ? 'Removing...' : confirmRemove ? 'Confirm: remove passkey backup' : 'Remove Passkey'}
                                             </button>
                                         </div>
                                     </>

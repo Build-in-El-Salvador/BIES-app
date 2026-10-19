@@ -95,12 +95,12 @@ Private keys never touch the server. BIES offers multiple client-side key manage
 
 | Method | How It Works | Best For |
 |--------|-------------|----------|
-| **Passkeys** (keytr) | PRF or KiH encryption via WebAuthn, keys stored as kind:31777 events on public relays | Daily login, cross-device |
 | **NIP-49 keyfiles** | scrypt + XChaCha20-Poly1305 encrypted `.nostrkey` files | Offline backup, portability |
 | **Browser extensions** | NIP-46 delegation to Alby, nos2x, etc. | Power users with existing setups |
 | **Seed phrases** | BIP-39 (NIP-06) mnemonic recovery | Emergency recovery |
+| **Passkeys** (keytr, optional) | PRF encryption via WebAuthn (legacy KiH decrypt-only), keys stored as kind:31777 events on public relays. Opt-in from Settings; needs PRF support | Quick login on supported devices |
 
-See [docs/passkey-implementation.md](docs/passkey-implementation.md), [docs/keytr-implementation.md](docs/keytr-implementation.md), and [docs/nostrkey-download.md](docs/nostrkey-download.md) for technical details.
+See [docs/keytr-implementation.md](docs/keytr-implementation.md) and [docs/nostrkey-download.md](docs/nostrkey-download.md) for technical details.
 
 ## Architecture
 
@@ -204,8 +204,7 @@ BIES/
 | [Nostr Integration](docs/nostr-integration.md) | Protocol usage, relay strategy, event kinds |
 | [Development Guide](docs/development.md) | Local setup, scripts, testing, project layout |
 | [Deployment Guide](docs/deployment.md) | Docker, Nginx, environment variables, production |
-| [Passkey Implementation](docs/passkey-implementation.md) | WebAuthn PRF encryption, storage, session lifecycle |
-| [Keytr Implementation](docs/keytr-implementation.md) | NIP-K1 library integration, PRF/KiH modes |
+| [Keytr Implementation](docs/keytr-implementation.md) | NIP-K1 passkeys: PRF registration, legacy KiH migration, session lifecycle |
 | [NIP-49 Keyfiles](docs/nostrkey-download.md) | Encrypted `.nostrkey` file format and flows |
 | [Coinos Wallet](docs/coinos-wallet-integration.md) | Custodial Lightning wallet integration |
 
