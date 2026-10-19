@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
-import { isNativePlatform } from '../utils/platform';
 import heroImage from '../assets/el-salvador-banner.png';
 import logo from '../assets/logo-icon.svg';
 
@@ -73,7 +72,7 @@ const Home = () => {
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
         { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },
         // Michael's idea: investments, businesses for sale, jobs, partnerships and programs.
-        { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects', desc: isNativePlatform() ? 'home.cards.opportunities.descApp' : undefined },
+        { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
     ].filter((card) => !card.flag || flags?.[card.flag]);
 
     return (

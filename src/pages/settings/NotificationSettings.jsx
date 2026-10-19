@@ -114,9 +114,8 @@ const NotificationSettings = () => {
         flags.messages && { key: 'notifyMessages', Icon: Mail, label: t('notificationSettings.messages') },
         flags.zaps && { key: 'notifyZaps', Icon: Zap, label: t('notificationSettings.zaps') },
         flags.events && { key: 'notifyEvents', Icon: CalendarDays, label: t('notificationSettings.events'), desc: t('notificationSettings.eventsDesc') },
-        // Opportunities: pitch deck requests and answers, which are for investments, so
-        // not in the phone app, which leaves investments out (config/appScope.js).
-        flags.projects && !native && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
+        // Opportunities: pitch deck requests and answers, on projects.
+        flags.projects && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
     ].filter(Boolean);
 
     const thisDevice = t(native ? 'notificationSettings.thisPhone' : 'notificationSettings.thisBrowser');
