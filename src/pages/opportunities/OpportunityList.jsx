@@ -157,7 +157,7 @@ const OpportunityList = () => {
     const emptyText = query ? t('opportunities.noResultsSearch', { query })
         : mineOnly && !type && !activeFilterCount ? t('opportunities.noneYours')
             : savedOnly && !type && !activeFilterCount ? t('opportunities.noneSaved')
-                : filtering ? t('opportunities.noMatches') : t(NATIVE ? 'opportunities.emptyApp' : 'opportunities.empty');
+                : filtering ? t('opportunities.noMatches') : t('opportunities.empty');
     const offerToPost = !filtering || (mineOnly && !activeFilterCount && !query);
 
     const chip = (active, onClick, label, key, extra = {}) => (
@@ -172,7 +172,7 @@ const OpportunityList = () => {
             <h1 className="page-header" style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
                 {t('pageTitles.opportunities')}
             </h1>
-            <p className="opp-intro">{t(NATIVE ? 'opportunities.introApp' : 'opportunities.intro')}</p>
+            <p className="opp-intro">{t('opportunities.intro')}</p>
 
             <div className="opp-content">
                 {/* Search row */}

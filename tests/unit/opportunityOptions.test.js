@@ -48,6 +48,8 @@ test('every type and kind has its words, in English and Spanish', () => {
             assert.ok(words.types[type] && words.typesPlural[type] && words.typeHints[type], `${lang} ${type}`);
             assert.ok(words.form.createTitles[type] && words.form.titlePlaceholder[type] && words.form.descriptionPlaceholder[type], `${lang} form ${type}`);
             for (const kind of OPPORTUNITY_KINDS[type]) assert.ok(words.kinds[type][kind], `${lang} ${type}.${kind}`);
+            // A project's card says who it's looking for.
+            if (type === 'investment') for (const kind of OPPORTUNITY_KINDS[type]) if (kind !== 'other') assert.ok(words.card.lookingFor[kind], `${lang} card.lookingFor.${kind}`);
             if (OPPORTUNITY_KINDS[type].length) assert.ok(words.filters.kind[type] && words.form.kindLabel[type], `${lang} kind label ${type}`);
             if (hasField(type, 'btcAccepted')) assert.ok(words.form.btcLabel[type] && words.filters.btc[type], `${lang} btc ${type}`);
             if (hasField(type, 'remote')) assert.ok(words.form.remoteLabel[type], `${lang} remote ${type}`);
@@ -58,8 +60,9 @@ test('every type and kind has its words, in English and Spanish', () => {
     }
 });
 
-test("each type's money: a raise, a price, the most a program gives", () => {
-    assert.deepEqual(amountOf({ type: 'investment', fundingGoal: 250000 }), { field: 'fundingGoal', value: 250000 });
+test("each type's money: a price, the most a program gives", () => {
+    // A project has no amounts, even an older one with a raise.
+    assert.equal(amountOf({ type: 'investment', fundingGoal: 250000 }), null);
     assert.deepEqual(amountOf({ type: 'business-for-sale' }), { field: 'price', value: null });
     assert.deepEqual(amountOf({ type: 'program', price: 10000 }), { field: 'price', value: 10000 });
     assert.equal(amountOf({ type: 'job', price: 5 }), null);
@@ -133,7 +136,10 @@ test("a card's lines: its type and kind, then what matters for its type", () => 
     const t = (key, vars) => (vars ? `${key}(${Object.values(vars).join(',')})` : key);
     assert.equal(typeLine({ type: 'job', kind: 'full-time' }, t), 'opportunities.types.job · opportunities.kinds.job.full-time');
     assert.equal(typeLine({ type: 'business-for-sale', kind: 'grant' }, t), 'opportunities.types.business-for-sale');
-    assert.equal(summaryOf({ type: 'investment', fundingGoal: 250000, stage: 'MVP' }, t), 'opportunities.card.raising($250K) · opportunities.stages.MVP');
+    assert.equal(summaryOf({ type: 'investment', kind: 'investors', stage: 'MVP' }, t), 'opportunities.card.lookingFor.investors · opportunities.stages.MVP');
+    // An older project: its raise and deal aren't shown.
+    assert.equal(summaryOf({ type: 'investment', kind: 'equity', fundingGoal: 250000, stage: 'MVP' }, t), 'opportunities.stages.MVP');
+    assert.equal(summaryOf({ type: 'investment', kind: 'other', stage: 'IDEA' }, t), 'opportunities.stages.IDEA');
     assert.equal(summaryOf({ type: 'business-for-sale', category: 'TOURISM' }, t), 'opportunities.card.priceOnRequest · opportunities.industries.TOURISM');
     assert.equal(summaryOf({ type: 'job', kind: 'part-time', pay: '$900 a month', category: 'FOOD' }, t), 'opportunities.kinds.job.part-time · $900 a month');
     assert.equal(summaryOf({ type: 'partnership', kind: 'co-founder', category: 'TECHNOLOGY' }, t), 'opportunities.kinds.partnership.co-founder · opportunities.industries.TECHNOLOGY');
@@ -142,12 +148,11 @@ test("a card's lines: its type and kind, then what matters for its type", () => 
     assert.equal(summaryOf({ type: 'program', kind: 'full-time' }, t), '');
 });
 
-test('the phone app leaves investments out; the website shows every type', () => {
+test('the phone app and the website show every type, projects too', () => {
     assert.deepEqual(typesShown(false), OPPORTUNITY_TYPES);
-    assert.deepEqual(typesShown(true), ['business-for-sale', 'job', 'partnership', 'program']);
+    assert.deepEqual(typesShown(true), OPPORTUNITY_TYPES);
     assert.equal(isTypeShown('job', true), true);
-    assert.equal(isTypeShown('investment', true), false);
-    // An older project, with no type, is an investment.
-    assert.equal(isTypeShown(undefined, true), false);
-    assert.equal(isTypeShown(undefined, false), true);
+    assert.equal(isTypeShown('investment', true), true);
+    // An older project, with no type, is a project.
+    assert.equal(isTypeShown(undefined, true), true);
 });
