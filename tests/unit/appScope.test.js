@@ -29,3 +29,8 @@ test('the app turns off everything outside its scope', () => {
 test('in the app, a feature switched off stays off', () => {
     assert.equal(scopeFlags({ ...DEFAULT_FLAGS, directories: false }, true).directories, false);
 });
+
+test('Opportunities is in the app, and follows its switch there', () => {
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, projects: true }, true).projects, true);
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, projects: false }, true).projects, false);
+});

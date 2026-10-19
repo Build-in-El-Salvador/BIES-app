@@ -9,9 +9,14 @@ import BackButton from '../../components/BackButton';
 import { getAssetUrl } from '../../utils/assets';
 import TypeBadge, { TYPE_STYLE, styleOf } from '../../components/opportunities/TypeBadge';
 import {
-    OPPORTUNITY_TYPES, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
+    typesShown, isTypeShown, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
     asWebLink, elSalvadorToday, fullDollars, hasField, industryOf, isOpen, parseDollars, plainText,
 } from '../../components/opportunities/opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
+
+// The phone app leaves some types out (config/appScope.js).
+const NATIVE = isNativePlatform();
+const TYPES = typesShown(NATIVE);
 
 const emptyForm = {
     title: '',
@@ -63,7 +68,7 @@ const OpportunityForm = ({ editMode = false }) => {
     const [params] = useSearchParams();
     const location = useLocation();
 
-    const [type, setType] = useState(() => (OPPORTUNITY_TYPES.includes(params.get('type')) ? params.get('type') : ''));
+    const [type, setType] = useState(() => (TYPES.includes(params.get('type')) ? params.get('type') : ''));
     const [form, setForm] = useState(emptyForm);
     const [photos, setPhotos] = useState([]);
     const [hasDeck, setHasDeck] = useState(false);
@@ -100,7 +105,11 @@ const OpportunityForm = ({ editMode = false }) => {
                         setLoadError(t('opportunities.form.notYours'));
                         return;
                     }
-                    setType(OPPORTUNITY_TYPES.includes(o.type) ? o.type : 'investment');
+                    if (!isTypeShown(o.type, NATIVE)) {
+                        setLoadError(t('opportunities.notFound'));
+                        return;
+                    }
+                    setType(TYPES.includes(o.type) ? o.type : 'investment');
                     setForm({
                         title: o.title || '',
                         kind: o.kind || '',
@@ -363,7 +372,7 @@ const OpportunityForm = ({ editMode = false }) => {
                             <p className="of-subtitle">{t('opportunities.form.chooseType')}</p>
                         </div>
                         <div className="of-types">
-                            {OPPORTUNITY_TYPES.map((ty) => {
+                            {TYPES.map((ty) => {
                                 const { Icon, color, tint } = TYPE_STYLE[ty];
                                 return (
                                     <button key={ty} type="button" className="of-type" onClick={() => chooseType(ty)}>
@@ -643,7 +652,7 @@ const OpportunityForm = ({ editMode = false }) => {
                         <div className="of-delete">
                             {confirmDelete ? (
                                 <div className="of-delete-confirm" role="alert" ref={deleteRef}>
-                                    <p>{t('opportunities.form.deleteConfirm')}</p>
+                                    <p>{t(type === 'investment' ? 'opportunities.form.deleteConfirm' : 'opportunities.form.deleteConfirmNoDeck')}</p>
                                     <div className="of-delete-buttons">
                                         <button type="button" className="btn btn-outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
                                             {t('common.cancel')}

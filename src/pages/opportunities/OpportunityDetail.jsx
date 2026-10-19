@@ -18,7 +18,8 @@ import { useModerationDialogs } from '../../components/moderation/useModerationD
 import BackButton from '../../components/BackButton';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
-import { daysLeft, formatDay, fullDollars, industryOf, isOpen, plainText } from '../../components/opportunities/opportunityOptions';
+import { daysLeft, formatDay, fullDollars, industryOf, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
 import '../../components/moderation/Moderation.css';
 
 const sectionTitleStyle = {
@@ -59,6 +60,8 @@ const OpportunityDetail = () => {
         setError(null);
         try {
             const result = await projectsApi.get(id);
+            // A type the phone app leaves out (an investment): not found here.
+            if (!isTypeShown(result?.type, isNativePlatform())) throw new Error('Not found');
             setOpportunity(result);
             setSaved(!!result?.saved);
             setBlockedMember(false);

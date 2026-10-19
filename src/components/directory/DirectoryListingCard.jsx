@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Phone, ChevronRight, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { MapPin, Phone, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getAssetUrl } from '../../utils/assets';
 import CertifiedBadge from './CertifiedBadge';
@@ -8,7 +8,7 @@ import CertifiedBadge from './CertifiedBadge';
 /**
  * Directory listing card (list row) per the mockup:
  * rounded photo left, bold name, produce/skills summary in primary blue,
- * MapPin + Phone rows in gray, chevron at the right edge.
+ * MapPin + Phone rows in gray. The whole card is the link (no arrow).
  * Then the vouch and downvote counts (the Trust Score is their difference), the BIES Trusted pill,
  * BTC and pricing.
  *
@@ -94,14 +94,12 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                         </div>
                     )}
                 </div>
-
-                <ChevronRight size={20} className="dir-card-chevron" />
             </div>
 
             <style jsx>{`
                 .dir-card {
                     display: flex;
-                    align-items: center;
+                    align-items: flex-start;
                     gap: 1rem;
                     padding: 1rem;
                     background: var(--color-surface);
@@ -174,10 +172,6 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
-                }
-                .dir-card-chevron {
-                    color: var(--color-gray-400);
-                    flex-shrink: 0;
                 }
                 .dir-card-pills {
                     display: flex;

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
+import { isNativePlatform } from '../utils/platform';
 import heroImage from '../assets/el-salvador-banner.png';
 import logo from '../assets/logo-icon.svg';
 
@@ -59,9 +60,8 @@ const OpportunityIcon = () => (
 /**
  * The app's home page, from Michael's mockup: the BIES logo over a view of
  * El Salvador, "Explore the Ecosystem", and a card for each part of BIES.
- * A card shows only when its page is on (in the store app, Opportunities
- * waits until it's in the app: an empty or "coming soon" card gets an app
- * rejected).
+ * A card shows only when its page is on. In the phone app, Opportunities says
+ * what it has there: no investments (config/appScope.js).
  */
 const Home = () => {
     const { t } = useTranslation();
@@ -73,7 +73,7 @@ const Home = () => {
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
         { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },
         // Michael's idea: investments, businesses for sale, jobs, partnerships and programs.
-        { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
+        { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects', desc: isNativePlatform() ? 'home.cards.opportunities.descApp' : undefined },
     ].filter((card) => !card.flag || flags?.[card.flag]);
 
     return (
@@ -85,12 +85,12 @@ const Home = () => {
             </section>
 
             <nav className="home-cards" aria-label={t('home.title')}>
-                {cards.map(({ key, to, Icon, tint }) => (
+                {cards.map(({ key, to, Icon, tint, desc }) => (
                     <Link key={key} to={to} className="home-card">
                         <span className="home-card-icon" style={{ background: tint }}><Icon /></span>
                         <span className="home-card-text">
                             <span className="home-card-title">{t(`home.cards.${key}.title`)}</span>
-                            <span className="home-card-desc">{t(`home.cards.${key}.desc`)}</span>
+                            <span className="home-card-desc">{t(desc || `home.cards.${key}.desc`)}</span>
                         </span>
                         <span className="home-card-go" aria-hidden="true"><ChevronRight size={20} strokeWidth={2.75} /></span>
                     </Link>

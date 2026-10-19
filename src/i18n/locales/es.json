@@ -1801,7 +1801,7 @@
       "toGo_other": "Faltan {{count}} recomendaciones para Confianza BIES",
       "trusted": "Los miembros recomiendan este negocio.",
       "trusted_farm": "Los miembros recomiendan esta finca.",
-      "how": "El puntaje de confianza son las recomendaciones de los miembros menos sus votos en contra. Con {{threshold}}, un listado obtiene Confianza BIES."
+      "how": "El puntaje de confianza es el porcentaje de reseñas de miembros que lo recomiendan. Un listado obtiene Confianza BIES cuando sus recomendaciones superan a sus votos en contra por {{threshold}}."
     },
     "review": {
       "vouch": "Recomendar",
@@ -2057,6 +2057,7 @@
   },
   "opportunities": {
     "intro": "Inversiones, negocios en venta, empleos, alianzas, y fondos y programas, publicados por miembros de BIES.",
+    "introApp": "Negocios en venta, empleos, alianzas, y fondos y programas, publicados por miembros de BIES.",
     "search": "Buscar oportunidades",
     "add": "Publicar una oportunidad",
     "yours": "Suyas",
@@ -2182,6 +2183,7 @@
       "clear": "Quitar filtros"
     },
     "empty": "Todavía no hay oportunidades. Publique la primera: una inversión, un negocio en venta, un empleo, una alianza o un programa.",
+    "emptyApp": "Todavía no hay oportunidades. Publique la primera: un negocio en venta, un empleo, una alianza o un programa.",
     "noneYours": "Usted no ha publicado ninguna oportunidad todavía.",
     "noneSaved": "Las oportunidades que guarde aparecen aquí. Toque Guardar en una para conservarla.",
     "noMatches": "Ninguna oportunidad coincide con estos filtros.",
@@ -2373,6 +2375,7 @@
       "seeYours": "Ver las suyas",
       "delete": "Eliminar esta oportunidad",
       "deleteConfirm": "¿Eliminar esta oportunidad para siempre? Sus fotos y su presentación se van con ella.",
+      "deleteConfirmNoDeck": "¿Eliminar esta oportunidad para siempre? Sus fotos se van con ella.",
       "deleteYes": "Eliminar",
       "tooLong": "Use como máximo {{max}} caracteres.",
       "closesOnPassed": "Ese día ya pasó. Elija hoy o un día posterior.",
@@ -2455,7 +2458,7 @@
     "discover": "Descubrir",
     "members": "Miembros",
     "farms": "Fincas",
-    "trusted": "Directorio",
+    "trusted": "Negocios",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",
@@ -3028,7 +3031,8 @@
       },
       "opportunities": {
         "title": "Oportunidades",
-        "desc": "Inversiones, negocios en venta, empleos, alianzas y más."
+        "desc": "Inversiones, negocios en venta, empleos, alianzas y más.",
+        "descApp": "Negocios en venta, empleos, alianzas y más."
       },
       "talent": {
         "title": "Talentos BIES",

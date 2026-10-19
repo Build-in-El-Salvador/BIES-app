@@ -68,9 +68,13 @@ export const NAV_PAGES = [
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));
 
-// Profile is in the side menu, not the default bar (Oct 2026); members can
-// add it to theirs.
-export const DEFAULT_BOTTOM_NAV = ['home', 'feed', 'members', 'farms', 'trusted'];
+// A new member's bar (Mike, 2026-10-19); members change theirs in Settings.
+// Profile is in the side menu, not the default bar; members can add it.
+export const DEFAULT_BOTTOM_NAV = ['home', 'trusted', 'farms', 'opportunities', 'feed'];
+
+// What fills a slot a switched-off page leaves (Opportunities, before its
+// switch is on): the default bar's pages, then these.
+const SPARE_TABS = [...DEFAULT_BOTTOM_NAV, 'members', 'talent'];
 
 // Bars saved before Home: the old default becomes the new one. A bar saved
 // since ends with SAVED_MARK (savedTabs), so a member who picks those same
@@ -120,13 +124,13 @@ export function savedTabs(ids) {
 /**
  * The tabs the bar shows: the member's tabs whose feature is on, with any
  * slots that switched-off features leave empty refilled from the default
- * bar (so a bar never shrinks to one tab because features are off in this
- * copy of the app). Pure: `isOn(page)` says whether a page's feature is on.
+ * bar, then Members and Talents (so a bar never shrinks to one tab because
+ * features are off in this copy of the app). Pure: `isOn(page)` says whether a page's feature is on.
  */
 export function visibleTabs(ids, isOn) {
   const pages = ids.map((id) => NAV_PAGES_BY_ID[id]).filter(Boolean);
   const shown = pages.filter(isOn);
-  const spare = DEFAULT_BOTTOM_NAV
+  const spare = SPARE_TABS
     .map((id) => NAV_PAGES_BY_ID[id])
     .filter((p) => p && isOn(p) && !shown.includes(p));
   return [...shown, ...spare.slice(0, pages.length - shown.length)];
