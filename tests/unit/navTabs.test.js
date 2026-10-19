@@ -12,8 +12,8 @@ const ids = (pages) => pages.map((p) => p.id);
 const allOn = () => true;
 const offFlags = (...flags) => (p) => !p.flag || !flags.includes(p.flag);
 
-test('the default bar is Home, Feed, Members, Farms, Businesses', () => {
-    assert.deepEqual(DEFAULT_BOTTOM_NAV, ['home', 'feed', 'members', 'farms', 'trusted']);
+test('the default bar is Home, Businesses, Farms, Opportunities, Feed', () => {
+    assert.deepEqual(DEFAULT_BOTTOM_NAV, ['home', 'trusted', 'farms', 'opportunities', 'feed']);
     assert.deepEqual(ids(visibleTabs(DEFAULT_BOTTOM_NAV, allOn)), DEFAULT_BOTTOM_NAV);
     assert.deepEqual(sanitizeTabs(undefined), DEFAULT_BOTTOM_NAV);
 });
@@ -27,7 +27,11 @@ test('switched-off pages give their slots to the default bar', () => {
     // The old default bar (its Discover is Opportunities now), in the store app (projects, events, media, dashboard off)
     const bar = sanitizeTabs(['feed', 'discover', 'events', 'media', 'dashboard']);
     const shown = ids(visibleTabs(bar, offFlags('projects', 'events', 'media', 'dashboard')));
-    assert.deepEqual(shown, ['feed', 'home', 'members', 'farms', 'trusted']);
+    assert.deepEqual(shown, ['feed', 'home', 'trusted', 'farms', 'members']);
+});
+
+test('with Opportunities switched off, the default bar shows Members in its place', () => {
+    assert.deepEqual(ids(visibleTabs(DEFAULT_BOTTOM_NAV, offFlags('projects'))), ['home', 'trusted', 'farms', 'feed', 'members']);
 });
 
 test('a deliberately short bar is not padded', () => {

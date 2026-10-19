@@ -23,8 +23,18 @@ export function reviewState(listing, user) {
 }
 
 /**
- * The BIES Trust Score of a listing: vouches minus downvotes, how far it is
- * from BIES Trusted, and how the score works. `onRecommend(vote)` adds the
+ * A listing's Trust Score: the share of its reviews that vouch, rounded down
+ * (so 100% means nobody downvoted it), or null before anyone has reviewed it.
+ */
+export function trustPercent(vouches, downvotes) {
+    const votes = vouches + downvotes;
+    return votes > 0 ? Math.floor((vouches / votes) * 100) : null;
+}
+
+/**
+ * The BIES Trust Score of a listing: the share of reviews that vouch, the
+ * vouches and downvotes, how far it is from BIES Trusted (still vouches minus
+ * downvotes, the server's reputationScore), and how the score works. `onRecommend(vote)` adds the
  * Vouch / Don't recommend buttons, right where members look at the score
  * (as Google Maps and Yelp put "Write a review" by the rating).
  */
@@ -35,11 +45,12 @@ export function TrustPanel({ listing, onRecommend }) {
     const vouches = listing.vouchCount ?? 0;
     const downvotes = listing.downvoteCount ?? 0;
     const progress = Math.max(0, Math.min(1, score / threshold));
+    const percent = trustPercent(vouches, downvotes);
 
     return (
         <section className="dir-trust" aria-label={t('directory.reputation')}>
             <div className="dir-trust-top">
-                <div className={`dir-trust-score${score < 0 ? ' negative' : ''}`}>{score > 0 ? `+${score}` : score}</div>
+                <div className={`dir-trust-score${percent !== null && percent < 50 ? ' negative' : ''}`}>{percent === null ? '–' : `${percent}%`}</div>
                 <div className="dir-trust-text">
                     <div className="dir-trust-title">{t('directory.reputation')}</div>
                     <div className="dir-trust-counts">
@@ -130,7 +141,7 @@ export function TrustPanel({ listing, onRecommend }) {
                     justify-content: center;
                     background: var(--color-blue-tint);
                     color: var(--color-primary);
-                    font-size: 1.45rem;
+                    font-size: 1.3rem;
                     font-weight: 800;
                     flex-shrink: 0;
                 }
@@ -482,7 +493,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                     display: flex;
                     align-items: flex-start;
                     gap: 0.75rem;
-                    padding: 0.9rem 0;
+                    padding: 0.9rem 0 0.3rem; /* little space under each one, as in the feed */
                 }
                 .dir-review + .dir-review { border-top: 1px solid var(--color-gray-200); }
                 .dir-review-avatar {

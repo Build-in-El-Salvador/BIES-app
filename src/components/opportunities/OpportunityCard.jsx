@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, ChevronRight, Clock } from 'lucide-react';
+import { MapPin, Clock } from 'lucide-react';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { daysLeft, isOpen, summaryOf } from './opportunityOptions';
@@ -59,8 +59,6 @@ const OpportunityCard = ({ opportunity }) => {
                         </div>
                     )}
                 </div>
-
-                <ChevronRight size={20} className="opp-card-chevron" />
             </div>
 
             <style jsx>{`
@@ -149,11 +147,6 @@ const OpportunityCard = ({ opportunity }) => {
                 .opp-card-meta.over {
                     color: var(--color-gray-600);
                     font-weight: 600;
-                }
-                .opp-card :global(.opp-card-chevron) {
-                    color: var(--color-gray-400);
-                    flex-shrink: 0;
-                    align-self: center;
                 }
             `}</style>
         </Link>

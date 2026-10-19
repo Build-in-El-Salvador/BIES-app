@@ -1800,7 +1800,7 @@
       "toGo_other": "{{count}} more vouches to become BIES Trusted",
       "trusted": "Members vouch for this business.",
       "trusted_farm": "Members vouch for this farm.",
-      "how": "The Trust Score is members' vouches minus their downvotes. At {{threshold}}, a listing becomes BIES Trusted."
+      "how": "The Trust Score is the share of members' reviews that vouch. A listing becomes BIES Trusted once its vouches outnumber its downvotes by {{threshold}}."
     },
     "review": {
       "vouch": "Vouch",
@@ -2457,7 +2457,7 @@
     "discover": "Discover",
     "members": "Members",
     "farms": "Farms",
-    "trusted": "Directory",
+    "trusted": "Businesses",
     "events": "Events",
     "news": "News",
     "dashboard": "Dashboard",

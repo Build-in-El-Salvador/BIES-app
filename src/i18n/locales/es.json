@@ -1801,7 +1801,7 @@
       "toGo_other": "Faltan {{count}} recomendaciones para Confianza BIES",
       "trusted": "Los miembros recomiendan este negocio.",
       "trusted_farm": "Los miembros recomiendan esta finca.",
-      "how": "El puntaje de confianza son las recomendaciones de los miembros menos sus votos en contra. Con {{threshold}}, un listado obtiene Confianza BIES."
+      "how": "El puntaje de confianza es el porcentaje de reseñas de miembros que lo recomiendan. Un listado obtiene Confianza BIES cuando sus recomendaciones superan a sus votos en contra por {{threshold}}."
     },
     "review": {
       "vouch": "Recomendar",
@@ -2458,7 +2458,7 @@
     "discover": "Descubrir",
     "members": "Miembros",
     "farms": "Fincas",
-    "trusted": "Directorio",
+    "trusted": "Negocios",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",
