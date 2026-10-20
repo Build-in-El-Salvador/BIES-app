@@ -9,7 +9,8 @@
  *   - createConnectSession() + connectViaURI(): client-initiated — we render
  *     a nostrconnect:// URI as QR/deep link, the signer scans/opens it.
  *
- * The ephemeral client keypair and bunker pointer are stored in localStorage
+ * The ephemeral client keypair and bunker pointer are stored through
+ * secureStore.js (the Keychain in the phone app; localStorage in a browser)
  * so the connection survives tab close and browser restarts. The client key
  * is an app-specific transport key, NOT the user's nsec — the nsec never
  * leaves the signer app.
@@ -17,6 +18,7 @@
 
 import { generateSecretKey, getPublicKey } from 'nostr-tools';
 import { parseBunkerInput, BunkerSigner, createNostrConnectURI } from 'nostr-tools/nip46';
+import { secureGet, secureRemove, secureSet } from './secureStore.js';
 
 const CLIENT_SK_KEY = 'bies_nip46_client_sk';
 const BUNKER_POINTER_KEY = 'bies_nip46_bunker';
@@ -39,12 +41,14 @@ export const NIP46_RELAYS =
 
 /**
  * Event kinds BIES signs with the user's key — requested as pre-authorized
- * permissions so the signer doesn't prompt for every action.
+ * permissions so the signer doesn't prompt for every action. Not 27235
+ * (HTTP auth): BIES sign-ins and account deletion are asked for each time,
+ * so a stolen client key can't sign them unseen.
  * (1059 gift-wraps and NWC events are signed with throwaway keys, not the
  * user key, so they're absent.)
  */
 export const NIP46_PERMS = [
-    ...[0, 1, 3, 5, 6, 7, 13, 1984, 9734, 10002, 22242, 24242, 27235, 30402, 31777, 31923, 31925]
+    ...[0, 1, 3, 5, 6, 7, 13, 1984, 9734, 10002, 22242, 24242, 30402, 31777, 31923, 31925]
         .map(kind => `sign_event:${kind}`),
     'nip44_encrypt',
     'nip44_decrypt',
@@ -97,9 +101,9 @@ function migrateLegacySession() {
     try {
         const legacySk = sessionStorage.getItem(CLIENT_SK_KEY);
         const legacyBp = sessionStorage.getItem(BUNKER_POINTER_KEY);
-        if (legacySk && legacyBp && !localStorage.getItem(CLIENT_SK_KEY)) {
-            localStorage.setItem(CLIENT_SK_KEY, legacySk);
-            localStorage.setItem(BUNKER_POINTER_KEY, legacyBp);
+        if (legacySk && legacyBp && !secureGet('nip46Sk')) {
+            secureSet('nip46Sk', legacySk);
+            secureSet('nip46Bunker', legacyBp);
         }
         sessionStorage.removeItem(CLIENT_SK_KEY);
         sessionStorage.removeItem(BUNKER_POINTER_KEY);
@@ -147,8 +151,8 @@ export const nostrConnectService = {
     },
 
     _persistSession(clientSk, bp) {
-        localStorage.setItem(CLIENT_SK_KEY, skToHex(clientSk));
-        localStorage.setItem(BUNKER_POINTER_KEY, JSON.stringify(bp));
+        secureSet('nip46Sk', skToHex(clientSk));
+        secureSet('nip46Bunker', JSON.stringify(bp));
     },
 
     /**
@@ -258,8 +262,8 @@ export const nostrConnectService = {
 
     async _doReconnect() {
         const generation = this._generation;
-        const skHex = localStorage.getItem(CLIENT_SK_KEY);
-        const bpJson = localStorage.getItem(BUNKER_POINTER_KEY);
+        const skHex = secureGet('nip46Sk');
+        const bpJson = secureGet('nip46Bunker');
         if (!skHex || !bpJson) return null;
 
         let signer;
@@ -319,7 +323,7 @@ export const nostrConnectService = {
 
     /** Whether session data exists for reconnection. */
     hasStoredConnection() {
-        return !!(localStorage.getItem(CLIENT_SK_KEY) && localStorage.getItem(BUNKER_POINTER_KEY));
+        return !!(secureGet('nip46Sk') && secureGet('nip46Bunker'));
     },
 
     /** Disconnect and clean up. Closes only the NIP-46 subscription — the
@@ -334,7 +338,7 @@ export const nostrConnectService = {
     },
 
     clearSession() {
-        localStorage.removeItem(CLIENT_SK_KEY);
-        localStorage.removeItem(BUNKER_POINTER_KEY);
+        secureRemove('nip46Sk');
+        secureRemove('nip46Bunker');
     },
 };

@@ -43,9 +43,31 @@ const LOOKALIKES: Record<string, string> = {
 
 // Formatting tags inside a word (<b>ni</b>gger) go without a trace; other tags
 // separate words. Invisible characters (zero-width spaces, soft hyphens) go.
-const INLINE_TAGS = /<\/?(?:a|b|i|u|s|em|strong|span|mark|small|sub|sup|font|code)\b[^>]*>/gi;
-const OTHER_TAGS = /<[^>]*>/g;
+const INLINE_TAG = /^<\/?(?:a|b|i|u|s|em|strong|span|mark|small|sub|sup|font|code)\b/i;
 const INVISIBLE = /\p{Cf}/gu;
+
+// Text past this is not screened: every field it's used on is shorter.
+const MAX_SCREENED = 100_000;
+
+/**
+ * Tags out, in one pass: a tag is from a "<" to the next ">", and a "<" with
+ * no ">" after it is text. Done by hand rather than with a regular
+ * expression, which takes time growing with the square of the text on many
+ * "<" and no ">".
+ */
+function withoutTags(text: string): string {
+    let out = '';
+    let at = 0;
+    while (at < text.length) {
+        const open = text.indexOf('<', at);
+        if (open === -1) break;
+        const close = text.indexOf('>', open + 1);
+        if (close === -1) break;
+        out += text.slice(at, open) + (INLINE_TAG.test(text.slice(open, Math.min(close, open + 12))) ? '' : ' ');
+        at = close + 1;
+    }
+    return out + text.slice(at);
+}
 
 /**
  * Lower-case words separated by spaces: tags and invisible characters gone,
@@ -53,9 +75,7 @@ const INVISIBLE = /\p{Cf}/gu;
  * in words that have letters ("f4gg0t", but not "$500").
  */
 export function normalize(text: string): string {
-    return text
-        .replace(INLINE_TAGS, '')
-        .replace(OTHER_TAGS, ' ')
+    return withoutTags(text.slice(0, MAX_SCREENED))
         .replace(INVISIBLE, '')
         .normalize('NFKC')
         .toLowerCase()
