@@ -123,6 +123,8 @@ export async function search(req: Request, res: Response): Promise<void> {
             const profiles = await prisma.profile.findMany({
                 where: {
                     isPublic: true,
+                    // Not suspended or deleted members.
+                    user: { isBanned: false, deletedAt: null },
                     OR: [
                         { name: searchTerm },
                         { bio: searchTerm },
@@ -148,21 +150,28 @@ export async function search(req: Request, res: Response): Promise<void> {
             results.profileTotal = profileTotal;
         }
 
-        if (type === 'all' || type === 'events') {
+        // Events only while Events is on, only public ones, and only what an
+        // event's card shows (not its online link, payout address or guests).
+        if ((type === 'all' || type === 'events') && await isEnabled('events')) {
+            const eventWhere = {
+                isPublished: true,
+                visibility: { in: ['PUBLIC', 'LIMITED_SPACES'] },
+                host: { isBanned: false, deletedAt: null },
+                OR: [
+                    { title: searchTerm },
+                    { description: searchTerm },
+                    { location: searchTerm },
+                ],
+            };
             const [events, eventTotal] = await Promise.all([
                 prisma.event.findMany({
-                    where: {
-                        isPublished: true,
-                        OR: [
-                            { title: searchTerm },
-                            { description: searchTerm },
-                            { location: searchTerm },
-                        ],
-                    },
+                    where: eventWhere,
                     take: limit,
                     skip,
                     orderBy: { startDate: 'asc' },
-                    include: {
+                    select: {
+                        id: true, title: true, description: true, category: true, startDate: true, endDate: true,
+                        thumbnail: true, location: true, locationName: true, isOnline: true, tags: true,
                         host: {
                             select: {
                                 id: true,
@@ -171,12 +180,7 @@ export async function search(req: Request, res: Response): Promise<void> {
                         },
                     },
                 }),
-                prisma.event.count({
-                    where: {
-                        isPublished: true,
-                        OR: [{ title: searchTerm }, { description: searchTerm }],
-                    },
-                }),
+                prisma.event.count({ where: eventWhere }),
             ]);
             results.events = events.map((e) => ({
                 ...e,
@@ -215,7 +219,7 @@ export async function getSuggestions(req: Request, res: Response): Promise<void>
                 select: { id: true, title: true, ownerId: true },
             }),
             prisma.profile.findMany({
-                where: { isPublic: true, name: searchTerm },
+                where: { isPublic: true, name: searchTerm, user: { isBanned: false, deletedAt: null } },
                 take: 5,
                 select: { id: true, name: true, userId: true },
             }),

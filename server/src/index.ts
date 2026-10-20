@@ -144,13 +144,6 @@ app.use(cors({
 // ─── Compression (gzip) ───────────────────────────────────────────────────────
 app.use(compression());
 
-// ─── Body parsing ─────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// ─── Input sanitization ───────────────────────────────────────────────────────
-app.use(sanitize);
-
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 // General: 300 req / 15 min per account when signed in, per IP otherwise
 // (utils/rateLimitKey.ts): a room on one Wi-Fi shares an IP.
@@ -196,6 +189,17 @@ app.use('/api/', generalLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/search', searchLimiter);
 app.use('/api/contact', contactLimiter);
+
+// ─── Body parsing ─────────────────────────────────────────────────────────────
+// After the limiters, so a request over its limit is turned away before its
+// body is read. Bodies are small JSON (files go up as multipart, through
+// multer, in upload.routes); compressed bodies aren't taken, so a small
+// request can't unpack into a big one.
+app.use(express.json({ limit: '1mb', inflate: false }));
+app.use(express.urlencoded({ extended: true, limit: '100kb', inflate: false }));
+
+// ─── Input sanitization ───────────────────────────────────────────────────────
+app.use(sanitize);
 
 // ─── NIP-05 identity (must be before other routes) ───────────────────────────
 app.use('/.well-known', nip05Routes);

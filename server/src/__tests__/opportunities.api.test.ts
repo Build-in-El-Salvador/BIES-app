@@ -818,10 +818,10 @@ describe('other ways to an opportunity follow the same rules', () => {
             await setFlags({ projects: true });
         }
 
-        // None from a suspended member (their profile seen after the suspension).
+        // None from a suspended member: their whole page is gone.
         const carl = await member();
         await post(carl, JOB);
         await prisma.user.update({ where: { id: carl.id }, data: { isBanned: true } });
-        expect((await call('GET', `/api/profiles/${carl.id}`, { token: ben.token })).body.user.projects).toEqual([]);
+        expect((await call('GET', `/api/profiles/${carl.id}`, { token: ben.token })).status).toBe(404);
     });
 });

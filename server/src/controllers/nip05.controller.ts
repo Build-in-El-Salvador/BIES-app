@@ -21,8 +21,10 @@ export async function nostrJson(req: Request, res: Response): Promise<void> {
 
         const normalizedName = name.toLowerCase().trim();
 
+        // Not for a suspended or deleted member: other Nostr clients would
+        // still show them as verified by BIES.
         const profile = await prisma.profile.findFirst({
-            where: { nip05Name: normalizedName },
+            where: { nip05Name: normalizedName, user: { isBanned: false, deletedAt: null } },
             include: {
                 user: { select: { nostrPubkey: true } },
             },

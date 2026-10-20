@@ -5,13 +5,14 @@
  * Parses nostr+walletconnect:// URIs, sends pay_invoice requests (kind:23194),
  * and listens for responses (kind:23195).
  *
- * Connection secrets are stored in localStorage only — never sent to the server.
+ * The connection's secret is stored through secureStore.js (the Keychain in
+ * the phone app; localStorage in a browser), never sent to the server.
  */
 
 import { SimplePool, finalizeEvent, getPublicKey } from 'nostr-tools';
 import { encrypt as nip04Encrypt, decrypt as nip04Decrypt } from 'nostr-tools/nip04';
+import { secureGet, secureRemove, secureSet } from './secureStore.js';
 
-const NWC_STORAGE_KEY = 'bies_nwc_uri';
 const NWC_CAPABILITIES_KEY = 'bies_nwc_capabilities';
 const REQUEST_TIMEOUT_MS = 15_000;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -149,7 +150,7 @@ class NwcClient {
             }
 
             this.capabilities = methods;
-            localStorage.setItem(NWC_STORAGE_KEY, uri);
+            secureSet('nwc', uri);
             if (methods) {
                 localStorage.setItem(NWC_CAPABILITIES_KEY, JSON.stringify(methods));
             } else {
@@ -174,7 +175,7 @@ class NwcClient {
     disconnect() {
         this.connection = null;
         this.capabilities = null;
-        localStorage.removeItem(NWC_STORAGE_KEY);
+        secureRemove('nwc');
         localStorage.removeItem(NWC_CAPABILITIES_KEY);
         this._emitChange();
     }
@@ -184,7 +185,7 @@ class NwcClient {
      * @returns {boolean} Whether a connection was restored
      */
     restore() {
-        const uri = localStorage.getItem(NWC_STORAGE_KEY);
+        const uri = secureGet('nwc');
         if (!uri) return false;
         try {
             this.connection = parseNwcUri(uri);
@@ -198,7 +199,7 @@ class NwcClient {
             return true;
         } catch (err) {
             console.warn('[NWC] Failed to restore connection:', err.message);
-            localStorage.removeItem(NWC_STORAGE_KEY);
+            secureRemove('nwc');
             localStorage.removeItem(NWC_CAPABILITIES_KEY);
             return false;
         }

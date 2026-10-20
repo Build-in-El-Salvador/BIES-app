@@ -25,34 +25,50 @@ interface CacheEntry {
 class InMemoryCache {
     private store = new Map<string, CacheEntry>();
     private readonly MAX_SIZE = 10_000;
+    // A budget in characters as well as entries, so a few big answers can't
+    // fill the server's memory; an answer bigger than MAX_VALUE isn't kept.
+    private readonly MAX_CHARS = 50_000_000;
+    private readonly MAX_VALUE = 1_000_000;
+    private chars = 0;
+
+    private drop(key: string): void {
+        const entry = this.store.get(key);
+        if (!entry) return;
+        this.chars -= entry.value.length;
+        this.store.delete(key);
+    }
 
     get(key: string): string | null {
         const entry = this.store.get(key);
         if (!entry) return null;
         if (Date.now() > entry.expiresAt) {
-            this.store.delete(key);
+            this.drop(key);
             return null;
         }
         return entry.value;
     }
 
     set(key: string, value: string, ttlSeconds: number): void {
-        // Evict oldest entries if at capacity
-        if (this.store.size >= this.MAX_SIZE) {
+        this.drop(key);
+        if (value.length > this.MAX_VALUE) return;
+        // Evict the oldest entries while over either limit
+        while (this.store.size > 0 && (this.store.size >= this.MAX_SIZE || this.chars + value.length > this.MAX_CHARS)) {
             const firstKey = this.store.keys().next().value;
-            if (firstKey) this.store.delete(firstKey);
+            if (firstKey === undefined) break;
+            this.drop(firstKey);
         }
         this.store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+        this.chars += value.length;
     }
 
     del(key: string): void {
-        this.store.delete(key);
+        this.drop(key);
     }
 
     /** Delete all keys matching a prefix */
     delPattern(prefix: string): void {
-        for (const key of this.store.keys()) {
-            if (key.startsWith(prefix)) this.store.delete(key);
+        for (const key of [...this.store.keys()]) {
+            if (key.startsWith(prefix)) this.drop(key);
         }
     }
 

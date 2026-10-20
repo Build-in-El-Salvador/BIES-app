@@ -60,7 +60,7 @@ function loadAlbum(id: string) {
         where: { id },
         include: {
             listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true } },
-            user: { select: { id: true, deletedAt: true, profile: { select: { name: true, avatar: true } } } },
+            user: { select: { id: true, deletedAt: true, isBanned: true, profile: { select: { name: true, avatar: true } } } },
         },
     });
 }
@@ -82,7 +82,7 @@ async function canView(req: Request, album: AlbumWithOwner): Promise<boolean> {
     if (album.visibility === 'ONLY_ME') return false;
     // Staff see the rest, to handle reports, even from members who blocked them.
     if (isStaff(req)) return true;
-    if (album.user?.deletedAt) return false;
+    if (album.user?.deletedAt || album.user?.isBanned) return false;
     if (album.listing && album.listing.status !== 'active') return false;
     if (album.visibility === 'MEMBERS' && !req.user) return false;
     const member = albumMember(album);
@@ -129,7 +129,7 @@ export async function listAlbums(req: Request, res: Response): Promise<void> {
             orderBy: { updatedAt: 'desc' },
             include: {
                 listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true } },
-                user: { select: { id: true, deletedAt: true, profile: { select: { name: true, avatar: true } } } },
+                user: { select: { id: true, deletedAt: true, isBanned: true, profile: { select: { name: true, avatar: true } } } },
                 photos: { orderBy: { createdAt: 'asc' }, take: 1, select: { id: true, url: true } },
                 _count: { select: { photos: true } },
             },

@@ -144,7 +144,8 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
             const cached = await cache.getJson<any>(cKey);
             if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
         }
-        const where = { followingId: userId, ...(hidden.length ? { followerId: { notIn: hidden } } : {}) };
+        // Not suspended or deleted members either.
+        const where = { followingId: userId, follower: { isBanned: false, deletedAt: null }, ...(hidden.length ? { followerId: { notIn: hidden } } : {}) };
 
         const [followers, total] = await Promise.all([
             prisma.follow.findMany({
@@ -206,7 +207,8 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
             const cached = await cache.getJson<any>(cKey);
             if (cached) { res.setHeader('X-Cache', 'HIT'); res.json(cached); return; }
         }
-        const where = { followerId: userId, ...(hidden.length ? { followingId: { notIn: hidden } } : {}) };
+        // Not suspended or deleted members either.
+        const where = { followerId: userId, following: { isBanned: false, deletedAt: null }, ...(hidden.length ? { followingId: { notIn: hidden } } : {}) };
 
         const [following, total] = await Promise.all([
             prisma.follow.findMany({

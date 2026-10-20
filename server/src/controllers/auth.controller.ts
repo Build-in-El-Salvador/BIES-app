@@ -30,6 +30,7 @@ import {
 } from '../services/emailCode.service';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { allowNewAccount } from '../services/signupLimit.service';
 
 /**
  * Strip encrypted wallet credentials (the Coinos JWT) from a
@@ -398,6 +399,11 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         const isEnvAdmin = isAdminPubkey(pubkey);
 
         if (!user) {
+            // A new account: a few a day from one address (signupLimit.service.ts).
+            if (!allowNewAccount(req.ip)) {
+                res.status(429).json({ error: 'Too many new accounts from this network today. Try again tomorrow, or sign up with your email.', reason: 'too_many_new_accounts' });
+                return;
+            }
             // Auto-create user for Nostr login (no custodial key needed — they manage their own)
             user = await prisma.user.create({
                 data: {
