@@ -27,5 +27,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 class BIESBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(SavedKeyPlugin())
+        // iOS's rubber-band bounce at the top and bottom of a page, as in other
+        // apps (Capacitor turns it off). Short pages bounce too. Nothing
+        // reloads on a pull: the web view has no pull-to-refresh.
+        webView?.scrollView.bounces = true
+        webView?.scrollView.alwaysBounceVertical = true
     }
 }

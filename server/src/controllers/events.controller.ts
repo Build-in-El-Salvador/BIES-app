@@ -9,6 +9,7 @@ import { cache, cacheKey, TTL } from '../services/redis.service';
 import { publishAnnouncement, publishCalendarEvent, deleteCalendarEvent, publishRSVPEvent, validateCalendarEventData } from '../services/nostr.service';
 import { notifyEventRsvp, createNotification } from '../services/notification.service';
 import { config } from '../config';
+import { removeTags } from '../middleware/sanitize';
 
 // ─── OG helpers ──────────────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ function escapeHtml(str: string): string {
 }
 
 function stripHtml(str: string): string {
-    return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    return removeTags(str).replace(/\s+/g, ' ').trim();
 }
 
 /** First origin from CORS_ORIGIN (may be comma-separated in dev). */
@@ -42,40 +43,40 @@ const webLink = z.string().trim().max(2000)
 
 export const createEventSchema = z.object({
     title: z.string().min(1).max(200),
-    description: z.string().min(1),
+    description: z.string().min(1).max(20_000),
     category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'OTHER']).default('NETWORKING'),
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
-    location: z.string().optional(),
+    location: z.string().max(200).optional(),
     isOnline: z.boolean().default(false),
     onlineUrl: webLink.optional(),
-    startDate: z.string(), // More lenient, parse in controller
-    endDate: z.string().optional(),
-    thumbnail: z.string().optional().or(z.literal('')),
+    startDate: z.string().max(40), // More lenient, parse in controller
+    endDate: z.string().max(40).optional(),
+    thumbnail: z.string().max(2000).optional().or(z.literal('')),
     ticketUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
     priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
     ticketCapacity: z.number().int().positive().optional().nullable(),
     payoutLightningAddress: z.string().max(320).optional(),
-    tags: z.array(z.string()).optional(),
+    tags: z.array(z.string().max(60)).max(30).optional(),
     isOfficial: z.boolean().optional(),
     endorsementRequested: z.boolean().optional(),
-    guestList: z.array(z.object({ name: z.string(), userId: z.string().optional() })).optional(),
-    locationName: z.string().optional(),
-    locationAddress: z.string().optional(),
+    guestList: z.array(z.object({ name: z.string().max(200), userId: z.string().max(64).optional() })).max(500).optional(),
+    locationName: z.string().max(200).optional(),
+    locationAddress: z.string().max(500).optional(),
     locationMapUrl: webLink.optional(),
     customSections: z.array(z.object({
-        title: z.string().default(''),
+        title: z.string().max(200).default(''),
         type: z.enum(['TEXT', 'PHOTO', 'CAROUSEL', 'GRAPH']).default('TEXT'),
         placement: z.enum(['LEFT', 'RIGHT']).default('LEFT'),
-        body: z.string().optional(),
-        content: z.string().optional(),
-        imageUrl: z.string().optional(),
-        images: z.array(z.string()).optional(),
-        graphType: z.string().optional(),
-        xAxisLabel: z.string().optional(),
-        yAxisLabel: z.string().optional(),
-        dataPoints: z.array(z.object({ label: z.string(), value: z.union([z.string(), z.number()]) })).optional(),
-    })).optional(),
+        body: z.string().max(20_000).optional(),
+        content: z.string().max(20_000).optional(),
+        imageUrl: z.string().max(2000).optional(),
+        images: z.array(z.string().max(2000)).max(50).optional(),
+        graphType: z.string().max(40).optional(),
+        xAxisLabel: z.string().max(200).optional(),
+        yAxisLabel: z.string().max(200).optional(),
+        dataPoints: z.array(z.object({ label: z.string().max(200), value: z.union([z.string().max(200), z.number()]) })).max(100).optional(),
+    })).max(20).optional(),
     nostrPublish: z.enum(['none', 'bies', 'public', 'both']).default('bies'),
 });
 

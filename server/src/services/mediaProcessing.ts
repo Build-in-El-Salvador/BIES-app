@@ -36,6 +36,7 @@ export const MAX_SIDE = 1600;
 // Photos are done one at a time and libvips keeps no cache, so a few uploads
 // at once can't take the server past its memory limit.
 export const MAX_INPUT_PIXELS = 50_000_000;
+const MAX_GIF_BYTES = 15 * 1024 * 1024;
 sharp.cache(false);
 
 /** The longest side of a stored video, in pixels: 720p. */
@@ -135,7 +136,11 @@ export async function prepareMedia(input: Buffer, mimeType: string, options: Med
     switch (mimeType) {
         case 'image/gif': {
             if (input.toString('latin1', 0, 4) !== 'GIF8') throw new UnreadableMediaError();
+            // Kept as sent, so it's held to a size: 15 MB, and its frames
+            // together no bigger than a photo may be.
+            if (input.length > MAX_GIF_BYTES) throw new UnreadableMediaError();
             const { width, height, pageHeight } = await readMetadata(input);
+            if (!width || !height || width * height > MAX_INPUT_PIXELS) throw new UnreadableMediaError();
             return { buffer: input, mimeType, width, height: pageHeight ?? height };
         }
         case 'video/mp4':

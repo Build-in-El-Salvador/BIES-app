@@ -12,63 +12,85 @@ import { openNow } from './project.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+// Every field has a size limit: what's saved is filtered and cached, so
+// without one a single save could hold the server (generous for real use).
+const short = z.string().max(200);
+const url = z.string().max(2000);
+const longText = z.string().max(10_000);
+const list = (item: z.ZodTypeAny = short, max = 50) => z.array(item).max(max);
+
 export const updateProfileSchema = z.object({
-    name: z.string().optional(),
-    bio: z.string().optional(),
-    avatar: z.string().optional(),
-    banner: z.string().optional(),
-    location: z.string().optional(),
-    skills: z.array(z.string()).optional(),
-    website: z.string().url().optional().or(z.literal('')),
-    twitter: z.string().optional(),
-    linkedin: z.string().optional(),
-    github: z.string().optional(),
-    company: z.string().optional(),
-    title: z.string().optional(),
-    tags: z.array(z.string()).optional(),
+    name: z.string().max(100).optional(),
+    bio: longText.optional(),
+    avatar: url.optional(),
+    banner: url.optional(),
+    location: short.optional(),
+    skills: list().optional(),
+    website: z.string().max(2000).url().optional().or(z.literal('')),
+    twitter: short.optional(),
+    linkedin: url.optional(),
+    github: short.optional(),
+    company: short.optional(),
+    title: short.optional(),
+    tags: list().optional(),
     // Profile sections
-    experience: z.array(z.object({
-        title: z.string().optional(),
-        company: z.string().optional(),
-        date: z.string().optional(),
-        description: z.string().optional(),
+    experience: list(z.object({
+        title: short.optional(),
+        company: short.optional(),
+        date: short.optional(),
+        description: longText.optional(),
     })).optional(),
-    biesProjects: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        role: z.string().optional(),
-        status: z.string().optional(),
-        image: z.string().optional(),
+    biesProjects: list(z.object({
+        id: short,
+        name: short,
+        role: short.optional(),
+        status: short.optional(),
+        image: url.optional(),
     })).optional(),
-    customSections: z.array(z.object({
-        title: z.string().default(''),
+    customSections: list(z.object({
+        title: short.default(''),
         type: z.enum(['TEXT', 'PHOTO', 'CAROUSEL', 'GRAPH']).default('TEXT'),
         placement: z.enum(['LEFT', 'RIGHT']).default('LEFT'),
-        body: z.string().optional(),
-        content: z.string().optional(),
-        imageUrl: z.string().optional(),
-        images: z.array(z.string()).optional(),
-        graphType: z.string().optional(),
-        xAxisLabel: z.string().optional(),
-        yAxisLabel: z.string().optional(),
-        dataPoints: z.array(z.object({ label: z.string(), value: z.union([z.string(), z.number()]) })).optional(),
-    })).optional(),
+        body: z.string().max(20_000).optional(),
+        content: z.string().max(20_000).optional(),
+        imageUrl: url.optional(),
+        images: list(url).optional(),
+        graphType: short.optional(),
+        xAxisLabel: short.optional(),
+        yAxisLabel: short.optional(),
+        dataPoints: list(z.object({ label: short, value: z.union([short, z.number()]) }), 100).optional(),
+    }), 20).optional(),
     showExperience: z.boolean().optional(),
     nostrFeedMode: z.enum(['off', 'private', 'public', 'combined']).optional(),
-    nostrNpub: z.string().optional(),
+    nostrNpub: short.optional(),
     // NIP-05 & Lightning
     nip05Name: z.string().min(3).max(30).regex(/^[a-z0-9._-]+$/, 'Only lowercase letters, numbers, dots, hyphens, underscores').optional(),
-    lightningAddress: z.string().optional(),
-    bolt12Offer: z.string().regex(/^lno1[a-z0-9]+$/, 'Must be a valid Bolt12 offer (starts with lno1)').optional().or(z.literal('')),
+    lightningAddress: z.string().max(320).optional(),
+    bolt12Offer: z.string().max(2000).regex(/^lno1[a-z0-9]+$/, 'Must be a valid Bolt12 offer (starts with lno1)').optional().or(z.literal('')),
     // Investor-specific
-    investmentFocus: z.array(z.string()).optional(),
-    investmentStage: z.array(z.string()).optional(),
+    investmentFocus: list().optional(),
+    investmentStage: list().optional(),
     minTicket: z.number().positive().optional(),
     maxTicket: z.number().positive().optional(),
     // Builder-specific
-    lookingFor: z.array(z.string()).optional(),
+    lookingFor: list().optional(),
     isPublic: z.boolean().optional(),
 });
+
+// Names@buildinelsalvador.com that would read as BIES itself speaking: kept
+// for staff. Other Nostr clients show the name as verified by BIES's domain.
+const RESERVED_NIP05 = new Set([
+    'admin', 'administrator', 'root', 'support', 'help', 'info', 'contact', 'hello', 'team', 'staff',
+    'mod', 'mods', 'moderator', 'moderators', 'official', 'bies', 'buildinelsalvador', 'security', 'abuse',
+    'noreply', 'no-reply', 'postmaster', 'hostmaster', 'webmaster', 'billing', 'payments', 'press',
+    'media', 'news', 'events', 'legal', 'privacy', 'verify', 'verified', 'system', 'app',
+]);
+// A name with one of these as a part ("bies.support", "admin_mike") is kept too.
+const RESERVED_NIP05_PARTS = new Set(['admin', 'support', 'staff', 'mod', 'moderator', 'official', 'bies', 'security', 'verified']);
+
+export function isReservedNip05(name: string): boolean {
+    return RESERVED_NIP05.has(name) || name.split(/[._-]/).some((part) => RESERVED_NIP05_PARTS.has(part));
+}
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
@@ -107,17 +129,21 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         });
     };
     try {
-        const { role, location, search, page = '1', limit = '20' } = req.query;
-        const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
-        const take = Math.min(parseInt(limit as string, 10), 50);
+        // Numbers, in range, and short text: the cache key is built from
+        // these, so made-up values can't each add an entry.
+        const pageNumber = Math.min(Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1), 1000);
+        const take = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 50);
+        const skip = (pageNumber - 1) * take;
+        const text = (value: unknown) => (typeof value === 'string' ? value.slice(0, 100) : '');
+        const location = text(req.query.location);
+        const search = text(req.query.search);
+        // What members do (builders, hosts, educators) anyone can filter by;
+        // account roles (ADMIN, MOD, INVESTOR, MEMBER) only staff.
+        const asked = text(req.query.role).toUpperCase();
+        const role = ['BUILDER', 'EVENT_HOST', 'EDUCATOR'].includes(asked) ? asked
+            : asked && isStaffUser(req.user) ? `STAFF:${asked}` : '';
 
-        const cKey = cacheKey.profiles({
-            role: role as string || '',
-            location: location as string || '',
-            search: search as string || '',
-            page: page as string,
-            limit: limit as string,
-        });
+        const cKey = cacheKey.profiles({ role, location, search, page: String(pageNumber), limit: String(take) });
 
         const cached = await cache.getJson<any>(cKey);
         if (cached) { res.setHeader('X-Cache', 'HIT'); await respond(cached); return; }
@@ -126,22 +152,21 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         // out of the list; the app asks them for one when they sign in.
         const where: any = { isPublic: true, AND: [{ name: { not: '' } }, { NOT: { name: { startsWith: 'nostr:' } } }] };
 
-        if (role && typeof role === 'string') {
-            const upRole = role.toUpperCase();
-            if (upRole === 'BUILDER') {
-                where.user = { projects: { some: { isPublished: true } } };
-            } else if (upRole === 'EVENT_HOST') {
-                where.user = { hostedEvents: { some: { isPublished: true } } };
-            } else if (upRole === 'EDUCATOR') {
-                where.user = { role: 'EDUCATOR' }; // Placeholder until courses are added
-            } else {
-                where.user = { role: upRole }; // ADMIN, MOD, INVESTOR, MEMBER
-            }
+        // Suspended and deleted members aren't listed.
+        where.user = { isBanned: false, deletedAt: null };
+        if (role === 'BUILDER') {
+            where.user.projects = { some: { isPublished: true } };
+        } else if (role === 'EVENT_HOST') {
+            where.user.hostedEvents = { some: { isPublished: true } };
+        } else if (role === 'EDUCATOR') {
+            where.user.role = 'EDUCATOR'; // Placeholder until courses are added
+        } else if (role.startsWith('STAFF:')) {
+            where.user.role = role.slice('STAFF:'.length); // ADMIN, MOD, INVESTOR, MEMBER
         }
-        if (location && typeof location === 'string') {
+        if (location) {
             where.location = { contains: location };
         }
-        if (search && typeof search === 'string') {
+        if (search) {
             where.OR = [
                 { name: { contains: search } },
                 { bio: { contains: search } },
@@ -153,7 +178,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
 
         // With a search or location, fetch every candidate (up to 500) and
         // let respond() page through what the viewer can see.
-        const searched = !!((typeof search === 'string' && search) || (typeof location === 'string' && location));
+        const searched = !!(search || location);
         const [profiles, total] = await Promise.all([
             prisma.profile.findMany({
                 where,
@@ -190,7 +215,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         const result = {
             data: parsed,
             pagination: {
-                page: parseInt(page as string, 10),
+                page: pageNumber,
                 limit: take,
                 total,
                 totalPages: Math.ceil(total / take),
@@ -278,9 +303,20 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             res.status(404).json({ error: 'Profile not found' });
             return;
         }
+        // A suspended or deleted member's page is gone, except to staff.
+        const { isBanned, deletedAt, ...user } = result.user || {};
+        if ((isBanned || deletedAt) && !isStaffUser(req.user)) {
+            res.status(404).json({ error: 'Profile not found' });
+            return;
+        }
         recordView(result);
-        // Their open opportunities, while Opportunities is on.
-        const shown = (await isEnabled('projects')) ? result : { ...result, user: result.user && { ...result.user, projects: [] } };
+        // Their open opportunities, while Opportunities is on, and the public
+        // events they're going to, while Events is on.
+        const [projectsOn, eventsOn] = await Promise.all([isEnabled('projects'), isEnabled('events')]);
+        const shown = {
+            ...result,
+            user: result.user && { ...user, projects: projectsOn ? user.projects : [], eventRSVPs: eventsOn ? user.eventRSVPs : [] },
+        };
         res.json(profileForViewer(shown, viewerOf(req, result.userId)));
     };
     // Each view (cached or not): the count, and "X viewed your profile" once
@@ -316,6 +352,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                 user: {
                     select: {
                         id: true, nostrPubkey: true, role: true, isAdmin: true, isVerified: true,
+                        isBanned: true, deletedAt: true,
                         projects: {
                             // Open ones, and none while their member is suspended or deleted (as on /opportunities).
                             where: { isPublished: true, ...openNow(), owner: { isBanned: false, deletedAt: null } },
@@ -327,7 +364,8 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                             orderBy: { createdAt: 'desc' },
                         },
                         eventRSVPs: {
-                            where: { status: { in: ['GOING', 'INTERESTED'] } },
+                            // Only events anyone can see: not private, draft or invite-only ones.
+                            where: { status: { in: ['GOING', 'INTERESTED'] }, event: { isPublished: true, visibility: { in: ['PUBLIC', 'LIMITED_SPACES'] } } },
                             include: {
                                 event: {
                                     select: {
@@ -399,6 +437,14 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
                 data.nip05Name = null;
             } else {
                 data.nip05Name = data.nip05Name.toLowerCase().trim();
+                // A staff-sounding name, unless it's already theirs.
+                if (isReservedNip05(data.nip05Name) && !isStaffUser(req.user)) {
+                    const mine = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { nip05Name: true } });
+                    if (mine?.nip05Name !== data.nip05Name) {
+                        res.status(409).json({ error: `"${data.nip05Name}" is kept for BIES staff. Choose another name.`, reason: 'reserved' });
+                        return;
+                    }
+                }
                 const existing = await prisma.profile.findFirst({
                     where: { nip05Name: data.nip05Name, userId: { not: req.user!.id } },
                 });
@@ -485,6 +531,10 @@ export async function checkNip05(req: Request, res: Response): Promise<void> {
             return;
         }
 
+        if (isReservedNip05(name) && !isStaffUser(req.user)) {
+            res.json({ available: false, name, reason: 'reserved' });
+            return;
+        }
         const existing = await prisma.profile.findFirst({
             where: {
                 nip05Name: name,

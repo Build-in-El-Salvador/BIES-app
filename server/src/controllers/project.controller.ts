@@ -1,9 +1,11 @@
 /**
- * Opportunities: what members post for other members to take up. A raise to
- * invest in, a business for sale, a job, a partnership, or a grant or
- * program. The model and these routes (/api/projects) keep the name they had
- * when every one was a project raising money; those are the investment type
- * now, with their pitch decks.
+ * Opportunities: what members post for other members to take up. A project
+ * (what a member is building and who they'd like to meet), a business for
+ * sale, a job, a partnership, or a grant or program. The model and these
+ * routes (/api/projects) keep the name they had when every one was a project
+ * raising money; those are the `investment` type, shown as Projects since
+ * 2026-10-19: no raise, terms or amounts, as BIES connects people and doesn't
+ * arrange investments. Their pitch decks stay, shared one member at a time.
  *
  * Members only: a member's WhatsApp and email are on it. Its member posts it,
  * changes it, and closes it once it's taken; staff can remove it (a report).
@@ -29,19 +31,21 @@ export const OPPORTUNITY_TYPES = ['investment', 'business-for-sale', 'job', 'par
 export type OpportunityType = (typeof OPPORTUNITY_TYPES)[number];
 
 /**
- * The kinds within each type (labels: opportunities.kinds.<type>.*): an
- * investment's deal, a job's hours, who a partnership is looking for, what a
- * program is. A business for sale has none.
+ * The kinds within each type (labels: opportunities.kinds.<type>.*): who a
+ * project is looking for, a job's hours, who a partnership is looking for,
+ * what a program is. A business for sale has none. Older projects' deals
+ * (equity, loan…) aren't kinds any more; an edit that leaves the kind alone
+ * still saves.
  */
 export const OPPORTUNITY_KINDS: Record<OpportunityType, readonly string[]> = {
-    investment: ['equity', 'convertible', 'loan', 'revenue-share', 'other'],
+    investment: ['investors', 'co-founder', 'team', 'mentors', 'partners', 'other'],
     'business-for-sale': [],
     job: ['full-time', 'part-time', 'contract', 'internship', 'volunteer'],
     partnership: ['co-founder', 'partner', 'distributor', 'supplier', 'sponsor', 'other'],
     program: ['grant', 'accelerator', 'competition', 'other'],
 };
 
-/** The types that must say their kind; an investment's deal is optional. */
+/** The types that must say their kind; who a project is looking for is optional. */
 const KIND_REQUIRED: readonly OpportunityType[] = ['job', 'partnership', 'program'];
 
 /** Industries (labels: opportunities.industries.*). */
@@ -50,7 +54,7 @@ export const INDUSTRIES = [
     'INFRASTRUCTURE', 'LOGISTICS', 'REAL_ESTATE', 'RETAIL', 'SERVICES', 'TECHNOLOGY', 'TOURISM', 'OTHER',
 ] as const;
 
-/** An investment's stage (labels: opportunities.stages.*). */
+/** A project's stage (labels: opportunities.stages.*). */
 export const STAGES = ['IDEA', 'MVP', 'GROWTH', 'SCALING'] as const;
 
 export const MAX_PHOTOS = 6;
@@ -60,9 +64,12 @@ export const MAX_OPEN_PER_MEMBER = 10;
 /** What every opportunity has. */
 const COMMON_FIELDS = ['title', 'description', 'category', 'kind', 'location', 'photos', 'whatsapp', 'email', 'websiteUrl', 'closesOn'];
 
-/** What each type has as well; anything else sent for it is left out. */
+/**
+ * What each type has as well; anything else sent for it is left out. A
+ * project has no amounts: older ones' raise columns stay as they were, unshown.
+ */
 const TYPE_FIELDS: Record<OpportunityType, readonly string[]> = {
-    investment: ['stage', 'fundingGoal', 'raisedAmount', 'btcAccepted', 'requiresDeckApproval'],
+    investment: ['stage', 'requiresDeckApproval'],
     'business-for-sale': ['price', 'revenue', 'btcAccepted'],
     job: ['pay', 'remote', 'btcAccepted'],
     partnership: ['remote'],
@@ -184,9 +191,6 @@ function problemWith(type: OpportunityType, o: Record<string, any>, changed?: st
         if (o.kind && !kinds.includes(o.kind)) return { field: 'kind', error: `"${o.kind}" isn't a kind of ${type}` };
         if (!o.kind && KIND_REQUIRED.includes(type)) return { field: 'kind', error: 'Say what kind it is' };
     }
-    if (type === 'investment' && checks('fundingGoal') && !o.fundingGoal) {
-        return { field: 'fundingGoal', error: 'Say how much it is raising' };
-    }
     if (checks('whatsapp', 'email', 'websiteUrl') && !o.whatsapp && !o.email && !o.websiteUrl) {
         return { field: 'contact', error: 'Add a way to reach you: WhatsApp, email or a link' };
     }
@@ -269,7 +273,7 @@ function amountRange(min: unknown, max: unknown): { gte?: number; lte?: number }
 export async function listProjects(req: Request, res: Response): Promise<void> {
     try {
         const viewer = req.user!;
-        const { type, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, featured } = req.query;
+        const { type, types, kind, category, stage, search, btc, remote, minAmount, maxAmount, ownerId, saved, featured } = req.query;
         const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
         const take = Math.min(Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20), 50);
 
@@ -288,17 +292,21 @@ export async function listProjects(req: Request, res: Response): Promise<void> {
             if (typeof kind === 'string' && OPPORTUNITY_KINDS[theType].includes(kind)) where.kind = kind;
             if (theType === 'investment' && typeof stage === 'string' && (STAGES as readonly string[]).includes(stage)) where.stage = stage;
         }
+        // Only the types the asker shows (?types=job,program): the phone app can leave some out.
+        if (typeof types === 'string' && types) {
+            and.push({ type: { in: types.split(',').filter((ty) => (OPPORTUNITY_TYPES as readonly string[]).includes(ty)) } });
+        }
         if (typeof category === 'string' && (INDUSTRIES as readonly string[]).includes(category)) where.category = category;
-        if (btc === 'true') where.btcAccepted = true;
+        // Projects don't say (older ones may still have it stored).
+        if (btc === 'true') { where.btcAccepted = true; and.push({ type: { not: 'investment' } }); }
         if (remote === 'true') where.remote = true;
         if (featured === 'true') where.isFeatured = true;
 
-        // What it's raising (an investment), its price (a business), or the most it gives (a program).
+        // Its price (a business) or the most it gives (a program); projects have no amounts.
         const range = amountRange(minAmount, maxAmount);
         if (range) {
-            if (theType === 'investment') where.fundingGoal = range;
-            else if (theType === 'business-for-sale' || theType === 'program') where.price = range;
-            else if (!theType) and.push({ OR: [{ type: 'investment', fundingGoal: range }, { type: { in: ['business-for-sale', 'program'] }, price: range }] });
+            if (theType === 'business-for-sale' || theType === 'program') where.price = range;
+            else if (!theType) and.push({ type: { in: ['business-for-sale', 'program'] }, price: range });
         }
 
         if (typeof search === 'string' && search.trim()) {
@@ -453,7 +461,9 @@ export async function updateProject(req: Request, res: Response): Promise<void> 
 
         const type = typeOf(existing.type);
         const data = opportunityData(type, req.body);
-        const problem = problemWith(type, { ...existing, ...data }, Object.keys(data));
+        // Only what it changes is checked: an older project's deal (equity…), sent back as it was, still saves.
+        const changed = Object.keys(data).filter((field) => data[field] !== (existing as Record<string, unknown>)[field]);
+        const problem = problemWith(type, { ...existing, ...data }, changed);
         if (problem) {
             res.status(400).json({ error: problem.error, reason: 'invalid', field: problem.field });
             return;

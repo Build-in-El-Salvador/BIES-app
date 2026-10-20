@@ -1806,7 +1806,7 @@
       "toGo_other": "Faltan {{count}} recomendaciones para Confianza BIES",
       "trusted": "Los miembros recomiendan este negocio.",
       "trusted_farm": "Los miembros recomiendan esta finca.",
-      "how": "El puntaje de confianza son las recomendaciones de los miembros menos sus votos en contra. Con {{threshold}}, un listado obtiene Confianza BIES."
+      "how": "El puntaje de confianza es el porcentaje de reseñas de miembros que lo recomiendan. Un listado obtiene Confianza BIES cuando sus recomendaciones superan a sus votos en contra por {{threshold}}."
     },
     "review": {
       "vouch": "Recomendar",
@@ -2061,7 +2061,7 @@
     }
   },
   "opportunities": {
-    "intro": "Inversiones, negocios en venta, empleos, alianzas, y fondos y programas, publicados por miembros de BIES.",
+    "intro": "Proyectos, negocios en venta, empleos, alianzas, y fondos y programas, publicados por miembros de BIES.",
     "search": "Buscar oportunidades",
     "add": "Publicar una oportunidad",
     "yours": "Suyas",
@@ -2069,21 +2069,21 @@
     "allTypes": "Todas",
     "typeLabel": "Tipos de oportunidad",
     "types": {
-      "investment": "Inversión",
+      "investment": "Proyecto",
       "business-for-sale": "Negocio en venta",
       "job": "Empleo",
       "partnership": "Alianza",
       "program": "Fondo o programa"
     },
     "typesPlural": {
-      "investment": "Inversiones",
+      "investment": "Proyectos",
       "business-for-sale": "Negocios en venta",
       "job": "Empleos",
       "partnership": "Alianzas",
       "program": "Fondos y programas"
     },
     "typeHints": {
-      "investment": "Consiga dinero para un proyecto o una empresa.",
+      "investment": "Comparta lo que está construyendo y a quién le gustaría conocer: inversionistas, un cofundador, un equipo.",
       "business-for-sale": "Venda un negocio, o una parte de uno.",
       "job": "Contrate a alguien: un empleo, un trabajo por contrato, una pasantía o un voluntariado.",
       "partnership": "Encuentre un cofundador, un socio, un distribuidor, un proveedor o un patrocinador.",
@@ -2091,10 +2091,11 @@
     },
     "kinds": {
       "investment": {
-        "equity": "Participación",
-        "convertible": "SAFE o nota",
-        "loan": "Préstamo",
-        "revenue-share": "Parte de los ingresos",
+        "investors": "Inversionistas",
+        "co-founder": "Un cofundador",
+        "team": "Personas para el equipo",
+        "mentors": "Mentores o asesores",
+        "partners": "Socios o clientes",
         "other": "Otro"
       },
       "job": {
@@ -2156,21 +2157,26 @@
     "closesIn_one": "Cierra mañana",
     "closesIn_other": "Cierra en {{count}} días",
     "card": {
-      "raising": "Busca {{amount}}",
       "asking": "Precio {{amount}}",
       "priceOnRequest": "Precio a consultar",
-      "upTo": "Hasta {{amount}}"
+      "upTo": "Hasta {{amount}}",
+      "lookingFor": {
+        "investors": "Busca inversionistas",
+        "co-founder": "Busca cofundador",
+        "team": "Busca personas para el equipo",
+        "mentors": "Busca mentores o asesores",
+        "partners": "Busca socios o clientes"
+      }
     },
     "filters": {
       "kind": {
-        "investment": "Tipo de inversión",
+        "investment": "Busca",
         "job": "Tipo de empleo",
         "partnership": "Busca",
         "program": "Tipo de programa"
       },
       "any": "Cualquiera",
       "amount": {
-        "investment": "Busca",
         "business-for-sale": "Precio",
         "program": "Hasta"
       },
@@ -2180,13 +2186,12 @@
       "remote": "Se puede hacer a distancia",
       "btc": {
         "any": "Acepta bitcoin",
-        "investment": "Acepta bitcoin",
         "business-for-sale": "Se vende por bitcoin",
         "job": "Paga en bitcoin"
       },
       "clear": "Quitar filtros"
     },
-    "empty": "Todavía no hay oportunidades. Publique la primera: una inversión, un negocio en venta, un empleo, una alianza o un programa.",
+    "empty": "Todavía no hay oportunidades. Publique la primera: un proyecto, un negocio en venta, un empleo, una alianza o un programa.",
     "noneYours": "Usted no ha publicado ninguna oportunidad todavía.",
     "noneSaved": "Las oportunidades que guarde aparecen aquí. Toque Guardar en una para conservarla.",
     "noMatches": "Ninguna oportunidad coincide con estos filtros.",
@@ -2218,7 +2223,7 @@
     "close": "Cerrarla",
     "reopen": "Abrirla de nuevo",
     "factsTitle": {
-      "investment": "La inversión",
+      "investment": "El proyecto",
       "business-for-sale": "El negocio",
       "job": "El empleo",
       "partnership": "La alianza",
@@ -2226,9 +2231,6 @@
       "default": "Detalles"
     },
     "facts": {
-      "raising": "Busca",
-      "raised": "Conseguido hasta ahora",
-      "deal": "Tipo de inversión",
       "asking": "Precio",
       "revenue": "Ingresos al año",
       "jobType": "Tipo de empleo",
@@ -2236,17 +2238,15 @@
       "lookingFor": "Busca",
       "programKind": "Tipo",
       "upTo": "Hasta",
-      "where": "Dónde",
-      "progress": "{{percent}}% conseguido"
+      "where": "Dónde"
     },
     "btc": {
-      "investment": "Acepta inversión en bitcoin",
       "business-for-sale": "Acepta bitcoin por la venta",
       "job": "Paga en bitcoin",
       "default": "Acepta bitcoin"
     },
     "safety": {
-      "investment": "BIES no revisa las oportunidades. Investigue antes de invertir, y nunca envíe dinero a alguien que no conoce en persona.",
+      "investment": "BIES conecta a los miembros: no ofrece, organiza ni revisa inversiones, y nada aquí es una oferta para invertir. Investigue por su cuenta, y nunca envíe dinero a alguien que no conoce en persona.",
       "business-for-sale": "BIES no revisa las oportunidades. Visite el negocio y revise sus papeles antes de pagar algo.",
       "job": "BIES no revisa las oportunidades. Nunca pague para postularse a un empleo.",
       "program": "BIES no revisa las oportunidades. Los fondos y programas reales nunca cobran por postularse.",
@@ -2279,7 +2279,7 @@
       "createTitle": "Publicar una oportunidad",
       "chooseType": "¿Qué va a publicar?",
       "createTitles": {
-        "investment": "Publicar una inversión",
+        "investment": "Publicar un proyecto",
         "business-for-sale": "Vender un negocio",
         "job": "Publicar un empleo",
         "partnership": "Buscar un socio",
@@ -2297,7 +2297,7 @@
         "program": "p. ej. Fondo para emprendedores 2027"
       },
       "kindLabel": {
-        "investment": "Tipo de inversión (opcional)",
+        "investment": "Busca (opcional)",
         "job": "Tipo de empleo",
         "partnership": "Busca",
         "program": "Tipo de programa"
@@ -2310,7 +2310,7 @@
       "chooseIndustry": "Elija una industria",
       "descriptionLabel": "Descripción",
       "descriptionPlaceholder": {
-        "investment": "Qué es, el equipo, cuánto ha avanzado, para qué es el dinero, y las condiciones.",
+        "investment": "Qué está construyendo, el equipo, cuánto ha avanzado, y a quién le gustaría conocer.",
         "business-for-sale": "Qué hace el negocio, cuánto tiempo lleva, por qué lo vende, y qué incluye: el local, el equipo, el inventario.",
         "job": "El trabajo, el horario, a quién busca, y cómo postularse.",
         "partnership": "Qué está construyendo, a quién busca, y qué aporta usted.",
@@ -2320,11 +2320,7 @@
       "descriptionRequired": "Diga lo que es.",
       "stageRequired": "Elija su etapa.",
       "amountInvalid": "Escriba un monto en dólares, como 250000 o 250k.",
-      "raisingRequired": "Diga cuánto busca.",
       "contactRequired": "Agregue al menos una forma de contactarle.",
-      "raiseHeading": "La inversión",
-      "raisingLabel": "Busca",
-      "raisedLabel": "Conseguido hasta ahora",
       "deckHint": "Un PDF o PowerPoint. Es privada: solo usted, y los miembros con quienes la comparta, pueden abrirla.",
       "deckAdd": "Agregar una presentación",
       "deckReplace": "Cambiar la presentación",
@@ -2342,7 +2338,6 @@
       "upToLabel": "Hasta",
       "upToHint": "Lo máximo que da: el monto de un fondo, o el premio.",
       "btcLabel": {
-        "investment": "Acepta inversión en bitcoin",
         "business-for-sale": "Acepta bitcoin por la venta",
         "job": "Paga en bitcoin"
       },
@@ -2378,13 +2373,16 @@
       "seeYours": "Ver las suyas",
       "delete": "Eliminar esta oportunidad",
       "deleteConfirm": "¿Eliminar esta oportunidad para siempre? Sus fotos y su presentación se van con ella.",
+      "deleteConfirmNoDeck": "¿Eliminar esta oportunidad para siempre? Sus fotos se van con ella.",
       "deleteYes": "Eliminar",
       "tooLong": "Use como máximo {{max}} caracteres.",
       "closesOnPassed": "Ese día ya pasó. Elija hoy o un día posterior.",
       "whatsappInvalid": "Use números, espacios y +, como +503 6123 4567.",
       "emailInvalid": "Revise el correo electrónico.",
       "fieldInvalid": "Revise este dato.",
-      "deckFailedEdit": "Sus cambios se guardaron, pero la presentación para inversionistas no se subió. Pulse Guardar cambios para intentarlo de nuevo."
+      "deckFailedEdit": "Sus cambios se guardaron, pero la presentación para inversionistas no se subió. Pulse Guardar cambios para intentarlo de nuevo.",
+      "projectHeading": "El proyecto",
+      "projectHint": "No incluya montos, valoraciones ni condiciones. Hable de eso en privado con las personas que conozca."
     }
   },
   "marketplace": {
@@ -2460,7 +2458,7 @@
     "discover": "Descubrir",
     "members": "Miembros",
     "farms": "Fincas",
-    "trusted": "Directorio",
+    "trusted": "Negocios",
     "events": "Eventos",
     "news": "Noticias",
     "dashboard": "Panel",
@@ -2680,7 +2678,7 @@
     "title": "Funciones de la App",
     "subtitle": "Activa o desactiva funciones para todos al instante, sin redesplegar",
     "propagationNote": "Los cambios se aplican de inmediato para ti. Los demas usuarios los reciben en unos 5 minutos (cache del servidor) o al volver a la app. Las funciones desactivadas desaparecen de la navegacion, sus paginas muestran No Encontrado y sus APIs quedan bloqueadas.",
-    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas, Confianza BIES y Talentos BIES de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
+    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas, Confianza BIES, Talentos BIES y Oportunidades de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
     "adminOnly": "Solo los administradores pueden cambiar las funciones. Los moderadores tienen acceso de solo lectura.",
     "enabled": "Activada",
     "disabled": "Desactivada",
@@ -2724,7 +2722,7 @@
       },
       "projects": {
         "name": "Oportunidades",
-        "description": "Inversiones, negocios en venta, empleos, alianzas, y fondos y programas"
+        "description": "Proyectos, negocios en venta, empleos, alianzas, y fondos y programas"
       },
       "cowork": {
         "name": "Cowork",
@@ -3033,7 +3031,7 @@
       },
       "opportunities": {
         "title": "Oportunidades",
-        "desc": "Inversiones, negocios en venta, empleos, alianzas y más."
+        "desc": "Proyectos, negocios en venta, empleos, alianzas y más."
       },
       "talent": {
         "title": "Talentos BIES",

@@ -148,6 +148,56 @@ const TalentDetail = () => {
                     {cover && <img src={getAssetUrl(cover)} alt="" className="tal-hero-img" />}
                     <BackButton fallback="/talents" overlay label={t('talent.back')} />
                 </div>
+                {/* Outside the photo's clipping, so the menu can open below it */}
+                <div className="tal-hero-tools">
+                    {isOwn && (
+                        <Link to={`/talents/${talent.id}/edit`} className="tal-edit-btn">
+                            <Edit3 size={15} /> {t('talent.edit')}
+                        </Link>
+                    )}
+                    {!isOwn && (
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                ref={menuButtonRef}
+                                type="button"
+                                className="tal-more-btn"
+                                aria-label={t('moderation.menu.more')}
+                                aria-expanded={showMenu}
+                                onClick={() => setShowMenu((v) => !v)}
+                            >
+                                <MoreHorizontal size={20} />
+                            </button>
+                            {showMenu && (
+                                <>
+                                    <div className="tal-menu-backdrop" onClick={() => setShowMenu(false)} />
+                                    <div className="tal-menu" role="menu">
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                closeMenu();
+                                                openReport({ type: 'talent', id: talent.id }, { name, blockTarget: { userId: talent.userId } });
+                                            }}
+                                        >
+                                            <Flag size={16} /> {t('moderation.menu.reportTalent')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="danger"
+                                            onClick={() => {
+                                                closeMenu();
+                                                openBlock({ userId: talent.userId }, { name });
+                                            }}
+                                        >
+                                            <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="container">
@@ -161,64 +211,6 @@ const TalentDetail = () => {
 
                         <div className="tal-head-row">
                             <h1 className="tal-title">{talent.title}</h1>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                {isOwn && (
-                                    <Link
-                                        to={`/talents/${talent.id}/edit`}
-                                        style={{
-                                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                                            padding: '0.4rem 0.9rem', borderRadius: 'var(--radius-full)',
-                                            border: '1px solid var(--color-gray-300)', background: 'var(--color-surface)',
-                                            color: 'var(--color-gray-700)', textDecoration: 'none',
-                                            fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
-                                        }}
-                                    >
-                                        <Edit3 size={14} /> {t('talent.edit')}
-                                    </Link>
-                                )}
-                                {!isOwn && (
-                                    <div style={{ position: 'relative' }}>
-                                        <button
-                                            ref={menuButtonRef}
-                                            type="button"
-                                            className="tal-more-btn"
-                                            aria-label={t('moderation.menu.more')}
-                                            aria-expanded={showMenu}
-                                            onClick={() => setShowMenu((v) => !v)}
-                                        >
-                                            <MoreHorizontal size={18} />
-                                        </button>
-                                        {showMenu && (
-                                            <>
-                                                <div className="tal-menu-backdrop" onClick={() => setShowMenu(false)} />
-                                                <div className="tal-menu" role="menu">
-                                                    <button
-                                                        type="button"
-                                                        role="menuitem"
-                                                        onClick={() => {
-                                                            closeMenu();
-                                                            openReport({ type: 'talent', id: talent.id }, { name, blockTarget: { userId: talent.userId } });
-                                                        }}
-                                                    >
-                                                        <Flag size={16} /> {t('moderation.menu.reportTalent')}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        role="menuitem"
-                                                        className="danger"
-                                                        onClick={() => {
-                                                            closeMenu();
-                                                            openBlock({ userId: talent.userId }, { name });
-                                                        }}
-                                                    >
-                                                        <Ban size={16} /> {t('moderation.menu.blockMember')}
-                                                    </button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
                         </div>
 
                         <p className="tal-by">
@@ -333,6 +325,7 @@ const TalentDetail = () => {
                     padding-bottom: 4rem;
                 }
                 .tal-hero-wrap {
+                    position: relative;
                     max-width: 760px;
                     margin: 0 auto;
                 }
@@ -412,11 +405,58 @@ const TalentDetail = () => {
                     font-weight: 600;
                     text-decoration: none;
                 }
+                /* On the photo's bottom-right corner, as on an opportunity's page:
+                   Edit for its member, the ⋯ menu for the rest */
+                .tal-hero-tools {
+                    position: absolute;
+                    right: 16px;
+                    bottom: 16px;
+                    z-index: 5;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+                /* White on any photo, in dark mode too, like the back button */
+                .tal-more-btn,
+                .tal-hero-tools :global(.tal-edit-btn) {
+                    height: 40px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    border: none;
+                    border-radius: var(--radius-full);
+                    background: rgba(255, 255, 255, 0.94);
+                    color: #0f172a;
+                    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+                    cursor: pointer;
+                    -webkit-tap-highlight-color: transparent;
+                }
                 .tal-more-btn {
-                    width: 44px; height: 44px; border-radius: 50%;
-                    display: inline-flex; align-items: center; justify-content: center;
-                    border: 1px solid var(--color-gray-300); background: var(--color-surface);
-                    color: var(--color-gray-700); cursor: pointer; padding: 0;
+                    width: 40px;
+                    padding: 0;
+                }
+                .tal-hero-tools :global(.tal-edit-btn) {
+                    gap: 6px;
+                    padding: 0 14px;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    white-space: nowrap;
+                    text-decoration: none;
+                }
+                .tal-more-btn:active,
+                .tal-hero-tools :global(.tal-edit-btn:active) {
+                    background: #ffffff;
+                }
+                @media (hover: hover) {
+                    .tal-more-btn:hover,
+                    .tal-hero-tools :global(.tal-edit-btn:hover) {
+                        background: #ffffff;
+                    }
+                }
+                .tal-more-btn:focus-visible,
+                .tal-hero-tools :global(.tal-edit-btn:focus-visible) {
+                    outline: 2px solid var(--color-primary);
+                    outline-offset: 2px;
                 }
                 .tal-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
                 .tal-menu {

@@ -2,6 +2,7 @@
 // project.controller.ts (keep both in sync). Pure, so tests can import it.
 
 import { htmlToText } from '../../utils/text.js';
+import { APP_HIDDEN_OPPORTUNITY_TYPES } from '../../config/appScope.js';
 
 export { asWebLink, shortLink } from '../talent/talentOptions.js';
 
@@ -17,19 +18,32 @@ export const plainText = (text) => (EDITOR_TAG.test(text || '') ? htmlToText(tex
 export const OPPORTUNITY_TYPES = ['investment', 'business-for-sale', 'job', 'partnership', 'program'];
 
 /**
- * The kinds within each type (labels: opportunities.kinds.<type>.*): an
- * investment's deal, a job's hours, who a partnership is looking for, what a
- * program is. A business for sale has none.
+ * The types shown here: the phone app leaves some out
+ * (APP_HIDDEN_OPPORTUNITY_TYPES), the website shows them all. An older
+ * project with no type is an investment.
+ */
+export const typesShown = (native) => (native
+    ? OPPORTUNITY_TYPES.filter((ty) => !APP_HIDDEN_OPPORTUNITY_TYPES.includes(ty))
+    : OPPORTUNITY_TYPES);
+export const isTypeShown = (type, native) => typesShown(native).includes(type || 'investment');
+
+/**
+ * The kinds within each type (labels: opportunities.kinds.<type>.*): who a
+ * project is looking for, a job's hours, who a partnership is looking for,
+ * what a program is. A business for sale has none. The `investment` type is
+ * shown as a Project: a member's project and who they'd like to meet, with
+ * no raise, terms or amounts (BIES connects people; it doesn't arrange
+ * investments). Older ones' deals (equity, loan…) aren't kinds any more.
  */
 export const OPPORTUNITY_KINDS = {
-    investment: ['equity', 'convertible', 'loan', 'revenue-share', 'other'],
+    investment: ['investors', 'co-founder', 'team', 'mentors', 'partners', 'other'],
     'business-for-sale': [],
     job: ['full-time', 'part-time', 'contract', 'internship', 'volunteer'],
     partnership: ['co-founder', 'partner', 'distributor', 'supplier', 'sponsor', 'other'],
     program: ['grant', 'accelerator', 'competition', 'other'],
 };
 
-/** The types that must say their kind; an investment's deal is optional. */
+/** The types that must say their kind; who a project is looking for is optional. */
 export const KIND_REQUIRED = ['job', 'partnership', 'program'];
 
 /** Industries (labels: opportunities.industries.*). */
@@ -38,7 +52,7 @@ export const INDUSTRIES = [
     'INFRASTRUCTURE', 'LOGISTICS', 'REAL_ESTATE', 'RETAIL', 'SERVICES', 'TECHNOLOGY', 'TOURISM', 'OTHER',
 ];
 
-/** An investment's stage (labels: opportunities.stages.*). */
+/** A project's stage (labels: opportunities.stages.*). */
 export const STAGES = ['IDEA', 'MVP', 'GROWTH', 'SCALING'];
 
 export const MAX_PHOTOS = 6;
@@ -47,7 +61,7 @@ export const MAX_OPEN = 10;
 
 /** What each type asks for, besides what every opportunity has. */
 export const TYPE_FIELDS = {
-    investment: ['stage', 'fundingGoal', 'raisedAmount', 'btcAccepted', 'requiresDeckApproval'],
+    investment: ['stage', 'requiresDeckApproval'],
     'business-for-sale': ['price', 'revenue', 'btcAccepted'],
     job: ['pay', 'remote', 'btcAccepted'],
     partnership: ['remote'],
@@ -67,13 +81,12 @@ export function industryOf(category) {
 }
 
 /**
- * The money an opportunity is about, by type: what an investment is raising,
- * a business's asking price, the most a program gives. { field, value }, the
- * value null when it isn't given; null for a type without one.
+ * The money an opportunity is about, by type: a business's asking price, the
+ * most a program gives. { field, value }, the value null when it isn't given;
+ * null for a type without one (a project shows no amounts).
  */
 export function amountOf(opportunity) {
     const type = opportunity?.type;
-    if (type === 'investment') return { field: 'fundingGoal', value: opportunity.fundingGoal ?? null };
     if (type === 'business-for-sale' || type === 'program') return { field: 'price', value: opportunity.price ?? null };
     return null;
 }
@@ -134,8 +147,8 @@ export function parseDollars(text) {
 /**
  * The line under a card's title: what matters most for its type. A job's
  * hours and pay; who a partnership is looking for; a program's kind and
- * size; what a raise is after and its stage; a business's price. `t` is
- * i18next's.
+ * size; who a project is looking for and its stage; a business's price. `t`
+ * is i18next's.
  */
 export function summaryOf(opportunity, t) {
     const o = opportunity || {};
@@ -145,7 +158,7 @@ export function summaryOf(opportunity, t) {
     const kind = (OPPORTUNITY_KINDS[o.type] || []).includes(o.kind) ? t(`opportunities.kinds.${o.type}.${o.kind}`) : '';
     switch (o.type) {
         case 'investment':
-            if (o.fundingGoal) parts.push(t('opportunities.card.raising', { amount: shortDollars(o.fundingGoal) }));
+            if (kind && o.kind !== 'other') parts.push(t(`opportunities.card.lookingFor.${o.kind}`));
             if (o.stage) parts.push(t(`opportunities.stages.${o.stage}`));
             break;
         case 'business-for-sale':

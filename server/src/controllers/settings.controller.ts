@@ -169,6 +169,15 @@ async function mediaReadTransaction<T>(
     }
 }
 
+// The most items kept in each list: the newest ones, so a member's row can't
+// grow without end (1,000 of up to 500 characters is about 0.5 MB a list).
+const MAX_STORED_ITEMS = 1000;
+
+/** The lists as they're stored: the newest MAX_STORED_ITEMS of each. */
+function capped(lists: { watched: string[]; read: string[] }): { watched: string[]; read: string[] } {
+    return { watched: lists.watched.slice(-MAX_STORED_ITEMS), read: lists.read.slice(-MAX_STORED_ITEMS) };
+}
+
 /** Safely parse the mediaReadItems JSON blob into { watched, read } arrays. */
 function parseMediaRead(raw: string | null | undefined): { watched: string[]; read: string[] } {
     try {
@@ -209,10 +218,10 @@ export async function updateMediaRead(req: Request, res: Response): Promise<void
             const settings = await tx.userSettings.findUnique({ where: { userId } });
             const current = parseMediaRead(settings?.mediaReadItems);
 
-            const next = {
+            const next = capped({
                 watched: watched !== undefined ? watched : current.watched,
                 read: read !== undefined ? read : current.read,
-            };
+            });
 
             await tx.userSettings.upsert({
                 where: { userId },
@@ -250,7 +259,7 @@ export async function toggleMediaRead(req: Request, res: Response): Promise<void
 
             const items = new Set(current[itemType]);
             if (value) items.add(itemId); else items.delete(itemId);
-            const next = { ...current, [itemType]: [...items] };
+            const next = capped({ ...current, [itemType]: [...items] });
 
             await tx.userSettings.upsert({
                 where: { userId },
@@ -291,7 +300,7 @@ export async function bulkMediaRead(req: Request, res: Response): Promise<void> 
             add.read.forEach((id) => read.add(id));
             remove.watched.forEach((id) => watched.delete(id));
             remove.read.forEach((id) => read.delete(id));
-            const next = { watched: [...watched], read: [...read] };
+            const next = capped({ watched: [...watched], read: [...read] });
 
             await tx.userSettings.upsert({
                 where: { userId },
@@ -309,16 +318,20 @@ export async function bulkMediaRead(req: Request, res: Response): Promise<void> 
     }
 }
 
+// The preferences the app keeps; anything else sent is dropped (strip), so a
+// member's row stays a few hundred bytes.
+const preference = z.string().max(32);
 export const updatePreferencesSchema = z.object({
-    theme: z.string().optional(),
-    language: z.string().optional(),
-    projectsView: z.string().optional(),
-    membersView: z.string().optional(),
-    eventsView: z.string().optional(),
-    mediaView: z.string().optional(),
-    defaultView: z.string().optional(),
+    theme: preference.optional(),
+    language: preference.optional(),
+    projectsView: preference.optional(),
+    membersView: preference.optional(),
+    eventsView: preference.optional(),
+    mediaView: preference.optional(),
+    defaultView: preference.optional(),
     bottomNavTabs: z.array(z.string().max(64)).max(12).optional(),
-}).passthrough();
+}).strip();
+const PREFERENCE_KEYS = Object.keys(updatePreferencesSchema.shape);
 
 /**
  * GET /settings/preferences
@@ -340,7 +353,8 @@ export async function updatePreferences(req: Request, res: Response): Promise<vo
     try {
         const settings = await prisma.userSettings.findUnique({ where: { userId: req.user!.id } });
         const current = JSON.parse(settings?.preferences || '{}');
-        const merged = { ...current, ...req.body };
+        // Only known keys, also from what's stored (rows saved before the schema was strict).
+        const merged = Object.fromEntries(Object.entries({ ...current, ...req.body }).filter(([key]) => PREFERENCE_KEYS.includes(key)));
 
         await prisma.userSettings.upsert({
             where: { userId: req.user!.id },

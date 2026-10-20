@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, ChevronRight, User, Play } from 'lucide-react';
+import { MapPin, User, Play } from 'lucide-react';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { isVideo, pictureOf, workMedia } from './talentOptions';
@@ -61,8 +61,6 @@ const TalentCard = ({ talent }) => {
                         </div>
                     )}
                 </div>
-
-                <ChevronRight size={20} className="tal-card-chevron" />
             </div>
 
             <style jsx>{`
@@ -176,11 +174,6 @@ const TalentCard = ({ talent }) => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                }
-                .tal-card :global(.tal-card-chevron) {
-                    color: var(--color-gray-400);
-                    flex-shrink: 0;
-                    align-self: center;
                 }
             `}</style>
         </Link>

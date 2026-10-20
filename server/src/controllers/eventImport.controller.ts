@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { safeGet } from '../utils/safeFetch';
+import { removeTags } from '../middleware/sanitize';
 
 /**
  * POST /events/import-url
@@ -163,7 +164,7 @@ function buildEventData(og: Record<string, string>, jsonLd: any, sourceUrl: stri
 
     // Description — strip HTML tags for plain text
     const rawDesc = jsonLd?.description || og['og:description'] || og['twitter:description'] || '';
-    event.description = rawDesc.replace(/<[^>]+>/g, '').trim();
+    event.description = removeTags(String(rawDesc).slice(0, 20_000)).trim();
 
     // Image
     event.thumbnail = jsonLd?.image?.url || jsonLd?.image || og['og:image'] || og['twitter:image'] || '';

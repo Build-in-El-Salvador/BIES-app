@@ -110,6 +110,17 @@ export async function banUser(req: Request, res: Response): Promise<void> {
         } else {
             addToRelayWhitelist(user.nostrPubkey);
         }
+        // Their page and the lists they're in change at once, not when the cache runs out.
+        const profile = await prisma.profile.findUnique({ where: { userId: user.id }, select: { id: true } });
+        await Promise.all([
+            cache.del(cacheKey.profileDetail(user.id)),
+            cache.del(cacheKey.profileDetail(user.nostrPubkey)),
+            profile ? cache.del(cacheKey.profileDetail(profile.id)) : Promise.resolve(),
+            cache.delPattern('profiles:'),
+            cache.delPattern('followers:'),
+            cache.delPattern('following:'),
+            cache.delPattern('search:'),
+        ]).catch(() => {});
 
         // Log the action
         await prisma.auditLog.create({

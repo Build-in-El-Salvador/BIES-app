@@ -18,7 +18,8 @@ import { useModerationDialogs } from '../../components/moderation/useModerationD
 import BackButton from '../../components/BackButton';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
-import { daysLeft, formatDay, fullDollars, industryOf, isOpen, plainText } from '../../components/opportunities/opportunityOptions';
+import { daysLeft, formatDay, fullDollars, hasField, industryOf, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
 import '../../components/moderation/Moderation.css';
 
 const sectionTitleStyle = {
@@ -59,6 +60,8 @@ const OpportunityDetail = () => {
         setError(null);
         try {
             const result = await projectsApi.get(id);
+            // A type the phone app leaves out (an investment): not found here.
+            if (!isTypeShown(result?.type, isNativePlatform())) throw new Error('Not found');
             setOpportunity(result);
             setSaved(!!result?.saved);
             setBlockedMember(false);
@@ -141,16 +144,13 @@ const OpportunityDetail = () => {
             : days !== null ? t('opportunities.openUntil', { day: formatDay(o.closesOn, locale) })
                 : t('opportunities.openLong');
 
-    // The facts its type has, as rows: [icon, label, value, the share raised (a bar)].
-    const progress = o.type === 'investment' && o.fundingGoal > 0 && o.raisedAmount > 0
-        ? Math.min(100, Math.round((o.raisedAmount / o.fundingGoal) * 100)) : null;
+    // The facts its type has, as rows: [icon, label, value]. A project shows no
+    // amounts, even an older one that had a raise.
     const kindLabel = o.kind ? t(`opportunities.kinds.${o.type}.${o.kind}`, { defaultValue: '' }) : '';
     const facts = [];
     if (o.type === 'investment') {
-        if (o.fundingGoal) facts.push([TrendingUp, t('opportunities.facts.raising'), fullDollars(o.fundingGoal)]);
-        if (o.raisedAmount > 0) facts.push([CircleDollarSign, t('opportunities.facts.raised'), fullDollars(o.raisedAmount), progress]);
+        if (kindLabel) facts.push([Users, t('opportunities.facts.lookingFor'), kindLabel]);
         if (o.stage) facts.push([Layers, t('opportunities.stage'), t(`opportunities.stages.${o.stage}`)]);
-        if (kindLabel) facts.push([Briefcase, t('opportunities.facts.deal'), kindLabel]);
     } else if (o.type === 'business-for-sale') {
         facts.push([CircleDollarSign, t('opportunities.facts.asking'), o.price ? fullDollars(o.price) : t('opportunities.card.priceOnRequest')]);
         if (o.revenue) facts.push([TrendingUp, t('opportunities.facts.revenue'), fullDollars(o.revenue)]);
@@ -349,20 +349,13 @@ const OpportunityDetail = () => {
                     {facts.length > 0 && (
                         <section className="od-section od-facts">
                             <h2 style={sectionTitleStyle}>{t(`opportunities.factsTitle.${o.type}`, { defaultValue: t('opportunities.factsTitle.default') })}</h2>
-                            {facts.map(([Icon, label, value, share]) => (
-                                <React.Fragment key={label}>
-                                    <div className="od-fact">
-                                        <Icon size={17} aria-hidden="true" />
-                                        <span><span className="od-fact-label">{label}:</span> {value}</span>
-                                    </div>
-                                    {share != null && (
-                                        <div className="od-progress" role="img" aria-label={t('opportunities.facts.progress', { percent: share })}>
-                                            <span className="od-progress-bar" style={{ width: `${share}%` }} />
-                                        </div>
-                                    )}
-                                </React.Fragment>
+                            {facts.map(([Icon, label, value]) => (
+                                <div key={label} className="od-fact">
+                                    <Icon size={17} aria-hidden="true" />
+                                    <span><span className="od-fact-label">{label}:</span> {value}</span>
+                                </div>
                             ))}
-                            {o.btcAccepted && (
+                            {o.btcAccepted && hasField(o.type, 'btcAccepted') && (
                                 <div className="od-fact od-btc">
                                     <Bitcoin size={17} aria-hidden="true" />
                                     <span>{t(`opportunities.btc.${o.type}`, { defaultValue: t('opportunities.btc.default') })}</span>
@@ -706,20 +699,6 @@ const OpportunityDetail = () => {
                 .od-fact-label {
                     font-weight: 600;
                     color: var(--color-gray-700);
-                }
-                .od-progress {
-                    height: 8px;
-                    border-radius: 999px;
-                    background: var(--color-gray-100);
-                    overflow: hidden;
-                    margin: 0.2rem 0 0.8rem;
-                    max-width: 22rem;
-                }
-                .od-progress-bar {
-                    display: block;
-                    height: 100%;
-                    border-radius: 999px;
-                    background: #047857;
                 }
                 .od-btc {
                     color: #b45309;

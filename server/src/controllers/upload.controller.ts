@@ -217,7 +217,8 @@ export async function discardMedia(req: Request, res: Response): Promise<void> {
 /**
  * POST /upload/deck
  * Upload a private pitch deck (PDF/PPT). Returns the S3 key.
- * Optionally associates with a project via ?projectId=xxx query param.
+ * For one of the member's own projects (?projectId=xxx), which it replaces
+ * the deck of: a deck belongs to a project, so they can't pile up.
  */
 export async function uploadDeck(req: Request, res: Response): Promise<void> {
     try {
@@ -236,12 +237,12 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        // For one of the member's own investments (pitch decks are theirs alone).
+        // For one of the member's own projects (pitch decks are theirs alone).
         const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : '';
         const project = projectId
             ? await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true, deckKey: true, type: true } })
             : null;
-        if (projectId && (!project || project.ownerId !== req.user!.id || project.type !== 'investment')) {
+        if (!project || project.ownerId !== req.user!.id || project.type !== 'investment') {
             res.status(404).json({ error: 'Opportunity not found' });
             return;
         }

@@ -45,19 +45,19 @@ export const createDirectoryListingSchema = z.object({
     // http(s) only — never allow javascript:/data: etc. to be stored as a link
     website: z.string().url().max(300).regex(/^https?:\/\//i).optional().or(z.literal('')),
     instagram: z.string().max(100).optional().or(z.literal('')),
-    languages: z.array(z.string().max(20)).optional(),
+    languages: z.array(z.string().max(20)).max(20).optional(),
     btcAccepted: z.boolean().optional(),
     products: z.array(z.object({
         label: z.string().min(1).max(60),
         icon: z.string().max(30).optional(),
     })).max(20).optional(),
-    practices: z.array(z.enum(['regenerative', 'rotational-grazing', 'no-gmo-feed', 'animal-welfare'])).optional(),
+    practices: z.array(z.enum(['regenerative', 'rotational-grazing', 'no-gmo-feed', 'animal-welfare'])).max(10).optional(),
     skills: z.array(z.string().max(60)).max(20).optional(),
     bestFor: z.string().max(200).optional(),
     pricing: z.string().max(200).optional(),
     comment: z.string().max(500).optional(),
     mapUrl: z.string().max(500).regex(MAPS_URL, 'Use a Google Maps, Apple Maps, Waze or OpenStreetMap link').optional().or(z.literal('')),
-    memberUserId: z.string().optional().or(z.literal('')),
+    memberUserId: z.string().max(64).optional().or(z.literal('')),
 });
 
 export const updateDirectoryListingSchema = createDirectoryListingSchema.omit({ review: true }).partial();
@@ -106,6 +106,10 @@ const memberUserSelect = {
  * The member a listing belongs to: its linked member when staff entered it
  * for them, otherwise whoever created it. Blocks and reports go by this.
  */
+/** A where clause: the member who runs the listing (listingMember) isn't suspended or deleted. */
+const ACTIVE = { isBanned: false, deletedAt: null };
+const ACTIVE_MEMBER_RUNS_IT = { OR: [{ memberUserId: null, owner: ACTIVE }, { memberUser: ACTIVE }] };
+
 export function listingMember(listing: { ownerId: string; memberUserId: string | null }): string {
     return listing.memberUserId ?? listing.ownerId;
 }
@@ -200,6 +204,8 @@ export async function listListings(req: Request, res: Response): Promise<void> {
                 { skills: { contains: search } },
             ];
         }
+        // Not while the member who runs it is suspended or deleted (their own list aside).
+        if (!(req.user && where.ownerId === req.user.id)) where.AND = [ACTIVE_MEMBER_RUNS_IT];
 
         let orderBy: any = { createdAt: 'desc' };
         if (sort === 'name') orderBy = { name: 'asc' };
@@ -254,6 +260,8 @@ export async function getListing(req: Request, res: Response): Promise<void> {
                 owner: ownerSelect,
                 memberUser: memberUserSelect,
                 endorsements: {
+                    // None by suspended or deleted members.
+                    where: { user: ACTIVE },
                     orderBy: { createdAt: 'desc' },
                     include: { user: ownerSelect },
                 },
@@ -276,8 +284,17 @@ export async function getListing(req: Request, res: Response): Promise<void> {
             }
         }
 
-        // A member the viewer blocked: their listing is gone for the viewer.
+        // While the member who runs it is suspended or deleted, it's gone
+        // (to all but its owner and staff).
         const member = listingMember(listing);
+        if (!isStaff(req) && listing.ownerId !== req.user?.id) {
+            const runner = await prisma.user.findUnique({ where: { id: member }, select: { isBanned: true, deletedAt: true } });
+            if (!runner || runner.isBanned || runner.deletedAt) {
+                res.status(404).json({ error: 'Listing not found' });
+                return;
+            }
+        }
+        // A member the viewer blocked: their listing is gone for the viewer.
         if ((await blockedIds(req.user?.id)).includes(member)) {
             res.status(404).json({ error: 'You blocked the member who runs this listing', reason: 'blocked' });
             return;

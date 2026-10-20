@@ -464,6 +464,11 @@ export const authService = {
         try {
             nwcClient.disconnect();
         } catch { /* best-effort */ }
+        // Members' names and photos the feed kept: members-only, so not for
+        // whoever uses this browser next.
+        try {
+            localStorage.removeItem('bies_member_names');
+        } catch { /* unavailable */ }
     },
 
     // ─── Role management ────────────────────────────────────────────────────

@@ -35,6 +35,17 @@ export class VoucherError extends Error {
     }
 }
 
+/**
+ * A code doesn't let a suspended or deleted account back onto the relay:
+ * sign-in refuses them, and so does this.
+ */
+async function refuseSuspended(pubkey: string): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { nostrPubkey: pubkey }, select: { isBanned: true, deletedAt: true } });
+    if (user && (user.isBanned || user.deletedAt)) {
+        throw new VoucherError("This code can't be used with this account", 'unavailable');
+    }
+}
+
 // ─── Code generation & pubkey normalization ─────────────────────────────────
 
 /** URL-safe random voucher code (~96 bits of entropy). */
@@ -177,6 +188,7 @@ export async function redeemFree(
     pubkey: string,
     ipAddress?: string | null,
 ): Promise<VoucherRedemption> {
+    await refuseSuspended(pubkey);
     let alreadyRedeemed = false;
 
     let redemption: VoucherRedemption;
@@ -263,6 +275,7 @@ export async function startPaidRedemption(
     pubkey: string,
     ipAddress?: string | null,
 ): Promise<VoucherRedemption> {
+    await refuseSuspended(pubkey);
     const existing = await prisma.voucherRedemption.findUnique({
         where: { voucherId_pubkey: { voucherId: voucher.id, pubkey } },
     });
@@ -401,7 +414,9 @@ export async function checkPaidRedemption(redemptionId: string): Promise<Voucher
     });
 
     if (finalized?.status === 'COMPLETED' && finalized.pubkey) {
-        addToRelayWhitelist(finalized.pubkey);
+        // Suspended since it was paid: no relay access.
+        const suspended = await refuseSuspended(finalized.pubkey).then(() => false, () => true);
+        if (!suspended) addToRelayWhitelist(finalized.pubkey);
         if (didFinalize) notifyVoucherRedeemed(redemption.voucher, finalized.pubkey);
     }
 

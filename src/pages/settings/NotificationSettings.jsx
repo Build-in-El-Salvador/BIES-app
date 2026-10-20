@@ -114,7 +114,7 @@ const NotificationSettings = () => {
         flags.messages && { key: 'notifyMessages', Icon: Mail, label: t('notificationSettings.messages') },
         flags.zaps && { key: 'notifyZaps', Icon: Zap, label: t('notificationSettings.zaps') },
         flags.events && { key: 'notifyEvents', Icon: CalendarDays, label: t('notificationSettings.events'), desc: t('notificationSettings.eventsDesc') },
-        // One switch for projects: interest and deck requests, and updates to ones you follow.
+        // Opportunities: pitch deck requests and answers, on projects.
         flags.projects && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
     ].filter(Boolean);
 
