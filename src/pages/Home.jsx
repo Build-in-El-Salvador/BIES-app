@@ -4,6 +4,8 @@ import { ChevronRight } from 'lucide-react';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import heroImage from '../assets/el-salvador-banner.png';
 import logo from '../assets/logo-icon.svg';
+// The brand kit's "Bies Icon dark background": snow letters, orange ring, no disc.
+import logoDark from '../assets/logo-icon-dark.svg';
 
 const ORANGE = 'var(--color-secondary)';
 
@@ -78,7 +80,8 @@ const Home = () => {
     return (
         <div className="home-page">
             <section className="home-hero" style={{ '--home-hero-image': `url(${heroImage})` }}>
-                <img className="home-logo" src={logo} alt="BIES" />
+                <img className="home-logo home-logo-light" src={logo} alt="BIES" />
+                <img className="home-logo home-logo-dark" src={logoDark} alt="BIES" />
                 <h1 className="home-title">{t('home.title')}</h1>
                 <p className="home-subtitle">{t('home.subtitle')}</p>
             </section>
@@ -128,6 +131,14 @@ const Home = () => {
                     border-radius: 50%;
                     background: #ffffff;
                     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+                }
+                /* In dark mode, the icon made for dark backgrounds, with nothing behind it */
+                .home-logo-dark { display: none; }
+                :global([data-theme="dark"]) .home-logo-light { display: none; }
+                :global([data-theme="dark"]) .home-logo-dark {
+                    display: inline-block;
+                    background: none;
+                    box-shadow: none;
                 }
                 .home-title {
                     margin: 18px 0 8px;
