@@ -10,11 +10,18 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { buildKeytrEvent, encryptNsec, KEYTR_VERSION, DELETION_EVENT_KIND, KEYTR_EVENT_KIND } from '@sovit.xyz/keytr';
-import { assertNsecMatches, buildDeletionTemplates, isHexPubkey } from './keytrGuards.js';
+import { assertNsecMatches, buildDeletionTemplates, isHexPubkey, repairPubkey } from './keytrGuards.js';
 
 function account() {
     const sk = generateSecretKey();
     return { sk, nsec: nip19.nsecEncode(sk), pubkey: getPublicKey(sk) };
+}
+
+// keytr writes the d-tag with @scure/base's base64url, which keeps the `=`
+// padding and refuses input without it. Node's 'base64url' drops it.
+function paddedBase64url(bytes) {
+    const s = Buffer.from(bytes).toString('base64url');
+    return s + '='.repeat((4 - (s.length % 4)) % 4);
 }
 
 /** A kind:31777 event as a relay would return it (id/pubkey filled in). */
@@ -29,7 +36,7 @@ function keytrEvent(acct, rpId = 'bies.sovit.xyz') {
     const template = buildKeytrEvent({
         credential: {
             credentialId,
-            credentialIdBase64url: Buffer.from(credentialId).toString('base64url'),
+            credentialIdBase64url: paddedBase64url(credentialId),
             rpId,
             transports: [],
         },
@@ -82,4 +89,16 @@ test('isHexPubkey only accepts 64-char lowercase hex strings', () => {
     assert.equal(isHexPubkey(JSON.parse(JSON.stringify(new Uint8Array(32)))), false);
     assert.equal(isHexPubkey('ab'.repeat(31)), false);
     assert.equal(isHexPubkey(undefined), false);
+});
+
+test('repairPubkey turns a stored byte array back into the hex pubkey', () => {
+    const a = account();
+    const bytes = new Uint8Array(a.pubkey.match(/.{2}/g).map(h => parseInt(h, 16)));
+    assert.equal(repairPubkey(JSON.parse(JSON.stringify(bytes))), a.pubkey);
+    assert.equal(repairPubkey(Array.from(bytes)), a.pubkey);
+    assert.equal(repairPubkey(a.pubkey), a.pubkey);
+    assert.equal(repairPubkey({ 0: 1, 1: 2 }), null);
+    assert.equal(repairPubkey(JSON.parse(JSON.stringify(new Uint8Array(32).fill(1))).length), null);
+    assert.equal(repairPubkey(undefined), null);
+    assert.equal(repairPubkey('not-hex'), null);
 });

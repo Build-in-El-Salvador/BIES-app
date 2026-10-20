@@ -77,8 +77,11 @@ const Login = ({ nostr = false }) => {
     const passkeyAvailable = PASSKEY_ENABLED &&
         typeof PublicKeyCredential !== 'undefined' &&
         !isNativePlatform();
+    // Amber hands its answer back to a web page (/amber-callback), which can't
+    // return into the native app, so it's offered in Android browsers only.
+    const amberAvailable = AMBER_NIP55_ENABLED && isAndroid() && !isNativePlatform();
     // The buttons above the "or" divider: an extension, or Amber on Android.
-    const hasQuickMethods = hasNostrExtension || (AMBER_NIP55_ENABLED && isAndroid());
+    const hasQuickMethods = hasNostrExtension || amberAvailable;
 
     useEffect(() => {
         if (hasNostrExtension) return;
@@ -461,7 +464,7 @@ const Login = ({ nostr = false }) => {
                                 <span>{loading && !nsecInput.trim() ? t('common.connecting') : t('login.loginWithExtension')}</span>
                             </button>
                         )}
-                        {AMBER_NIP55_ENABLED && isAndroid() && (
+                        {amberAvailable && (
                             <>
                                 <button
                                     onClick={handleAmberLogin}

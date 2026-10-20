@@ -71,7 +71,7 @@ const NostrKeys = () => {
             return;
         }
         // Try re-acquiring via passkey (unavailable in the native WKWebView shell)
-        if (PASSKEY_ENABLED && typeof PublicKeyCredential !== 'undefined' && !isNativePlatform() && keytrService.hasCredential(user?.nostrPubkey)) {
+        if (PASSKEY_ENABLED && typeof PublicKeyCredential !== 'undefined' && !isNativePlatform() && user?.nostrPubkey && keytrService.hasCredential(user.nostrPubkey)) {
             setNsecLoading(true);
             try {
                 // Only this account's key — never another account's passkey.
@@ -149,15 +149,24 @@ const NostrKeys = () => {
         setConfirmRemove(false);
         setRemovingPasskey(true);
         try {
-            await keytrService.removePasskey(user.nostrPubkey);
+            const { deleted } = await keytrService.removePasskey(user.nostrPubkey);
             setHasPasskey(false);
-            setPasskeySuccess('Passkey backup removed: a deletion request was sent to the relays. Also delete the "BIES Account" passkey from your device or password manager.');
+            setPasskeySuccess(deleted > 0
+                ? 'Passkey login removed on all your devices: a deletion request was sent to the relays. Also delete the "BIES Account" passkey from each device or password manager.'
+                : 'Removed from this browser, but no passkey backup was found on the relays (they may be unreachable). If you still see passkey login on another device, try again later.');
         } catch (err) {
             if (!isUserCancellation(err)) setPasskeyError(err.message || 'Failed to remove passkey.');
         } finally {
             setRemovingPasskey(false);
         }
     }, [confirmRemove, user?.nostrPubkey]);
+
+    // An armed "Confirm" goes back to "Remove Passkey" if it isn't clicked.
+    useEffect(() => {
+        if (!confirmRemove) return undefined;
+        const timer = setTimeout(() => setConfirmRemove(false), 8000);
+        return () => clearTimeout(timer);
+    }, [confirmRemove]);
 
     const keyHeldElsewhere = {
         extension: 'Your secret key lives in your Nostr browser extension. Check your extension settings to export it.',
@@ -262,9 +271,12 @@ const NostrKeys = () => {
                                                 <Fingerprint size={14} style={{ marginRight: '0.4rem' }} /> {savingBackup ? 'Saving...' : 'Add Backup Gateway'}
                                             </button>
                                             <button onClick={handleRemovePasskey} disabled={removingPasskey} className="btn btn-outline btn-sm btn-danger-outline">
-                                                {removingPasskey ? 'Removing...' : confirmRemove ? 'Confirm: remove passkey backup' : 'Remove Passkey'}
+                                                {removingPasskey ? 'Removing...' : confirmRemove ? 'Confirm: remove on all devices' : 'Remove Passkey'}
                                             </button>
                                         </div>
+                                        {confirmRemove && (
+                                            <p className="key-muted">This removes passkey login for this account on every device, not just this one. You can still log in with your nsec or seed phrase.</p>
+                                        )}
                                     </>
                                 ) : (
                                     <>
