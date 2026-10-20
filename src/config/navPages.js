@@ -68,6 +68,22 @@ export const NAV_PAGES = [
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));
 
+// The side menu: every page a member can put in the bottom bar is in it too
+// (Mike, 2026-10-20), in this order, then Feedback and Settings in its bottom
+// section. A page whose feature is off, or that this copy of the app leaves
+// out, isn't shown.
+export const MENU_PAGES = [
+  'profile', 'home', 'feed', 'members', 'trusted', 'farms', 'talent', 'opportunities', 'marketplace',
+  'events', 'media', 'courses', 'news', 'messages', 'notifications', 'cowork', 'wallet', 'bounties',
+  'leaderboard', 'dashboard',
+];
+export const MENU_BOTTOM_PAGES = ['feedback', 'settings'];
+
+/** The side menu's pages from a list of ids: those in this copy of the app whose feature is on (`isOn(page)`). */
+export function menuPages(ids, isOn) {
+  return ids.map((id) => NAV_PAGES_BY_ID[id]).filter((page) => page && isOn(page));
+}
+
 // A new member's bar (Mike, 2026-10-19); members change theirs in Settings.
 // Profile is in the side menu, not the default bar; members can add it.
 export const DEFAULT_BOTTOM_NAV = ['home', 'trusted', 'farms', 'opportunities', 'feed'];
