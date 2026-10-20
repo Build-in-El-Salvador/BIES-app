@@ -38,7 +38,7 @@ const Settings = () => {
 
     const [views, setViews] = useState(() => ({
         projectsView: localStorage.getItem('bies_projects_view') || defaultView || 'list',
-        membersView: localStorage.getItem('bies_members_view') || defaultView || 'list',
+        membersView: localStorage.getItem('bies_members_view') || 'icons',
         eventsView: localStorage.getItem('bies_events_view') || defaultView || 'list',
         mediaView: localStorage.getItem('bies_media_view') || 'card',
     }));

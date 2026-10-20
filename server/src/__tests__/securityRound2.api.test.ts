@@ -212,7 +212,7 @@ describe('projects, decks and investments', () => {
         expect(ok.status).toBe(200);
         expect(await ok.text()).toBe('%PDF-1.7 deck');
 
-        expect((await fetch(`${base}${link.replace(/sig=[0-9a-f]/, 'sig=0')}`)).status).toBe(404);
+        expect((await fetch(`${base}${link.replace(/sig=([0-9a-f])/, (_, c) => `sig=${c === '0' ? '1' : '0'}`)}`)).status).toBe(404);
         const expired = link.replace(/exp=\d+/, `exp=${Date.now() - 1000}`);
         expect((await fetch(`${base}${expired}`)).status).toBe(404);
         expect((await fetch(`${base}/uploads/${key}`)).status).toBe(404);

@@ -112,7 +112,8 @@ async function member({ name = `Member ${++counter}`, role = 'MEMBER', isAdmin =
 
 const CONTACT = { description: 'All the details.', whatsapp: '+503 7000 0000' };
 const JOB = { type: 'job', title: 'Bartender', kind: 'full-time', ...CONTACT };
-const INVESTMENT = { type: 'investment', title: 'Solar farm', stage: 'MVP', fundingGoal: 250000, ...CONTACT };
+// A project (the `investment` type, shown as a Project): no raise or amounts.
+const INVESTMENT = { type: 'investment', title: 'Solar farm', stage: 'MVP', ...CONTACT };
 const SALE = { type: 'business-for-sale', title: 'Hostel in El Zonte', price: 180000, ...CONTACT };
 const PARTNERSHIP = { type: 'partnership', title: 'Technical co-founder', kind: 'co-founder', ...CONTACT };
 const PROGRAM = { type: 'program', title: 'Builders grant', kind: 'grant', price: 10000, ...CONTACT };
@@ -186,8 +187,9 @@ describe('posting an opportunity', () => {
         const ana = await member();
         const job = await post(ana, { ...JOB, fundingGoal: 5000, price: 10, stage: 'GROWTH', requiresDeckApproval: false });
         expect(job).toMatchObject({ fundingGoal: null, price: null, stage: 'IDEA', requiresDeckApproval: true });
-        const raise = await post(ana, { ...INVESTMENT, pay: '$10 an hour', remote: true, price: 99 });
-        expect(raise).toMatchObject({ pay: '', remote: false, price: null, fundingGoal: 250000, stage: 'MVP' });
+        // A project keeps no raise, amounts or bitcoin.
+        const raise = await post(ana, { ...INVESTMENT, pay: '$10 an hour', remote: true, price: 99, fundingGoal: 250000, raisedAmount: 5000, btcAccepted: true });
+        expect(raise).toMatchObject({ pay: '', remote: false, price: null, fundingGoal: null, raisedAmount: 0, btcAccepted: false, stage: 'MVP' });
         const sale = await post(ana, { ...SALE, revenue: 60000, btcAccepted: true, remote: true });
         expect(sale).toMatchObject({ price: 180000, revenue: 60000, btcAccepted: true, remote: false });
     });
@@ -204,10 +206,24 @@ describe('posting an opportunity', () => {
         await bad({ ...PARTNERSHIP, kind: undefined }, 'kind');
         await bad({ ...PROGRAM, kind: 'full-time' }, 'kind');
         await bad({ ...SALE, kind: 'grant' }, 'kind');
-        // An investment's deal is optional; its raise isn't.
+        // Who a project is looking for is optional; a deal isn't a kind of project.
         await post(ana, INVESTMENT);
-        await post(ana, { ...INVESTMENT, kind: 'revenue-share' });
-        await bad({ ...INVESTMENT, fundingGoal: undefined }, 'fundingGoal');
+        await post(ana, { ...INVESTMENT, kind: 'investors' });
+        await bad({ ...INVESTMENT, kind: 'revenue-share' }, 'kind');
+    });
+
+    it("an older project, with a deal that isn't a kind any more, can still be edited", async () => {
+        const ana = await member();
+        const old = await post(ana, INVESTMENT);
+        await prisma.project.update({ where: { id: old.id }, data: { kind: 'equity', fundingGoal: 250000 } });
+        // Sent back as it was, the deal doesn't stop the edit; a new deal does.
+        const edited = await call('PUT', `/api/projects/${old.id}`, { token: ana.token, body: { kind: 'equity', title: 'Solar farm, phase two' } });
+        expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+        const changed = await call('PUT', `/api/projects/${old.id}`, { token: ana.token, body: { kind: 'loan' } });
+        expect(changed.status).toBe(400);
+        expect(changed.body.field).toBe('kind');
+        // Who it's looking for replaces it.
+        expect((await call('PUT', `/api/projects/${old.id}`, { token: ana.token, body: { kind: 'investors' } })).status).toBe(200);
     });
 
     it('has a way to reach its member', async () => {
@@ -260,16 +276,19 @@ describe('finding opportunities', () => {
         expect(await find('')).toEqual(sorted(job.id, raise.id, sale.id, partner.id, grant.id));
         expect(await find('type=job')).toEqual([job.id]);
         expect(await find('type=job&kind=full-time')).toEqual([]);
+        // Only some types, as the phone app can ask; a type outside them finds none.
+        expect(await find('types=business-for-sale,job,partnership,program')).toEqual(sorted(job.id, sale.id, partner.id, grant.id));
+        expect(await find('types=job,program&type=investment')).toEqual([]);
+        expect(await find('types=business-for-sale,job&minAmount=100000')).toEqual([sale.id]);
         expect(await find('type=partnership&kind=distributor')).toEqual([partner.id]);
         expect(await find('type=investment&stage=GROWTH')).toEqual([raise.id]);
         expect(await find('type=investment&stage=IDEA')).toEqual([]);
         expect(await find('category=TOURISM')).toEqual([sale.id]);
         expect(await find('remote=true')).toEqual([job.id]);
         expect(await find('btc=true')).toEqual(sorted(job.id, sale.id));
-        // What it's raising, its price, or the most it gives.
-        expect(await find('type=investment&minAmount=200000')).toEqual([raise.id]);
+        // Its price, or the most it gives; projects have no amounts.
         expect(await find('type=business-for-sale&maxAmount=100000')).toEqual([]);
-        expect(await find('minAmount=100000')).toEqual(sorted(raise.id, sale.id));
+        expect(await find('minAmount=100000')).toEqual([sale.id]);
         expect(await find('maxAmount=50000')).toEqual([grant.id]);
 
         // Words in its place and its member's name count too.
@@ -799,10 +818,10 @@ describe('other ways to an opportunity follow the same rules', () => {
             await setFlags({ projects: true });
         }
 
-        // None from a suspended member (their profile seen after the suspension).
+        // None from a suspended member: their whole page is gone.
         const carl = await member();
         await post(carl, JOB);
         await prisma.user.update({ where: { id: carl.id }, data: { isBanned: true } });
-        expect((await call('GET', `/api/profiles/${carl.id}`, { token: ben.token })).body.user.projects).toEqual([]);
+        expect((await call('GET', `/api/profiles/${carl.id}`, { token: ben.token })).status).toBe(404);
     });
 });

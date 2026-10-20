@@ -1800,7 +1800,7 @@
       "toGo_other": "{{count}} more vouches to become BIES Trusted",
       "trusted": "Members vouch for this business.",
       "trusted_farm": "Members vouch for this farm.",
-      "how": "The Trust Score is members' vouches minus their downvotes. At {{threshold}}, a listing becomes BIES Trusted."
+      "how": "The Trust Score is the share of members' reviews that vouch. A listing becomes BIES Trusted once its vouches outnumber its downvotes by {{threshold}}."
     },
     "review": {
       "vouch": "Vouch",
@@ -2055,7 +2055,7 @@
     }
   },
   "opportunities": {
-    "intro": "Investments, businesses for sale, jobs, partnerships, and grants and programs, posted by BIES members.",
+    "intro": "Projects, businesses for sale, jobs, partnerships, and grants and programs, posted by BIES members.",
     "search": "Search opportunities",
     "add": "Post an opportunity",
     "yours": "Yours",
@@ -2063,21 +2063,21 @@
     "allTypes": "All",
     "typeLabel": "Kinds of opportunity",
     "types": {
-      "investment": "Investment",
+      "investment": "Project",
       "business-for-sale": "Business for sale",
       "job": "Job",
       "partnership": "Partnership",
       "program": "Grant or program"
     },
     "typesPlural": {
-      "investment": "Investments",
+      "investment": "Projects",
       "business-for-sale": "Businesses for sale",
       "job": "Jobs",
       "partnership": "Partnerships",
       "program": "Grants & programs"
     },
     "typeHints": {
-      "investment": "Raise money for a project or a company.",
+      "investment": "Share what you're building and who you'd like to meet: investors, a co-founder, a team.",
       "business-for-sale": "Sell a business, or a share of one.",
       "job": "Hire someone: a job, contract work, an internship or a volunteer role.",
       "partnership": "Find a co-founder, a business partner, a distributor, a supplier or a sponsor.",
@@ -2085,11 +2085,12 @@
     },
     "kinds": {
       "investment": {
-        "equity": "Equity",
-        "convertible": "SAFE or note",
-        "loan": "Loan",
-        "revenue-share": "Revenue share",
-        "other": "Other"
+        "investors": "Investors",
+        "co-founder": "A co-founder",
+        "team": "People for the team",
+        "mentors": "Mentors or advisors",
+        "partners": "Partners or customers",
+        "other": "Something else"
       },
       "job": {
         "full-time": "Full-time",
@@ -2150,21 +2151,26 @@
     "closesIn_one": "Closes tomorrow",
     "closesIn_other": "Closes in {{count}} days",
     "card": {
-      "raising": "Raising {{amount}}",
       "asking": "Asking {{amount}}",
       "priceOnRequest": "Price on request",
-      "upTo": "Up to {{amount}}"
+      "upTo": "Up to {{amount}}",
+      "lookingFor": {
+        "investors": "Looking for investors",
+        "co-founder": "Looking for a co-founder",
+        "team": "Looking for people for the team",
+        "mentors": "Looking for mentors or advisors",
+        "partners": "Looking for partners or customers"
+      }
     },
     "filters": {
       "kind": {
-        "investment": "Deal",
+        "investment": "Looking for",
         "job": "Type of job",
         "partnership": "Looking for",
         "program": "Kind of program"
       },
       "any": "Any",
       "amount": {
-        "investment": "Raising",
         "business-for-sale": "Asking price",
         "program": "Up to"
       },
@@ -2174,13 +2180,12 @@
       "remote": "Can be done remotely",
       "btc": {
         "any": "Bitcoin accepted",
-        "investment": "Takes bitcoin",
         "business-for-sale": "Sells for bitcoin",
         "job": "Pays in bitcoin"
       },
       "clear": "Clear filters"
     },
-    "empty": "No opportunities yet. Post the first one: an investment, a business for sale, a job, a partnership or a program.",
+    "empty": "No opportunities yet. Post the first one: a project, a business for sale, a job, a partnership or a program.",
     "noneYours": "You haven't posted any opportunities yet.",
     "noneSaved": "Opportunities you save show here. Tap Save on one to keep it.",
     "noMatches": "No opportunities match these filters.",
@@ -2212,7 +2217,7 @@
     "close": "Close it",
     "reopen": "Open it again",
     "factsTitle": {
-      "investment": "The raise",
+      "investment": "The project",
       "business-for-sale": "The business",
       "job": "The job",
       "partnership": "The partnership",
@@ -2220,9 +2225,6 @@
       "default": "Details"
     },
     "facts": {
-      "raising": "Raising",
-      "raised": "Raised so far",
-      "deal": "Deal",
       "asking": "Asking price",
       "revenue": "Yearly revenue",
       "jobType": "Type of job",
@@ -2230,17 +2232,15 @@
       "lookingFor": "Looking for",
       "programKind": "Kind",
       "upTo": "Up to",
-      "where": "Where",
-      "progress": "{{percent}}% raised"
+      "where": "Where"
     },
     "btc": {
-      "investment": "Takes investment in bitcoin",
       "business-for-sale": "Accepts bitcoin for the sale",
       "job": "Pays in bitcoin",
       "default": "Bitcoin accepted"
     },
     "safety": {
-      "investment": "BIES doesn't check opportunities. Do your own research before you invest, and never send money to someone you haven't met.",
+      "investment": "BIES connects members: it doesn't offer, arrange or check investments, and nothing here is an offer to invest. Do your own research, and never send money to someone you haven't met.",
       "business-for-sale": "BIES doesn't check opportunities. Visit the business and check its papers before you pay anything.",
       "job": "BIES doesn't check opportunities. Never pay to apply for a job.",
       "program": "BIES doesn't check opportunities. Real grants and programs never ask you to pay to apply.",
@@ -2273,7 +2273,7 @@
       "createTitle": "Post an opportunity",
       "chooseType": "What are you posting?",
       "createTitles": {
-        "investment": "Post an investment",
+        "investment": "Post a project",
         "business-for-sale": "Sell a business",
         "job": "Post a job",
         "partnership": "Find a partner",
@@ -2291,7 +2291,7 @@
         "program": "e.g. Builders grant 2027"
       },
       "kindLabel": {
-        "investment": "Deal (optional)",
+        "investment": "Looking for (optional)",
         "job": "Type of job",
         "partnership": "Looking for",
         "program": "Kind of program"
@@ -2304,7 +2304,7 @@
       "chooseIndustry": "Choose an industry",
       "descriptionLabel": "Description",
       "descriptionPlaceholder": {
-        "investment": "What it is, the team, how far it's got, what the money is for, and the terms.",
+        "investment": "What you're building, the team, how far it's got, and who you'd like to meet.",
         "business-for-sale": "What the business does, how long it has run, why you're selling, and what's included: the premises, equipment, stock.",
         "job": "The work, the hours, who you're looking for, and how to apply.",
         "partnership": "What you're building, who you're looking for, and what you bring.",
@@ -2314,11 +2314,7 @@
       "descriptionRequired": "Say what it is.",
       "stageRequired": "Choose its stage.",
       "amountInvalid": "Type an amount in dollars, like 250000 or 250k.",
-      "raisingRequired": "Say how much it's raising.",
       "contactRequired": "Add at least one way to reach you.",
-      "raiseHeading": "The raise",
-      "raisingLabel": "Raising",
-      "raisedLabel": "Raised so far",
       "deckHint": "A PDF or PowerPoint. It's private: only you, and the members you share it with, can open it.",
       "deckAdd": "Add a pitch deck",
       "deckReplace": "Replace the pitch deck",
@@ -2336,7 +2332,6 @@
       "upToLabel": "Up to",
       "upToHint": "The most it gives: a grant's size, or the prize.",
       "btcLabel": {
-        "investment": "Takes investment in bitcoin",
         "business-for-sale": "Accepts bitcoin for the sale",
         "job": "Pays in bitcoin"
       },
@@ -2372,13 +2367,16 @@
       "seeYours": "See yours",
       "delete": "Delete this opportunity",
       "deleteConfirm": "Delete this opportunity for good? Its photos and pitch deck go with it.",
+      "deleteConfirmNoDeck": "Delete this opportunity for good? Its photos go with it.",
       "deleteYes": "Delete",
       "tooLong": "Keep it to {{max}} characters.",
       "closesOnPassed": "That day has passed. Pick today or a later day.",
       "whatsappInvalid": "Use numbers, spaces and +, like +503 6123 4567.",
       "emailInvalid": "Check the email address.",
       "fieldInvalid": "Check this.",
-      "deckFailedEdit": "Your changes are saved, but the pitch deck didn't upload. Press Save changes to try again."
+      "deckFailedEdit": "Your changes are saved, but the pitch deck didn't upload. Press Save changes to try again.",
+      "projectHeading": "The project",
+      "projectHint": "Leave out amounts, valuations and terms. Talk about those privately with the people you meet."
     }
   },
   "marketplace": {
@@ -2454,7 +2452,7 @@
     "discover": "Discover",
     "members": "Members",
     "farms": "Farms",
-    "trusted": "Directory",
+    "trusted": "Businesses",
     "events": "Events",
     "news": "News",
     "dashboard": "Dashboard",
@@ -2674,7 +2672,7 @@
     "title": "Feature Toggles",
     "subtitle": "Turn app features on or off for everyone, instantly - no redeploy needed",
     "propagationNote": "Changes apply to you immediately. Other users pick them up within about 5 minutes (server cache) or on their next app focus. Disabled features disappear from navigation, their pages show Not Found and their APIs are blocked.",
-    "appNote": "The iOS and Android apps show only the Farm Directory, BIES Trusted and BIES Talents from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
+    "appNote": "The iOS and Android apps show only the Farm Directory, BIES Trusted, BIES Talents and Opportunities from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
     "adminOnly": "Only administrators can change feature toggles. Moderators have read-only access.",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -2718,7 +2716,7 @@
       },
       "projects": {
         "name": "Opportunities",
-        "description": "Investments, businesses for sale, jobs, partnerships, and grants and programs"
+        "description": "Projects, businesses for sale, jobs, partnerships, and grants and programs"
       },
       "cowork": {
         "name": "Cowork",
@@ -3027,7 +3025,7 @@
       },
       "opportunities": {
         "title": "Opportunities",
-        "desc": "Investments, businesses for sale, jobs, partnerships and more."
+        "desc": "Projects, businesses for sale, jobs, partnerships and more."
       },
       "talent": {
         "title": "BIES Talents",

@@ -9,9 +9,14 @@ import BackButton from '../../components/BackButton';
 import { getAssetUrl } from '../../utils/assets';
 import TypeBadge, { TYPE_STYLE, styleOf } from '../../components/opportunities/TypeBadge';
 import {
-    OPPORTUNITY_TYPES, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
+    typesShown, isTypeShown, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
     asWebLink, elSalvadorToday, fullDollars, hasField, industryOf, isOpen, parseDollars, plainText,
 } from '../../components/opportunities/opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
+
+// The phone app leaves some types out (config/appScope.js).
+const NATIVE = isNativePlatform();
+const TYPES = typesShown(NATIVE);
 
 const emptyForm = {
     title: '',
@@ -19,8 +24,6 @@ const emptyForm = {
     category: '',
     description: '',
     stage: '',
-    fundingGoal: '',
-    raisedAmount: '',
     price: '',
     revenue: '',
     pay: '',
@@ -41,7 +44,7 @@ const MAX_DESCRIPTION = 5000;
 const PHONE = /^[+0-9\s()-]{1,30}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // The fields that show their own error; for others, the message goes at the top.
-const FIELD_ERRORS = ['title', 'kind', 'description', 'stage', 'fundingGoal', 'raisedAmount', 'price', 'revenue', 'closesOn', 'whatsapp', 'email', 'websiteUrl'];
+const FIELD_ERRORS = ['title', 'kind', 'description', 'stage', 'price', 'revenue', 'closesOn', 'whatsapp', 'email', 'websiteUrl'];
 const asText = (n) => (n === null || n === undefined || n === 0 ? '' : String(n));
 
 /**
@@ -63,7 +66,7 @@ const OpportunityForm = ({ editMode = false }) => {
     const [params] = useSearchParams();
     const location = useLocation();
 
-    const [type, setType] = useState(() => (OPPORTUNITY_TYPES.includes(params.get('type')) ? params.get('type') : ''));
+    const [type, setType] = useState(() => (TYPES.includes(params.get('type')) ? params.get('type') : ''));
     const [form, setForm] = useState(emptyForm);
     const [photos, setPhotos] = useState([]);
     const [hasDeck, setHasDeck] = useState(false);
@@ -100,15 +103,18 @@ const OpportunityForm = ({ editMode = false }) => {
                         setLoadError(t('opportunities.form.notYours'));
                         return;
                     }
-                    setType(OPPORTUNITY_TYPES.includes(o.type) ? o.type : 'investment');
+                    if (!isTypeShown(o.type, NATIVE)) {
+                        setLoadError(t('opportunities.notFound'));
+                        return;
+                    }
+                    setType(TYPES.includes(o.type) ? o.type : 'investment');
                     setForm({
                         title: o.title || '',
-                        kind: o.kind || '',
+                        // An older project's deal (equity…) isn't a kind any more.
+                        kind: (OPPORTUNITY_KINDS[o.type || 'investment'] || []).includes(o.kind) ? o.kind : '',
                         category: o.category ? industryOf(o.category) : '',
                         description: plainText(o.description),
                         stage: o.stage || '',
-                        fundingGoal: asText(o.fundingGoal),
-                        raisedAmount: asText(o.raisedAmount),
                         price: asText(o.price),
                         revenue: asText(o.revenue),
                         pay: o.pay || '',
@@ -209,8 +215,6 @@ const OpportunityForm = ({ editMode = false }) => {
         };
         if (!editMode) payload.type = type;
         if (hasField(type, 'stage')) payload.stage = form.stage || 'IDEA';
-        if (hasField(type, 'fundingGoal')) payload.fundingGoal = money('fundingGoal');
-        if (hasField(type, 'raisedAmount')) payload.raisedAmount = money('raisedAmount') || 0;
         // No price (0 too): on request.
         if (hasField(type, 'price')) payload.price = money('price') || null;
         if (hasField(type, 'revenue')) payload.revenue = money('revenue');
@@ -236,7 +240,7 @@ const OpportunityForm = ({ editMode = false }) => {
 
     /** The first thing to fix before it can be posted, or null. */
     const firstProblem = () => {
-        const badAmount = ['fundingGoal', 'raisedAmount', 'price', 'revenue'].find((f) => hasField(type, f) && Number.isNaN(money(f)));
+        const badAmount = ['price', 'revenue'].find((f) => hasField(type, f) && Number.isNaN(money(f)));
         if (!form.title.trim()) return { id: 'of-title', message: t('opportunities.form.titleRequired') };
         // Older projects could have longer ones.
         if (form.title.trim().length > MAX_TITLE) return { id: 'of-title', message: t('opportunities.form.tooLong', { max: MAX_TITLE }) };
@@ -245,7 +249,6 @@ const OpportunityForm = ({ editMode = false }) => {
         if (form.description.trim().length > MAX_DESCRIPTION) return { id: 'of-description', message: t('opportunities.form.tooLong', { max: MAX_DESCRIPTION }) };
         if (type === 'investment' && !form.stage) return { id: 'of-stage', message: t('opportunities.form.stageRequired') };
         if (badAmount) return { id: `of-${badAmount}`, message: t('opportunities.form.amountInvalid') };
-        if (type === 'investment' && !money('fundingGoal')) return { id: 'of-fundingGoal', message: t('opportunities.form.raisingRequired') };
         // A typed date gets past the calendar's limit.
         if (form.closesOn && form.closesOn < elSalvadorToday() && form.closesOn !== savedClosesOn) return { id: 'of-closesOn', message: t('opportunities.form.closesOnPassed') };
         if (form.whatsapp.trim() && !PHONE.test(form.whatsapp.trim())) return { id: 'of-whatsapp', message: t('opportunities.form.whatsappInvalid') };
@@ -363,7 +366,7 @@ const OpportunityForm = ({ editMode = false }) => {
                             <p className="of-subtitle">{t('opportunities.form.chooseType')}</p>
                         </div>
                         <div className="of-types">
-                            {OPPORTUNITY_TYPES.map((ty) => {
+                            {TYPES.map((ty) => {
                                 const { Icon, color, tint } = TYPE_STYLE[ty];
                                 return (
                                     <button key={ty} type="button" className="of-type" onClick={() => chooseType(ty)}>
@@ -471,7 +474,8 @@ const OpportunityForm = ({ editMode = false }) => {
                     {/* The facts its type has */}
                     {type === 'investment' && (
                         <div className="of-card">
-                            <h3 className="of-card-heading">{t('opportunities.form.raiseHeading')}</h3>
+                            <h3 className="of-card-heading">{t('opportunities.form.projectHeading')}</h3>
+                            <p className="of-hint" style={{ marginTop: 0, marginBottom: '0.9rem' }}>{t('opportunities.form.projectHint')}</p>
                             <div className="of-group" role="radiogroup" aria-labelledby="of-stage-label">
                                 <span className="of-label" id="of-stage-label">{t('opportunities.stage')} *</span>
                                 <div className="of-chips">
@@ -492,12 +496,6 @@ const OpportunityForm = ({ editMode = false }) => {
                                 </div>
                                 {fieldErrorFor('of-stage')}
                             </div>
-                            <div className="of-row">
-                                <MoneyField id="fundingGoal" label={`${t('opportunities.form.raisingLabel')} *`} form={form} onChange={handleChange} invalid={invalid} errorFor={fieldErrorFor} />
-                                <MoneyField id="raisedAmount" label={t('opportunities.form.raisedLabel')} form={form} onChange={handleChange} invalid={invalid} errorFor={fieldErrorFor} />
-                            </div>
-                            <BtcCheck type={type} form={form} onChange={handleChange} t={t} />
-
                             <div className="of-deck">
                                 <span className="of-label">{t('opportunities.deck.title')}</span>
                                 <p className="of-hint" style={{ marginTop: 0, marginBottom: '0.6rem' }}>{t('opportunities.form.deckHint')}</p>
@@ -643,7 +641,7 @@ const OpportunityForm = ({ editMode = false }) => {
                         <div className="of-delete">
                             {confirmDelete ? (
                                 <div className="of-delete-confirm" role="alert" ref={deleteRef}>
-                                    <p>{t('opportunities.form.deleteConfirm')}</p>
+                                    <p>{t(type === 'investment' ? 'opportunities.form.deleteConfirm' : 'opportunities.form.deleteConfirmNoDeck')}</p>
                                     <div className="of-delete-buttons">
                                         <button type="button" className="btn btn-outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
                                             {t('common.cancel')}

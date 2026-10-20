@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, MapPin, Loader2, User, LayoutGrid, List as ListIcon, Columns } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { profilesApi } from '../services/api';
+import { profilesApi, preferencesApi } from '../services/api';
 import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import { useAuth } from '../context/AuthContext';
-import { useViewPreference } from '../context/ViewContext';
 import { stripHtml } from '../utils/text';
 
 // A member's headline: "Title at Company", or whichever they gave.
@@ -23,10 +22,18 @@ const Discover = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const { user } = useAuth();
-  const { defaultView } = useViewPreference();
   const [searchQuery, setSearchQuery] = useState('');
-  const [memberViewType, setMemberViewType] = useState(() => localStorage.getItem('bies_members_view') || defaultView);
+  // Icons until a member picks another layout, here or in Settings.
+  const [memberViewType, setMemberViewType] = useState(() => localStorage.getItem('bies_members_view') || 'icons');
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+
+  // A layout choice: kept on this device and in the account (as Settings does).
+  const pickView = (value) => {
+    setMemberViewType(value);
+    setViewMenuOpen(false);
+    localStorage.setItem('bies_members_view', value);
+    preferencesApi.save({ membersView: value }).catch(() => {});
+  };
 
   const [builders, setBuilders] = useState([]);
   const [buildersLoading, setBuildersLoading] = useState(false);
@@ -129,13 +136,13 @@ const Discover = () => {
                   boxShadow: 'var(--shadow-md)', minWidth: '160px',
                   display: 'flex', flexDirection: 'column', gap: '4px'
                 }}>
-                  <button onClick={() => { setMemberViewType('icons'); setViewMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='icons'?'var(--color-primary)':'transparent', color: memberViewType==='icons'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
+                  <button onClick={() => pickView('icons')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='icons'?'var(--color-primary)':'transparent', color: memberViewType==='icons'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
                     <LayoutGrid size={16}/> Icons
                   </button>
-                  <button onClick={() => { setMemberViewType('list'); setViewMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='list'?'var(--color-primary)':'transparent', color: memberViewType==='list'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
+                  <button onClick={() => pickView('list')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='list'?'var(--color-primary)':'transparent', color: memberViewType==='list'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
                     <ListIcon size={16}/> List
                   </button>
-                  <button onClick={() => { setMemberViewType('standard'); setViewMenuOpen(false); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='standard'?'var(--color-primary)':'transparent', color: memberViewType==='standard'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
+                  <button onClick={() => pickView('standard')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='standard'?'var(--color-primary)':'transparent', color: memberViewType==='standard'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
                     <Columns size={16}/> Standard
                   </button>
                 </div>

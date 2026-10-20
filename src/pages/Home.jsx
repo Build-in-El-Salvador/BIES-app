@@ -4,6 +4,8 @@ import { ChevronRight } from 'lucide-react';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import heroImage from '../assets/el-salvador-banner.png';
 import logo from '../assets/logo-icon.svg';
+// The brand kit's "Bies Icon dark background": snow letters, orange ring, no disc.
+import logoDark from '../assets/logo-icon-dark.svg';
 
 const ORANGE = 'var(--color-secondary)';
 
@@ -59,9 +61,8 @@ const OpportunityIcon = () => (
 /**
  * The app's home page, from Michael's mockup: the BIES logo over a view of
  * El Salvador, "Explore the Ecosystem", and a card for each part of BIES.
- * A card shows only when its page is on (in the store app, Opportunities
- * waits until it's in the app: an empty or "coming soon" card gets an app
- * rejected).
+ * A card shows only when its page is on. In the phone app, Opportunities says
+ * what it has there: no investments (config/appScope.js).
  */
 const Home = () => {
     const { t } = useTranslation();
@@ -79,18 +80,19 @@ const Home = () => {
     return (
         <div className="home-page">
             <section className="home-hero" style={{ '--home-hero-image': `url(${heroImage})` }}>
-                <img className="home-logo" src={logo} alt="BIES" />
+                <img className="home-logo home-logo-light" src={logo} alt="BIES" />
+                <img className="home-logo home-logo-dark" src={logoDark} alt="BIES" />
                 <h1 className="home-title">{t('home.title')}</h1>
                 <p className="home-subtitle">{t('home.subtitle')}</p>
             </section>
 
             <nav className="home-cards" aria-label={t('home.title')}>
-                {cards.map(({ key, to, Icon, tint }) => (
+                {cards.map(({ key, to, Icon, tint, desc }) => (
                     <Link key={key} to={to} className="home-card">
                         <span className="home-card-icon" style={{ background: tint }}><Icon /></span>
                         <span className="home-card-text">
                             <span className="home-card-title">{t(`home.cards.${key}.title`)}</span>
-                            <span className="home-card-desc">{t(`home.cards.${key}.desc`)}</span>
+                            <span className="home-card-desc">{t(desc || `home.cards.${key}.desc`)}</span>
                         </span>
                         <span className="home-card-go" aria-hidden="true"><ChevronRight size={20} strokeWidth={2.75} /></span>
                     </Link>
@@ -129,6 +131,14 @@ const Home = () => {
                     border-radius: 50%;
                     background: #ffffff;
                     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+                }
+                /* In dark mode, the icon made for dark backgrounds, with nothing behind it */
+                .home-logo-dark { display: none; }
+                :global([data-theme="dark"]) .home-logo-light { display: none; }
+                :global([data-theme="dark"]) .home-logo-dark {
+                    display: inline-block;
+                    background: none;
+                    box-shadow: none;
                 }
                 .home-title {
                     margin: 18px 0 8px;

@@ -31,8 +31,11 @@ function removeSpans(str: string, open: RegExp, close: RegExp): string {
     return out + str.slice(kept);
 }
 
-/** Takes out every tag: a "<", at least one character, and the first ">" after it (`<[^>]+>`). */
-function removeTags(str: string): string {
+/**
+ * Takes out every tag: a "<", at least one character, and the first ">" after it (`<[^>]+>`),
+ * in one pass (the regular expression takes time growing with the square of the text).
+ */
+export function removeTags(str: string): string {
     let out = '';
     let kept = 0;
     for (let lt = str.indexOf('<'); lt !== -1;) {

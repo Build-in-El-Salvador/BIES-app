@@ -9,6 +9,7 @@ import { User, Search, ChevronDown, LogOut, Trophy, X } from 'lucide-react';
 import NostrIcon from './NostrIcon';
 import NostrNotifications from './NostrNotifications';
 import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config/featureFlags';
+import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
 import logoIconDark from '../assets/logo-icon-dark.svg';
 
@@ -57,6 +58,12 @@ const Navbar = () => {
   const squeezeLinks = navLinks.filter((link) => link.squeeze);
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+  // The side menu's links: pages whose feature is on, and, signed out, only
+  // the ones that don't need an account.
+  const menuLinks = (ids) => menuPages(ids, (page) => (!page.flag || featureOn(page.flag))
+    && (!page.auth || isAuthenticated)
+    && (page.id !== 'cowork' || COWORK_ENABLED))
+    .map((page) => ({ to: page.path, label: t(page.labelKey) }));
 
   // Derive mobile navbar title from route
   const getPageTitle = () => {
@@ -302,24 +309,12 @@ const Navbar = () => {
               <button onClick={() => setIsMenuOpen(false)} aria-label={t('nav.closeMenu')} style={{ display: 'flex', color: 'white', background: 'none', border: 'none', padding: '10px', cursor: 'pointer' }}><X size={24} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
-              {/* Top Section: Profile, Messages, News, About. The pages go by
-                  their short names, as in the bottom bar, so each fits on one line. */}
+              {/* Top Section: every page the bottom bar can hold (MENU_PAGES),
+                  then Admin and About. The pages go by their short names, as
+                  in the bottom bar, so each fits on one line. */}
               {[
-                { to: '/profile', label: t('nav.profile') },
-                ...(featureOn('directories') ? [
-                  { to: '/farms', label: t('mobileNav.farms') },
-                  { to: '/trusted', label: t('mobileNav.trusted') },
-                ] : []),
-                ...(featureOn('talent') ? [{ to: '/talents', label: t('mobileNav.talent') }] : []),
-                ...(featureOn('projects') ? [{ to: '/opportunities', label: t('mobileNav.opportunities') }] : []),
-                ...(MARKETPLACE_ENABLED && featureOn('marketplace') ? [{ to: '/market', label: t('marketplace.entryLabel') }] : []),
-                ...(featureOn('messages') ? [{ to: '/messages', label: t('nav.messages') }] : []),
-                ...(COWORK_ENABLED && featureOn('cowork') ? [{ to: '/cowork', label: t('nav.cowork') }] : []),
-                ...(featureOn('zaps') ? [{ to: '/wallet', label: t('nav.wallet', 'Wallet') }] : []),
-                ...(BOUNTIES_ENABLED && featureOn('bounties') ? [{ to: '/bounties', label: t('nav.bounties') }] : []),
+                ...menuLinks(MENU_PAGES),
                 ...((user?.isAdmin || user?.role === 'MOD') ? [{ to: '/admin', label: t('nav.adminPanel'), isAdmin: true }] : []),
-                ...(featureOn('points') ? [{ to: '/leaderboard', label: t('nav.leaderboard') }] : []),
-                ...(featureOn('news') ? [{ to: '/news', label: t('nav.news') }] : []),
                 { to: '/about', label: t('nav.about') },
               ].map((link) => {
                 const active = isActive(link.to);
@@ -341,11 +336,8 @@ const Navbar = () => {
               })}
             </div>
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
-              {/* Bottom Section: Feedback, FAQ, Settings, Log Out */}
-              {[
-                ...(featureOn('feedback') ? [{ to: '/feedback', label: 'Feedback' }] : []),
-                { to: '/settings', label: t('nav.settings') },
-              ].map(item => (
+              {/* Bottom Section: Feedback, Settings, Log Out */}
+              {menuLinks(MENU_BOTTOM_PAGES).map(item => (
                 <Link key={item.to} to={item.to} style={{ display: 'block', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
                   {item.label}
                 </Link>

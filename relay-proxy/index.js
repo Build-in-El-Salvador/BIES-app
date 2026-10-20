@@ -13,6 +13,12 @@ const AUTH_TIMEOUT   = parseInt(process.env.AUTH_TIMEOUT_MS || '30000', 10);
 // may send before signing in; past either, the connection closes.
 const MAX_PAYLOAD    = 512 * 1024;
 const MAX_PENDING    = 50;
+// And how much, in all, before signing in.
+const MAX_PENDING_BYTES = 256 * 1024;
+// Connections not yet signed in, per address at once: enough for a room on
+// one venue Wi-Fi opening the app together, not for one machine opening
+// thousands to hold memory.
+const MAX_UNAUTHED_PER_IP = parseInt(process.env.MAX_UNAUTHED_PER_IP || '40', 10);
 // How often open connections are checked against the whitelist, so a
 // member who is suspended or deletes their account stops reading.
 const RECHECK_MS     = parseInt(process.env.RECHECK_MS || '60000', 10);
@@ -107,6 +113,21 @@ function normalizeMessage(text) {
     return changed ? JSON.stringify(normalized) : text;
 }
 
+// ─── Who is connecting ───────────────────────────────────────────────────────
+// Behind two nginx (the server's, then the app's), the visitor's address is
+// the second from the right in X-Forwarded-For, as the API's TRUST_PROXY=2
+// reads it; entries further left are whatever the visitor sent.
+function clientIp(req) {
+    const chain = String(req.headers['x-forwarded-for'] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    return chain.length >= 2 ? chain[chain.length - 2] : (req.socket?.remoteAddress || 'unknown');
+}
+
+const unauthedByIp = new Map();
+function countUnauthed(ip, change) {
+    const next = (unauthedByIp.get(ip) || 0) + change;
+    if (next > 0) unauthedByIp.set(ip, next); else unauthedByIp.delete(ip);
+}
+
 // ─── WebSocket proxy server ──────────────────────────────────────────────────
 const wss = new WebSocketServer({ port: LISTEN_PORT, maxPayload: MAX_PAYLOAD });
 
@@ -128,6 +149,17 @@ console.log(`[Proxy] Relay URL for auth: ${RELAY_URL}`);
 wss.on('connection', (clientWs, req) => {
     // Derive the relay URL this connection is arriving on (handles prod TLS + local access)
     const connectionRelayUrl = resolveRelayUrl(req);
+
+    const ip = clientIp(req);
+    if ((unauthedByIp.get(ip) || 0) >= MAX_UNAUTHED_PER_IP) {
+        clientWs.close(1013, 'too many connections');
+        return;
+    }
+    countUnauthed(ip, 1);
+    let counted = true;
+    const uncount = () => { if (counted) { counted = false; countUnauthed(ip, -1); } };
+    clientWs.on('close', uncount);
+    let pendingBytes = 0;
 
     let authenticated = false;
     let upstream = null;
@@ -161,7 +193,7 @@ wss.on('connection', (clientWs, req) => {
         const payload = isBinary ? data : data.toString();
         if (authenticated && clientWs.readyState === WebSocket.OPEN) {
             clientWs.send(payload);
-        } else if (!authenticated && pendingUpstream.length < MAX_PENDING) {
+        } else if (!authenticated && pendingUpstream.length < MAX_PENDING && payload.length <= MAX_PENDING_BYTES) {
             // Buffer upstream responses so they aren't lost during auth
             pendingUpstream.push(payload);
         }
@@ -243,6 +275,7 @@ wss.on('connection', (clientWs, req) => {
 
             // Auth success
             authenticated = true;
+            uncount();
             authedSockets.set(clientWs, event.pubkey);
             clearTimeout(authTimer);
             console.log(`[Proxy] Authenticated: ${event.pubkey.substring(0, 8)}...`);
@@ -255,7 +288,8 @@ wss.on('connection', (clientWs, req) => {
 
         // Before auth, buffer messages instead of dropping them (a few)
         if (!authenticated) {
-            if (pendingMessages.length >= MAX_PENDING) {
+            pendingBytes += text.length;
+            if (pendingMessages.length >= MAX_PENDING || pendingBytes > MAX_PENDING_BYTES) {
                 clientWs.close(4001, 'auth-required');
                 return;
             }

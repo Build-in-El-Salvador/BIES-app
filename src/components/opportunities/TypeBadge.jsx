@@ -1,11 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { TrendingUp, Store, Briefcase, HeartHandshake, Award } from 'lucide-react';
+import { Rocket, Store, Briefcase, HeartHandshake, Award } from 'lucide-react';
 import { OPPORTUNITY_TYPES, typeLine } from './opportunityOptions';
 
 /** Each type's icon and colours (text on its tint passes WCAG AA). */
 export const TYPE_STYLE = {
-    investment: { Icon: TrendingUp, color: '#047857', tint: '#ecfdf5' },
+    investment: { Icon: Rocket, color: '#047857', tint: '#ecfdf5' },
     'business-for-sale': { Icon: Store, color: '#c2410c', tint: '#fff7ed' },
     job: { Icon: Briefcase, color: '#0047ab', tint: '#eef4fc' },
     partnership: { Icon: HeartHandshake, color: '#6d28d9', tint: '#f5f3ff' },
