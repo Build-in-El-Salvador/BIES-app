@@ -2,11 +2,11 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AlertCircle, Loader2, Key, KeyRound, Globe, FileText, FileKey, Fingerprint, Smartphone, QrCode } from 'lucide-react';
+import { AlertCircle, Loader2, Key, KeyRound, Globe, FileText, FileKey, Smartphone, QrCode } from 'lucide-react';
 import { nip19, getPublicKey } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { PASSKEY_ENABLED, NIP46_ENABLED, AMBER_NIP55_ENABLED } from '../config/featureFlags';
-import { isLikelyExtensionInterference, keytrService } from '../services/keytrService';
+import { isLikelyExtensionInterference } from '../services/keytrService';
 import { isNativePlatform } from '../utils/platform';
 import { authService } from '../services/authService';
 import { isMobileUA, isAndroid } from '../utils/device';
@@ -77,6 +77,11 @@ const Login = ({ nostr = false }) => {
     const passkeyAvailable = PASSKEY_ENABLED &&
         typeof PublicKeyCredential !== 'undefined' &&
         !isNativePlatform();
+    // Amber hands its answer back to a web page (/amber-callback), which can't
+    // return into the native app, so it's offered in Android browsers only.
+    const amberAvailable = AMBER_NIP55_ENABLED && isAndroid() && !isNativePlatform();
+    // The buttons above the "or" divider: an extension, or Amber on Android.
+    const hasQuickMethods = hasNostrExtension || amberAvailable;
 
     useEffect(() => {
         if (hasNostrExtension) return;
@@ -219,29 +224,8 @@ const Login = ({ nostr = false }) => {
         setError('');
         setLoading(true);
         try {
-            // If the nsec field has a real nsec, login with it and save as passkey
-            const trimmed = nsecInput.trim();
-            if (trimmed.startsWith('nsec1')) {
-                const result = await loginWithNsec(trimmed);
-                if (!result.success) {
-                    setError(result.error || 'Invalid nsec key.');
-                    return;
-                }
-                // Login succeeded — now register the passkey for future logins
-                try {
-                    const pubkey = result.user?.nostrPubkey;
-                    if (pubkey) {
-                        await keytrService.saveWithPasskey(trimmed, pubkey);
-                    }
-                } catch (saveErr) {
-                    // Passkey save failed but login succeeded — continue anyway
-                    console.warn('[Login] Passkey save failed:', saveErr.message);
-                }
-                handleResult(result);
-                return;
-            }
-
-            // No nsec present — normal passkey login flow
+            // Login only: a passkey is never created from this screen (that's
+            // an explicit choice in Settings → Nostr key).
             const result = await loginWithPasskey();
             if (result.cancelled) return;
             if (!result.success) {
@@ -463,23 +447,9 @@ const Login = ({ nostr = false }) => {
                     <div className="divider"><span>{t('common.or')}</span></div>
                 </>)}
 
-                {/* Quick login methods — passkey shown when WebAuthn is available */}
-                {(hasNostrExtension || passkeyAvailable) && (
+                {/* Quick login methods */}
+                {hasQuickMethods && (
                     <div className="quick-login-buttons">
-                        {passkeyAvailable && (
-                            <button
-                                onClick={handlePasskeyLogin}
-                                disabled={loading}
-                                className="w-full btn-passkey flex items-center justify-center gap-3 py-3 rounded-full"
-                            >
-                                {loading ? (
-                                    <Loader2 size={20} className="spin" />
-                                ) : (
-                                    <Fingerprint size={20} />
-                                )}
-                                <span>{t('login.loginWithPasskey')}</span>
-                            </button>
-                        )}
                         {hasNostrExtension && (
                             <button
                                 onClick={handleExtensionLogin}
@@ -494,7 +464,7 @@ const Login = ({ nostr = false }) => {
                                 <span>{loading && !nsecInput.trim() ? t('common.connecting') : t('login.loginWithExtension')}</span>
                             </button>
                         )}
-                        {AMBER_NIP55_ENABLED && isAndroid() && (
+                        {amberAvailable && (
                             <>
                                 <button
                                     onClick={handleAmberLogin}
@@ -520,7 +490,7 @@ const Login = ({ nostr = false }) => {
                 )}
 
                 {/* Divider between quick methods and manual methods */}
-                {(hasNostrExtension || passkeyAvailable) && (
+                {hasQuickMethods && (
                     <div className="divider"><span>{t('common.or')}</span></div>
                 )}
 
@@ -739,6 +709,23 @@ const Login = ({ nostr = false }) => {
                     </div>
                 )}
 
+                {/* Passkey (NIP-K1): kept for members who already saved one, but
+                    not promoted — new passkeys need PRF, which many browsers
+                    and password managers lack. Always shown on the web: a new
+                    device has no local index and finds the passkey by discovery. */}
+                {passkeyAvailable && (
+                    <p className="login-hint" style={{ textAlign: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={handlePasskeyLogin}
+                            disabled={loading}
+                            className="login-link-btn"
+                        >
+                            {t('login.loginWithPasskey')}
+                        </button>
+                    </p>
+                )}
+
                 {/* Create a Nostr key */}
                 <div className="login-footer">
                     <p className="login-subtext" style={{ marginBottom: '0.5rem' }}>{t('emailSignIn.ownKeyPrompt')}</p>
@@ -864,18 +851,6 @@ const Login = ({ nostr = false }) => {
                     transition: border-color 0.2s;
                 }
                 .btn-nostr:hover { border-color: var(--color-primary); }
-                .btn-passkey {
-                    background: #1e1b4b;
-                    color: white;
-                    font-weight: 600;
-                    transition: all 0.2s;
-                    border: none;
-                    cursor: pointer;
-                    border-radius: 9999px;
-                    padding: clamp(0.75rem, 2vh, 1rem) 1.5rem;
-                }
-                .btn-passkey:hover { opacity: 0.9; }
-                .btn-passkey:disabled { opacity: 0.5; cursor: not-allowed; }
                 /* :global() for components (Link, icons): styled-jsx only scopes plain elements */
                 .login-footer :global(.btn-create-account) {
                     display: block;

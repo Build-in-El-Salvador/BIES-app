@@ -26,7 +26,6 @@ import {
     loginWithKeytr,
     discover,
     migrateFromKih,
-    nsecToPublicKey,
     checkPrfSupport,
     PrfNotSupportedError,
     KEYTR_VERSION,
@@ -35,6 +34,8 @@ import {
 } from '@sovit.xyz/keytr';
 import { NOSTR_RELAYS } from './nostrService.js';
 import { orderGateways, discoverThroughGateways } from './gatewayOrder.js';
+import { getPublicKey } from 'nostr-tools';
+import { assertNsecMatches, buildDeletionTemplates, repairPubkey } from './keytrGuards.js';
 
 // Override gateways: the serving domain first (WebAuthn requires the primary,
 // registration rpId to equal the origin's domain — hardcoding one deployment's
@@ -70,7 +71,14 @@ export function isUserCancellation(err) {
 
 function getStored() {
     try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        // Tier-2 login once stored the pubkey as a byte array (keytr's
+        // nsecToPublicKey returns bytes, not hex): repair those entries, and
+        // drop anything else that isn't a pubkey.
+        const creds = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        if (!Array.isArray(creds)) return [];
+        return creds
+            .map(c => ({ ...c, pubkey: repairPubkey(c?.pubkey) }))
+            .filter(c => c.pubkey);
     } catch {
         return [];
     }
@@ -237,12 +245,6 @@ export const keytrService = {
         return _prfSupport;
     },
 
-    /** Whether a new passkey can (likely) be registered on this device. */
-    async canRegisterPasskey() {
-        await ensureChecked();
-        return _webauthnAvailable && _prfSupport.supported;
-    },
-
     /** Whether a keytr credential exists for the given pubkey (or any). */
     hasCredential(pubkey) {
         const creds = getStored();
@@ -340,10 +342,24 @@ export const keytrService = {
      *
      * Tier 3: discoverable — browser shows available passkeys.
      *
+     * @param {object} [opts]
+     * @param {string} [opts.expectedPubkey] - when re-acquiring the key for an
+     *   existing session: only that account's credentials are tried first, and
+     *   a key for any other account is rejected (err.pubkeyMismatch).
      * @returns {Promise<string>} bech32-encoded nsec
      */
-    async loginWithPasskey() {
-        const creds = getStored();
+    async loginWithPasskey({ expectedPubkey } = {}) {
+        const nsec = await this._loginWithPasskey(expectedPubkey);
+        assertNsecMatches(nsec, expectedPubkey);
+        return nsec;
+    },
+
+    /** @private The three login tiers; see loginWithPasskey(). */
+    async _loginWithPasskey(expectedPubkey) {
+        // Re-acquiring for a session: only that account's own events, one
+        // prompt. A cancellation ends it, and it never falls through to the
+        // discoverable picker, which could offer (and decrypt) any account.
+        const creds = expectedPubkey ? [{ pubkey: expectedPubkey }] : getStored();
 
         if (creds.length > 0) {
             // Tier 1 — we know which pubkey to look up
@@ -355,11 +371,13 @@ export const keytrService = {
                     const { nsecBytes } = await loginWithKeytr(events);
                     setLastLoginInfo(pubkey, events);
                     try { return encodeNsec(nsecBytes); } finally { nsecBytes.fill(0); }
-                } catch {
+                } catch (err) {
+                    if (expectedPubkey) throw err;
                     // login failed — fall through to next tier
                 }
             }
         }
+        if (expectedPubkey) throw new Error('No passkey for this account could be used.');
 
         // Tier 2 — cached BIES user pubkey
         const raw = localStorage.getItem('bies_user');
@@ -369,7 +387,7 @@ export const keytrService = {
             if (events.length > 0) {
                 try {
                     const { nsecBytes } = await loginWithKeytr(events);
-                    const recoveredPk = nsecToPublicKey(nsecBytes);
+                    const recoveredPk = getPublicKey(nsecBytes); // hex
                     setLastLoginInfo(recoveredPk, events);
                     try {
                         const nsec = encodeNsec(nsecBytes);
@@ -488,6 +506,27 @@ export const keytrService = {
     /** Remove credential metadata for a specific pubkey. */
     removeCredential(pubkey) {
         setStored(getStored().filter(c => c.pubkey !== pubkey));
+    },
+
+    /**
+     * Remove this account's passkey backup: publish a NIP-09 kind:5 deletion
+     * for each of its kind:31777 events (every gateway), then drop the local
+     * index entry. The passkey itself lives on the user's authenticator and
+     * can only be deleted there.
+     *
+     * @param {string} pubkey - hex pubkey of the logged-in account
+     * @returns {Promise<{ deleted: number }>} number of events retracted
+     */
+    async removePasskey(pubkey) {
+        const { nostrSigner } = await import('./nostrSigner.js');
+        const events = await fetchKeytrEvents(pubkey, NOSTR_RELAYS);
+        const templates = buildDeletionTemplates(events, pubkey);
+        for (const template of templates) {
+            const signed = await nostrSigner.signEvent({ ...template, pubkey });
+            await publishKeytrEvent(signed, NOSTR_RELAYS);
+        }
+        this.removeCredential(pubkey);
+        return { deleted: templates.length };
     },
 
     /** Remove all stored credential metadata. */

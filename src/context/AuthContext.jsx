@@ -9,7 +9,6 @@ import { toSignerError, signerErrorKey, MAX_SIGNER_MESSAGE } from '../services/s
 import i18n from '../i18n';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
-import PasskeySavePrompt from '../components/PasskeySavePrompt';
 import PasskeyMigratePrompt from '../components/PasskeyMigratePrompt';
 import PushPermissionPrompt from '../components/PushPermissionPrompt';
 import TermsGate from '../components/moderation/TermsGate';
@@ -38,7 +37,6 @@ export const AuthProvider = ({ children }) => {
     const [wsClient, setWsClient] = useState(null);
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
     const [showMigratePrompt, setShowMigratePrompt] = useState(false);
     const [showPushPrompt, setShowPushPrompt] = useState(false);
 
@@ -76,34 +74,9 @@ export const AuthProvider = ({ children }) => {
         settleTermsWaiters(true);
     }, []);
 
-    // ─── Passkey save prompt ─────────────────────────────────────────────────
-
-    /**
-     * After a successful login that gives us the nsec in memory, check whether
-     * we should prompt the user to save a passkey for easier future logins.
-     */
-    const maybePromptPasskeySave = useCallback(async () => {
-        if (!PASSKEY_ENABLED) return;
-        if (!nostrSigner.hasKey || !nostrSigner.getNsec()) return;
-        if (keytrService.hasCredential(nostrSigner.pubkey)) return;
-        if (sessionStorage.getItem('bies_passkey_prompt_dismissed')) return;
-
-        // Registration is PRF-only as of keytr 0.8.0 — don't offer a save
-        // that would throw on non-PRF authenticators.
-        const prf = await keytrService.checkPrfSupport();
-        if (!prf.supported) return;
-
-        setShowPasskeyPrompt(true);
-    }, []);
-
-    const dismissPasskeyPrompt = useCallback(() => {
-        sessionStorage.setItem('bies_passkey_prompt_dismissed', '1');
-        setShowPasskeyPrompt(false);
-    }, []);
-
-    const handlePasskeySaved = useCallback(() => {
-        setShowPasskeyPrompt(false);
-    }, []);
+    // Saving a new passkey is opt-in from Settings → Nostr key only: keytr
+    // 0.8.0 registration needs PRF, which many browsers and password managers
+    // lack, so it is not offered after login. Existing passkeys keep working.
 
     // ─── KiH → PRF migration prompt ─────────────────────────────────────────
 
@@ -327,7 +300,6 @@ export const AuthProvider = ({ children }) => {
             const user = await authService.loginWithNsec(nsec);
             setUser(user);
             initWebSocket(user);
-            maybePromptPasskeySave();
             return { success: true, user };
         } catch (error) {
             return { success: false, error: error.message };
@@ -339,7 +311,6 @@ export const AuthProvider = ({ children }) => {
             const user = await authService.loginWithSeedPhrase(mnemonic);
             setUser(user);
             initWebSocket(user);
-            maybePromptPasskeySave();
             return { success: true, user };
         } catch (error) {
             return { success: false, error: error.message };
@@ -476,19 +447,13 @@ export const AuthProvider = ({ children }) => {
             {profilePending && !gatesHeld && (
                 <ProfileGate key={user.id} user={user} onDone={refreshUser} onSignOut={logout} />
             )}
-            {showPasskeyPrompt && !termsPending && !profilePending && (
-                <PasskeySavePrompt
-                    onClose={dismissPasskeyPrompt}
-                    onSaved={handlePasskeySaved}
-                />
-            )}
-            {showMigratePrompt && !showPasskeyPrompt && !termsPending && !profilePending && (
+            {showMigratePrompt && !termsPending && !profilePending && (
                 <PasskeyMigratePrompt
                     onClose={dismissMigratePrompt}
                     onMigrated={handleMigrated}
                 />
             )}
-            {showPushPrompt && !showPasskeyPrompt && !showMigratePrompt && !termsPending && !profilePending && (
+            {showPushPrompt && !showMigratePrompt && !termsPending && !profilePending && (
                 <PushPermissionPrompt onClose={dismissPushPrompt} />
             )}
         </AuthContext.Provider>

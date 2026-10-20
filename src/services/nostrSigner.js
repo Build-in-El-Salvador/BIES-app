@@ -468,15 +468,29 @@ class NostrSigner {
         if (!PASSKEY_ENABLED) return false;
 
         try {
-            const { keytrService } = await import('./keytrService.js');
-            if (!keytrService.hasCredential()) return false;
+            // Only this session's account: never load another indexed
+            // account's key under the current login.
+            const expectedPubkey = sessionUserPubkey();
+            if (!expectedPubkey) return false;
 
-            const nsec = await keytrService.loginWithPasskey();
+            const { keytrService } = await import('./keytrService.js');
+            if (!keytrService.hasCredential(expectedPubkey)) return false;
+
+            const nsec = await keytrService.loginWithPasskey({ expectedPubkey });
             this.setNsec(nsec);
             return true;
         } catch {
             return false;
         }
+    }
+}
+
+/** Hex pubkey of the logged-in BIES user (authService's cached user), or null. */
+export function sessionUserPubkey() {
+    try {
+        return JSON.parse(localStorage.getItem('bies_user'))?.nostrPubkey || null;
+    } catch {
+        return null;
     }
 }
 

@@ -4,12 +4,9 @@ import { getPublicKey, nip19 } from 'nostr-tools';
 import { generateSeedWords, privateKeyFromSeedWords } from 'nostr-tools/nip06';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Copy, CheckCircle, ShieldAlert, ArrowRight, AlertCircle, Fingerprint, KeyRound, Loader2, ChevronUp, ChevronDown, AtSign, X } from 'lucide-react';
-import { keytrService, isPrfUnsupportedError } from '../services/keytrService';
-import { nostrSigner } from '../services/nostrSigner';
-import { PASSKEY_ENABLED, COINOS_SIGNUP_WALLET } from '../config/featureFlags';
+import { Copy, CheckCircle, ShieldAlert, ArrowRight, AlertCircle, KeyRound, Loader2, ChevronUp, ChevronDown, AtSign, X } from 'lucide-react';
+import { COINOS_SIGNUP_WALLET } from '../config/featureFlags';
 import { walletApi, profilesApi } from '../services/api';
-import { isNativePlatform } from '../utils/platform';
 import EmailSignIn from '../components/EmailSignIn';
 import { saveKey, savedKeyAvailable } from '../services/savedKey';
 
@@ -25,22 +22,10 @@ const Signup = () => {
     const [keys, setKeys] = useState(null); // { nsec, npub, sk, pk, mnemonic }
     const [profile, setProfile] = useState({ name: '' });
     const [copiedItem, setCopiedItem] = useState(null);
-    const [savingPasskey, setSavingPasskey] = useState(false);
-    const [passkeySaved, setPasskeySaved] = useState(false);
-    const [passkeySupported, setPasskeySupported] = useState(false);
     const [nip05Name, setNip05Name] = useState('');
     const [nip05Available, setNip05Available] = useState(null);
     const [nip05Checking, setNip05Checking] = useState(false);
 
-    useEffect(() => {
-        if (!PASSKEY_ENABLED) return;
-        // WebAuthn does not exist in WKWebView (Capacitor native shell) — hide
-        // the passkey save UI there instead of letting it hard-fail.
-        if (typeof PublicKeyCredential === 'undefined' || isNativePlatform()) return;
-        // Signup only *registers* passkeys, which is PRF-only in keytr 0.8.0 —
-        // hide the step entirely when the device can't create one.
-        keytrService.canRegisterPasskey().then(setPasskeySupported);
-    }, []);
     // NIP-05 availability check (debounced)
     useEffect(() => {
         const name = nip05Name.trim().toLowerCase();
@@ -97,32 +82,6 @@ const Signup = () => {
             setKeySave(saved ? 'saved' : cancelled ? '' : 'failed');
         } catch {
             setKeySave('failed');
-        }
-    };
-
-    const handleSavePasskey = async () => {
-        if (!keys) return;
-        setSavingPasskey(true);
-        setError('');
-        try {
-            // Set up signer so keytrService can sign the kind:31777 relay event
-            nostrSigner.setNsec(keys.nsec);
-            await keytrService.saveWithPasskey(keys.nsec, keys.pk);
-            setPasskeySaved(true);
-            // Prevent the post-login PasskeySavePrompt modal from appearing
-            sessionStorage.setItem('bies_passkey_prompt_dismissed', '1');
-        } catch (err) {
-            if (err.name === 'NotAllowedError') {
-                // User cancelled the WebAuthn prompt — not an error
-                return;
-            }
-            if (isPrfUnsupportedError(err)) {
-                setError(t('passkeySave.prfUnsupported'));
-                return;
-            }
-            setError(err.message || 'Failed to save passkey.');
-        } finally {
-            setSavingPasskey(false);
         }
     };
 
@@ -323,30 +282,6 @@ const Signup = () => {
                                     </>
                                 )}
                             </div>
-
-                            {/* ── Quick Login section (separate from backup) ── */}
-                            {PASSKEY_ENABLED && passkeySupported && (
-                                <div style={{ borderTop: '1px solid var(--color-gray-200)', paddingTop: '0.75rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    <p className="text-sm font-bold" style={{ marginBottom: 2, color: 'var(--color-gray-600)' }}>Quick Login (NIP-K1)</p>
-                                    <button
-                                        onClick={handleSavePasskey}
-                                        disabled={savingPasskey || passkeySaved}
-                                        className="w-full btn-primary py-3 rounded-full flex items-center justify-center gap-2"
-                                        style={{ backgroundColor: 'var(--color-warning)' }}
-                                    >
-                                        {passkeySaved ? (
-                                            <><CheckCircle size={16} style={{ color: 'var(--color-success)' }} /> Passkey Saved</>
-                                        ) : savingPasskey ? (
-                                            <><Loader2 size={16} className="spin" /> Saving...</>
-                                        ) : (
-                                            <><Fingerprint size={16} /> Save to Passkey</>
-                                        )}
-                                    </button>
-                                    <p className="text-xs" style={{ color: 'var(--color-warning)', lineHeight: 1.3 }}>
-                                        Your key is encrypted with your passkey and stored on Nostr relays. You can recover it from any device using the same passkey. Always keep a separate backup above.
-                                    </p>
-                                </div>
-                            )}
 
                             <button
                                 onClick={handleBackupConfirm}
