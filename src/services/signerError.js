@@ -13,7 +13,7 @@
 
 // Signer text is attacker-controlled (any bunker can reply anything); it is
 // only ever rendered as React text, but cap it so it can't flood the page.
-const MAX_SIGNER_MESSAGE = 200;
+export const MAX_SIGNER_MESSAGE = 200;
 
 export const SIGNER_ERROR = Object.freeze({
     PERMISSION_DENIED: 'signer_permission_denied',

@@ -5,7 +5,7 @@ import { notifyIncomingMessage, subscribeToPush, unsubscribeFromPush } from '../
 import { isNativePlatform } from '../utils/platform';
 import { initNativePush, nativePushToken, forgetNativePushToken } from '../services/pushService';
 import { nostrSigner } from '../services/nostrSigner';
-import { toSignerError, signerErrorKey } from '../services/signerError';
+import { toSignerError, signerErrorKey, MAX_SIGNER_MESSAGE } from '../services/signerError';
 import i18n from '../i18n';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
@@ -20,7 +20,9 @@ import { needsProfile } from '../utils/profileComplete';
 function signerErrorText(err) {
     const error = toSignerError(err);
     const known = signerErrorKey(error);
-    return known ? i18n.t(known.key, known.params) : error.message;
+    // Error objects pass through toSignerError untouched, and some carry signer
+    // text too (nostr-tools quotes the bunker's reply), so cap them here.
+    return known ? i18n.t(known.key, known.params) : String(error.message ?? '').slice(0, MAX_SIGNER_MESSAGE);
 }
 
 const AuthContext = createContext();
