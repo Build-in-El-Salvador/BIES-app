@@ -136,6 +136,8 @@ function isTerminalError(err) {
 
 export const nostrConnectService = {
     _bunkerSigner: null,
+    // The bunker:// / NIP-05 input _bunkerSigner was paired from (paste flow).
+    _pairedInput: null,
     _reconnectPromise: null,
     // Bumped by disconnect() so an in-flight reconnect can detect that the
     // session it was reviving has since been torn down (logout) and avoid
@@ -160,7 +162,12 @@ export const nostrConnectService = {
      * Returns the connected BunkerSigner instance.
      */
     async connect(bunkerInput) {
-        const bp = await parseBunkerInput(bunkerInput.trim());
+        const input = bunkerInput.trim();
+        // Already paired with this exact input (a retry after the signer
+        // refused to sign): reuse it — the URI's secret is spent.
+        if (this._bunkerSigner && this._pairedInput === input) return this._bunkerSigner;
+
+        const bp = await parseBunkerInput(input);
         if (!bp) throw new Error('Invalid bunker URI or NIP-05 identifier.');
 
         const clientSk = generateSecretKey();
@@ -188,7 +195,8 @@ export const nostrConnectService = {
         // Persist only after a successful handshake — a failed attempt must
         // not leave hasStoredConnection() truthy.
         this._persistSession(clientSk, bp);
-        this._bunkerSigner = signer;
+        this._replaceSigner(signer);
+        this._pairedInput = input;
         return signer;
     },
 
@@ -237,7 +245,7 @@ export const nostrConnectService = {
         // fromURI populates signer.bp ({pubkey, relays, secret}) on success —
         // the same shape parseBunkerInput returns, so reconnect() reuses it.
         this._persistSession(clientSk, signer.bp);
-        this._bunkerSigner = signer;
+        this._replaceSigner(signer);
         return signer;
     },
 
@@ -316,6 +324,15 @@ export const nostrConnectService = {
         return signer;
     },
 
+    /** Adopt a newly paired signer, closing any previous one's subscription. */
+    _replaceSigner(signer) {
+        if (this._bunkerSigner && this._bunkerSigner !== signer) {
+            this._bunkerSigner.close().catch(() => {});
+        }
+        this._bunkerSigner = signer;
+        this._pairedInput = null;
+    },
+
     /** Get the current connected BunkerSigner, or null. */
     getSigner() {
         return this._bunkerSigner;
@@ -334,6 +351,7 @@ export const nostrConnectService = {
             this._bunkerSigner.close().catch(() => {});
             this._bunkerSigner = null;
         }
+        this._pairedInput = null;
         this.clearSession();
     },
 

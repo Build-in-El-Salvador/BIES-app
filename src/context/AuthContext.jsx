@@ -5,6 +5,8 @@ import { notifyIncomingMessage, subscribeToPush, unsubscribeFromPush } from '../
 import { isNativePlatform } from '../utils/platform';
 import { initNativePush, nativePushToken, forgetNativePushToken } from '../services/pushService';
 import { nostrSigner } from '../services/nostrSigner';
+import { toSignerError, signerErrorKey, MAX_SIGNER_MESSAGE } from '../services/signerError';
+import i18n from '../i18n';
 import { keytrService } from '../services/keytrService';
 import { PASSKEY_ENABLED } from '../config/featureFlags';
 import PasskeyMigratePrompt from '../components/PasskeyMigratePrompt';
@@ -12,6 +14,15 @@ import PushPermissionPrompt from '../components/PushPermissionPrompt';
 import TermsGate from '../components/moderation/TermsGate';
 import ProfileGate from '../components/ProfileGate';
 import { needsProfile } from '../utils/profileComplete';
+
+/** Login-screen text for a remote-signer failure (string rejections included). */
+function signerErrorText(err) {
+    const error = toSignerError(err);
+    const known = signerErrorKey(error);
+    // Error objects pass through toSignerError untouched, and some carry signer
+    // text too (nostr-tools quotes the bunker's reply), so cap them here.
+    return known ? i18n.t(known.key, known.params) : String(error.message ?? '').slice(0, MAX_SIGNER_MESSAGE);
+}
 
 const AuthContext = createContext();
 
@@ -315,7 +326,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: signerErrorText(error) };
         }
     };
 
@@ -342,7 +353,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, error: signerErrorText(error) };
         }
     };
 

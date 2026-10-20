@@ -77,4 +77,32 @@ test.describe('NIP-46 bunker login', () => {
 
         await context2.close();
     });
+
+    test('signer refuses the login kind → clear message → allow + retry with the same URI', async ({ page }) => {
+        test.setTimeout(120_000);
+        bunker.denyKinds([27235]);
+        const requestCountBefore = bunker.requests.length;
+
+        await page.goto('/login');
+        await page.click('.mode-tab:has-text("Remote")');
+        await page.click('.mode-tab:has-text("Paste bunker URI")');
+
+        const uri = bunker.bunkerUri('e2e-deny-secret');
+        await page.fill('input[placeholder="bunker://... or name@domain.com"]', uri);
+        await page.click('button:has-text("Login with Remote Signer")');
+
+        // The signer's refusal is explained, not "Login failed".
+        await expect(page.locator('text=event kind 27235')).toBeVisible({ timeout: 60_000 });
+        await expect(page.locator('text=Login failed. Please try again.')).not.toBeVisible();
+
+        // User allows the kind in the signer and presses login again with the
+        // same (already spent) URI: the existing pairing is reused.
+        bunker.denyKinds([]);
+        await page.click('button:has-text("Login with Remote Signer")');
+        await page.waitForURL(/\/(home|feed|dashboard)/, { timeout: 60_000 });
+
+        const methods = bunker.requests.slice(requestCountBefore).map(r => r.method);
+        expect(methods.filter(m => m === 'connect')).toHaveLength(1);
+        expect(methods.filter(m => m === 'sign_event').length).toBeGreaterThanOrEqual(2);
+    });
 });
