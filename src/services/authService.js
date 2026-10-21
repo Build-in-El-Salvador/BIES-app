@@ -26,7 +26,7 @@ const USER_KEY = 'bies_user';
 // this device last had, as it does offline: the phone app's launch screen
 // stays up while it waits (App.jsx). With no member to carry on as, it waits
 // longer, then shows signing in.
-const RESTORE_WAIT_MS = 6000;
+const RESTORE_WAIT_MS = 1500;
 const RESTORE_LIMIT_MS = 12000;
 
 // A remote signer answers get_public_key at once; sign_event may wait on a

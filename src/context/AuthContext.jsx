@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
                 if (user) {
                     setUser(user);
                     initWebSocket(user);
-                    fetchInitialNotifications();
+                    // Notifications: the bell fetches them when it mounts.
                     // Warm up the NIP-46 connection so the first signing action
                     // doesn't stall on a cold reconnect. Guarded to bunker mode
                     // only — tryRestore() for 'nsec' would fire a WebAuthn prompt.

@@ -8,6 +8,7 @@ import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { User, Search, ChevronDown, LogOut, Trophy, X } from 'lucide-react';
 import NostrIcon from './NostrIcon';
 import NostrNotifications from './NostrNotifications';
+import useMediaQuery from '../hooks/useMediaQuery';
 import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config/featureFlags';
 import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
@@ -26,6 +27,9 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
+  // One notifications bell at a time: each opens its own relay subscriptions
+  // and lookups, so the hidden one mustn't run (768px matches the CSS below).
+  const phoneWidth = useMediaQuery('(max-width: 768px)');
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -196,7 +200,7 @@ const Navbar = () => {
             )}
           </div>
           <div className="notifications-menu relative">
-            {isAuthenticated && <NostrNotifications />}
+            {isAuthenticated && !phoneWidth && <NostrNotifications />}
           </div>
 
           {/* User Profile / Mode Switcher */}
@@ -278,7 +282,7 @@ const Navbar = () => {
 
           {/* Mobile Notification Bell + Menu Toggle */}
           <div className="mobile-actions">
-            {isAuthenticated && <NostrNotifications mobile />}
+            {isAuthenticated && phoneWidth && <NostrNotifications mobile />}
             <button
               className="mobile-toggle"
               onClick={() => setIsMenuOpen(!isMenuOpen)}

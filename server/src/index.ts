@@ -139,18 +139,24 @@ app.use(cors({
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    // The phone app (capacitor://localhost) is cross-origin, so each API call
+    // first sends an OPTIONS check. Let the app reuse that answer for 10
+    // minutes (WebKit's ceiling) instead of 5 seconds: one round trip fewer
+    // per call on a phone. The allowed origins above don't change.
+    maxAge: 600,
 }));
 
 // ─── Compression (gzip) ───────────────────────────────────────────────────────
 app.use(compression());
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
-// General: 300 req / 15 min per account when signed in, per IP otherwise
-// (utils/rateLimitKey.ts): a room on one Wi-Fi shares an IP.
-// 300 per 15 min = 20/min, which is generous but safe
+// General, per 15 min: 600 per signed-in account, 300 per IP signed out
+// (utils/rateLimitKey.ts): a room on one Wi-Fi shares an IP. Opening a
+// member's profile alone makes about ten calls, so 300 could stop someone
+// browsing members; signed-out traffic keeps the lower limit.
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: (req) => (rateLimitKey(req).startsWith('user:') ? 600 : 300),
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' },
@@ -171,18 +177,23 @@ const uploadLimiter = rateLimit({
     keyGenerator: rateLimitKey,
 });
 
-// Search / autocomplete: 120 per minute (frequent UI calls)
+// Search / autocomplete: 120 per minute per account (per IP signed out), so
+// a room on one Wi-Fi doesn't share one budget.
 const searchLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 120,
     message: { error: 'Search rate limit reached' },
+    skip: (req) => req.method === 'OPTIONS',
+    keyGenerator: rateLimitKey,
 });
 
-// Contact form: 5 per hour
+// Contact form: 5 per hour per account (per IP signed out)
 const contactLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 5,
     message: { error: 'Too many contact submissions. Please try again later.' },
+    skip: (req) => req.method === 'OPTIONS',
+    keyGenerator: rateLimitKey,
 });
 
 app.use('/api/', generalLimiter);
