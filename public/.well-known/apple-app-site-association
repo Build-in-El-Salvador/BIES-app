@@ -1,4 +1,18 @@
 {
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["VQFDNBV9VS.com.bies.app"],
+        "components": [
+          { "/": "/farms/*", "comment": "farm listings" },
+          { "/": "/trusted/*", "comment": "business listings" },
+          { "/": "/talents/*", "comment": "talents" },
+          { "/": "/opportunities/*", "comment": "opportunities and projects" },
+          { "/": "/feed", "?": { "post": "?*" }, "comment": "a shared post" }
+        ]
+      }
+    ]
+  },
   "webcredentials": {
     "apps": ["VQFDNBV9VS.com.bies.app"]
   }

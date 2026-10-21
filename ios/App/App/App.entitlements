@@ -6,6 +6,7 @@
 	<string>development</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:app.buildinelsalvador.com</string>
 		<string>webcredentials:app.buildinelsalvador.com</string>
 	</array>
 </dict>

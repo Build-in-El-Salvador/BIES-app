@@ -23,6 +23,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Shared links to these pages open in the app (Android App Links).
+                 Verified against https://app.buildinelsalvador.com/.well-known/assetlinks.json,
+                 which needs the release signing key's SHA-256; until then
+                 Android opens them in the browser. Keep in step with
+                 public/.well-known/apple-app-site-association. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.buildinelsalvador.com" />
+                <data android:pathPrefix="/farms/" />
+                <data android:pathPrefix="/trusted/" />
+                <data android:pathPrefix="/talents/" />
+                <data android:pathPrefix="/opportunities/" />
+                <data android:path="/feed" />
+            </intent-filter>
+
         </activity>
 
         <provider
