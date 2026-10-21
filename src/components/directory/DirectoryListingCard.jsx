@@ -49,7 +49,7 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
             <div className="dir-card">
                 <div className="dir-card-photo">
                     {photo ? (
-                        <img src={getAssetUrl(photo)} alt={listing.name} />
+                        <img src={getAssetUrl(photo)} alt={listing.name} loading="lazy" decoding="async" />
                     ) : (
                         <div className="dir-card-photo-fallback">
                             <FallbackIcon size={28} />

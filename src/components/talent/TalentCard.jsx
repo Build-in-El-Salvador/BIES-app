@@ -34,7 +34,7 @@ const TalentCard = ({ talent }) => {
         >
             <div className="tal-card">
                 <div className="tal-card-photo">
-                    {profile.avatar ? <img src={getAssetUrl(profile.avatar)} alt="" /> : <User size={28} />}
+                    {profile.avatar ? <img src={getAssetUrl(profile.avatar)} alt="" loading="lazy" decoding="async" /> : <User size={28} />}
                 </div>
 
                 <div className="tal-card-info">

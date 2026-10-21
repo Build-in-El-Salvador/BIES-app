@@ -23,8 +23,22 @@ const FeatureFlagsContext = createContext({
     refresh: () => {},
 });
 
+// The last answer, so the app starts with the right pages instead of
+// showing everything and then hiding what's off. Only switches, nothing
+// personal; the server's answer replaces it a moment later.
+const FLAGS_KEY = 'bies_flags';
+
+function rememberedFlags() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(FLAGS_KEY));
+        return saved && typeof saved === 'object' && !Array.isArray(saved) ? { ...DEFAULT_FLAGS, ...saved } : DEFAULT_FLAGS;
+    } catch {
+        return DEFAULT_FLAGS;
+    }
+}
+
 export const FeatureFlagsProvider = ({ children }) => {
-    const [flags, setFlags] = useState(DEFAULT_FLAGS);
+    const [flags, setFlags] = useState(rememberedFlags);
     const [loading, setLoading] = useState(true);
     const inFlight = useRef(false);
 
@@ -35,6 +49,7 @@ export const FeatureFlagsProvider = ({ children }) => {
             const data = await flagsApi.get();
             if (data && typeof data === 'object' && !Array.isArray(data)) {
                 setFlags({ ...DEFAULT_FLAGS, ...data });
+                try { localStorage.setItem(FLAGS_KEY, JSON.stringify(data)); } catch { /* storage off */ }
             }
         } catch {
             // fail-open: keep the last known flags (defaults on first load)

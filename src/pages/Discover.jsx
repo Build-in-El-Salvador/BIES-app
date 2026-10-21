@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { profilesApi, preferencesApi } from '../services/api';
 import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
+import Avatar from '../components/Avatar';
 import { useAuth } from '../context/AuthContext';
 import { stripHtml } from '../utils/text';
 
@@ -52,19 +53,18 @@ const Discover = () => {
     }
   }, [location.search]);
 
-  // Members load 12 at a time as you scroll down; a new search, or coming
-  // back to the page, starts again from the top.
+  // Members load a screenful or more at a time as you scroll down (Icons
+  // shows many per screen, so 48; cards fewer, so 24); a new search, or
+  // coming back to the page, starts again from the top.
+  const pageSize = memberViewType === 'icons' ? 48 : 24;
   const loadBuilders = useCallback(async (pageToLoad) => {
     const request = ++buildersRequest.current;
     setBuildersLoading(true);
     try {
-      const params = { page: pageToLoad, limit: 12 };
+      const params = { page: pageToLoad, limit: pageSize };
       if (searchQuery) params.search = searchQuery;
 
-      const [result, followingRes] = await Promise.all([
-        profilesApi.list(params),
-        pageToLoad === 1 && user?.id ? profilesApi.getFollowing(user.id, { limit: 100 }).catch(() => null) : Promise.resolve(null)
-      ]);
+      const result = await profilesApi.list(params);
       if (request !== buildersRequest.current) return;
 
       const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
@@ -75,11 +75,6 @@ const Discover = () => {
       });
       setBuildersPage(pageToLoad);
       setBuildersHasMore(pageToLoad < (result?.pagination?.totalPages || 1));
-
-      if (followingRes) {
-        const fList = Array.isArray(followingRes?.data) ? followingRes.data : Array.isArray(followingRes) ? followingRes : [];
-        setFollowingIds(new Set(fList.map(u => u.id)));
-      }
     } catch (err) {
       if (request !== buildersRequest.current) return;
       console.error('Fetch builders error:', err);
@@ -88,20 +83,33 @@ const Discover = () => {
     } finally {
       if (request === buildersRequest.current) setBuildersLoading(false);
     }
-  }, [searchQuery, user?.id]);
+  }, [searchQuery, pageSize]);
 
   useEffect(() => {
     const debounce = setTimeout(() => loadBuilders(1), 300);
     return () => clearTimeout(debounce);
   }, [loadBuilders]);
 
-  // The next 12 once the end of the list comes near the screen.
+  // Who you follow, for the Follow buttons: only the List and Standard views
+  // have them, so Icons doesn't wait for it. Fetched once per visit.
+  const showsFollow = memberViewType !== 'icons';
+  const followingLoaded = useRef(false);
+  useEffect(() => {
+    if (!showsFollow || !user?.id || followingLoaded.current) return;
+    followingLoaded.current = true;
+    profilesApi.getFollowing(user.id, { limit: 100 }).then((res) => {
+      const fList = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setFollowingIds(new Set(fList.map((u) => u.id)));
+    }).catch(() => { followingLoaded.current = false; });
+  }, [showsFollow, user?.id]);
+
+  // The next batch once the end of the list comes near the screen.
   useEffect(() => {
     const end = buildersEnd.current;
     if (!end || !buildersHasMore || buildersLoading) return;
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) loadBuilders(buildersPage + 1);
-    }, { rootMargin: '600px 0px' });
+    }, { rootMargin: '300px 0px' });
     observer.observe(end);
     return () => observer.disconnect();
   }, [buildersHasMore, buildersLoading, buildersPage, loadBuilders]);
@@ -167,12 +175,18 @@ const Discover = () => {
                 <div className={`builders-layout-${memberViewType}`}>
                     {builders.map((builder) => {
                         const targetUserId = builder.user?.id || builder.userId;
-                        const avatarContent = builder.avatar || builder.image ? (
-                            <img src={builder.avatar || builder.image} alt={builder.name} className="builder-avatar-img w-full h-full object-cover" />
-                        ) : (
-                            <div className="builder-avatar-fallback w-full h-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <User size={memberViewType === 'icons' ? 32 : 48} style={{ color: 'var(--color-gray-300)' }} />
-                            </div>
+                        const avatarContent = (
+                            <Avatar
+                                src={builder.avatar || builder.image}
+                                alt={builder.name}
+                                size={memberViewType === 'icons' ? 72 : 96}
+                                className="builder-avatar-img w-full h-full object-cover"
+                                fallback={
+                                    <div className="builder-avatar-fallback w-full h-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <User size={memberViewType === 'icons' ? 32 : 48} style={{ color: 'var(--color-gray-300)' }} />
+                                    </div>
+                                }
+                            />
                         );
                         
                         // Like a LinkedIn card: the headline and location say who they are;
