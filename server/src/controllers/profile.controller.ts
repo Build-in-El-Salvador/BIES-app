@@ -9,6 +9,27 @@ import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
 import { isEnabled } from '../services/featureFlags.service';
 import { openNow } from './project.controller';
+import { removeTags } from '../middleware/sanitize';
+
+// What a member card shows (Members: icons, list and cards). Everything else
+// comes with the profile page itself (GET /profiles/:id), so a list of 48
+// members doesn't carry 48 full bios, work histories and custom sections.
+const CARD_BIO_CHARS = 200;
+function memberCard(p: any) {
+    return {
+        id: p.id,
+        userId: p.userId,
+        name: p.name,
+        avatar: p.avatar,
+        title: p.title,
+        company: p.company,
+        location: p.location,
+        bio: typeof p.bio === 'string' ? removeTags(p.bio).slice(0, CARD_BIO_CHARS) : p.bio,
+        skills: Array.isArray(p.skills) ? p.skills.slice(0, 3) : [],
+        tags: Array.isArray(p.tags) ? p.tags.slice(0, 3) : [],
+        user: p.user ? { id: p.user.id, nostrPubkey: p.user.nostrPubkey } : undefined,
+    };
+}
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -109,12 +130,16 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
     const respond = async (result: any) => {
         const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) }));
         const { search, location } = req.query;
+        // ?fields=card: only what a member card shows, after the privacy
+        // rules (profileForViewer) have been applied to the full profile.
+        const asCard = req.query.fields === 'card';
         const data = result.data
             .filter((p: any) => !hidden.has(p.userId))
             .filter((p: any) => typeof search !== 'string' || !search || matchesVisibly(p, search, viewerOf(req, p.userId)))
             .filter((p: any) => typeof location !== 'string' || !location
                 || String(profileForViewer(p, viewerOf(req, p.userId)).location || '').toLowerCase().includes(location.toLowerCase()))
-            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
+            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)))
+            .map((p: any) => (asCard ? memberCard(p) : p));
         if (!result.searched) {
             res.json({ ...result, data });
             return;
@@ -193,7 +218,9 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                 },
                 skip: searched ? 0 : skip,
                 take: searched ? 500 : take,
-                orderBy: { viewCount: 'desc' },
+                // Most viewed first; the id keeps members with equal counts in
+                // one order, so the next page neither repeats nor skips them.
+                orderBy: [{ viewCount: 'desc' }, { id: 'asc' }],
             }),
             searched ? Promise.resolve(0) : prisma.profile.count({ where }),
         ]);

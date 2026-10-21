@@ -61,7 +61,8 @@ const Discover = () => {
     const request = ++buildersRequest.current;
     setBuildersLoading(true);
     try {
-      const params = { page: pageToLoad, limit: pageSize };
+      // Only what the cards show; a member's page fetches their full profile.
+      const params = { page: pageToLoad, limit: pageSize, fields: 'card' };
       if (searchQuery) params.search = searchQuery;
 
       const result = await profilesApi.list(params);
