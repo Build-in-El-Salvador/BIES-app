@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // The app's own plugins; Capacitor finds the npm ones by itself.
         registerPlugin(SavedKeyPlugin.class);
+        registerPlugin(SystemBarColorsPlugin.class);
         super.onCreate(savedInstanceState);
         // Android 12+ stretches the whole web view at the top and bottom of a
         // page, the fixed header and bottom bar with it. Pages stop at their

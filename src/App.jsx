@@ -18,6 +18,7 @@ import GamificationToast from './components/GamificationToast';
 import SignerToast from './components/SignerToast';
 import AppLinkListener from './components/AppLinkListener';
 import BackButtonListener from './components/BackButtonListener';
+import SystemBarsSync from './components/SystemBarsSync';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
 import { lazyPage } from './utils/lazyPage';
@@ -307,6 +308,7 @@ const AppContent = () => {
             {location.pathname === '/' && <BootSplash />}
             <AppLinkListener />
             <BackButtonListener />
+            <SystemBarsSync />
             {user && <Navbar />}
             <div className="app-content">
                 <Suspense fallback={<PageLoading />}>
