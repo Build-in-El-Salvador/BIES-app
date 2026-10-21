@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing with the upload key, kept outside the repo in ~/.bies-android
+// (android/make-upload-key.sh creates it; android/ship.sh builds with it).
+// Play App Signing then re-signs the app with the real key, which Google keeps.
+def uploadKey = new Properties()
+def uploadKeyFile = new File(System.getProperty('user.home'), '.bies-android/keystore.properties')
+if (uploadKeyFile.exists()) {
+    uploadKeyFile.withInputStream { uploadKey.load(it) }
+}
+
 android {
     namespace = "com.bies.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +25,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (uploadKey.storeFile) {
+                storeFile file(uploadKey.storeFile)
+                storePassword uploadKey.storePassword
+                keyAlias uploadKey.keyAlias
+                keyPassword uploadKey.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig uploadKey.storeFile ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
