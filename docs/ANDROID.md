@@ -29,22 +29,17 @@ Or open the project with `npx cap open android` and use Android Studio.
 
 ## Release builds for Play
 
-1. **Create an upload key, once.** Play App Signing holds the real app-signing key;
-   you only keep the upload key.
-
-   ```bash
-   keytool -genkeypair -v -keystore bies-upload.jks -alias bies-upload \
-     -keyalg RSA -keysize 4096 -validity 10000
-   ```
-
-   **Never commit the keystore or its passwords.** Store both in the shared
-   Bitwarden. A lost upload key can be reset through Play support, but it takes days.
-2. **Raise the version** in `android/app/build.gradle` on every upload:
-   - `versionCode` must go up by at least 1 (Play rejects repeats);
-   - `versionName` is what users see.
-3. **Build a signed bundle:** Android Studio → Build → Generate Signed App Bundle
-   → `app-release.aab`.
-4. **Upload to Play Console:** Testing → Internal testing first, then Closed testing.
+1. **Create the upload key, once:** `android/make-upload-key.sh`. It asks for a password
+   (never shown) and writes the key and its settings to `~/.bies-android`, outside the
+   repo. Play App Signing holds the real app-signing key; this one only signs uploads.
+   **Save the `.jks` file and the password in the shared Bitwarden.** A lost upload key
+   can be reset through Play support, but it takes days.
+2. **Build:** `android/ship.sh`. It builds the web bundle with the production URLs,
+   syncs it, raises `versionCode` by one (Play refuses a repeat; `--no-bump` keeps it),
+   builds the release bundle, checks it is signed with the upload key, and copies it to
+   `android/releases/BIES-<versionCode>.aab` (git-ignored). Commit the new version code.
+3. **Upload to Play Console:** Test and release → Internal testing first, then Closed
+   testing. `versionName` in `android/app/build.gradle` is what users see.
 
 **New personal developer accounts** must run a closed test with at least 12 testers
 who stay opted in for 14 consecutive days before Play allows a production release.
@@ -64,10 +59,10 @@ app. To turn it on:
 
 ## Known gaps to check on a device
 
-- **Edge-to-edge.** Android 16 forces it at target API 36. Check that content
-  doesn't sit under the status bar or the gesture bar.
-- **Amber sign-in.** It returns to `window.location.origin` + `/amber-callback`,
-  which is `https://localhost` inside the app. It needs an app deep link before it
-  can work.
-- **Share links.** Links built from `window.location.origin` come out as
-  `https://localhost/...`.
+- **Edge-to-edge.** Android 16 forces it at target API 36. With a WebView of 140 or
+  newer, the page draws under the status bar and gesture bar and CSS
+  `env(safe-area-inset-*)` keeps content clear, as on iOS. Older WebViews get
+  padding instead, and the window background (`bies_bars`, the header colour)
+  fills the gap. Checked on the emulator's WebView 134 (2026-10-21).
+- **Amber sign-in.** Off inside the app (`Login.jsx`); it needs an app deep link
+  before it can work there.
