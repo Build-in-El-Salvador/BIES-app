@@ -16,6 +16,7 @@ import ModeSelectionModal from './components/ModeSelectionModal';
 import VersionIndicator from './components/VersionIndicator';
 import GamificationToast from './components/GamificationToast';
 import SignerToast from './components/SignerToast';
+import AppLinkListener from './components/AppLinkListener';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
 
@@ -235,6 +236,7 @@ const AppContent = () => {
     return (
         <>
             {location.pathname === '/' && <BootSplash />}
+            <AppLinkListener />
             {user && <Navbar />}
             <div className="app-content">
                 <Routes>
