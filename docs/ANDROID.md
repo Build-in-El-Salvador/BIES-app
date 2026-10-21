@@ -64,10 +64,10 @@ app. To turn it on:
 
 ## Known gaps to check on a device
 
-- **Edge-to-edge.** Android 16 forces it at target API 36. Check that content
-  doesn't sit under the status bar or the gesture bar.
-- **Amber sign-in.** It returns to `window.location.origin` + `/amber-callback`,
-  which is `https://localhost` inside the app. It needs an app deep link before it
-  can work.
-- **Share links.** Links built from `window.location.origin` come out as
-  `https://localhost/...`.
+- **Edge-to-edge.** Android 16 forces it at target API 36. With a WebView of 140 or
+  newer, the page draws under the status bar and gesture bar and CSS
+  `env(safe-area-inset-*)` keeps content clear, as on iOS. Older WebViews get
+  padding instead, and the window background (`bies_bars`, the header colour)
+  fills the gap. Checked on the emulator's WebView 134 (2026-10-21).
+- **Amber sign-in.** Off inside the app (`Login.jsx`); it needs an app deep link
+  before it can work there.

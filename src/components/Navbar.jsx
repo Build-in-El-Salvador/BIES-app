@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import { User, Search, ChevronDown, LogOut, Trophy, X } from 'lucide-react';
 import NostrIcon from './NostrIcon';
 import NostrNotifications from './NostrNotifications';
 import useMediaQuery from '../hooks/useMediaQuery';
+import { addBackHandler } from '../utils/backHandlers';
 import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config/featureFlags';
 import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
@@ -30,6 +31,8 @@ const Navbar = () => {
   // One notifications bell at a time: each opens its own relay subscriptions
   // and lookups, so the hidden one mustn't run (768px matches the CSS below).
   const phoneWidth = useMediaQuery('(max-width: 768px)');
+  // Android's Back closes the side menu before it leaves the page.
+  useEffect(() => (isMenuOpen ? addBackHandler(() => setIsMenuOpen(false)) : undefined), [isMenuOpen]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

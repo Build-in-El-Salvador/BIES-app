@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launch screen: the app icon's blue, so the logo sits on the icon's own colour (as on iOS). -->
+    <color name="bies_launch">#2B3C7A</color>
+    <!-- Behind the status bar and the gesture bar, where older WebViews leave a gap
+         (Capacitor pads the page there): the header and bottom bar colour.
+         values-night has the dark-mode one. -->
+    <color name="bies_bars">#0047AB</color>
+</resources>
