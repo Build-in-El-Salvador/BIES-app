@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getAssetUrl } from '../utils/assets';
+import { thumbnailUrl } from '../utils/thumbnail';
 
 /**
  * A member's (or listing's) photo for lists and grids.
  *
+ * - The server's small copy first (utils/thumbnail.js): a few KB for a 72px
+ *   circle instead of the full photo. No copy, or it fails: the photo itself.
  * - Loads only when it nears the screen and decodes off the main thread, so
  *   a page of 48 photos doesn't download and decode them all at once (on an
  *   iPhone that ran out of memory and left photos half drawn or missing).
@@ -17,20 +20,23 @@ import { getAssetUrl } from '../utils/assets';
  * @param {React.ReactNode} fallback - shown when there's no photo or it fails
  */
 export default function Avatar({ src, alt = '', size, className, fallback = null }) {
-    const [failed, setFailed] = useState(false);
-    useEffect(() => { setFailed(false); }, [src]);
+    const thumb = thumbnailUrl(src);
+    // 0: the small copy (when there is one), 1: the photo, 2: the fallback.
+    const [stage, setStage] = useState(thumb ? 0 : 1);
+    useEffect(() => { setStage(thumbnailUrl(src) ? 0 : 1); }, [src]);
 
-    if (!src || failed) return fallback;
+    if (!src || stage === 2) return fallback;
     return (
         <img
-            src={getAssetUrl(src)}
+            key={stage}
+            src={getAssetUrl(stage === 0 ? thumb : src)}
             alt={alt}
             className={className}
             width={size}
             height={size}
             loading="lazy"
             decoding="async"
-            onError={() => setFailed(true)}
+            onError={() => setStage((s) => s + 1)}
         />
     );
 }

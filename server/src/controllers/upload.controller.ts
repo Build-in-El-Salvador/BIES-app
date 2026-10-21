@@ -6,6 +6,7 @@ import { z } from 'zod';
 import prisma from '../lib/prisma';
 import path from 'path';
 import { PROCESSING_DIR, privateFileFromLink, uploadPublicFile, uploadPrivateFile } from '../services/storage.service';
+import { makeThumbnail } from '../services/thumbnails.service';
 import {
     MAX_VIDEO_SECONDS, MediaAbortedError, prepareMedia, prepareVideoFile, UnreadableMediaError, VideoTooLargeError, VideoTooLongError,
 } from '../services/mediaProcessing';
@@ -167,11 +168,14 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         // members' posts can show, so deleting a post leaves it.
         const shared = req.query.shared === '1' && media.mimeType === 'image/gif';
         await recordUpload(userId, { name, mimeType: media.mimeType, size: media.buffer.length, shared });
+        // A small copy for lists (thumbnails.service.ts); photos only.
+        if (media.mimeType.startsWith('image/')) await makeThumbnail(name, media.buffer);
 
         let poster: string | undefined;
         if (media.poster) {
             const still = await uploadPublicFile(media.poster.buffer, media.poster.mimeType);
             await recordUpload(userId, { name: still.name, mimeType: media.poster.mimeType, size: media.poster.buffer.length });
+            await makeThumbnail(still.name, media.poster.buffer);
             poster = still.url;
         }
 

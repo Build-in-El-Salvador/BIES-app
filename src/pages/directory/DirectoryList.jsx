@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cachedList, rememberList } from '../../utils/listCache';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, Bookmark } from 'lucide-react';
@@ -53,25 +54,40 @@ const DirectoryList = ({ type = 'FARM' }) => {
     }, [type]);
 
     // Fetch listings (same 300ms debounce pattern as Discover)
+    // A list shown before appears at once (utils/listCache.js) and is then
+    // refreshed; a new one shows the spinner.
     useEffect(() => {
-        const fetchListings = async () => {
+        const params = { type, limit: 50, sort: 'score' };
+        if (searchQuery) params.search = searchQuery;
+        if (category) params.category = category;
+        if (savedOnly) params.saved = 'true';
+        const key = `directory:${JSON.stringify(params)}`;
+        const seen = cachedList(key);
+        if (seen) {
+            setListings(seen);
+            setLoading(false);
+        } else {
             setLoading(true);
+        }
+        let current = true;
+        const fetchListings = async () => {
             try {
-                const params = { type, limit: 50, sort: 'score' };
-                if (searchQuery) params.search = searchQuery;
-                if (category) params.category = category;
-                if (savedOnly) params.saved = 'true';
                 const result = await directoryApi.list(params);
                 const list = result?.data || result || [];
-                setListings(Array.isArray(list) ? list : []);
+                const found = Array.isArray(list) ? list : [];
+                rememberList(key, found);
+                if (current) setListings(found);
             } catch {
-                setListings([]);
+                if (current && !seen) setListings([]);
             } finally {
-                setLoading(false);
+                if (current) setLoading(false);
             }
         };
-        const debounce = setTimeout(fetchListings, 300);
-        return () => clearTimeout(debounce);
+        const debounce = setTimeout(fetchListings, seen ? 0 : 300);
+        return () => {
+            current = false;
+            clearTimeout(debounce);
+        };
     }, [searchQuery, type, category, savedOnly]);
 
     // Client-side filtering (minimal drawer for now)

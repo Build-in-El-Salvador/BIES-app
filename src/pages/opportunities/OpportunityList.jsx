@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { cachedList, rememberList } from '../../utils/listCache';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound, Bookmark } from 'lucide-react';
@@ -122,26 +123,36 @@ const OpportunityList = () => {
     useEffect(() => {
         let current = true;
         (async () => {
-            setLoading(true);
+            const request = { limit: 50 };
+            if (query) request.search = query;
+            if (type) request.type = type;
+            if (kind) request.kind = kind;
+            if (stage) request.stage = stage;
+            if (category) request.category = category;
+            if (minAmount) request.minAmount = minAmount;
+            if (maxAmount) request.maxAmount = maxAmount;
+            if (remoteOnly) request.remote = 'true';
+            if (btcOnly) request.btc = 'true';
+            if (mineOnly && user?.id) request.ownerId = user.id;
+            if (savedOnly) request.saved = 'true';
+            if (NATIVE) request.types = TYPES.join(',');
+            // A list shown before appears at once (utils/listCache.js) and is
+            // then refreshed; a new one shows the spinner.
+            const key = `opportunities:${JSON.stringify(request)}`;
+            const seen = cachedList(key);
+            if (seen) {
+                setOpportunities(seen);
+                setLoading(false);
+            } else {
+                setLoading(true);
+            }
             try {
-                const request = { limit: 50 };
-                if (query) request.search = query;
-                if (type) request.type = type;
-                if (kind) request.kind = kind;
-                if (stage) request.stage = stage;
-                if (category) request.category = category;
-                if (minAmount) request.minAmount = minAmount;
-                if (maxAmount) request.maxAmount = maxAmount;
-                if (remoteOnly) request.remote = 'true';
-                if (btcOnly) request.btc = 'true';
-                if (mineOnly && user?.id) request.ownerId = user.id;
-                if (savedOnly) request.saved = 'true';
-                if (NATIVE) request.types = TYPES.join(',');
                 const result = await projectsApi.list(request);
-                const found = Array.isArray(result?.data) ? result.data : [];
-                if (current) setOpportunities(found.filter((o) => isTypeShown(o.type, NATIVE)));
+                const found = (Array.isArray(result?.data) ? result.data : []).filter((o) => isTypeShown(o.type, NATIVE));
+                rememberList(key, found);
+                if (current) setOpportunities(found);
             } catch {
-                if (current) setOpportunities([]);
+                if (current && !seen) setOpportunities([]);
             } finally {
                 if (current) setLoading(false);
             }

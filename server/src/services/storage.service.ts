@@ -34,7 +34,9 @@ if (config.s3.endpoint && config.s3.accessKey) {
 // ─── Local fallback directory ───
 // UPLOAD_DIR is for tests; the app keeps them next to the code (Dockerfile).
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
-const PUBLIC_DIR = path.join(UPLOAD_DIR, 'public');
+export const PUBLIC_DIR = path.join(UPLOAD_DIR, 'public');
+/** Small copies of public photos, for lists (thumbnails.service.ts). */
+export const THUMB_DIR = path.join(PUBLIC_DIR, 't');
 const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
 /**
  * Where a video waits while it's made smaller (mediaProcessing.ts): on the
@@ -43,7 +45,7 @@ const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
 export const PROCESSING_DIR = path.join(UPLOAD_DIR, 'processing');
 
 // Ensure upload directories exist
-[PUBLIC_DIR, PRIVATE_DIR, PROCESSING_DIR].forEach((dir) => {
+[PUBLIC_DIR, THUMB_DIR, PRIVATE_DIR, PROCESSING_DIR].forEach((dir) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -227,5 +229,22 @@ export async function deleteFile(key: string): Promise<void> {
  */
 export async function deleteStoredFile(name: string, isPrivate = false): Promise<void> {
     if (s3Client) return deleteFile(`${isPrivate ? 'decks' : 'media'}/${name}`);
-    return deleteFile(`${isPrivate ? 'private' : 'public'}/${name}`);
+    await deleteFile(`${isPrivate ? 'private' : 'public'}/${name}`);
+    // A public photo's small copy goes with it.
+    const thumb = isPrivate ? null : thumbFileName(name);
+    if (thumb) await deleteFile(`public/t/${thumb}`);
+}
+
+/** Whether uploads go to object storage (S3) rather than this server's disk. */
+export function usesObjectStorage(): boolean {
+    return !!s3Client;
+}
+
+/**
+ * The small copy's file name for a public photo's name, or null for anything
+ * else: the same name, as a JPEG, in public/t/.
+ */
+export function thumbFileName(name: string): string | null {
+    const match = /^(\d{13}-[0-9a-f]{32})\.(jpe?g|png|gif|webp)$/i.exec(name);
+    return match ? `${match[1]}.jpg` : null;
 }

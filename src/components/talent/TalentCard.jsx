@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, User, Play } from 'lucide-react';
 import { getAssetUrl } from '../../utils/assets';
+import Avatar from '../Avatar';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { isVideo, pictureOf, workMedia } from './talentOptions';
 import TalentPills from './TalentPills';
@@ -34,7 +35,7 @@ const TalentCard = ({ talent }) => {
         >
             <div className="tal-card">
                 <div className="tal-card-photo">
-                    {profile.avatar ? <img src={getAssetUrl(profile.avatar)} alt="" loading="lazy" decoding="async" /> : <User size={28} />}
+                    <Avatar src={profile.avatar} size={80} fallback={<User size={28} />} />
                 </div>
 
                 <div className="tal-card-info">
@@ -92,7 +93,7 @@ const TalentCard = ({ talent }) => {
                     align-items: center;
                     justify-content: center;
                 }
-                .tal-card-photo img {
+                .tal-card-photo :global(img) {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;

@@ -6,6 +6,7 @@ import { profilesApi, preferencesApi } from '../services/api';
 import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import Avatar from '../components/Avatar';
+import { cachedList, rememberList } from '../utils/listCache';
 import { useAuth } from '../context/AuthContext';
 import { stripHtml } from '../utils/text';
 
@@ -54,9 +55,10 @@ const Discover = () => {
   }, [location.search]);
 
   // Members load a screenful or more at a time as you scroll down (Icons
-  // shows many per screen, so 48; cards fewer, so 24); a new search, or
-  // coming back to the page, starts again from the top.
+  // shows many per screen, so 48; cards fewer, so 24); a new search starts
+  // again from the top. Coming back shows what was loaded (utils/listCache.js).
   const pageSize = memberViewType === 'icons' ? 48 : 24;
+  const listKey = `members:${pageSize}:${searchQuery}`;
   const loadBuilders = useCallback(async (pageToLoad) => {
     const request = ++buildersRequest.current;
     setBuildersLoading(true);
@@ -69,13 +71,18 @@ const Discover = () => {
       if (request !== buildersRequest.current) return;
 
       const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+      const hasMore = pageToLoad < (result?.pagination?.totalPages || 1);
       setBuilders((prev) => {
-        if (pageToLoad === 1) return list;
-        const seen = new Set(prev.map((b) => b.id));
-        return [...prev, ...list.filter((b) => !seen.has(b.id))];
+        let next = list;
+        if (pageToLoad !== 1) {
+          const seen = new Set(prev.map((b) => b.id));
+          next = [...prev, ...list.filter((b) => !seen.has(b.id))];
+        }
+        rememberList(listKey, { builders: next, page: pageToLoad, hasMore, at: Date.now() });
+        return next;
       });
       setBuildersPage(pageToLoad);
-      setBuildersHasMore(pageToLoad < (result?.pagination?.totalPages || 1));
+      setBuildersHasMore(hasMore);
     } catch (err) {
       if (request !== buildersRequest.current) return;
       console.error('Fetch builders error:', err);
@@ -84,12 +91,21 @@ const Discover = () => {
     } finally {
       if (request === buildersRequest.current) setBuildersLoading(false);
     }
-  }, [searchQuery, pageSize]);
+  }, [searchQuery, pageSize, listKey]);
 
+  // Shown in the last 2 minutes: as it was, scrolled-in members included.
+  // Older: shown at once, then the first page is fetched again.
   useEffect(() => {
-    const debounce = setTimeout(() => loadBuilders(1), 300);
+    const seen = cachedList(listKey);
+    if (seen) {
+      setBuilders(seen.builders);
+      setBuildersPage(seen.page);
+      setBuildersHasMore(seen.hasMore);
+      if (Date.now() - seen.at < 2 * 60_000) return undefined;
+    }
+    const debounce = setTimeout(() => loadBuilders(1), seen ? 0 : 300);
     return () => clearTimeout(debounce);
-  }, [loadBuilders]);
+  }, [loadBuilders, listKey]);
 
   // Who you follow, for the Follow buttons: only the List and Standard views
   // have them, so Icons doesn't wait for it. Fetched once per visit.

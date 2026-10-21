@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Phone, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { getAssetUrl } from '../../utils/assets';
+import Avatar from '../Avatar';
 import CertifiedBadge from './CertifiedBadge';
 
 /**
@@ -48,13 +48,16 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
         >
             <div className="dir-card">
                 <div className="dir-card-photo">
-                    {photo ? (
-                        <img src={getAssetUrl(photo)} alt={listing.name} loading="lazy" decoding="async" />
-                    ) : (
-                        <div className="dir-card-photo-fallback">
-                            <FallbackIcon size={28} />
-                        </div>
-                    )}
+                    <Avatar
+                        src={photo}
+                        alt={listing.name}
+                        size={80}
+                        fallback={
+                            <div className="dir-card-photo-fallback">
+                                <FallbackIcon size={28} />
+                            </div>
+                        }
+                    />
                 </div>
 
                 <div className="dir-card-info">
@@ -121,7 +124,7 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                     flex-shrink: 0;
                     background: var(--color-blue-tint);
                 }
-                .dir-card-photo img {
+                .dir-card-photo :global(img) {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;
