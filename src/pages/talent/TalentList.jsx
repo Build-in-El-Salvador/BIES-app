@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cachedList, rememberList } from '../../utils/listCache';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound } from 'lucide-react';
@@ -33,26 +34,37 @@ const TalentList = () => {
     // that arrives after the search or filters changed again is dropped.
     useEffect(() => {
         let current = true;
-        const fetchTalent = async () => {
+        const params = { limit: 50 };
+        if (searchQuery) params.search = searchQuery;
+        if (category) params.category = category;
+        if (mineOnly && user?.id) params.userId = user.id;
+        if (availableOnly) params.available = 'true';
+        if (remoteOnly) params.remote = 'true';
+        if (btcOnly) params.btc = 'true';
+        if (workType) params.workType = workType;
+        // A list shown before appears at once (utils/listCache.js) and is then
+        // refreshed; a new one shows the spinner.
+        const key = `talent:${JSON.stringify(params)}`;
+        const seen = cachedList(key);
+        if (seen) {
+            setTalents(seen);
+            setLoading(false);
+        } else {
             setLoading(true);
+        }
+        const fetchTalent = async () => {
             try {
-                const params = { limit: 50 };
-                if (searchQuery) params.search = searchQuery;
-                if (category) params.category = category;
-                if (mineOnly && user?.id) params.userId = user.id;
-                if (availableOnly) params.available = 'true';
-                if (remoteOnly) params.remote = 'true';
-                if (btcOnly) params.btc = 'true';
-                if (workType) params.workType = workType;
                 const result = await talentApi.list(params);
-                if (current) setTalents(Array.isArray(result?.data) ? result.data : []);
+                const found = Array.isArray(result?.data) ? result.data : [];
+                rememberList(key, found);
+                if (current) setTalents(found);
             } catch {
-                if (current) setTalents([]);
+                if (current && !seen) setTalents([]);
             } finally {
                 if (current) setLoading(false);
             }
         };
-        const debounce = setTimeout(fetchTalent, 300);
+        const debounce = setTimeout(fetchTalent, seen ? 0 : 300);
         return () => {
             current = false;
             clearTimeout(debounce);

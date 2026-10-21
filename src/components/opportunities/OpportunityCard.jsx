@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Clock } from 'lucide-react';
-import { getAssetUrl } from '../../utils/assets';
+import Avatar from '../Avatar';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { daysLeft, isOpen, summaryOf } from './opportunityOptions';
 import TypeBadge, { styleOf } from './TypeBadge';
@@ -38,7 +38,7 @@ const OpportunityCard = ({ opportunity }) => {
         >
             <div className={`opp-card${open ? '' : ' closed'}`}>
                 <div className="opp-card-photo" style={{ background: tint, color }}>
-                    {o.thumbnail ? <img src={getAssetUrl(o.thumbnail)} alt="" loading="lazy" /> : <Icon size={28} aria-hidden="true" />}
+                    <Avatar src={o.thumbnail} size={80} fallback={<Icon size={28} aria-hidden="true" />} />
                 </div>
 
                 <div className="opp-card-info">
@@ -92,7 +92,7 @@ const OpportunityCard = ({ opportunity }) => {
                     align-items: center;
                     justify-content: center;
                 }
-                .opp-card-photo img {
+                .opp-card-photo :global(img) {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;
