@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { UserModeProvider, useUserMode } from './context/UserModeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -18,97 +18,128 @@ import GamificationToast from './components/GamificationToast';
 import SignerToast from './components/SignerToast';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
+import { lazyPage } from './utils/lazyPage';
+import { Loader2 } from 'lucide-react';
 
-// Pages
+// Pages. Home and signing in come with the app; every other page is
+// fetched the first time it's opened (utils/lazyPage.js), so the app starts
+// with about a third of the code. The bottom-bar pages are fetched in the
+// background once Home is up (PRELOAD below).
 import Landing from './pages/Landing';
-import Feed from './pages/Feed';
+const Feed = lazyPage(() => import('./pages/Feed'));
 import Home from './pages/Home';
-import Discover from './pages/Discover';
-import Members from './pages/Members';
-import Builders from './pages/Builders';
-import Investors from './pages/Investors';
-import Media from './pages/Media';
-import News from './pages/News';
-import Events from './pages/Events';
-import EventDetail from './pages/EventDetail';
-import CreateEvent from './pages/CreateEvent';
-import EditEvent from './pages/EditEvent';
-import MyEvents from './pages/MyEvents';
-import Team from './pages/Team';
-import PublicProfile from './pages/PublicProfile';
-import FollowList from './pages/FollowList';
-import Profile from './pages/Profile';
-import ProfileEdit from './pages/ProfileEdit';
-import Messages from './pages/Messages';
-import Settings from './pages/Settings';
-import DeleteAccount from './pages/settings/DeleteAccount';
-import TakeYourKey from './pages/settings/TakeYourKey';
-import BlockedMembers from './pages/settings/BlockedMembers';
-import NotificationSettings from './pages/settings/NotificationSettings';
-import NostrKeys from './pages/settings/NostrKeys';
-import PrivacySettings from './pages/settings/PrivacySettings';
-import AlbumPage from './pages/AlbumPage';
-import CustomizeNavbar from './pages/CustomizeNavbar';
-import Cowork from './pages/Cowork';
-import Wallet from './pages/Wallet';
-import Bounties from './pages/Bounties';
-import BountyDetail from './pages/BountyDetail';
-import CreateBounty from './pages/CreateBounty';
-import Notifications from './pages/Notifications';
-import ArticleDetail from './pages/ArticleDetail';
+const Discover = lazyPage(() => import('./pages/Discover'));
+const Members = lazyPage(() => import('./pages/Members'));
+const Builders = lazyPage(() => import('./pages/Builders'));
+const Investors = lazyPage(() => import('./pages/Investors'));
+const Media = lazyPage(() => import('./pages/Media'));
+const News = lazyPage(() => import('./pages/News'));
+const Events = lazyPage(() => import('./pages/Events'));
+const EventDetail = lazyPage(() => import('./pages/EventDetail'));
+const CreateEvent = lazyPage(() => import('./pages/CreateEvent'));
+const EditEvent = lazyPage(() => import('./pages/EditEvent'));
+const MyEvents = lazyPage(() => import('./pages/MyEvents'));
+const Team = lazyPage(() => import('./pages/Team'));
+const PublicProfile = lazyPage(() => import('./pages/PublicProfile'));
+const FollowList = lazyPage(() => import('./pages/FollowList'));
+const Profile = lazyPage(() => import('./pages/Profile'));
+const ProfileEdit = lazyPage(() => import('./pages/ProfileEdit'));
+const Messages = lazyPage(() => import('./pages/Messages'));
+const Settings = lazyPage(() => import('./pages/Settings'));
+const DeleteAccount = lazyPage(() => import('./pages/settings/DeleteAccount'));
+const TakeYourKey = lazyPage(() => import('./pages/settings/TakeYourKey'));
+const BlockedMembers = lazyPage(() => import('./pages/settings/BlockedMembers'));
+const NotificationSettings = lazyPage(() => import('./pages/settings/NotificationSettings'));
+const NostrKeys = lazyPage(() => import('./pages/settings/NostrKeys'));
+const PrivacySettings = lazyPage(() => import('./pages/settings/PrivacySettings'));
+const AlbumPage = lazyPage(() => import('./pages/AlbumPage'));
+const CustomizeNavbar = lazyPage(() => import('./pages/CustomizeNavbar'));
+const Cowork = lazyPage(() => import('./pages/Cowork'));
+const Wallet = lazyPage(() => import('./pages/Wallet'));
+const Bounties = lazyPage(() => import('./pages/Bounties'));
+const BountyDetail = lazyPage(() => import('./pages/BountyDetail'));
+const CreateBounty = lazyPage(() => import('./pages/CreateBounty'));
+const Notifications = lazyPage(() => import('./pages/Notifications'));
+const ArticleDetail = lazyPage(() => import('./pages/ArticleDetail'));
 import Login from './pages/Login';
-import Signup from './pages/Signup';
-import AmberCallback from './pages/AmberCallback';
-import VoucherRedeem from './pages/VoucherRedeem';
-import Join from './pages/Join';
-import Dashboard from './pages/Dashboard';
-import Leaderboard from './pages/Leaderboard';
-import Overview from './pages/Overview';
-import Following from './pages/Following';
-import NotFound from './pages/NotFound';
+const Signup = lazyPage(() => import('./pages/Signup'));
+const AmberCallback = lazyPage(() => import('./pages/AmberCallback'));
+const VoucherRedeem = lazyPage(() => import('./pages/VoucherRedeem'));
+const Join = lazyPage(() => import('./pages/Join'));
+const Dashboard = lazyPage(() => import('./pages/Dashboard'));
+const Leaderboard = lazyPage(() => import('./pages/Leaderboard'));
+const Overview = lazyPage(() => import('./pages/Overview'));
+const Following = lazyPage(() => import('./pages/Following'));
+const NotFound = lazyPage(() => import('./pages/NotFound'));
 
-import DirectoryList from './pages/directory/DirectoryList';
-import ListingDetail from './pages/directory/ListingDetail';
-import CreateListing from './pages/directory/CreateListing';
+const DirectoryList = lazyPage(() => import('./pages/directory/DirectoryList'));
+const ListingDetail = lazyPage(() => import('./pages/directory/ListingDetail'));
+const CreateListing = lazyPage(() => import('./pages/directory/CreateListing'));
 
-import TalentList from './pages/talent/TalentList';
-import TalentDetail from './pages/talent/TalentDetail';
-import TalentForm from './pages/talent/TalentForm';
-import OpportunityList from './pages/opportunities/OpportunityList';
-import OpportunityDetail from './pages/opportunities/OpportunityDetail';
-import OpportunityForm from './pages/opportunities/OpportunityForm';
+const TalentList = lazyPage(() => import('./pages/talent/TalentList'));
+const TalentDetail = lazyPage(() => import('./pages/talent/TalentDetail'));
+const TalentForm = lazyPage(() => import('./pages/talent/TalentForm'));
+const OpportunityList = lazyPage(() => import('./pages/opportunities/OpportunityList'));
+const OpportunityDetail = lazyPage(() => import('./pages/opportunities/OpportunityDetail'));
+const OpportunityForm = lazyPage(() => import('./pages/opportunities/OpportunityForm'));
 
-import MarketplaceList from './pages/marketplace/MarketplaceList';
-import MarketListingDetail from './pages/marketplace/MarketListingDetail';
-import CreateMarketListing from './pages/marketplace/CreateMarketListing';
+const MarketplaceList = lazyPage(() => import('./pages/marketplace/MarketplaceList'));
+const MarketListingDetail = lazyPage(() => import('./pages/marketplace/MarketListingDetail'));
+const CreateMarketListing = lazyPage(() => import('./pages/marketplace/CreateMarketListing'));
 
-import Analytics from './pages/builder/Analytics';
-import MyCourses from './pages/educator/MyCourses';
-import NewCourse from './pages/educator/NewCourse';
-import CourseBuilder from './pages/educator/CourseBuilder';
-import LessonEditor from './pages/educator/LessonEditor';
-import CourseCatalog from './pages/courses/CourseCatalog';
-import CourseDetail from './pages/courses/CourseDetail';
-import LessonPlayer from './pages/courses/LessonPlayer';
+const Analytics = lazyPage(() => import('./pages/builder/Analytics'));
+const MyCourses = lazyPage(() => import('./pages/educator/MyCourses'));
+const NewCourse = lazyPage(() => import('./pages/educator/NewCourse'));
+const CourseBuilder = lazyPage(() => import('./pages/educator/CourseBuilder'));
+const LessonEditor = lazyPage(() => import('./pages/educator/LessonEditor'));
+const CourseCatalog = lazyPage(() => import('./pages/courses/CourseCatalog'));
+const CourseDetail = lazyPage(() => import('./pages/courses/CourseDetail'));
+const LessonPlayer = lazyPage(() => import('./pages/courses/LessonPlayer'));
 
 // Admin pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminOverview from './pages/admin/AdminOverview';
-import AdminProjects from './pages/admin/AdminProjects';
-import AdminEvents from './pages/admin/AdminEvents';
-import AdminDirectory from './pages/admin/AdminDirectory';
-import AdminUsers from './pages/admin/AdminUsers';
-import AdminPoints from './pages/admin/AdminPoints';
-import AdminAuditLog from './pages/admin/AdminAuditLog';
-import AdminNewsSettings from './pages/admin/AdminNewsSettings';
-import AdminInvestorVetting from './pages/admin/AdminInvestorVetting';
-import AdminVouchers from './pages/admin/AdminVouchers';
-import AdminFeedback from './pages/admin/AdminFeedback';
-import AdminReports from './pages/admin/AdminReports';
-import AdminCourses from './pages/admin/AdminCourses';
-import AdminBounties from './pages/admin/AdminBounties';
-import AdminFeatures from './pages/admin/AdminFeatures';
-import Feedback from './pages/Feedback';
+const AdminDashboard = lazyPage(() => import('./pages/admin/AdminDashboard'));
+const AdminOverview = lazyPage(() => import('./pages/admin/AdminOverview'));
+const AdminProjects = lazyPage(() => import('./pages/admin/AdminProjects'));
+const AdminEvents = lazyPage(() => import('./pages/admin/AdminEvents'));
+const AdminDirectory = lazyPage(() => import('./pages/admin/AdminDirectory'));
+const AdminUsers = lazyPage(() => import('./pages/admin/AdminUsers'));
+const AdminPoints = lazyPage(() => import('./pages/admin/AdminPoints'));
+const AdminAuditLog = lazyPage(() => import('./pages/admin/AdminAuditLog'));
+const AdminNewsSettings = lazyPage(() => import('./pages/admin/AdminNewsSettings'));
+const AdminInvestorVetting = lazyPage(() => import('./pages/admin/AdminInvestorVetting'));
+const AdminVouchers = lazyPage(() => import('./pages/admin/AdminVouchers'));
+const AdminFeedback = lazyPage(() => import('./pages/admin/AdminFeedback'));
+const AdminReports = lazyPage(() => import('./pages/admin/AdminReports'));
+const AdminCourses = lazyPage(() => import('./pages/admin/AdminCourses'));
+const AdminBounties = lazyPage(() => import('./pages/admin/AdminBounties'));
+const AdminFeatures = lazyPage(() => import('./pages/admin/AdminFeatures'));
+const Feedback = lazyPage(() => import('./pages/Feedback'));
+
+// While a page's code arrives: nothing for the first moment (it's usually
+// instant), then a spinner, so a quick load doesn't flash.
+const PageLoading = () => {
+    const [show, setShow] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => setShow(true), 300);
+        return () => clearTimeout(timer);
+    }, []);
+    if (!show) return null;
+    return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+            <Loader2 size={32} role="status" aria-label="Loading" style={{ animation: 'spin 1s linear infinite', color: 'var(--color-gray-400)' }} />
+        </div>
+    );
+};
+
+// The pages most people open next, fetched quietly once the app is up.
+const PRELOAD = [Feed, Discover, DirectoryList, ListingDetail, OpportunityList, OpportunityDetail,
+    TalentList, TalentDetail, PublicProfile, Profile, Notifications, Messages, Settings];
+
+function preloadPages() {
+    const run = () => PRELOAD.forEach((page) => page.preload().catch(() => {}));
+    if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 });
+    else setTimeout(run, 1500);
+}
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
@@ -227,6 +258,15 @@ const AppContent = () => {
         return () => cancelAnimationFrame(frame);
     }, [loading, location.pathname]);
 
+    // Once someone is signed in and their first page is up, fetch the pages
+    // they're likely to open next, so those open without waiting.
+    const preloaded = useRef(false);
+    useEffect(() => {
+        if (loading || !user || preloaded.current) return;
+        preloaded.current = true;
+        preloadPages();
+    }, [loading, user]);
+
     // Until it's known who's signed in, no page: the logo (in a browser too,
     // where there's no launch screen). It stays over "/" while that sends
     // them on to Home or to sign in.
@@ -237,6 +277,7 @@ const AppContent = () => {
             {location.pathname === '/' && <BootSplash />}
             {user && <Navbar />}
             <div className="app-content">
+                <Suspense fallback={<PageLoading />}>
                 <Routes>
                     {/* Public Routes */}
                     <Route path="/" element={user ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
@@ -464,6 +505,7 @@ const AppContent = () => {
                         <ProtectedRoute><NotFound /></ProtectedRoute>
                     } />
                 </Routes>
+                </Suspense>
             </div>
             {user && location.pathname !== '/settings/navbar' && <MobileBottomNav />}
             {/* Gamification toasts are part of the `points` feature */}
