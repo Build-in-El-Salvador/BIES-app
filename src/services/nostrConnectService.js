@@ -30,14 +30,24 @@ const NOSTRCONNECT_TIMEOUT_MS = 120_000;
  * Rendezvous relays for NIP-46 traffic (kind 24133). The BIES relay is
  * deliberately excluded: it is NIP-42 gated, which is a chicken-and-egg
  * problem during login (we can't AUTH before we have a signer), and the
- * signer app couldn't AUTH to it either. relay.nsec.app is the de-facto
- * NIP-46 rendezvous relay (Amber's default); the others are public relays
- * BIES already uses.
+ * signer app couldn't AUTH to it either. relay.nsec.app (Amber's old
+ * default) went dark in Sept 2026 (#415): a signer that subscribes on every
+ * relay in the URI re-subscribes to a dead one forever. Every relay here must
+ * accept and echo kind 24133 — relay.nos.social, purplepag.es and nostr.wine
+ * refuse it — and hold a subscription open: probed 2026-10-22 with a 2-minute
+ * soak, no drops. Re-probe before adding one. Every URI carries the whole
+ * list, so keep it to a handful.
  */
 export const NIP46_RELAYS =
     (import.meta.env.VITE_NIP46_RELAYS?.split(',').map(s => s.trim()).filter(Boolean)) ||
     (typeof window !== 'undefined' && window.__TEST_NIP46_RELAYS) ||
-    ['wss://relay.nsec.app', 'wss://relay.damus.io', 'wss://nos.lol'];
+    [
+        'wss://relay.damus.io',
+        'wss://nos.lol',
+        'wss://relay.primal.net',
+        'wss://offchain.pub',
+        'wss://relay.snort.social',
+    ];
 
 /**
  * Event kinds BIES signs with the user's key — requested as pre-authorized
