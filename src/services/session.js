@@ -184,7 +184,7 @@ async function doRefresh() {
         return null;
     }
 
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
+    const options = {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -192,8 +192,11 @@ async function doRefresh() {
             ...(stale ? { Authorization: `Bearer ${stale}` } : {}),
         },
         body: JSON.stringify(native ? { refreshToken } : {}),
-        signal: AbortSignal.timeout?.(REFRESH_TIMEOUT_MS),
-    });
+    };
+    // The phone app's own networking, as for every API call (nativeHttp.js).
+    const res = native
+        ? await (await import('./nativeHttp.js')).nativeFetch(`${API_BASE}/auth/refresh`, { ...options, timeoutMs: REFRESH_TIMEOUT_MS })
+        : await fetch(`${API_BASE}/auth/refresh`, { ...options, signal: AbortSignal.timeout?.(REFRESH_TIMEOUT_MS) });
 
     if (startedIn !== generation) return null; // signed out meanwhile
     if (res.status === 401) {
