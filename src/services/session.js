@@ -55,10 +55,13 @@ export function saveSession({ token, refreshToken }) {
         if (Number.isFinite(iat)) localStorage.setItem(SKEW_KEY, String(iat - Math.floor(Date.now() / 1000)));
     }
     if (refreshToken && isNativePlatform()) secureSet('refresh', refreshToken);
+    if (token) refreshAhead();
 }
 
 export function clearSession() {
     generation++;
+    clearTimeout(aheadTimer);
+    aheadTimer = null;
     localStorage.removeItem(ACCESS_KEY);
     secureRemove('refresh');
     localStorage.removeItem(USER_KEY);
@@ -98,12 +101,58 @@ export function secondsLeft(token) {
     return Number.isFinite(exp) ? Math.max(0, exp - serverNowSeconds()) : 0;
 }
 
-/** Time to refresh: inside the margin before expiry, or already expired. */
-export function needsRefresh(token) {
+function refreshMargin(token) {
     const { exp, iat } = claims(token);
     const lifetime = Number.isFinite(exp) && Number.isFinite(iat) ? exp - iat : 0;
-    const margin = lifetime > 0 ? Math.min(REFRESH_MARGIN_SECONDS, lifetime / 4) : REFRESH_MARGIN_SECONDS;
-    return secondsLeft(token) <= margin;
+    return lifetime > 0 ? Math.min(REFRESH_MARGIN_SECONDS, lifetime / 4) : REFRESH_MARGIN_SECONDS;
+}
+
+/** Time to refresh: inside the margin before expiry, or already expired. */
+export function needsRefresh(token) {
+    return secondsLeft(token) <= refreshMargin(token);
+}
+
+/** Seconds until a token is due for a refresh (0: due now). */
+export function secondsUntilRefresh(token) {
+    return Math.max(0, secondsLeft(token) - refreshMargin(token));
+}
+
+// ─── Refreshing ahead (phone app) ─────────────────────────────────────────────
+
+let aheadTimer = null;
+const AHEAD_RETRY_MS = 60_000;
+
+/**
+ * In the phone app the access token is renewed before a tap needs it, so no
+ * page waits for /auth/refresh: when it comes due (a timer, armed by each
+ * token saved and by the first request after launch), and when the app comes
+ * back to the screen, as timers don't run in the background. Not in a
+ * browser: its tabs share one session, and all of them renewing at the same
+ * moment would race each other.
+ */
+function refreshAhead() {
+    clearTimeout(aheadTimer);
+    aheadTimer = null;
+    const token = getAccessToken();
+    if (!token || !isNativePlatform()) return;
+    const wait = secondsUntilRefresh(token);
+    if (wait > 0) {
+        aheadTimer = setTimeout(refreshAhead, Math.min(wait * 1000 + 1000, 2 ** 31 - 1));
+    } else {
+        // Saving the new token arms the next timer; null means signed out.
+        refreshSession().catch(() => {
+            aheadTimer = setTimeout(refreshAhead, AHEAD_RETRY_MS);
+            aheadTimer?.unref?.();
+        });
+    }
+    // Node (the tests) needn't stay up for it; a browser's timer is a number.
+    aheadTimer?.unref?.();
+}
+
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refreshAhead();
+    });
 }
 
 // ─── Refresh ──────────────────────────────────────────────────────────────────
@@ -166,6 +215,8 @@ async function doRefresh() {
  */
 export async function freshAccessToken() {
     const token = getAccessToken();
+    // The first request after launch arms the renewal ahead of time (phone app).
+    if (token && !aheadTimer && !inFlight) refreshAhead();
     if (!token || !needsRefresh(token)) return token;
     try {
         return await refreshSession();

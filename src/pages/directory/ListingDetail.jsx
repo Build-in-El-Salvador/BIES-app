@@ -10,6 +10,8 @@ import {
     UserCheck, ArrowRightLeft,
 } from 'lucide-react';
 import { directoryApi } from '../../services/api';
+import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../../utils/detailCache';
+import { listingPage } from '../../utils/detailPages';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../../components/TranslatableText';
@@ -50,8 +52,12 @@ const ListingDetail = () => {
     const { t } = useTranslation();
     const { user, isStaff } = useAuth();
 
-    const [listing, setListing] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // Opened before (detailCache), or tapped in a list (the list's copy): drawn
+    // from the first frame, no loader.
+    const shownAtOnce = () => cachedDetail(listingPage(id)[0])
+        || (location.state?.preview?.id === id ? location.state.preview : null);
+    const [listing, setListing] = useState(shownAtOnce);
+    const [loading, setLoading] = useState(() => !shownAtOnce());
     const [error, setError] = useState(null);
     // The member who runs it is one this member blocked.
     const [blockedOwner, setBlockedOwner] = useState(false);
@@ -78,28 +84,44 @@ const ListingDetail = () => {
 
     // silent=true refreshes in place (after a review changes) without the full-page loader
     const fetchListing = useCallback(async ({ silent = false } = {}) => {
+        const [key, load] = listingPage(id);
         if (!silent) {
             setLoading(true);
             setError(null);
         }
         try {
-            const result = await directoryApi.get(id);
-            setListing(result?.data || result);
+            setListing(await fetchDetail(key, load));
             setBlockedOwner(false);
         } catch (err) {
             if (err?.data?.reason === 'blocked') {
                 setListing(null);
                 setBlockedOwner(true);
             }
-            if (!silent) setError(err.message || 'Failed to load listing');
+            // Gone meanwhile (taken down, or its member left): not the copy shown.
+            if (err?.status === 404) {
+                forgetDetail(key);
+                setListing(null);
+            }
+            if (!silent || err?.status === 404) setError(err.message || 'Failed to load listing');
         } finally {
             if (!silent) setLoading(false);
         }
     }, [id]);
 
+    // Opened before: shown at once. Tapped in a list: the list's copy at once
+    // (its reviews and Saved fill in when the page arrives). Either way it's
+    // fetched again in place; otherwise the loader until it's here.
     useEffect(() => {
-        fetchListing();
-    }, [fetchListing]);
+        const shown = shownAtOnce();
+        if (!shown) {
+            fetchListing();
+            return;
+        }
+        setListing(shown);
+        setError(null);
+        setLoading(false);
+        fetchListing({ silent: true });
+    }, [fetchListing, location.state]);
 
     // After a block the server hides the member's listing or recommendation.
     const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => fetchListing() });
@@ -266,6 +288,9 @@ const ListingDetail = () => {
         setSaved(next);
         try {
             await (next ? directoryApi.save(listing.id) : directoryApi.unsave(listing.id));
+            // The copy kept for next time says so too.
+            const [key] = listingPage(listing.id);
+            if (cachedDetail(key)) rememberDetail(key, { ...cachedDetail(key), savedByMe: next });
         } catch {
             setSaved(!next);
         }

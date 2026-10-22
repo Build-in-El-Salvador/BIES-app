@@ -254,3 +254,35 @@ test('api: a wrong sign-in code leaves the current session alone', async () => {
     assert.equal(store.has('bies_token'), true);
     assert.deepEqual(events, []);
 });
+
+// ─── Renewing ahead (phone app) ──────────────────────────────────────────────
+
+test('phone app: a token about to run out is renewed ahead, with no request waiting on it', async () => {
+    native = true;
+    store.set('bies_token', tokenExpiringIn(30)); // inside the 60 s margin
+    store.set('bies_refresh', 'rt1.s.one');
+    const fresh = tokenExpiringIn(900, 'new');
+    answers.push({ body: { token: fresh, refreshToken: 'rt1.s.two' } });
+
+    // Any token saved arms the renewal; this one is due, so it starts now.
+    session.saveSession({ token: store.get('bies_token') });
+    assert.equal(await session.refreshSession(), fresh); // the one already on its way
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/api/auth/refresh');
+    assert.equal(store.get('bies_refresh'), 'rt1.s.two');
+    assert.ok(session.secondsUntilRefresh(fresh) > 800);
+    session.clearSession();
+});
+
+test('in a browser nothing is renewed ahead: tabs share the session', async () => {
+    store.set('bies_token', tokenExpiringIn(30));
+    session.saveSession({ token: store.get('bies_token') });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(calls.length, 0);
+});
+
+test('a token is due for renewal a minute before it runs out', () => {
+    const due = session.secondsUntilRefresh(tokenExpiringIn(600));
+    assert.ok(due > 535 && due <= 540);
+    assert.equal(session.secondsUntilRefresh(tokenExpiringIn(30)), 0);
+});

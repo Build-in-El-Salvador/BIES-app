@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Globe, Mail, Loader2, Edit3, Tag, Bitcoin, Flag, Ban, Banknote, MoreHorizontal, MessageCircle,
@@ -7,6 +7,8 @@ import {
     Users, Award, ShieldAlert, Lock, RotateCcw, Laptop,
 } from 'lucide-react';
 import { projectsApi, watchlistApi } from '../../services/api';
+import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../../utils/detailCache';
+import { opportunityPage } from '../../utils/detailPages';
 import { useAuth } from '../../context/AuthContext';
 import { useLightbox } from '../../context/LightboxContext';
 import { getAssetUrl } from '../../utils/assets';
@@ -39,44 +41,76 @@ const sectionTitleStyle = {
  */
 const OpportunityDetail = () => {
     const { id } = useParams();
+    const location = useLocation();
     const { t, i18n } = useTranslation();
     const { user } = useAuth();
     const lightbox = useLightbox();
 
-    const [opportunity, setOpportunity] = useState(null);
-    const [loading, setLoading] = useState(true);
+    // Opened before (detailCache), or tapped in a list (the card's copy): drawn
+    // from the first frame, no loader, then fetched again in place.
+    const shownAtOnce = () => cachedDetail(opportunityPage(id)[0])
+        || (location.state?.preview?.id === id ? location.state.preview : null);
+    const [opportunity, setOpportunity] = useState(shownAtOnce);
+    const [loading, setLoading] = useState(() => !shownAtOnce());
     const [error, setError] = useState(null);
     const [blockedMember, setBlockedMember] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
-    const [saved, setSaved] = useState(false);
+    const [saved, setSaved] = useState(() => !!shownAtOnce()?.saved);
     const [closing, setClosing] = useState(false);
     const [problem, setProblem] = useState('');
     // Focus goes back to the menu button when a Report or Block sheet closes.
     const menuButtonRef = useRef(null);
 
-    const fetchOpportunity = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    // silent: fetched again behind what's shown; only its being gone (or
+    // blocked, or a type the app leaves out) replaces it.
+    const fetchOpportunity = useCallback(async ({ silent = false } = {}) => {
+        const [key, load] = opportunityPage(id);
+        if (!silent) {
+            setLoading(true);
+            setError(null);
+        }
         try {
-            const result = await projectsApi.get(id);
+            const result = await fetchDetail(key, load);
             // A type the phone app leaves out (an investment): not found here.
-            if (!isTypeShown(result?.type, isNativePlatform())) throw new Error('Not found');
+            if (!isTypeShown(result?.type, isNativePlatform())) {
+                const gone = new Error('Not found');
+                gone.status = 404;
+                throw gone;
+            }
             setOpportunity(result);
             setSaved(!!result?.saved);
             setBlockedMember(false);
         } catch (err) {
-            setOpportunity(null);
-            setBlockedMember(err?.data?.reason === 'blocked');
-            setError(err.message || 'Failed to load opportunity');
+            const gone = err?.status === 404 || err?.data?.reason === 'blocked';
+            if (gone) forgetDetail(key);
+            if (!silent || gone) {
+                setOpportunity(null);
+                setBlockedMember(err?.data?.reason === 'blocked');
+                setError(err.message || 'Failed to load opportunity');
+            }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, [id]);
 
     useEffect(() => {
-        fetchOpportunity();
-    }, [fetchOpportunity]);
+        const shown = shownAtOnce();
+        if (!shown) {
+            fetchOpportunity();
+            return;
+        }
+        setOpportunity(shown);
+        setSaved(!!shown.saved);
+        setError(null);
+        setLoading(false);
+        fetchOpportunity({ silent: true });
+    }, [fetchOpportunity, location.state]);
+
+    // The copy kept for next time is what's shown (after Save or Close too).
+    useEffect(() => {
+        if (opportunity?.id === id) rememberDetail(opportunityPage(id)[0], { ...opportunity, saved });
+    }, [opportunity, saved, id]);
 
     // After a block the server hides the member's opportunities.
     const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => fetchOpportunity() });
