@@ -20,6 +20,12 @@ import {
     sessionGeneration,
     waitForLogout,
 } from './session.js';
+import { isNativePlatform } from '../utils/platform.js';
+
+// The phone app sends API calls through its own networking (nativeHttp.js:
+// no CORS check before each new address), loaded only there.
+let nativeHttp = null;
+const loadNativeHttp = () => (nativeHttp ??= import('./nativeHttp.js'));
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
 
@@ -40,10 +46,17 @@ const unreachable = () => new Response(
  * was done. If it says the session is over, sign out.
  */
 async function sendAuthorized(path, init) {
-    const send = (token) => fetch(`${BASE_URL}${path}`, {
-        ...init,
-        headers: { ...init.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    });
+    const send = async (token) => {
+        const options = {
+            ...init,
+            headers: { ...init.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        };
+        if (isNativePlatform()) {
+            const { canSendNatively, nativeFetch } = await loadNativeHttp();
+            if (canSendNatively(options.body)) return nativeFetch(`${BASE_URL}${path}`, options);
+        }
+        return fetch(`${BASE_URL}${path}`, options);
+    };
 
     // Signing in needs no token, and must wait for a logout still being sent.
     if (isSignInPath(path)) {
