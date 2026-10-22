@@ -34,3 +34,8 @@ test('Opportunities is in the app, and follows its switch there', () => {
     assert.equal(scopeFlags({ ...DEFAULT_FLAGS, projects: true }, true).projects, true);
     assert.equal(scopeFlags({ ...DEFAULT_FLAGS, projects: false }, true).projects, false);
 });
+
+test('Report / Feedback is in the app, and follows its switch there', () => {
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, feedback: true }, true).feedback, true);
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, feedback: false }, true).feedback, false);
+});

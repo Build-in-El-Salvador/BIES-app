@@ -63,7 +63,8 @@ export const NAV_PAGES = [
     : []),
   { id: 'leaderboard', path: '/leaderboard', icon: Trophy, labelKey: 'nav.leaderboard', auth: true, flag: 'points' },
   { id: 'settings', path: '/settings', icon: Settings, labelKey: 'nav.settings', auth: true },
-  { id: 'feedback', path: '/feedback', icon: MessageCircle, labelKey: 'customNav.pages.feedback', flag: 'feedback' },
+  // "Feedback" as a tab; the side menu gives its full name (menuLabelKey).
+  { id: 'feedback', path: '/feedback', icon: MessageCircle, labelKey: 'customNav.pages.feedback', menuLabelKey: 'feedback.title', flag: 'feedback' },
 ];
 
 export const NAV_PAGES_BY_ID = Object.fromEntries(NAV_PAGES.map((p) => [p.id, p]));

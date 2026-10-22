@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -6,6 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { useBottomNav } from '../context/BottomNavContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { visibleTabs } from '../config/navPages';
+import { prefetchLists } from '../utils/prefetchLists';
+
+// How long after sign-in (the first page being up) the bar's lists are fetched.
+const PREFETCH_AFTER_MS = 1500;
 
 // The active tab: a solid orange pill behind a white icon, and a bold white
 // label (orange text on the blue bar is only 2.7:1; white is 8.4:1).
@@ -52,6 +56,26 @@ const MobileBottomNav = () => {
   const tabs = isAuthenticated ? enabledTabs : enabledTabs.filter((tab, i) => !tab.auth || i === firstAuthIdx);
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
+
+  // Once signed in, the lists behind the bar's tabs are fetched quietly, so
+  // the first tap on Businesses, Farms, Opportunities or Members shows its
+  // list at once. Members too when it isn't a tab: it's Home's first card.
+  // Once per sign-in.
+  const tabsRef = useRef(enabledTabs);
+  tabsRef.current = enabledTabs;
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      prefetched.current = false;
+      return undefined;
+    }
+    if (prefetched.current) return undefined;
+    const timer = setTimeout(() => {
+      prefetched.current = true;
+      prefetchLists([...new Set([...tabsRef.current.map((tab) => tab.id), 'members'])]);
+    }, PREFETCH_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated]);
 
   return (
     <>

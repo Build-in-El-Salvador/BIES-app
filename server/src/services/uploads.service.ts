@@ -96,6 +96,7 @@ const REFERENCES: [model: string, fields: string[]][] = [
     ['article', ['thumbnail', 'content']],
     ['video', ['thumbnail']],
     ['bountySubmission', ['content']],
+    ['feedback', ['screenshot']],
 ];
 
 type Finder = { findMany(args: { where: unknown; select: Record<string, true> }): Promise<Record<string, unknown>[]> };

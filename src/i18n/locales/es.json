@@ -109,7 +109,8 @@
     "profile": "Perfil",
     "notifications": "Notificaciones",
     "talent": "Talentos BIES",
-    "opportunities": "Oportunidades"
+    "opportunities": "Oportunidades",
+    "feedback": "Reportar / Comentarios"
   },
   "settings": {
     "title": "Configuración",
@@ -1745,7 +1746,6 @@
     "acceptsBitcoin": "Acepta Bitcoin",
     "endorse": "Recomendar",
     "endorsed": "Lo recomendaste",
-    "endorsements": "Recomendaciones",
     "noEndorsements": "Aún no hay reseñas. Sé el primero.",
     "endorsePlaceholder": "¿Cómo fue tu experiencia? (opcional)",
     "linkMember": "Vincular Miembro BIES",
@@ -1829,7 +1829,11 @@
       "cantReviewOwn": "Es tu negocio, así que no puedes reseñarlo.",
       "cantReviewOwn_farm": "Es tu finca, así que no puedes reseñarla.",
       "notLive": "Las reseñas se abren cuando el equipo apruebe el listado.",
-      "edited": "editada"
+      "edited": "editada",
+      "addWords": "Escribir reseña",
+      "noWordsYet": "Recomiendas sin reseña, así que solo aparece tu foto, en Recomendado por.",
+      "vouchHint": "Déjalo vacío para solo recomendar: apareces en Recomendado por. Lo que escribas aparece en Reseñas.",
+      "yourVouch": "Tu recomendación"
     },
     "productName": "Producto {{n}}",
     "productIcon": "Ícono del producto {{n}}",
@@ -1906,7 +1910,9 @@
       "error": "No funcionó. Inténtalo de nuevo."
     },
     "adminEditMenu": "Editar como admin",
-    "notYoursToEdit": "Solo el miembro que agregó este listado puede editarlo."
+    "notYoursToEdit": "Solo el miembro que agregó este listado puede editarlo.",
+    "recommendedBy": "Recomendado por",
+    "reviewsTitle": "Reseñas"
   },
   "talent": {
     "search": "Buscar habilidades o personas",
@@ -3051,7 +3057,8 @@
     "tabs": {
       "all": "Todo",
       "photos": "Fotos",
-      "talent": "Talentos"
+      "talent": "Talentos",
+      "recommendations": "Recomendaciones"
     },
     "details": "Detalles",
     "at": "en",
@@ -3069,7 +3076,10 @@
     "newMember": "Miembro nuevo",
     "photosFromPosts": "De publicaciones",
     "networkPrivate": "{{name}} mantiene su red en privado.",
-    "networkPrivateList": "Este miembro mantiene su red en privado."
+    "networkPrivateList": "Este miembro mantiene su red en privado.",
+    "recommendationsEmptyOwn": "Los negocios y fincas que recomiendas aparecen aquí, para que otros miembros los vean.",
+    "findBusinesses": "Buscar negocios",
+    "showMore": "Ver más"
   },
   "notificationSettings": {
     "push": "Notificaciones push",
@@ -3188,5 +3198,50 @@
     "makeCover": "Usar como portada",
     "deletePhoto": "Eliminar foto",
     "deletePhotoConfirm": "¿Eliminar esta foto?"
+  },
+  "feedback": {
+    "title": "Reportar / Comentarios",
+    "subtitle": "¿Encontraste un problema o tienes una idea? Cuéntale al equipo de BIES aquí.",
+    "kindProblem": "Reportar un problema",
+    "kindFeedback": "Dar comentarios",
+    "pageLabel": "¿Qué página?",
+    "pageChoose": "Elige una página",
+    "pageGuessed": "Es la página en la que estabas. Toca para elegir otra.",
+    "messageLabelProblem": "¿Qué pasó?",
+    "messageLabelFeedback": "Tus comentarios",
+    "messagePlaceholderProblem": "¿Qué hiciste y qué salió mal?",
+    "messagePlaceholderFeedback": "¿Qué haría BIES mejor para ti?",
+    "screenshotLabel": "Captura de pantalla",
+    "optional": "(opcional)",
+    "screenshotAdd": "Agregar una captura",
+    "screenshotAlt": "Tu captura de pantalla",
+    "screenshotRemove": "Quitar la captura",
+    "deviceNote": "Se envían la versión de la app y el tipo de teléfono o navegador, para ayudarnos a arreglarlo. Solo el equipo de BIES ve tu reporte y tu captura.",
+    "send": "Enviar",
+    "sending": "Enviando...",
+    "thanksTitle": "¡Gracias!",
+    "thanksBody": "El equipo de BIES recibió tu reporte. Leemos cada uno.",
+    "sendAnother": "Enviar otro",
+    "errorPage": "Elige la página de la que se trata.",
+    "errorShort": "Escribe al menos 5 caracteres.",
+    "errorNotPicture": "La captura tiene que ser una imagen.",
+    "errorTooBig": "Esa captura es muy grande (15 MB como máximo).",
+    "errorSend": "No se envió. Inténtalo de nuevo.",
+    "pages": {
+      "home": "Inicio",
+      "feed": "Feed",
+      "members": "Miembros y sus perfiles",
+      "profile": "Tu perfil y fotos",
+      "farms": "Fincas",
+      "trusted": "Negocios",
+      "talent": "Talentos BIES",
+      "opportunities": "Oportunidades",
+      "events": "Eventos",
+      "messages": "Mensajes",
+      "notifications": "Notificaciones",
+      "settings": "Configuración",
+      "signin": "Iniciar sesión o registrarse",
+      "other": "Otro lugar"
+    }
   }
 }

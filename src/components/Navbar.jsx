@@ -70,7 +70,7 @@ const Navbar = () => {
   const menuLinks = (ids) => menuPages(ids, (page) => (!page.flag || featureOn(page.flag))
     && (!page.auth || isAuthenticated)
     && (page.id !== 'cowork' || COWORK_ENABLED))
-    .map((page) => ({ to: page.path, label: t(page.labelKey) }));
+    .map((page) => ({ to: page.path, label: t(page.menuLabelKey || page.labelKey) }));
 
   // Derive mobile navbar title from route
   const getPageTitle = () => {
@@ -96,7 +96,7 @@ const Navbar = () => {
     if (path.startsWith('/messages')) return t('pageTitles.messages');
     if (path.startsWith('/settings')) return t('pageTitles.settings');
     if (path.startsWith('/albums')) return t('albums.title');
-    if (path.startsWith('/feedback')) return 'Feedback';
+    if (path.startsWith('/feedback')) return t('pageTitles.feedback');
     if (path.startsWith('/admin')) return t('pageTitles.adminPanel');
     return '';
   };
@@ -257,7 +257,7 @@ const Navbar = () => {
                       )}
                       <Link to="/settings" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>{t('nav.settings')}</Link>
                       {featureOn('feedback') && (
-                        <Link to="/feedback" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>Feedback</Link>
+                        <Link to="/feedback" className="dropdown-item" onClick={() => setIsUserMenuOpen(false)}>{t('feedback.title')}</Link>
                       )}
                     </div>
 
