@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MoreHorizontal, Loader2, Copy, Check, UserPlus, UserCheck, Users, Zap, MessageSquare, Calendar, Trophy, Flag, Ban, Pencil } from 'lucide-react';
 import { getAssetUrl } from '../utils/assets';
@@ -21,9 +21,12 @@ const PublicProfile = ({ type }) => {
     const { id } = useParams();
     const { t } = useTranslation();
     const { user: currentUser } = useAuth();
-    // Opened before this session (detailCache): drawn from the first frame,
-    // then fetched again in place.
-    const shownAtOnce = () => cachedDetail(profilePage(id)[0]) || null;
+    const location = useLocation();
+    // Opened before this session (detailCache), or tapped in Members (the
+    // card's name, photo and lines, marked isPreview until the page arrives):
+    // drawn from the first frame, then fetched in place.
+    const preview = () => (location.state?.preview?.id === id ? { ...location.state.preview, isPreview: true } : null);
+    const shownAtOnce = () => cachedDetail(profilePage(id)[0]) || preview();
     const [profile, setProfile] = useState(shownAtOnce);
     const [loading, setLoading] = useState(() => !shownAtOnce());
     const [error, setError] = useState('');
@@ -53,7 +56,7 @@ const PublicProfile = ({ type }) => {
         const [key, load] = profilePage(id);
         // After a block or unblock the server answers differently: not the copy kept.
         if (reloadKey) forgetDetail(key);
-        const shown = cachedDetail(key);
+        const shown = cachedDetail(key) || preview();
         let current = true;
         const fetchProfile = async () => {
             if (shown) {
@@ -118,7 +121,8 @@ const PublicProfile = ({ type }) => {
 
     // Whether the current user follows them: the profile says (followedByMe);
     // a server from before that is asked for the list of who they follow.
-    const followKnown = typeof profile?.followedByMe === 'boolean';
+    // (A card's preview doesn't say: the page will, so nothing is asked meanwhile.)
+    const followKnown = typeof profile?.followedByMe === 'boolean' || !!profile?.isPreview;
     useEffect(() => {
         if (followKnown || !currentUser?.id || !targetUserId || currentUser.id === targetUserId) return;
         profilesApi.getFollowing(currentUser.id, { limit: 100 })
@@ -150,7 +154,8 @@ const PublicProfile = ({ type }) => {
             // Invalid npub — skip
         }
         return () => { cancelled = true; };
-    }, [profile]);
+        // Their key, not the whole profile: the card's preview and the page are the same member.
+    }, [!!profile, profile?.blocked, profile?.user?.nostrPubkey, profile?.nostrNpub]);
 
     // Fetch events this user hosts — upcoming for the panel, total for stats.
     // Not while Events is switched off (the API answers 404 then).
@@ -265,7 +270,9 @@ const PublicProfile = ({ type }) => {
                 type="button"
                 className={`pv-btn${isFollowing ? '' : ' primary'}`}
                 onClick={toggleFollow}
-                disabled={followLoading}
+                disabled={followLoading || !!profile?.isPreview}
+                // Until the page says whether they're followed: its place, not a wrong label.
+                style={profile?.isPreview ? { visibility: 'hidden' } : undefined}
                 aria-pressed={isFollowing}
             >
                 {isFollowing ? <UserCheck size={18} /> : <UserPlus size={18} />}

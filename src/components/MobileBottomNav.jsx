@@ -59,7 +59,8 @@ const MobileBottomNav = () => {
 
   // Once signed in, the lists behind the bar's tabs are fetched quietly, so
   // the first tap on Businesses, Farms, Opportunities or Members shows its
-  // list at once. Once per sign-in.
+  // list at once. Members too when it isn't a tab: it's Home's first card.
+  // Once per sign-in.
   const tabsRef = useRef(enabledTabs);
   tabsRef.current = enabledTabs;
   const prefetched = useRef(false);
@@ -71,7 +72,7 @@ const MobileBottomNav = () => {
     if (prefetched.current) return undefined;
     const timer = setTimeout(() => {
       prefetched.current = true;
-      prefetchLists(tabsRef.current.map((tab) => tab.id));
+      prefetchLists([...new Set([...tabsRef.current.map((tab) => tab.id), 'members'])]);
     }, PREFETCH_AFTER_MS);
     return () => clearTimeout(timer);
   }, [isAuthenticated]);

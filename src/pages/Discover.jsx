@@ -227,7 +227,7 @@ const Discover = () => {
 
                         if (memberViewType === 'icons') {
                             return (
-                                <Link to={`/builder/${builder.id}`} key={builder.id} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-icons" title={builder.name}>
+                                <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-icons" title={builder.name}>
                                     <div className="builder-card-icons">
                                         <div className="builder-avatar-wrap-icons">
                                             {avatarContent}
@@ -240,7 +240,7 @@ const Discover = () => {
 
                         if (memberViewType === 'list') {
                             return (
-                                <Link to={`/builder/${builder.id}`} key={builder.id} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-list">
+                                <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-list">
                                     <div className="builder-card-list">
                                         <div className="builder-avatar-wrap-list relative">
                                             {avatarContent}
@@ -282,7 +282,7 @@ const Discover = () => {
                         }
 
                         return (
-                            <Link to={`/builder/${builder.id}`} key={builder.id} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link">
+                            <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link">
                                 <div className="builder-card">
                                     <div className="h-48 bg-gray-100 relative builder-avatar-wrap-standard">
                                         {avatarContent}

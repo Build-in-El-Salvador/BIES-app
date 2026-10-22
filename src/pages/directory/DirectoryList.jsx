@@ -29,8 +29,11 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const isFarm = type === 'FARM';
 
     const [searchQuery, setSearchQuery] = useState('');
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // A list shown before (or fetched ahead by the bottom bar) from the first
+    // frame, not a frame of spinner first.
+    const firstSeen = () => cachedList(directoryKey(directoryRequest({ type })));
+    const [listings, setListings] = useState(() => firstSeen() || []);
+    const [loading, setLoading] = useState(() => !firstSeen());
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     // Farm filters
