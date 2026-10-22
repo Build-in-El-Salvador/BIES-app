@@ -1744,7 +1744,6 @@
     "acceptsBitcoin": "Accepts Bitcoin",
     "endorse": "Vouch",
     "endorsed": "You vouched",
-    "endorsements": "Recommendations",
     "noEndorsements": "No reviews yet. Be the first.",
     "endorsePlaceholder": "What was your experience? (optional)",
     "linkMember": "Link BIES Member",
@@ -1828,7 +1827,11 @@
       "cantReviewOwn": "This is your business, so you can't review it.",
       "cantReviewOwn_farm": "This is your farm, so you can't review it.",
       "notLive": "Reviews open once staff approve the listing.",
-      "edited": "edited"
+      "edited": "edited",
+      "addWords": "Add a review",
+      "noWordsYet": "You vouch without a review, so only your photo shows, under Recommended by.",
+      "vouchHint": "Leave it empty to just vouch: you show under Recommended by. Words show under Reviews.",
+      "yourVouch": "Your vouch"
     },
     "productName": "Product {{n}}",
     "productIcon": "Product {{n}} icon",
@@ -1903,7 +1906,9 @@
       "requestSent": "Request sent. We'll let you know.",
       "offerSent": "Sent. We'll let you know when {{name}} accepts.",
       "error": "That didn't work. Please try again."
-    }
+    },
+    "recommendedBy": "Recommended by",
+    "reviewsTitle": "Reviews"
   },
   "talent": {
     "search": "Search skills or people",
@@ -3048,7 +3053,8 @@
     "tabs": {
       "all": "All",
       "photos": "Photos",
-      "talent": "Talents"
+      "talent": "Talents",
+      "recommendations": "Recommendations"
     },
     "details": "Details",
     "at": "at",
@@ -3066,7 +3072,10 @@
     "newMember": "New member",
     "photosFromPosts": "From posts",
     "networkPrivate": "{{name}} keeps their network private.",
-    "networkPrivateList": "This member keeps their network private."
+    "networkPrivateList": "This member keeps their network private.",
+    "recommendationsEmptyOwn": "Businesses and farms you vouch for show here, for other members to see.",
+    "findBusinesses": "Find businesses",
+    "showMore": "Show more"
   },
   "notificationSettings": {
     "push": "Push notifications",

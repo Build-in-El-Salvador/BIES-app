@@ -6,6 +6,7 @@ import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../TranslatableText';
 import CertifiedBadge from './CertifiedBadge';
 import { objectionableMessage } from '../moderation/objectionable';
+import { reviewCount, writtenReviews } from './recommenders';
 
 // The server's DOWNVOTE_REASON_MIN (directory.controller.ts).
 const REASON_MIN = 20;
@@ -229,8 +230,9 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
 
     const { reviews, mine, runsIt, live, canReview } = reviewState(listing, user);
     const sectionRef = useRef(null);
-    // Mine first, then the member who added it, then newest.
-    const ordered = [...reviews].sort((a, b) => {
+    // Only reviews with words (a bare vouch is a face under "Recommended by"):
+    // mine first, then the member who added it, then newest.
+    const ordered = writtenReviews(reviews, mine).sort((a, b) => {
         const rank = (r) => (r === mine ? 0 : r.userId === listing.ownerId ? 1 : 2);
         return rank(a) - rank(b) || new Date(b.createdAt) - new Date(a.createdAt);
     });
@@ -293,8 +295,8 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
     const edited = (r) => r.updatedAt && new Date(r.updatedAt) - new Date(r.createdAt) > 60_000;
 
     return (
-        <section className="dir-detail-section dir-reviews" id="recommendations" ref={sectionRef}>
-            <h2 style={titleStyle}>{t('directory.endorsements')} ({reviews.length})</h2>
+        <section className="dir-detail-section dir-reviews" id="reviews" ref={sectionRef}>
+            <h2 style={titleStyle}>{t('directory.reviewsTitle')} ({reviewCount(reviews)})</h2>
 
             {runsIt && <p className="dir-review-note">{t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })}</p>}
             {!runsIt && !live && <p className="dir-review-note">{t('directory.review.notLive')}</p>}
@@ -323,6 +325,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                             {t('directory.review.reasonCount', { count: text.trim().length, min: REASON_MIN })}
                         </p>
                     )}
+                    {mode === 1 && <p className="dir-review-count ok">{t('directory.review.vouchHint')}</p>}
                     {error && <p className="dir-review-error" role="alert">{error}</p>}
                     <div className="dir-review-actions">
                         <button type="button" className="dir-review-cancel" onClick={cancel} disabled={busy}>
@@ -353,7 +356,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                                 </div>
                                 <div className="dir-review-body">
                                     <div className="dir-review-head">
-                                        <span className="dir-review-name">{isMine ? t('directory.review.yourReview') : who}</span>
+                                        <span className="dir-review-name">{isMine ? t((r.comment || '').trim() ? 'directory.review.yourReview' : 'directory.review.yourVouch') : who}</span>
                                         <span className={`dir-review-vote ${r.vote < 0 ? 'down' : 'up'}`}>
                                             {r.vote < 0 ? <ThumbsDown size={12} /> : <ThumbsUp size={12} />}
                                             {r.vote < 0 ? t('directory.review.downvoted') : t('directory.review.vouched')}
@@ -370,10 +373,13 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                                             style={{ marginTop: '0.3rem', fontSize: '0.9rem', lineHeight: 1.55, color: 'var(--color-gray-700)', whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}
                                         />
                                     )}
+                                    {isMine && !(r.comment || '').trim() && (
+                                        <p className="dir-review-nowords">{t('directory.review.noWordsYet')}</p>
+                                    )}
                                     {isMine && mode === null && (
                                         <div className="dir-review-own-actions">
                                             <button type="button" onClick={() => start(r.vote)} disabled={busy}>
-                                                <Pencil size={13} /> {t('directory.review.edit')}
+                                                <Pencil size={13} /> {(r.comment || '').trim() ? t('directory.review.edit') : t('directory.review.addWords')}
                                             </button>
                                             <button type="button" onClick={() => start(r.vote < 0 ? 1 : -1)} disabled={busy}>
                                                 {r.vote < 0 ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
@@ -445,6 +451,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                     color: var(--color-error);
                 }
                 .dir-review-count.ok { color: var(--color-gray-500); }
+                .dir-review-nowords { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--color-gray-500); }
                 .dir-review-error {
                     margin: 0.5rem 0;
                     font-size: 0.85rem;

@@ -421,6 +421,76 @@ describe('reading a listing', () => {
         expect(signedOut.body.endorsements).toEqual([]);
         expect(signedOut.body).toMatchObject({ vouchCount: 1, downvoteCount: 1 });
     });
+
+    it('dates a changed vote from the change, so recommenders keep the order they recommended in', async () => {
+        const id = await liveListing(await member());
+        const early = await member();
+        const late = await member();
+        await vote(early, id, -1, REASON);
+        await vote(late, id, 1);
+        await vote(early, id, 1); // changed their mind after `late` recommended it
+
+        const after = await prisma.directoryEndorsement.findMany({ where: { listingId: id, vote: 1 }, orderBy: { createdAt: 'asc' } });
+        expect(after.map((e) => e.userId).slice(1)).toEqual([late.id, early.id]);
+
+        // The same vote again (an edit of the words) keeps its date.
+        const dated = after[2].createdAt.getTime();
+        await vote(early, id, 1, 'Came back and they fixed it properly.');
+        expect((await prisma.directoryEndorsement.findFirstOrThrow({ where: { listingId: id, userId: early.id } })).createdAt.getTime()).toBe(dated);
+    });
+});
+
+// ─── What a member recommends (their profile) ────────────────────────────────
+
+describe("a member's recommendations", () => {
+    const recommendedBy = (viewer: Member | null, userId: string) =>
+        call('GET', `/api/directory/recommended-by/${userId}`, viewer ? { token: viewer.token } : {});
+
+    it('lists the businesses and farms they vouched for, newest first, to members only', async () => {
+        const rae = await member();
+        const first = await liveListing(rae);                           // her review is her vouch
+        const farm = await liveListing(await member(), { type: 'FARM', category: '' });
+        await vote(rae, farm, 1);
+        const disliked = await liveListing(await member());
+        await vote(rae, disliked, -1, REASON);
+        const takenDown = await liveListing(await member());
+        await vote(rae, takenDown, 1);
+        await prisma.directoryListing.update({ where: { id: takenDown }, data: { status: 'rejected' } });
+        const ownBusiness = await liveListing(rae, { isOwnBusiness: true }); // no vouch for her own
+
+        const res = await recommendedBy(await member(), rae.id);
+        expect(res.status).toBe(200);
+        expect(res.body.data.map((l: any) => l.id)).toEqual([farm, first]);
+        expect(res.body.data[0]).toMatchObject({ type: 'FARM', recommendedAt: expect.any(String) });
+        expect(res.body.pagination.total).toBe(2);
+        expect(res.body.data.map((l: any) => l.id)).not.toContain(ownBusiness);
+
+        expect((await recommendedBy(null, rae.id)).status).toBe(401);
+    });
+
+    it('shows nothing for a member blocked either way, and skips listings run by one', async () => {
+        const viewer = await member();
+        const fan = await member();
+        await liveListing(fan);
+        const blockedRunner = await member();
+        const theirs = await liveListing(blockedRunner);
+        await vote(fan, theirs, 1);
+
+        await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blockedRunner.id } });
+        const seen = await recommendedBy(viewer, fan.id);
+        expect(seen.body.data).toHaveLength(1);
+        expect(seen.body.data.map((l: any) => l.id)).not.toContain(theirs);
+
+        await prisma.block.create({ data: { blockerId: fan.id, blockedId: viewer.id } });
+        expect((await recommendedBy(viewer, fan.id)).body.data).toEqual([]);
+    });
+
+    it('shows nothing for a suspended member', async () => {
+        const gone = await member();
+        await liveListing(gone);
+        await prisma.user.update({ where: { id: gone.id }, data: { isBanned: true } });
+        expect((await recommendedBy(await member(), gone.id)).body.data).toEqual([]);
+    });
 });
 
 // ─── Handing a listing to the member who runs it ─────────────────────────────

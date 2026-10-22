@@ -1745,7 +1745,6 @@
     "acceptsBitcoin": "Acepta Bitcoin",
     "endorse": "Recomendar",
     "endorsed": "Lo recomendaste",
-    "endorsements": "Recomendaciones",
     "noEndorsements": "Aún no hay reseñas. Sé el primero.",
     "endorsePlaceholder": "¿Cómo fue tu experiencia? (opcional)",
     "linkMember": "Vincular Miembro BIES",
@@ -1829,7 +1828,11 @@
       "cantReviewOwn": "Es tu negocio, así que no puedes reseñarlo.",
       "cantReviewOwn_farm": "Es tu finca, así que no puedes reseñarla.",
       "notLive": "Las reseñas se abren cuando el equipo apruebe el listado.",
-      "edited": "editada"
+      "edited": "editada",
+      "addWords": "Escribir reseña",
+      "noWordsYet": "Recomiendas sin reseña, así que solo aparece tu foto, en Recomendado por.",
+      "vouchHint": "Déjalo vacío para solo recomendar: apareces en Recomendado por. Lo que escribas aparece en Reseñas.",
+      "yourVouch": "Tu recomendación"
     },
     "productName": "Producto {{n}}",
     "productIcon": "Ícono del producto {{n}}",
@@ -1904,7 +1907,9 @@
       "requestSent": "Solicitud enviada. Te avisaremos.",
       "offerSent": "Enviado. Te avisaremos cuando {{name}} acepte.",
       "error": "No funcionó. Inténtalo de nuevo."
-    }
+    },
+    "recommendedBy": "Recomendado por",
+    "reviewsTitle": "Reseñas"
   },
   "talent": {
     "search": "Buscar habilidades o personas",
@@ -3049,7 +3054,8 @@
     "tabs": {
       "all": "Todo",
       "photos": "Fotos",
-      "talent": "Talentos"
+      "talent": "Talentos",
+      "recommendations": "Recomendaciones"
     },
     "details": "Detalles",
     "at": "en",
@@ -3067,7 +3073,10 @@
     "newMember": "Miembro nuevo",
     "photosFromPosts": "De publicaciones",
     "networkPrivate": "{{name}} mantiene su red en privado.",
-    "networkPrivateList": "Este miembro mantiene su red en privado."
+    "networkPrivateList": "Este miembro mantiene su red en privado.",
+    "recommendationsEmptyOwn": "Los negocios y fincas que recomiendas aparecen aquí, para que otros miembros los vean.",
+    "findBusinesses": "Buscar negocios",
+    "showMore": "Ver más"
   },
   "notificationSettings": {
     "push": "Notificaciones push",
