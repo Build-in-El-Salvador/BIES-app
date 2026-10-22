@@ -16,6 +16,7 @@ import { publicUrl } from '../../utils/publicUrl';
 import TranslatableText from '../../components/TranslatableText';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
+import Avatar from '../../components/Avatar';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
 import { daysLeft, formatDay, fullDollars, hasField, industryOf, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
@@ -301,7 +302,7 @@ const OpportunityDetail = () => {
 
                         <Link to={profilePath} className="od-by">
                             <span className="od-avatar" style={{ background: tint, color }}>
-                                {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <User size={18} />}
+                                <Avatar src={avatar} size={32} fallback={<User size={18} />} />
                             </span>
                             <span>{t('opportunities.postedBy', { name })}</span>
                         </Link>
@@ -517,13 +518,20 @@ const OpportunityDetail = () => {
                     max-width: 760px;
                     margin: 0 auto;
                 }
+                /* One wrapping row: the poster and the status pill sit side by side
+                   with a gap; the title and the place take a line each. */
                 .od-head {
                     padding-top: 1rem;
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 0.6rem 12px;
                 }
                 .od-title {
+                    flex-basis: 100%;
                     font-size: 1.75rem;
                     font-weight: 800;
-                    margin: 0 0 0.6rem;
+                    margin: 0;
                     line-height: 1.2;
                     overflow-wrap: break-word;
                 }
@@ -531,7 +539,7 @@ const OpportunityDetail = () => {
                     display: inline-flex;
                     align-items: center;
                     gap: 8px;
-                    margin-bottom: 0.6rem;
+                    min-width: 0;
                     color: var(--color-gray-700);
                     font-weight: 600;
                     text-decoration: none;
@@ -546,7 +554,7 @@ const OpportunityDetail = () => {
                     justify-content: center;
                     flex-shrink: 0;
                 }
-                .od-avatar img {
+                .od-avatar :global(img) {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;
@@ -565,12 +573,12 @@ const OpportunityDetail = () => {
                 }
                 .od-menu button.danger { color: var(--color-danger, #dc2626); }
                 .od-meta {
+                    flex-basis: 100%;
                     display: flex;
                     align-items: center;
                     gap: 8px;
                     color: var(--color-gray-600);
                     font-size: 0.95rem;
-                    margin-bottom: 0.4rem;
                     min-width: 0;
                 }
                 .od-meta span {
@@ -581,7 +589,7 @@ const OpportunityDetail = () => {
                     display: inline-flex;
                     align-items: center;
                     gap: 6px;
-                    margin: 0.35rem 0 0;
+                    margin: 0;
                     padding: 4px 12px;
                     border-radius: var(--radius-full);
                     background: #ecfdf5;
