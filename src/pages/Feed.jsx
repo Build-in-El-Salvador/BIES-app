@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { isNativePlatform } from '../utils/platform';
 import { useFeature } from '../context/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigationType } from 'react-router-dom';
 import { publicUrl } from '../utils/publicUrl';
 import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
 import { nostrService, BIES_RELAY, profileCache } from '../services/nostrService';
@@ -18,7 +18,8 @@ import EmojiPicker from '../components/EmojiPicker';
 import NostrGifPicker from '../components/NostrGifPicker';
 import { useLightbox } from '../context/LightboxContext';
 import { nip19 } from 'nostr-tools';
-import { isGenuineRepost } from '../utils/repost';
+import { cachedFeed, rememberFeed, feedCacheKey } from '../utils/feedCache';
+import { feedPostOf, addFeedPosts, mergePosts as mergeFeedPosts, tallyCounts, markIds } from '../utils/feedPosts';
 import { Note, FeedSkeleton, Paginator } from '../components/feed';
 import { formatTime as formatTimeUtil, parseNoteContent as parseNoteContentUtil, getDisplayName as getDisplayNameUtil } from '../utils/noteUtils';
 import '../components/feed/Feed.css';
@@ -98,9 +99,19 @@ function keepMemberNames(found) {
     } catch { /* storage full or off: they're looked up each time */ }
 }
 
+// The feed opens with the newest 50 events; counts are asked 50 posts at a time.
+const FEED_PAGE = 50;
+// Posts drawn in the first pass, about a screen and a half; the rest follow.
+const FIRST_DRAW = 15;
+// A kept feed asks again from 10 minutes before its newest event, so a post
+// from a phone whose clock is a little behind isn't skipped; posts already
+// shown are not added twice.
+const SINCE_OVERLAP = 600;
+
 const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) => {
     const embedded = !!author;
     const { user } = useAuth();
+    const accountId = user?.id;
     // Members this member blocked: their posts and comments are hidden here.
     const blocks = useBlocks();
     const { t } = useTranslation();
@@ -137,6 +148,11 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [refreshKey, setRefreshKey] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const fetchedProfiles = useRef(new Set());
+    // This view of the BIES feed (the members' feed, or one member's posts),
+    // and the view whose load has finished: its counts are asked for, and it
+    // is kept for next time (utils/feedCache.js), only once the two match.
+    const feedKey = feedMode === 'private' ? feedCacheKey(accountId, author) : null;
+    const [readyKey, setReadyKey] = useState(null);
 
     // Re-subscribe to the private relay when the page regains visibility.
     // Mobile browsers kill WebSocket connections when backgrounded; the pool
@@ -223,9 +239,11 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const currentView = EXPLORE_VIEWS.find(v => v.key === exploreView) || EXPLORE_VIEWS[0];
 
     // Fetch own pubkey once on mount for reaction persistence and notifications
+    const myPubkeyRef = useRef(null);
     useEffect(() => {
         nostrSigner.getPublicKey().then(pk => {
             setMyPubkey(pk);
+            myPubkeyRef.current = pk;
             if (pk && !fetchedProfiles.current.has(pk)) {
                 fetchedProfiles.current.add(pk);
                 nostrService.getProfile(pk).then(p => {
@@ -255,20 +273,107 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         });
     }, []);
 
-    // Subscribe to private relay feed
+    // Where the walk back through older posts is (loadOlderPrivate): the
+    // oldest event received, the page it reached, and whether it's done.
+    const olderUntil = useRef(null);
+    const oldestReceived = useRef(null);
+    const [olderDone, setOlderDone] = useState(false);
+
+    // Likes, reposts and replies of the BIES feed's posts, and which ones I
+    // liked or reposted: one query per batch of posts, the first once the
+    // feed has loaded (every post it shows at once), then the posts that come
+    // later (live, older pages, a shared post). Each query runs to its end; a
+    // reload of the feed starts again. The BIES relay only: asking public
+    // relays would hand them the ids of members-only posts (and the member's
+    // sign-in, if one asked).
+    const countsAsked = useRef(new Set());
+    const countQueries = useRef(new Set());
+    const countsRound = useRef(0);
+    // When my own like, repost or reply last changed a post's counts here:
+    // a query sent before that doesn't overwrite them.
+    const countsTouched = useRef(new Map());
+    const touchCounts = (id) => countsTouched.current.set(id, Date.now());
+    const stopCountQueries = () => {
+        countsRound.current++;
+        for (const query of countQueries.current) query.close();
+        countQueries.current.clear();
+    };
+    const askCounts = (batch) => {
+        const ids = batch.map(p => p.id);
+        ids.forEach(id => countsAsked.current.add(id));
+        const round = countsRound.current;
+        const sentAt = Date.now();
+        const events = [];
+        let finished = false;
+        const query = nostrService.pool.subscribeMany(
+            [BIES_RELAY],
+            { kinds: [7, 6, 1, 5], '#e': ids, limit: 2000 },
+            {
+                onevent: (event) => events.push(event),
+                oneose: async () => {
+                    finished = true;
+                    query.close();
+                    const me = myPubkeyRef.current || await nostrSigner.getPublicKey().catch(() => null);
+                    if (round !== countsRound.current) return;
+                    const fresh = ids.filter(id => !(countsTouched.current.get(id) >= sentAt));
+                    const { stats, liked, reposted, deleted } = tallyCounts(events, batch, me);
+                    setNoteStats(prev => {
+                        const next = { ...prev };
+                        for (const id of fresh) next[id] = { ...prev[id], ...stats[id] };
+                        return next;
+                    });
+                    if (me) {
+                        setLikedNotes(prev => markIds(prev, fresh, liked));
+                        setRepostedNotes(prev => markIds(prev, fresh, reposted));
+                    }
+                    // Posts their authors deleted since this feed was kept.
+                    if (deleted.size) {
+                        if (deleted.has(sharedPost.current?.id)) sharedPost.current = null;
+                        setPosts(prev => prev.filter(p => !deleted.has(p.id)));
+                    }
+                },
+                onclose: () => {
+                    countQueries.current.delete(query);
+                    // Closed by the relay before its end: asked again with the next posts.
+                    if (!finished && round === countsRound.current) ids.forEach(id => countsAsked.current.delete(id));
+                },
+                onauth: relayAuth,
+            }
+        );
+        countQueries.current.add(query);
+    };
+
+    // Subscribe to private relay feed. A view of it shown before in this
+    // session comes back at once from memory (utils/feedCache.js), and the
+    // relay is asked only for what's newer than its newest event; otherwise
+    // the newest 50.
     const reconnectAttempts = useRef(0);
+    const newestReceived = useRef(null);
 
     useEffect(() => {
         if (feedMode !== 'private') return;
 
-        setPosts([]);
-        setProfiles({});
-        setNoteStats({});
+        const key = feedCacheKey(accountId, author);
+        const kept = cachedFeed(key);
+        const since = kept?.newest ? kept.newest - SINCE_OVERLAP : null;
+        setPosts(kept?.posts || []);
+        setProfiles(kept?.profiles || {});
+        setNoteStats(kept?.stats || {});
+        if (kept) {
+            setLikedNotes(kept.liked);
+            setRepostedNotes(kept.reposted);
+        }
         setComments({});
         setOpenComments(new Set());
-        setLoading(true);
+        setLoading(!kept);
+        setReadyKey(null);
         fetchedProfiles.current.clear();
         fetchedComments.current.clear();
+        countsAsked.current.clear();
+        oldestReceived.current = kept?.oldest ?? null;
+        newestReceived.current = kept?.newest ?? null;
+        olderUntil.current = kept?.olderUntil ?? null;
+        setOlderDone(kept?.olderDone || false);
 
         let cancelled = false;
         let reconnectTimer = null;
@@ -276,12 +381,29 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         let timeout = null;
 
         // Collect pubkeys during streaming, batch-fetch profiles after EOSE.
-        // Post-EOSE live arrivals are debounced (300ms) and batched too.
-        const preEosePubkeys = [];
+        // Post-EOSE live arrivals are debounced (300ms) and batched too. The
+        // kept posts' people are looked up again, as a first load would.
+        const preEosePubkeys = (kept?.posts || []).flatMap(p => [p.pubkey, ...(p._reposters || []).map(r => r.pubkey)]);
         const liveQueue = new Set();
         let debounceTimer = null;
         let eoseFired = false;
-        oldestReceived.current = null;
+        // Events this load received before EOSE, and the oldest of them.
+        let received = 0;
+        let receivedOldest = null;
+
+        // New posts join the list once per frame, not one render per event.
+        let pending = [];
+        let flushFrame = 0;
+        const flush = () => {
+            cancelAnimationFrame(flushFrame);
+            flushFrame = 0;
+            if (pending.length === 0) return;
+            const batch = pending;
+            pending = [];
+            setPosts(prev => addFeedPosts(prev, batch));
+            clearTimeout(timeout);
+            setLoading(false);
+        };
 
         const flushLiveProfiles = async () => {
             if (liveQueue.size === 0) return;
@@ -315,78 +437,39 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
 
             sub = nostrService.pool.subscribeMany(
                 [BIES_RELAY],
-                { kinds: [1, 6], limit: 50, ...(author ? { authors: [author] } : {}) },
+                {
+                    kinds: [1, 6], limit: FEED_PAGE,
+                    ...(since ? { since } : {}),
+                    ...(author ? { authors: [author] } : {}),
+                },
                 {
                     onevent: (event) => {
                         // Older pages start before the oldest event received,
                         // replies and reposts included (loadOlderPrivate).
                         if (oldestReceived.current === null || event.created_at < oldestReceived.current) oldestReceived.current = event.created_at;
-                        // Handle reposts (kind 6) — deduplicate by original note ID
-                        if (event.kind === 6) {
-                            let original;
-                            try { original = JSON.parse(event.content); } catch { return; }
-                            if (!isGenuineRepost(event, original)) return;
-                            const reposter = { pubkey: event.pubkey, timestamp: event.created_at, repostId: event.id };
-                            setPosts(prev => {
-                                // Skip if this exact repost event was already processed
-                                if (prev.some(p => p._reposters?.some(r => r.repostId === event.id))) return prev;
-                                // If original note already in feed, merge reposter into it
-                                const existingIdx = prev.findIndex(p => p.id === original.id);
-                                if (existingIdx !== -1) {
-                                    const existing = prev[existingIdx];
-                                    if (existing._reposters?.some(r => r.pubkey === event.pubkey)) return prev;
-                                    const updated = [...prev];
-                                    const reposters = [...(existing._reposters || []), reposter];
-                                    const repostTime = Math.max(existing._repostTime || 0, event.created_at);
-                                    updated[existingIdx] = { ...existing, _reposters: reposters, _repostTime: repostTime };
-                                    return updated.sort((a, b) => (b._repostTime || b.created_at) - (a._repostTime || a.created_at));
-                                }
-                                // New original note surfaced via repost
-                                const repostEvent = { ...original, _reposters: [reposter], _repostTime: event.created_at };
-                                return [...prev, repostEvent].sort((a, b) => (b._repostTime || b.created_at) - (a._repostTime || a.created_at));
-                            });
-                            if (!fetchedProfiles.current.has(event.pubkey)) {
-                                if (!eoseFired) { preEosePubkeys.push(event.pubkey); }
-                                else { liveQueue.add(event.pubkey); clearTimeout(debounceTimer); debounceTimer = setTimeout(flushLiveProfiles, 300); }
-                            }
-                            if (!fetchedProfiles.current.has(original.pubkey)) {
-                                if (!eoseFired) { preEosePubkeys.push(original.pubkey); }
-                                else { liveQueue.add(original.pubkey); clearTimeout(debounceTimer); debounceTimer = setTimeout(flushLiveProfiles, 300); }
-                            }
-                            clearTimeout(timeout);
-                            setLoading(false);
-                            return;
+                        // The newest no later than now: a post dated ahead
+                        // (a phone's clock) mustn't move the next `since` past
+                        // posts made in between.
+                        const seenAt = Math.min(event.created_at, Math.floor(Date.now() / 1000));
+                        if (newestReceived.current === null || seenAt > newestReceived.current) newestReceived.current = seenAt;
+                        if (!eoseFired) {
+                            received++;
+                            if (receivedOldest === null || event.created_at < receivedOldest) receivedOldest = event.created_at;
                         }
 
-                        // Skip machine-generated events (JSON metadata, protocol messages)
-                        const c = (event.content || '').trimStart();
-                        if (c.startsWith('{') || c.startsWith('xitchat-') || c.startsWith('[')) return;
+                        // Root notes and reposts (deduplicated by the original
+                        // note's id); replies and machine-generated events are skipped.
+                        const post = feedPostOf(event);
+                        if (!post) return;
+                        pending.push(post);
+                        if (!flushFrame) flushFrame = requestAnimationFrame(flush);
 
-                        // Skip replies — events with 'e' tags are replies to other posts, not root posts
-                        if (event.tags.some(t => t[0] === 'e')) return;
-
-                        setPosts(prev => {
-                            // If this note already exists via a repost, update with full Kind 1 data but keep repost metadata
-                            const existingIdx = prev.findIndex(p => p.id === event.id);
-                            if (existingIdx !== -1) {
-                                const existing = prev[existingIdx];
-                                if (existing._reposters) {
-                                    const updated = [...prev];
-                                    updated[existingIdx] = { ...event, _reposters: existing._reposters, _repostTime: existing._repostTime };
-                                    return updated;
-                                }
-                                return prev;
-                            }
-                            return [...prev, event].sort((a, b) => (b._repostTime || b.created_at) - (a._repostTime || a.created_at));
-                        });
-                        clearTimeout(timeout);
-                        setLoading(false);
-
-                        if (!fetchedProfiles.current.has(event.pubkey)) {
+                        for (const pk of [post.pubkey, ...(post._reposters || []).map(r => r.pubkey)]) {
+                            if (fetchedProfiles.current.has(pk)) continue;
                             if (!eoseFired) {
-                                preEosePubkeys.push(event.pubkey);
+                                preEosePubkeys.push(pk);
                             } else {
-                                liveQueue.add(event.pubkey);
+                                liveQueue.add(pk);
                                 clearTimeout(debounceTimer);
                                 debounceTimer = setTimeout(flushLiveProfiles, 300);
                             }
@@ -394,8 +477,20 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     },
                     oneose: async () => {
                         eoseFired = true;
+                        flush();
+                        // A full page of newer events: there may be more
+                        // between them and the kept posts, so rather than
+                        // leave a gap the feed goes on from these, as a
+                        // first load would.
+                        if (kept && received >= FEED_PAGE) {
+                            setPosts(prev => prev.filter(p => (p._repostTime || p.created_at) >= receivedOldest));
+                            oldestReceived.current = receivedOldest;
+                            olderUntil.current = null;
+                            setOlderDone(false);
+                        }
                         reconnectAttempts.current = 0; // Reset backoff on success
                         setLoading(false);
+                        setReadyKey(key);
                         if (author) setAuthorLoadedAt(Date.now());
                         clearTimeout(debounceTimer);
                         const toFetch = [...new Set(preEosePubkeys)].filter(pk => !fetchedProfiles.current.has(pk));
@@ -454,72 +549,41 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             clearTimeout(timeout);
             clearTimeout(debounceTimer);
             clearTimeout(reconnectTimer);
+            cancelAnimationFrame(flushFrame);
             if (sub) sub.close();
+            stopCountQueries();
         };
-    }, [feedMode, refreshKey, author]);
+    }, [feedMode, refreshKey, author, accountId]);
 
-    // Fetch ALL reactions for private relay posts — builds stats counts + marks user's own likes/reposts
-    const fetchedReactionIds = useRef(new Set());
+    // Counts for the posts not asked about yet, once the feed has loaded.
+    // Posts that arrive together (the first load, a page of older posts)
+    // share a query.
     useEffect(() => {
-        if (feedMode !== 'private' || posts.length === 0) return;
+        if (!feedKey || readyKey !== feedKey) return undefined;
+        const toAsk = posts.filter(p => !countsAsked.current.has(p.id));
+        if (toAsk.length === 0) return undefined;
+        const timer = setTimeout(() => {
+            for (let i = 0; i < toAsk.length; i += FEED_PAGE) askCounts(toAsk.slice(i, i + FEED_PAGE));
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [feedKey, readyKey, posts]);
 
-        const postIds = posts.map(p => p.id).filter(id => !fetchedReactionIds.current.has(id));
-        if (postIds.length === 0) return;
-        postIds.forEach(id => fetchedReactionIds.current.add(id));
-        const likeCounts = {};
-        const repostCounts = {};
-        const replyCounts = {};
-        const userLiked = new Set();
-        const userReposted = new Set();
-
-        // The BIES relay only: asking public relays would hand them the ids
-        // of members-only posts (and the member's sign-in, if one asked).
-        const sub = nostrService.pool.subscribeMany(
-            [BIES_RELAY],
-            { kinds: [7, 6, 1], '#e': postIds, limit: 2000 },
-            {
-                onevent: (event) => {
-                    const eTag = event.tags.find(t => t[0] === 'e');
-                    if (!eTag) return;
-                    const targetId = eTag[1];
-                    if (event.kind === 7) {
-                        likeCounts[targetId] = (likeCounts[targetId] || 0) + 1;
-                        if (myPubkey && event.pubkey === myPubkey) userLiked.add(targetId);
-                    } else if (event.kind === 6) {
-                        repostCounts[targetId] = (repostCounts[targetId] || 0) + 1;
-                        if (myPubkey && event.pubkey === myPubkey) userReposted.add(targetId);
-                    } else if (event.kind === 1) {
-                        replyCounts[targetId] = (replyCounts[targetId] || 0) + 1;
-                    }
-                },
-                oneose: () => {
-                    sub.close();
-                    // Build stats object
-                    const stats = {};
-                    for (const id of postIds) {
-                        if (likeCounts[id] || repostCounts[id] || replyCounts[id]) {
-                            stats[id] = {
-                                likes: likeCounts[id] || 0,
-                                reposts: repostCounts[id] || 0,
-                                replies: replyCounts[id] || 0,
-                            };
-                        }
-                    }
-                    setNoteStats(prev => ({ ...prev, ...stats }));
-                    if (userLiked.size) setLikedNotes(prev => new Set([...prev, ...userLiked]));
-                    if (userReposted.size) setRepostedNotes(prev => new Set([...prev, ...userReposted]));
-                },
-                onauth: async (evt) => { try { return await nostrSigner.signEvent(evt); } catch { return undefined; } },
-            }
-        );
-
-        return () => sub.close();
-    }, [feedMode, posts, myPubkey]);
-
-    // Reset reaction cache when switching feed modes
+    // Keep this view of the feed for next time (utils/feedCache.js), once
+    // it has loaded.
     useEffect(() => {
-        fetchedReactionIds.current.clear();
-    }, [feedMode]);
+        if (!feedKey || readyKey !== feedKey) return;
+        rememberFeed(feedKey, {
+            posts,
+            profiles: nostrProfiles,
+            stats: noteStats,
+            liked: likedNotes,
+            reposted: repostedNotes,
+            newest: newestReceived.current,
+            oldest: oldestReceived.current,
+            olderUntil: olderUntil.current,
+            olderDone,
+        });
+    }, [feedKey, readyKey, posts, nostrProfiles, noteStats, likedNotes, repostedNotes, olderDone]);
 
     // The BIES members among who appears on the BIES feed (authors, reposters,
     // repliers): their BIES names and photos, a hundred at a time.
@@ -581,6 +645,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         setComments({});
         setOpenComments(new Set());
         setLoading(true);
+        setReadyKey(null);
         fetchedComments.current.clear();
 
         (async () => {
@@ -615,18 +680,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         return () => { cancelled = true; };
     }, [feedMode, exploreView, currentView, sortNotes, refreshKey]);
 
-    // A root note of the BIES feed (not a reply, not machine-generated JSON).
-    const isRootNote = (ev) => {
-        const c = (ev.content || '').trimStart();
-        return ev.kind === 1 && !c.startsWith('{') && !c.startsWith('xitchat-') && !c.startsWith('[')
-            && !ev.tags.some(t => t[0] === 'e');
-    };
-    const byFeedTime = (a, b) => (b._repostTime || b.created_at) - (a._repostTime || a.created_at);
-    const mergePosts = (events) => setPosts(prev => {
-        const have = new Set(prev.map(p => p.id));
-        const add = events.filter(e => !have.has(e.id));
-        return add.length ? [...prev, ...add].sort(byFeedTime) : prev;
-    });
+    const mergePosts = (events) => setPosts(prev => mergeFeedPosts(prev, events));
     const relayAuth = async (evt) => { try { return await nostrSigner.signEvent(evt); } catch { return undefined; } };
     const ensureProfiles = useCallback(async (pubkeys) => {
         const toFetch = [...new Set(pubkeys)].filter(pk => pk && !fetchedProfiles.current.has(pk));
@@ -635,22 +689,11 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         const map = await nostrService.getProfiles(toFetch, [BIES_RELAY]).catch(() => new Map());
         if (map.size) setProfiles(prev => { const next = { ...prev }; for (const [pk, pr] of map) next[pk] = pr; return next; });
     }, []);
-    // A repost (kind 6) as the post it shares, as the live feed shows it.
-    const asRepostedPost = (ev) => {
-        let original;
-        try { original = JSON.parse(ev.content); } catch { return null; }
-        if (!isGenuineRepost(ev, original)) return null;
-        return { ...original, _reposters: [{ pubkey: ev.pubkey, timestamp: ev.created_at, repostId: ev.id }], _repostTime: ev.created_at };
-    };
 
     // Older posts in the BIES feed, page by page (the feed opens with the
     // newest 50). Pages start before the oldest event received, replies and
     // reposts included, so a page of replies, or a repost of an old note,
-    // doesn't stop or skip the walk back.
-    const olderUntil = useRef(null);
-    const oldestReceived = useRef(null);
-    const [olderDone, setOlderDone] = useState(false);
-    useEffect(() => { olderUntil.current = null; setOlderDone(false); }, [feedMode, refreshKey]);
+    // doesn't stop or skip the walk back (olderUntil, oldestReceived, above).
     const loadOlderPrivate = async () => {
         if (olderDone || loadingMore) return;
         const start = olderUntil.current ?? oldestReceived.current;
@@ -667,7 +710,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 const oldest = Math.min(...events.map(e => e.created_at));
                 olderUntil.current = oldest;
                 until = oldest - 1;
-                const found = [...events.filter(isRootNote), ...events.filter(e => e.kind === 6).map(asRepostedPost).filter(Boolean)];
+                const found = events.map(feedPostOf).filter(Boolean);
                 mergePosts(found);
                 ensureProfiles(found.flatMap(e => [e.pubkey, ...(e._reposters || []).map(r => r.pubkey)]));
                 shown += found.length;
@@ -894,10 +937,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         setCommentGifPicker(null);
     };
 
-    const bumpLikes = (id, by) => setNoteStats(prev => ({
-        ...prev,
-        [id]: { ...prev[id], likes: Math.max(0, (prev[id]?.likes || 0) + by) },
-    }));
+    const bumpLikes = (id, by) => {
+        touchCounts(id);
+        setNoteStats(prev => ({
+            ...prev,
+            [id]: { ...prev[id], likes: Math.max(0, (prev[id]?.likes || 0) + by) },
+        }));
+    };
 
     // Like a note (kind:7 reaction); tapping again undoes it (a NIP-09
     // deletion of the reaction), as in every social app.
@@ -932,10 +978,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             await nostrService.publishSigned(signed, { biesOnly });
             myReactionIds.current.set(post.id, signed.id);
             setLikedNotes(prev => new Set(prev).add(post.id));
-            setNoteStats(prev => ({
-                ...prev,
-                [post.id]: { ...prev[post.id], likes: (prev[post.id]?.likes || 0) + 1 },
-            }));
+            bumpLikes(post.id, 1);
             // Notify the post author (fire-and-forget)
             if (user) {
                 notificationsApi.feedInteraction({
@@ -971,6 +1014,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             } else {
                 await nostrService.publishEvent(event);
             }
+            touchCounts(post.id);
             setRepostedNotes(prev => new Set(prev).add(post.id));
             setNoteStats(prev => ({
                 ...prev,
@@ -1006,6 +1050,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             }
             setReplyText('');
             setReplyTarget(null);
+            touchCounts(post.id);
             setNoteStats(prev => ({
                 ...prev,
                 [post.id]: { ...prev[post.id], replies: (prev[post.id]?.replies || 0) + 1 },
@@ -1183,6 +1228,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             });
             await nostrService.publishSigned(deletion, { biesOnly: feedMode === 'private' });
             setComments(prev => ({ ...prev, [postId]: (prev[postId] || []).filter(c => c.id !== comment.id) }));
+            touchCounts(postId);
             setNoteStats(prev => ({
                 ...prev,
                 [postId]: { ...prev[postId], replies: Math.max(0, (prev[postId]?.replies || 0) - 1) },
@@ -1316,6 +1362,20 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     }), [posts, isHidden]);
 
     useEffect(() => { onPosts?.(rootPosts, loading); }, [rootPosts, loading]);
+
+    // The first screen of posts is drawn on its own and the rest once it has
+    // painted, so the Feed shows sooner. Back to a feed kept in memory draws
+    // them all at once, so the place it was left at can be scrolled back to.
+    const navigationType = useNavigationType();
+    const [drawAll, setDrawAll] = useState(() => navigationType === 'POP' && !!cachedFeed(feedCacheKey(accountId, author)));
+    const manyPosts = rootPosts.length > FIRST_DRAW;
+    useEffect(() => {
+        if (drawAll || !manyPosts) return undefined;
+        let timer = null;
+        const frame = requestAnimationFrame(() => { timer = setTimeout(() => setDrawAll(true), 0); });
+        return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+    }, [drawAll, manyPosts]);
+    const shownPosts = drawAll ? rootPosts : rootPosts.slice(0, FIRST_DRAW);
 
     const getStats = (noteId) => noteStats[noteId] || {};
 
@@ -1767,7 +1827,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     </div>
                 ) : (
                     <div data-testid="feed-list">
-                        {rootPosts.map(post => {
+                        {shownPosts.map(post => {
                             const stats = getStats(post.id);
                             const isLiked = likedNotes.has(post.id);
                             const isReposted = repostedNotes.has(post.id) || post._reposters?.some(r => r.pubkey === myPubkey);
@@ -2024,7 +2084,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         })}
 
                         {/* Infinite scroll / load more */}
-                        {(feedMode === 'explore' || (feedMode === 'private' && !olderDone)) && (author || rootPosts.length >= 10) && (
+                        {(feedMode === 'explore' || (feedMode === 'private' && !olderDone)) && (author || rootPosts.length >= 10) && shownPosts.length === rootPosts.length && (
                             <>
                                 <Paginator onIntersect={handleLoadMore} disabled={loadingMore} />
                                 {loadingMore && (

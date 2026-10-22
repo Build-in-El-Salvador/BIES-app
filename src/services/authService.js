@@ -19,6 +19,7 @@ import { toSignerError, isDeadSessionError, SIGNER_ERROR } from './signerError.j
 import { isNativePlatform } from '../utils/platform.js';
 import { nwcClient } from './nwcService.js';
 import { clearLists } from '../utils/listCache.js';
+import { clearFeeds } from '../utils/feedCache.js';
 import { API_BASE, clearSession, getAccessToken, logoutSession, retryPendingLogout, saveSession } from './session.js';
 
 const USER_KEY = 'bies_user';
@@ -465,8 +466,10 @@ export const authService = {
         try {
             nwcClient.disconnect();
         } catch { /* best-effort */ }
-        // Lists this session showed (members, listings): members-only too.
+        // Lists and feed posts this session showed (members, listings, the
+        // BIES feed): members-only too.
         clearLists();
+        clearFeeds();
         // Members' names and photos the feed kept: members-only, so not for
         // whoever uses this browser next.
         try {
