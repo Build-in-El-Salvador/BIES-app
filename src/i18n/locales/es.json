@@ -1904,7 +1904,9 @@
       "requestSent": "Solicitud enviada. Te avisaremos.",
       "offerSent": "Enviado. Te avisaremos cuando {{name}} acepte.",
       "error": "No funcionó. Inténtalo de nuevo."
-    }
+    },
+    "adminEditMenu": "Editar como admin",
+    "notYoursToEdit": "Solo el miembro que agregó este listado puede editarlo."
   },
   "talent": {
     "search": "Buscar habilidades o personas",

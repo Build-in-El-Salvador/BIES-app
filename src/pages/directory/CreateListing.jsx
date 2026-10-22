@@ -61,7 +61,7 @@ const emptyForm = {
  */
 const CreateListing = ({ type: typeProp, editMode = false }) => {
     const { t } = useTranslation();
-    const { isStaff } = useAuth();
+    const { user, isStaff, isAdmin } = useAuth();
     const navigate = useNavigate();
     const { id } = useParams();
     const [searchParams] = useSearchParams();
@@ -81,6 +81,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
     const [loading, setLoading] = useState(editMode);
     const [loadError, setLoadError] = useState(null);
+    const [notYours, setNotYours] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
     // A field the member must fix: shown beside it, and it gets the focus.
@@ -122,6 +123,12 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 const result = await directoryApi.get(id);
                 const listing = result?.data || result;
                 if (cancelled) return;
+                // The API only saves the creator's or an admin's changes.
+                if (!isAdmin && listing.ownerId !== user?.id) {
+                    setNotYours(true);
+                    setLoadError(t('directory.notYoursToEdit'));
+                    return;
+                }
                 setType(listing.type === 'PROVIDER' ? 'PROVIDER' : 'FARM');
                 setForm({
                     name: listing.name || '',
@@ -383,7 +390,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         return (
             <div className="container">
                 <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                    <h2>{t('directory.notFound')}</h2>
+                    <h2>{notYours ? t('directory.editTitle') : t('directory.notFound')}</h2>
                     <p style={{ color: 'var(--color-gray-500)', margin: '0.5rem 0' }}>{loadError}</p>
                     <Link
                         to={isFarm ? '/farms' : '/trusted'}
