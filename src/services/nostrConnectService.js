@@ -35,19 +35,15 @@ const NOSTRCONNECT_TIMEOUT_MS = 120_000;
  * relay in the URI re-subscribes to a dead one forever. Every relay here must
  * accept and echo kind 24133 — relay.nos.social, purplepag.es and nostr.wine
  * refuse it — and hold a subscription open: probed 2026-10-22 with a 2-minute
- * soak, no drops. Re-probe before adding one. Every URI carries the whole
- * list, so keep it to a handful.
+ * soak, no drops. Re-probe before adding one. Keep it at three or four:
+ * the whole list goes in every URI and its QR (three relays make a 93x93
+ * code, five 101x101), and a signer holds a subscription on each one.
+ * offchain.pub passed the same probe and is the first spare.
  */
 export const NIP46_RELAYS =
     (import.meta.env.VITE_NIP46_RELAYS?.split(',').map(s => s.trim()).filter(Boolean)) ||
     (typeof window !== 'undefined' && window.__TEST_NIP46_RELAYS) ||
-    [
-        'wss://relay.damus.io',
-        'wss://nos.lol',
-        'wss://relay.primal.net',
-        'wss://offchain.pub',
-        'wss://relay.snort.social',
-    ];
+    ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net'];
 
 /**
  * Event kinds BIES signs with the user's key — requested as pre-authorized
