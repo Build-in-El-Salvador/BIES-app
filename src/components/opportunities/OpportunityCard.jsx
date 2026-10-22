@@ -6,6 +6,8 @@ import Avatar from '../Avatar';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { daysLeft, isOpen, summaryOf } from './opportunityOptions';
 import TypeBadge, { styleOf } from './TypeBadge';
+import { prefetchDetail } from '../../utils/detailCache';
+import { opportunityPage } from '../../utils/detailPages';
 
 /**
  * An opportunity in the list, as a row (LinkedIn Jobs, Facebook Marketplace):
@@ -30,9 +32,13 @@ const OpportunityCard = ({ opportunity }) => {
     const { Icon, color, tint } = styleOf(o.type);
 
     return (
-        /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div */
+        /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div.
+           The page draws this card's copy at once (state.preview), and its own
+           fetch starts as soon as a finger touches the card. */
         <Link
             to={`/opportunities/${o.id}`}
+            state={{ preview: o }}
+            onPointerDown={() => prefetchDetail(...opportunityPage(o.id))}
             className="opp-card-link"
             style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
         >

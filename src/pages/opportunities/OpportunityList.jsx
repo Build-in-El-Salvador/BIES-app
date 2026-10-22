@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
+import { opportunitiesKey, opportunitiesRequest } from '../../utils/listRequests';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound, Bookmark } from 'lucide-react';
@@ -61,8 +62,14 @@ const OpportunityList = () => {
     // What's typed in the search box; it goes into the address after a pause.
     const [searchQuery, setSearchQuery] = useState(query);
     const [filtersOpen, setFiltersOpen] = useState(() => [...params.keys()].some((key) => ['kind', 'stage', 'industry', 'min', 'max', 'remote', 'btc'].includes(key)));
-    const [opportunities, setOpportunities] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // A list shown before (or fetched ahead by the bottom bar) from the first
+    // frame, not a frame of spinner first.
+    const firstSeen = () => cachedList(opportunitiesKey(opportunitiesRequest(
+        { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly },
+        { types: NATIVE ? TYPES : null, userId: user?.id },
+    )));
+    const [opportunities, setOpportunities] = useState(() => firstSeen() || []);
+    const [loading, setLoading] = useState(() => !firstSeen());
 
     /** Changes the address (in place: no new step for Back): each key set, or taken out when empty. */
     const update = (changes) => setParams((prev) => {
@@ -123,22 +130,13 @@ const OpportunityList = () => {
     useEffect(() => {
         let current = true;
         (async () => {
-            const request = { limit: 50 };
-            if (query) request.search = query;
-            if (type) request.type = type;
-            if (kind) request.kind = kind;
-            if (stage) request.stage = stage;
-            if (category) request.category = category;
-            if (minAmount) request.minAmount = minAmount;
-            if (maxAmount) request.maxAmount = maxAmount;
-            if (remoteOnly) request.remote = 'true';
-            if (btcOnly) request.btc = 'true';
-            if (mineOnly && user?.id) request.ownerId = user.id;
-            if (savedOnly) request.saved = 'true';
-            if (NATIVE) request.types = TYPES.join(',');
+            const request = opportunitiesRequest(
+                { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly },
+                { types: NATIVE ? TYPES : null, userId: user?.id },
+            );
             // A list shown before appears at once (utils/listCache.js) and is
             // then refreshed; a new one shows the spinner.
-            const key = `opportunities:${JSON.stringify(request)}`;
+            const key = opportunitiesKey(request);
             const seen = cachedList(key);
             if (seen) {
                 setOpportunities(seen);

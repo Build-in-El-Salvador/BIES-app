@@ -248,6 +248,60 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * GET /directory/recommended-by/:userId
+ * The businesses and farms a member recommends (vouched for), their newest
+ * recommendation first: the Recommendations on their profile. Members only,
+ * as reviews are; nothing for a member blocked either way, suspended or
+ * deleted. The listings follow the directory's rules: live, and not run by a
+ * member who is suspended, deleted or blocked either way.
+ */
+export async function listRecommendedBy(req: Request, res: Response): Promise<void> {
+    try {
+        const { userId } = req.params;
+        const page = Math.max(parseInt(String(req.query.page ?? '1'), 10) || 1, 1);
+        const take = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 50);
+        const reply = (data: any[], total: number) => res.json({
+            data,
+            trustedThreshold: TRUSTED_THRESHOLD,
+            pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+        });
+
+        const hidden = new Set(await hiddenFromIds(req.user!.id, { staff: isStaff(req) }));
+        const recommender = await prisma.user.findUnique({ where: { id: userId }, select: { isBanned: true, deletedAt: true } });
+        if (!recommender || recommender.isBanned || recommender.deletedAt || hidden.has(userId)) {
+            reply([], 0);
+            return;
+        }
+
+        const where = {
+            userId,
+            vote: 1,
+            listing: { status: 'active', isPublished: true, AND: [ACTIVE_MEMBER_RUNS_IT] },
+        };
+        const [rows, total] = await Promise.all([
+            prisma.directoryEndorsement.findMany({
+                where,
+                include: {
+                    listing: {
+                        include: { owner: ownerSelect, memberUser: ownerSelect, _count: { select: { endorsements: true } } },
+                    },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * take,
+                take,
+            }),
+            prisma.directoryEndorsement.count({ where }),
+        ]);
+
+        const visible = rows.filter((r) => !hidden.has(listingMember(r.listing)));
+        reply(visible.map((r) => ({ ...parseListing(r.listing), recommendedAt: r.createdAt })), total);
+    } catch (error) {
+        console.error('List recommended listings error:', error);
+        res.status(500).json({ error: 'Failed to list recommendations' });
+    }
+}
+
+/**
  * GET /directory/:id
  * Get a single listing. Non-active/unpublished listings are only visible
  * to the owner or an admin.
@@ -541,10 +595,16 @@ export async function endorseListing(req: Request, res: Response): Promise<void>
             return;
         }
 
+        // A changed vote dates from the change: "Recommended by" lists members
+        // in the order they came to recommend it.
+        const before = await prisma.directoryEndorsement.findUnique({
+            where: { listingId_userId: { listingId: listing.id, userId } },
+            select: { vote: true },
+        });
         const endorsement = await prisma.directoryEndorsement.upsert({
             where: { listingId_userId: { listingId: listing.id, userId } },
             create: { listingId: listing.id, userId, vote, comment },
-            update: { vote, comment },
+            update: { vote, comment, ...(before && before.vote !== vote ? { createdAt: new Date() } : {}) },
         });
 
         await recomputeListingScore(listing.id);

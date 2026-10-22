@@ -4,6 +4,7 @@ import { requireTerms, screenContent } from '../middleware/contentRules';
 import { validate } from '../middleware/validate';
 import {
     listListings,
+    listRecommendedBy,
     getListing,
     createListing,
     createDirectoryListingSchema,
@@ -32,6 +33,8 @@ const LISTING_TEXT = ['name', 'hours', 'about', 'location', 'instagram', 'websit
 
 // Public routes
 router.get('/', optionalAuth, listListings);
+// What a member recommends (their profile): members only, like the reviews.
+router.get('/recommended-by/:userId', authenticate, listRecommendedBy);
 router.get('/:id', optionalAuth, getListing);
 
 // Handing a listing to the member who runs it

@@ -7,6 +7,9 @@ import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import Avatar from '../components/Avatar';
 import { cachedList, rememberList } from '../utils/listCache';
+import { membersKey, membersPageSize } from '../utils/listRequests';
+import { prefetchDetail } from '../utils/detailCache';
+import { profilePage } from '../utils/detailPages';
 import { useAuth } from '../context/AuthContext';
 import { stripHtml } from '../utils/text';
 
@@ -38,7 +41,8 @@ const Discover = () => {
   };
 
   const [builders, setBuilders] = useState([]);
-  const [buildersLoading, setBuildersLoading] = useState(false);
+  // Loading until the first answer: a spinner, never a moment of "No members found".
+  const [buildersLoading, setBuildersLoading] = useState(true);
   const [buildersPage, setBuildersPage] = useState(1);
   const [buildersHasMore, setBuildersHasMore] = useState(false);
   const buildersRequest = useRef(0);
@@ -57,8 +61,8 @@ const Discover = () => {
   // Members load a screenful or more at a time as you scroll down (Icons
   // shows many per screen, so 48; cards fewer, so 24); a new search starts
   // again from the top. Coming back shows what was loaded (utils/listCache.js).
-  const pageSize = memberViewType === 'icons' ? 48 : 24;
-  const listKey = `members:${pageSize}:${searchQuery}`;
+  const pageSize = membersPageSize(memberViewType);
+  const listKey = membersKey(pageSize, searchQuery);
   const loadBuilders = useCallback(async (pageToLoad) => {
     const request = ++buildersRequest.current;
     setBuildersLoading(true);
@@ -94,18 +98,25 @@ const Discover = () => {
   }, [searchQuery, pageSize, listKey]);
 
   // Shown in the last 2 minutes: as it was, scrolled-in members included.
-  // Older: shown at once, then the first page is fetched again.
+  // Older: shown at once, then the first page is fetched again. Only typing
+  // in search waits (300 ms after the last key); opening the page doesn't.
+  const lastSearch = useRef(searchQuery);
   useEffect(() => {
+    const typing = searchQuery !== lastSearch.current;
+    lastSearch.current = searchQuery;
     const seen = cachedList(listKey);
     if (seen) {
       setBuilders(seen.builders);
       setBuildersPage(seen.page);
       setBuildersHasMore(seen.hasMore);
-      if (Date.now() - seen.at < 2 * 60_000) return undefined;
+      if (Date.now() - seen.at < 2 * 60_000) {
+        setBuildersLoading(false);
+        return undefined;
+      }
     }
-    const debounce = setTimeout(() => loadBuilders(1), seen ? 0 : 300);
+    const debounce = setTimeout(() => loadBuilders(1), typing && !seen ? 300 : 0);
     return () => clearTimeout(debounce);
-  }, [loadBuilders, listKey]);
+  }, [loadBuilders, listKey, searchQuery]);
 
   // Who you follow, for the Follow buttons: only the List and Standard views
   // have them, so Icons doesn't wait for it. Fetched once per visit.
@@ -216,7 +227,7 @@ const Discover = () => {
 
                         if (memberViewType === 'icons') {
                             return (
-                                <Link to={`/builder/${builder.id}`} key={builder.id} className="builder-card-link-icons" title={builder.name}>
+                                <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-icons" title={builder.name}>
                                     <div className="builder-card-icons">
                                         <div className="builder-avatar-wrap-icons">
                                             {avatarContent}
@@ -229,7 +240,7 @@ const Discover = () => {
 
                         if (memberViewType === 'list') {
                             return (
-                                <Link to={`/builder/${builder.id}`} key={builder.id} className="builder-card-link-list">
+                                <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link-list">
                                     <div className="builder-card-list">
                                         <div className="builder-avatar-wrap-list relative">
                                             {avatarContent}
@@ -271,7 +282,7 @@ const Discover = () => {
                         }
 
                         return (
-                            <Link to={`/builder/${builder.id}`} key={builder.id} className="builder-card-link">
+                            <Link to={`/builder/${builder.id}`} key={builder.id} state={{ preview: builder }} onPointerDown={() => prefetchDetail(...profilePage(builder.id))} className="builder-card-link">
                                 <div className="builder-card">
                                     <div className="h-48 bg-gray-100 relative builder-avatar-wrap-standard">
                                         {avatarContent}

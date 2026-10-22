@@ -5,11 +5,12 @@
 //
 // v1.0 (Oct 2026): the Feed (the BIES private relay only), Members, the Farm
 // Directory and BIES Trusted, BIES Talents, Opportunities, Profile, Settings,
-// notifications. Features without a slug (Feed, Members, Profile, Settings)
+// notifications, and Report / Feedback for testers and members (Mike,
+// 2026-10-22). Features without a slug (Feed, Members, Profile, Settings)
 // are always on.
 import { FEATURE_SLUGS } from './featureSlugs.js';
 
-export const APP_FEATURES = ['directories', 'talent', 'projects'];
+export const APP_FEATURES = ['directories', 'talent', 'projects', 'feedback'];
 
 // Opportunities the app leaves out (the website shows them; the app never asks
 // for them, links to one show "not found", and it can't post one). None since

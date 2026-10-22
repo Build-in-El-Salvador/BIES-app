@@ -22,6 +22,7 @@ import SystemBarsSync from './components/SystemBarsSync';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
 import { lazyPage } from './utils/lazyPage';
+import { rememberPage } from './utils/lastPage';
 import { Loader2 } from 'lucide-react';
 
 // Pages. Home and signing in come with the app; every other page is
@@ -279,6 +280,9 @@ const AppContent = () => {
         const timer = setTimeout(() => window.scrollTo(0, saved), 60);
         return () => clearTimeout(timer);
     }, [location.key]);
+
+    // Report / Feedback starts on the page the member was on (utils/lastPage.js).
+    useEffect(() => { rememberPage(location.pathname); }, [location.pathname]);
 
     // The phone app's launch screen (the BIES logo) goes once it's known who's
     // signed in and their first page has drawn: Home, or signing in, with
