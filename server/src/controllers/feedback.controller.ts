@@ -1,36 +1,108 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
+import { prepareMedia, UnreadableMediaError } from '../services/mediaProcessing';
+import { getPresignedUrl, privateFileKey, uploadPrivateFile } from '../services/storage.service';
+import { discardUploadNames, recordUpload } from '../services/uploads.service';
 
 const VALID_STATUSES = ['NEW', 'IN_REVIEW', 'FIXED', 'WONT_FIX', 'PLANNED', 'DUPLICATE', 'CLOSED'];
 const VALID_PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
+/** What a screenshot can be sent as: what phones and browsers make of one. */
+export const SCREENSHOT_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const short = (max: number) => z.string().trim().max(max).optional().catch(undefined);
+
+// What the app sends with a report (src/utils/deviceInfo.js). Anything else
+// in it is dropped, and a report whose details don't read still goes in.
+const deviceSchema = z.object({
+    platform: z.enum(['web', 'ios', 'android']).optional().catch(undefined),
+    appVersion: short(20),
+    build: short(20),
+    userAgent: short(400),
+    screen: short(40),
+    language: short(10),
+    path: short(200),
+});
+
+const parseDevice = (raw: unknown) => {
+    if (typeof raw !== 'string' || raw.length > 2000) return {};
+    try {
+        return deviceSchema.parse(JSON.parse(raw));
+    } catch {
+        return {};
+    }
+};
+
+// Sent as a form (multipart), with the screenshot as its file, if there is one.
 export const submitFeedbackSchema = z.object({
     type: z.enum(['BUG', 'FEATURE', 'LOVE', 'GENERAL']).default('GENERAL'),
-    message: z.string().min(5, 'Message must be at least 5 characters').max(5000),
+    message: z.string().trim().min(5, 'Message must be at least 5 characters').max(5000),
+    // An id from the form's page list (src/config/feedbackPages.js).
+    page: z.union([z.string().regex(/^[a-z][a-z-]{0,39}$/), z.literal('')]).default(''),
+    device: z.string().optional().transform(parseDevice),
 });
 
 /**
- * POST /feedback
- * Submit feedback (authenticated users only).
+ * POST /feedback (multipart: type, message, page, device, and file)
+ * A member's report or feedback, with a screenshot if they add one. The
+ * screenshot is shrunk and saved again without its metadata
+ * (mediaProcessing.ts), kept as a private file only admins open, and
+ * recorded as the member's: it goes with the report, or with their account.
  */
 export async function submitFeedback(req: Request, res: Response): Promise<void> {
+    let screenshot = '';
     try {
-        const { type, message } = req.body;
+        const { type, message, page, device } = req.body as z.infer<typeof submitFeedbackSchema>;
+        const userId = req.user!.id;
+
+        if (req.file) {
+            let media;
+            try {
+                media = await prepareMedia(req.file.buffer, req.file.mimetype);
+            } catch (err) {
+                if (err instanceof UnreadableMediaError) {
+                    res.status(400).json({ error: 'That screenshot couldn\'t be read. Try a PNG or JPG', reason: 'unreadable' });
+                    return;
+                }
+                throw err;
+            }
+            const stored = await uploadPrivateFile(media.buffer, media.mimeType);
+            screenshot = stored.name;
+            await recordUpload(userId, { name: stored.name, mimeType: media.mimeType, size: media.buffer.length, isPrivate: true });
+        }
 
         const feedback = await prisma.feedback.create({
-            data: {
-                userId: req.user!.id,
-                type,
-                message,
-            },
+            data: { userId, type, message, page, screenshot, device: JSON.stringify(device) },
         });
 
         res.status(201).json({ message: 'Thank you for your feedback!', id: feedback.id });
     } catch (error) {
         console.error('Feedback submit error:', error);
+        // A screenshot stored for a report that didn't go in.
+        if (screenshot) await discardUploadNames([screenshot]);
         res.status(500).json({ error: 'Failed to submit feedback' });
     }
+}
+
+const USER_FIELDS = {
+    select: {
+        id: true,
+        email: true,
+        nostrPubkey: true,
+        profile: { select: { name: true, avatar: true } },
+    },
+} as const;
+
+/**
+ * A report as admins see it: what the app sent with it, read, and a
+ * 15-minute link to its screenshot.
+ */
+async function forAdmin<T extends { screenshot: string; device: string }>(item: T) {
+    let device = {};
+    try { device = JSON.parse(item.device); } catch { /* none */ }
+    const screenshotUrl = item.screenshot ? await getPresignedUrl(privateFileKey(item.screenshot)) : null;
+    return { ...item, device, screenshotUrl };
 }
 
 /**
@@ -45,9 +117,12 @@ export async function listFeedback(req: Request, res: Response): Promise<void> {
         const status = req.query.status as string || '';
         const priority = req.query.priority as string || '';
         const search = req.query.search as string || '';
+        // The page a report is about (`page` is the page of the list).
+        const onPage = req.query.onPage as string || '';
 
         const where: any = {};
         if (type) where.type = type;
+        if (onPage) where.page = onPage;
         if (status) where.status = status;
         if (priority) where.priority = priority;
         if (search) {
@@ -60,16 +135,7 @@ export async function listFeedback(req: Request, res: Response): Promise<void> {
         const [data, total, counts] = await Promise.all([
             prisma.feedback.findMany({
                 where,
-                include: {
-                    user: {
-                        select: {
-                            id: true,
-                            email: true,
-                            nostrPubkey: true,
-                            profile: { select: { name: true, avatar: true } },
-                        },
-                    },
-                },
+                include: { user: USER_FIELDS },
                 orderBy: [
                     { priority: 'asc' }, // URGENT first (alphabetical: HIGH, LOW, NORMAL, URGENT — we sort client-side)
                     { createdAt: 'desc' },
@@ -88,7 +154,7 @@ export async function listFeedback(req: Request, res: Response): Promise<void> {
         ]);
 
         res.json({
-            data,
+            data: await Promise.all(data.map(forAdmin)),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
             counts,
         });
@@ -143,19 +209,10 @@ export async function updateFeedback(req: Request, res: Response): Promise<void>
         const feedback = await prisma.feedback.update({
             where: { id },
             data,
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        email: true,
-                        nostrPubkey: true,
-                        profile: { select: { name: true, avatar: true } },
-                    },
-                },
-            },
+            include: { user: USER_FIELDS },
         });
 
-        res.json(feedback);
+        res.json(await forAdmin(feedback));
     } catch (error) {
         console.error('Update feedback error:', error);
         res.status(500).json({ error: 'Failed to update feedback' });
@@ -164,11 +221,12 @@ export async function updateFeedback(req: Request, res: Response): Promise<void>
 
 /**
  * DELETE /admin/feedback/:id
- * Delete feedback (admin only).
+ * Delete feedback (admin only), and its screenshot.
  */
 export async function deleteFeedback(req: Request, res: Response): Promise<void> {
     try {
-        await prisma.feedback.delete({ where: { id: req.params.id } });
+        const { screenshot } = await prisma.feedback.delete({ where: { id: req.params.id }, select: { screenshot: true } });
+        if (screenshot) await discardUploadNames([screenshot]);
         res.json({ message: 'Feedback deleted' });
     } catch (error) {
         console.error('Delete feedback error:', error);

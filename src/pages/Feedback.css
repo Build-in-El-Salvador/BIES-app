@@ -23,36 +23,153 @@
     margin-bottom: 1.5rem;
 }
 
-.feedback-type-grid {
+/* Report a problem | Give feedback */
+.feedback-kinds {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 1.25rem;
+    background: var(--color-gray-100);
+    border-radius: 9999px;
 }
 
-.feedback-type-btn {
+.feedback-kind {
+    padding: 0.6rem 0.5rem;
+    border: none;
+    border-radius: 9999px;
+    background: none;
+    color: var(--color-gray-500);
+    font-size: 0.9rem;
+    white-space: nowrap;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.feedback-kind.selected {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.feedback-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 0.4rem;
+}
+
+.feedback-optional {
+    font-weight: 400;
+    color: var(--color-gray-400);
+}
+
+/* Which page? A dropdown that looks like one on every phone. */
+.feedback-select-wrap {
+    position: relative;
+    margin-bottom: 1.25rem;
+}
+
+.feedback-select-wrap.has-hint {
+    margin-bottom: 0.4rem;
+}
+
+.feedback-select {
+    width: 100%;
+    padding: 0.75rem 2.75rem 0.75rem 1rem;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    font-family: inherit;
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+.feedback-select-arrow {
+    position: absolute;
+    top: 50%;
+    right: 0.9rem;
+    transform: translateY(-50%);
+    color: var(--color-gray-500);
+    pointer-events: none;
+}
+
+.feedback-hint {
+    font-size: 0.8rem;
+    color: var(--color-gray-500);
+    margin-bottom: 1.25rem;
+}
+
+.feedback-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.feedback-shot-add {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    padding: 0.75rem 1rem;
-    border: 2px solid var(--color-gray-200);
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 2px dashed var(--color-gray-200);
     border-radius: 0.75rem;
-    background: var(--color-surface);
+    background: none;
     color: var(--color-gray-500);
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
-    transition: all 0.2s;
 }
 
-.feedback-type-btn:hover {
-    border-color: var(--color-gray-400);
-    color: var(--color-text);
+.feedback-shot-add:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
 }
 
-.feedback-type-btn.selected {
-    font-weight: 600;
+.feedback-shot {
+    position: relative;
+    display: inline-block;
+}
+
+.feedback-shot-img {
+    display: block;
+    max-width: 160px;
+    max-height: 240px;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 0.75rem;
+    object-fit: contain;
     background: var(--color-gray-50);
+}
+
+.feedback-shot-remove {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--color-surface);
+    border-radius: 50%;
+    background: var(--color-gray-700);
+    color: white;
+    cursor: pointer;
+}
+
+.feedback-note {
+    font-size: 0.8rem;
+    color: var(--color-gray-400);
+    margin: 1rem 0;
 }
 
 .feedback-textarea {
@@ -84,7 +201,7 @@
     font-size: 0.75rem;
     color: var(--color-gray-400);
     margin-top: 0.25rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .feedback-error-text {
@@ -171,17 +288,11 @@
 }
 
 @media (max-width: 480px) {
-    .feedback-type-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-
     .feedback-card {
         padding: 1.25rem;
     }
 
-    .feedback-type-btn {
-        padding: 0.6rem 0.75rem;
-        font-size: 0.78rem;
-        gap: 6px;
+    .feedback-kind {
+        font-size: 0.85rem;
     }
 }

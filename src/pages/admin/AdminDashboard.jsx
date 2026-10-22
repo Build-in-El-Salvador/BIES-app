@@ -26,6 +26,9 @@ const AdminDashboard = () => {
   const allTabs = [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
     { to: '/admin/reports', label: 'Reports', icon: Flag },
+    // Testers' reports and members' feedback (Report / Feedback), near the
+    // front so it shows without scrolling the tabs on a phone.
+    { to: '/admin/feedback', label: 'Feedback', icon: MessageSquare },
     { to: '/admin/projects', label: 'Opportunities', icon: Folder },
     { to: '/admin/events', label: 'Events', icon: Calendar },
     { to: '/admin/directory', label: 'Directory', icon: Store },
@@ -37,7 +40,6 @@ const AdminDashboard = () => {
     { to: '/admin/news-settings', label: 'News', icon: Newspaper },
     { to: '/admin/investor-vetting', label: 'Vetting', icon: ShieldCheck },
     { to: '/admin/vouchers', label: t('admin.vouchers.nav'), icon: Ticket },
-    { to: '/admin/feedback', label: 'Feedback', icon: MessageSquare },
     { to: '/admin/features', label: t('features.tab'), icon: SlidersHorizontal },
   ];
   const MODERATOR_TABS = ['/admin/reports', '/admin/directory'];

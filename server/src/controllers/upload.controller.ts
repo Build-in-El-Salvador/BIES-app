@@ -273,8 +273,10 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /upload/private/:name?exp=&sig=
- * A private file (a pitch deck) through the 15-minute link getProjectDeck
- * hands out (storage.service.ts getPresignedUrl): the link is the permission.
+ * A private file through the 15-minute link getProjectDeck (a pitch deck) or
+ * the admin feedback list (a screenshot) hands out (storage.service.ts
+ * getPresignedUrl): the link is the permission. A deck downloads; a
+ * screenshot shows in the page.
  */
 export async function downloadPrivateFile(req: Request, res: Response): Promise<void> {
     try {
@@ -285,7 +287,13 @@ export async function downloadPrivateFile(req: Request, res: Response): Promise<
         }
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Cache-Control', 'private, no-store');
-        res.download(file, `pitch-deck${path.extname(file)}`);
+        const ext = path.extname(file).toLowerCase();
+        if (['.jpg', '.png', '.webp'].includes(ext)) {
+            res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+            res.type(ext).sendFile(file);
+            return;
+        }
+        res.download(file, `pitch-deck${ext}`);
     } catch (error) {
         console.error('Download private file error:', error);
         res.status(404).json({ error: 'This link has expired' });

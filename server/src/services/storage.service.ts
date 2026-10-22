@@ -134,7 +134,7 @@ export async function uploadPublicFile(
 }
 
 /**
- * Upload a private file (pitch decks).
+ * Upload a private file (pitch decks, feedback screenshots).
  * Returns the S3 key (NOT a URL — use getPresignedUrl to access).
  */
 export async function uploadPrivateFile(
@@ -184,6 +184,11 @@ export async function getPresignedUrl(key: string): Promise<string> {
     return `${BASE_PATH}/api/upload/private/${name}?exp=${exp}&sig=${signPrivateLink(name, exp)}`;
 }
 
+/** The key of a private file by its name (uploadPrivateFile), for getPresignedUrl. */
+export function privateFileKey(name: string): string {
+    return `${s3Client ? 'decks' : 'private'}/${name}`;
+}
+
 function signPrivateLink(name: string, exp: number): string {
     return crypto.createHmac('sha256', config.jwtSecret).update(`private-file:${name}:${exp}`).digest('hex');
 }
@@ -193,7 +198,7 @@ function signPrivateLink(name: string, exp: number): string {
  * is genuine and hasn't expired; otherwise null.
  */
 export function privateFileFromLink(name: string, exp: string, sig: string): string | null {
-    if (!/^\d{13}-[0-9a-f]{32}\.(pdf|pptx?)$/i.test(name)) return null;
+    if (!/^\d{13}-[0-9a-f]{32}\.(pdf|pptx?|jpg|png|webp)$/i.test(name)) return null;
     const expires = Number(exp);
     if (!Number.isSafeInteger(expires) || expires < Date.now()) return null;
     if (typeof sig !== 'string' || !/^[0-9a-f]{64}$/.test(sig)) return null;

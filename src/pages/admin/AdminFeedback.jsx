@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, Trash2, Bug, Lightbulb, Heart, MessageSquare, Search, ChevronDown, ChevronUp, X, MessageCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { Loader2, Trash2, Bug, Lightbulb, Heart, MessageSquare, Search, X, MessageCircle, MapPin, Smartphone } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { FEEDBACK_PAGES } from '../../config/feedbackPages';
+import { getAssetUrl } from '../../utils/assets';
 
 const TYPE_META = {
     BUG: { label: 'Bug', icon: Bug, color: '#dc2626', bg: '#fef2f2' },
     FEATURE: { label: 'Feature', icon: Lightbulb, color: '#f59e0b', bg: '#fffbeb' },
     LOVE: { label: 'Love', icon: Heart, color: '#ec4899', bg: '#fdf2f8' },
-    GENERAL: { label: 'General', icon: MessageSquare, color: 'var(--color-primary)', bg: 'var(--color-blue-tint)' },
+    GENERAL: { label: 'Feedback', icon: MessageSquare, color: 'var(--color-primary)', bg: 'var(--color-blue-tint)' },
 };
 
 const STATUS_OPTIONS = [
@@ -29,7 +33,18 @@ const PRIORITY_OPTIONS = [
 const getStatusMeta = (status) => STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[0];
 const getPriorityMeta = (priority) => PRIORITY_OPTIONS.find(p => p.value === priority) || PRIORITY_OPTIONS[1];
 
+const PLATFORM_NAMES = { ios: 'iOS app', android: 'Android app', web: 'Website' };
+
+/** What the app sent with a report, in one line: where, which version, what screen. */
+const deviceLine = (device = {}) => [
+    PLATFORM_NAMES[device.platform],
+    device.appVersion && `v${device.appVersion}${device.build ? ` (${device.build})` : ''}`,
+    device.screen,
+    device.path && `from ${device.path}`,
+].filter(Boolean).join(' · ');
+
 const AdminFeedback = () => {
+    const { t } = useTranslation();
     const [items, setItems] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
     const [counts, setCounts] = useState({ new: 0, inReview: 0, fixed: 0, all: 0 });
@@ -37,6 +52,10 @@ const AdminFeedback = () => {
     const [typeFilter, setTypeFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
+    const [pageFilter, setPageFilter] = useState('');
+    // The screenshot open full size, and those whose 15-minute link ran out.
+    const [openShot, setOpenShot] = useState('');
+    const [expiredShots, setExpiredShots] = useState(() => new Set());
     const [search, setSearch] = useState('');
     const [expandedId, setExpandedId] = useState(null);
     const [noteText, setNoteText] = useState('');
@@ -49,17 +68,19 @@ const AdminFeedback = () => {
             if (typeFilter) params.type = typeFilter;
             if (statusFilter) params.status = statusFilter;
             if (priorityFilter) params.priority = priorityFilter;
+            if (pageFilter) params.onPage = pageFilter;
             if (search) params.search = search;
             const res = await adminApi.feedback(params);
             setItems(Array.isArray(res?.data) ? res.data : []);
             setPagination(res?.pagination || { page: 1, total: 0, totalPages: 1 });
             if (res?.counts) setCounts(res.counts);
+            setExpiredShots(new Set());
         } catch (err) {
             console.error('Failed to fetch feedback:', err);
         } finally {
             setLoading(false);
         }
-    }, [typeFilter, statusFilter, priorityFilter, search]);
+    }, [typeFilter, statusFilter, priorityFilter, pageFilter, search]);
 
     useEffect(() => { fetchFeedback(1); }, [fetchFeedback]);
 
@@ -97,6 +118,8 @@ const AdminFeedback = () => {
             setNoteText(currentNote || '');
         }
     };
+
+    const pageName = (id) => (id ? t(`feedback.pages.${id}`, id) : '');
 
     const formatDate = (d) => new Date(d).toLocaleString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
@@ -162,7 +185,13 @@ const AdminFeedback = () => {
                     <option value="BUG">Bug Reports</option>
                     <option value="FEATURE">Feature Requests</option>
                     <option value="LOVE">Love</option>
-                    <option value="GENERAL">General</option>
+                    <option value="GENERAL">Feedback</option>
+                </select>
+                <select value={pageFilter} onChange={(e) => setPageFilter(e.target.value)} className="filter-select">
+                    <option value="">All Pages</option>
+                    {FEEDBACK_PAGES.map(p => (
+                        <option key={p.id} value={p.id}>{pageName(p.id)}</option>
+                    ))}
                 </select>
                 <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)} className="filter-select">
                     <option value="">All Priority</option>
@@ -198,6 +227,9 @@ const AdminFeedback = () => {
                                         <span className="type-badge" style={{ color: typeMeta.color, background: typeMeta.bg }}>
                                             <TypeIcon size={14} /> {typeMeta.label}
                                         </span>
+                                        {item.page && (
+                                            <span className="page-badge"><MapPin size={12} /> {pageName(item.page)}</span>
+                                        )}
                                         <span className="priority-dot" style={{ background: priorityMeta.color }} title={priorityMeta.label} />
                                         <span className="feedback-time" title={formatDate(item.createdAt)}>{formatRelative(item.createdAt)}</span>
                                     </div>
@@ -241,6 +273,23 @@ const AdminFeedback = () => {
 
                                 <p className="feedback-message">{item.message}</p>
 
+                                {item.screenshotUrl && (
+                                    expiredShots.has(item.id) ? (
+                                        <button type="button" className="shot-expired" onClick={() => fetchFeedback(pagination.page)}>
+                                            Screenshot link expired. Reload
+                                        </button>
+                                    ) : (
+                                        <button type="button" className="shot-thumb" onClick={() => setOpenShot(getAssetUrl(item.screenshotUrl))} title="See it full size">
+                                            <img
+                                                src={getAssetUrl(item.screenshotUrl)}
+                                                alt="Screenshot sent with this report"
+                                                loading="lazy"
+                                                onError={() => setExpiredShots(prev => new Set(prev).add(item.id))}
+                                            />
+                                        </button>
+                                    )
+                                )}
+
                                 {/* Admin note preview (when collapsed) */}
                                 {item.adminNote && !isExpanded && (
                                     <div className="note-preview" onClick={() => toggleExpand(item.id, item.adminNote)}>
@@ -283,10 +332,55 @@ const AdminFeedback = () => {
                                         <span className="resolved-date">Resolved {formatRelative(item.resolvedAt)}</span>
                                     )}
                                 </div>
+                                {deviceLine(item.device) && (
+                                    <div className="device-line" title={item.device?.userAgent || ''}>
+                                        <Smartphone size={12} /> {deviceLine(item.device)}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
+            )}
+
+            {/* Over the whole app, the bottom bar included, like the side menu. */}
+            {openShot && createPortal(
+                <div className="admin-shot-overlay" role="dialog" aria-label="Screenshot" onClick={() => setOpenShot('')}>
+                    <img src={openShot} alt="Screenshot sent with this report" />
+                    <button type="button" className="admin-shot-close" onClick={() => setOpenShot('')} aria-label="Close"><X size={22} /></button>
+                    <style>{`
+                        .admin-shot-overlay {
+                            position: fixed;
+                            inset: 0;
+                            z-index: 10001; /* above the bottom bar (10000) */
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+                            background: rgba(0, 0, 0, 0.85);
+                            cursor: zoom-out;
+                        }
+                        .admin-shot-overlay img {
+                            max-width: 100%;
+                            max-height: 100%;
+                            object-fit: contain;
+                            border-radius: var(--radius-md);
+                        }
+                        .admin-shot-close {
+                            position: absolute;
+                            top: calc(12px + env(safe-area-inset-top, 0px));
+                            right: 12px;
+                            display: flex;
+                            padding: 8px;
+                            border: none;
+                            border-radius: 50%;
+                            background: rgba(255, 255, 255, 0.15);
+                            color: white;
+                            cursor: pointer;
+                        }
+                    `}</style>
+                </div>,
+                document.body,
             )}
 
             {pagination.totalPages > 1 && (
@@ -428,6 +522,17 @@ const AdminFeedback = () => {
                     font-size: 0.7rem;
                     font-weight: 600;
                 }
+                .page-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 0.2rem 0.6rem;
+                    border-radius: 9999px;
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                    color: var(--color-gray-600);
+                    background: var(--color-gray-100);
+                }
                 .priority-dot {
                     width: 8px;
                     height: 8px;
@@ -472,6 +577,43 @@ const AdminFeedback = () => {
                     line-height: 1.55;
                     color: var(--color-text);
                     white-space: pre-wrap;
+                    word-break: break-word;
+                }
+
+                /* Screenshot */
+                .shot-thumb {
+                    display: block;
+                    margin-top: 0.6rem;
+                    padding: 0;
+                    border: 1px solid var(--color-gray-200);
+                    border-radius: var(--radius-md);
+                    background: var(--color-gray-50);
+                    cursor: zoom-in;
+                    overflow: hidden;
+                }
+                .shot-thumb img {
+                    display: block;
+                    max-width: 140px;
+                    max-height: 220px;
+                    object-fit: contain;
+                }
+                .shot-expired {
+                    margin-top: 0.6rem;
+                    padding: 0.4rem 0.75rem;
+                    border: 1px dashed var(--color-gray-300);
+                    border-radius: var(--radius-sm);
+                    background: none;
+                    color: var(--color-gray-500);
+                    font-size: 0.8rem;
+                    cursor: pointer;
+                }
+                .device-line {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    margin-top: 0.4rem;
+                    font-size: 0.75rem;
+                    color: var(--color-gray-400);
                     word-break: break-word;
                 }
 
