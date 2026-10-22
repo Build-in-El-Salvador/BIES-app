@@ -706,7 +706,17 @@ export const newsApi = {
 // ─── Feedback ───────────────────────────────────────────────────────────────
 
 export const feedbackApi = {
-    submit: (data) => post('/feedback', data),
+    // A report: its type, page id, message, the app's details (deviceInfo.js)
+    // and a screenshot (a File) if there is one, sent as a form.
+    submit: ({ type, page, message, device, screenshot }) => {
+        const fd = new FormData();
+        fd.append('type', type);
+        fd.append('page', page || '');
+        fd.append('message', message);
+        fd.append('device', JSON.stringify(device || {}));
+        if (screenshot) fd.append('file', screenshot);
+        return uploadFile('/feedback', fd);
+    },
 };
 
 // ─── Media (Live Feeds) ──────────────────────────────────────────────────────

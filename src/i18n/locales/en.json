@@ -109,7 +109,8 @@
     "profile": "Profile",
     "notifications": "Notifications",
     "talent": "BIES Talents",
-    "opportunities": "Opportunities"
+    "opportunities": "Opportunities",
+    "feedback": "Report / Feedback"
   },
   "settings": {
     "title": "Settings",
@@ -3185,5 +3186,50 @@
     "makeCover": "Make album cover",
     "deletePhoto": "Delete photo",
     "deletePhotoConfirm": "Delete this photo?"
+  },
+  "feedback": {
+    "title": "Report / Feedback",
+    "subtitle": "Found a problem or have an idea? Tell the BIES team here.",
+    "kindProblem": "Report a problem",
+    "kindFeedback": "Give feedback",
+    "pageLabel": "Which page?",
+    "pageChoose": "Choose a page",
+    "pageGuessed": "This is the page you were on. Tap to choose another.",
+    "messageLabelProblem": "What happened?",
+    "messageLabelFeedback": "Your feedback",
+    "messagePlaceholderProblem": "What did you do, and what went wrong?",
+    "messagePlaceholderFeedback": "What would make BIES better for you?",
+    "screenshotLabel": "Screenshot",
+    "optional": "(optional)",
+    "screenshotAdd": "Add a screenshot",
+    "screenshotAlt": "Your screenshot",
+    "screenshotRemove": "Remove the screenshot",
+    "deviceNote": "Your app version and the type of phone or browser are sent with it, to help us fix things. Only the BIES team sees your report and screenshot.",
+    "send": "Send",
+    "sending": "Sending...",
+    "thanksTitle": "Thank you!",
+    "thanksBody": "The BIES team has your report. We read every one.",
+    "sendAnother": "Send another",
+    "errorPage": "Choose the page it's about.",
+    "errorShort": "Please write at least 5 characters.",
+    "errorNotPicture": "A screenshot has to be a picture.",
+    "errorTooBig": "That screenshot is too big (15 MB at most).",
+    "errorSend": "It didn't send. Please try again.",
+    "pages": {
+      "home": "Home",
+      "feed": "Feed",
+      "members": "Members and their profiles",
+      "profile": "Your profile and photos",
+      "farms": "Farms",
+      "trusted": "Businesses",
+      "talent": "BIES Talents",
+      "opportunities": "Opportunities",
+      "events": "Events",
+      "messages": "Messages",
+      "notifications": "Notifications",
+      "settings": "Settings",
+      "signin": "Signing in or signing up",
+      "other": "Somewhere else"
+    }
   }
 }

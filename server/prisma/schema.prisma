@@ -677,6 +677,15 @@ model Feedback {
   userId     String    @map("user_id")
   type       String    @default("GENERAL") // BUG | FEATURE | LOVE | GENERAL
   message    String
+  // Which part of the app it's about: an id from the form's list
+  // (src/config/feedbackPages.js), or "" when the member didn't say.
+  page       String    @default("")
+  // The screenshot sent with it: a private file's name (uploadPrivateFile),
+  // which only admins open, through a 15-minute link. "" for none.
+  screenshot String    @default("")
+  // What the app sends with it (JSON): web, iOS or Android, the app's
+  // version and build, the browser, the screen, and the path it was sent from.
+  device     String    @default("{}")
   status     String    @default("NEW") // NEW | IN_REVIEW | FIXED | WONT_FIX | PLANNED | DUPLICATE | CLOSED
   priority   String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
   adminNote  String    @default("") @map("admin_note")
