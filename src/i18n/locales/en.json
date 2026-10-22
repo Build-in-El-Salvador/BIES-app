@@ -1908,6 +1908,8 @@
       "offerSent": "Sent. We'll let you know when {{name}} accepts.",
       "error": "That didn't work. Please try again."
     },
+    "adminEditMenu": "Edit as admin",
+    "notYoursToEdit": "Only the member who added this listing can edit it.",
     "recommendedBy": "Recommended by",
     "reviewsTitle": "Reviews"
   },

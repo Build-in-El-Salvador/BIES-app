@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useLocation, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useLocation, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Phone, Instagram, Globe, Mail, ChevronRight,
@@ -51,7 +51,8 @@ const ListingDetail = () => {
     const { id } = useParams();
     const location = useLocation();
     const { t } = useTranslation();
-    const { user, isStaff } = useAuth();
+    const { user, isStaff, isAdmin } = useAuth();
+    const navigate = useNavigate();
 
     // Opened before (detailCache), or tapped in a list (the list's copy): drawn
     // from the first frame, no loader.
@@ -172,7 +173,9 @@ const ListingDetail = () => {
     }
 
     const isOwner = !!user?.id && listing.ownerId === user.id;
-    const canEdit = isOwner || isStaff;
+    // The member who added it edits it. Admins can too (the API allows it),
+    // but from the ⋯ menu, so someone else's listing isn't changed by a slip.
+    const canAdminEdit = isAdmin && !isOwner;
     // Who answers for the listing: its linked member when staff entered it,
     // otherwise its creator (server: directory.controller.ts listingMember).
     const listingMemberId = listing.memberUserId || listing.ownerId;
@@ -186,7 +189,7 @@ const ListingDetail = () => {
     const canClaim = !!user?.id && !isOwner && listing.status === 'active'
         && !transfers.some((tr) => tr.kind === 'claim' && tr.toUserId === user.id);
     const canMove = isStaff && !isOwner;
-    const hasMenu = canClaim || isOwner || canMove || canModerate;
+    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate;
     const openOwnership = (mode) => {
         setShowMenu(false);
         menuButtonRef.current?.focus({ preventScroll: true });
@@ -346,9 +349,9 @@ const ListingDetail = () => {
                     <BackButton to={backPath} overlay label={t('directory.backToDirectory')} />
                 </div>
                 {/* Outside the photo's clipping, so the menu can open below it */}
-                {(canEdit || hasMenu) && (
+                {(isOwner || hasMenu) && (
                     <div className="dir-hero-tools">
-                        {canEdit && (
+                        {isOwner && (
                             <Link to={`${backPath}/${listing.id}/edit`} className="dir-edit-btn">
                                 <Edit3 size={15} /> {t('directory.editListing')}
                             </Link>
@@ -382,6 +385,11 @@ const ListingDetail = () => {
                                             {canMove && (
                                                 <button type="button" role="menuitem" onClick={() => openOwnership('staff')}>
                                                     <ArrowRightLeft size={16} /> {t('directory.ownership.staffMenu')}
+                                                </button>
+                                            )}
+                                            {canAdminEdit && (
+                                                <button type="button" role="menuitem" onClick={() => navigate(`${backPath}/${listing.id}/edit`)}>
+                                                    <Edit3 size={16} /> {t('directory.adminEditMenu')}
                                                 </button>
                                             )}
                                             {canModerate && (<>
@@ -765,7 +773,7 @@ const ListingDetail = () => {
                 }
 
                 /* On the photo's bottom-right corner, as on an opportunity's page:
-                   Edit for whoever runs it, the ⋯ menu (claim, hand over, report) */
+                   Edit for whoever added it, the ⋯ menu (claim, hand over, report) */
                 .dir-hero-tools {
                     position: absolute;
                     right: 16px;
