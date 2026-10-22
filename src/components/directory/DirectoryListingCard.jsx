@@ -4,6 +4,8 @@ import { MapPin, Phone, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'l
 import { useTranslation } from 'react-i18next';
 import Avatar from '../Avatar';
 import CertifiedBadge from './CertifiedBadge';
+import { prefetchDetail } from '../../utils/detailCache';
+import { listingPage } from '../../utils/detailPages';
 
 /**
  * Directory listing card (list row) per the mockup:
@@ -40,9 +42,13 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
     const FallbackIcon = isProvider ? Building2 : Leaf;
 
     return (
-        /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div */
+        /* styled-jsx only scopes DOM elements, so link resets are inline; the visual card is the div.
+           The page draws this card's copy at once (state.preview), and its own
+           fetch starts as soon as a finger touches the card. */
         <Link
             to={`${basePath}/${listing.id}`}
+            state={{ preview: listing }}
+            onPointerDown={() => prefetchDetail(...listingPage(listing.id))}
             className="dir-card-link"
             style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
         >

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
+import { directoryKey, directoryRequest } from '../../utils/listRequests';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, Bookmark } from 'lucide-react';
@@ -28,8 +29,11 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const isFarm = type === 'FARM';
 
     const [searchQuery, setSearchQuery] = useState('');
-    const [listings, setListings] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // A list shown before (or fetched ahead by the bottom bar) from the first
+    // frame, not a frame of spinner first.
+    const firstSeen = () => cachedList(directoryKey(directoryRequest({ type })));
+    const [listings, setListings] = useState(() => firstSeen() || []);
+    const [loading, setLoading] = useState(() => !firstSeen());
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     // Farm filters
@@ -53,15 +57,16 @@ const DirectoryList = ({ type = 'FARM' }) => {
         setFiltersOpen(false);
     }, [type]);
 
-    // Fetch listings (same 300ms debounce pattern as Discover)
+    // Fetch listings. Only typing in search waits (300 ms after the last key,
+    // as Discover does); opening the page or tapping a filter loads at once.
     // A list shown before appears at once (utils/listCache.js) and is then
     // refreshed; a new one shows the spinner.
+    const lastSearch = useRef(searchQuery);
     useEffect(() => {
-        const params = { type, limit: 50, sort: 'score' };
-        if (searchQuery) params.search = searchQuery;
-        if (category) params.category = category;
-        if (savedOnly) params.saved = 'true';
-        const key = `directory:${JSON.stringify(params)}`;
+        const typing = searchQuery !== lastSearch.current;
+        lastSearch.current = searchQuery;
+        const params = directoryRequest({ type, search: searchQuery, category, saved: savedOnly });
+        const key = directoryKey(params);
         const seen = cachedList(key);
         if (seen) {
             setListings(seen);
@@ -83,7 +88,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                 if (current) setLoading(false);
             }
         };
-        const debounce = setTimeout(fetchListings, seen ? 0 : 300);
+        const debounce = setTimeout(fetchListings, typing && !seen ? 300 : 0);
         return () => {
             current = false;
             clearTimeout(debounce);

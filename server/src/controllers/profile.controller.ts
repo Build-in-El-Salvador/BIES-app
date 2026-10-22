@@ -339,12 +339,23 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         recordView(result);
         // Their open opportunities, while Opportunities is on, and the public
         // events they're going to, while Events is on.
-        const [projectsOn, eventsOn] = await Promise.all([isEnabled('projects'), isEnabled('events')]);
+        // Whether the viewer follows them, for the Follow button (the viewer's
+        // own, so outside the shared cache): the app needn't fetch who they follow.
+        const [projectsOn, eventsOn, follow] = await Promise.all([
+            isEnabled('projects'),
+            isEnabled('events'),
+            req.user && req.user.id !== result.userId
+                ? prisma.follow.findUnique({
+                    where: { followerId_followingId: { followerId: req.user.id, followingId: result.userId } },
+                    select: { id: true },
+                })
+                : null,
+        ]);
         const shown = {
             ...result,
             user: result.user && { ...user, projects: projectsOn ? user.projects : [], eventRSVPs: eventsOn ? user.eventRSVPs : [] },
         };
-        res.json(profileForViewer(shown, viewerOf(req, result.userId)));
+        res.json({ ...profileForViewer(shown, viewerOf(req, result.userId)), followedByMe: !!follow });
     };
     // Each view (cached or not): the count, and "X viewed your profile" once
     // an hour per viewer, unless they browse privately (Settings → Privacy).

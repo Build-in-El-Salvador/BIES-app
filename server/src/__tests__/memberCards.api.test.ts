@@ -121,3 +121,18 @@ describe('member cards', () => {
         expect(new Set(seen).size).toBe(total);
     });
 });
+
+describe('a profile page', () => {
+    it("says whether the viewer follows them, so the app needn't fetch who they follow", async () => {
+        const viewer = await member('Follow Viewer');
+        const followed = await member('Followed One');
+        const other = await member('Not Followed');
+        await prisma.follow.create({ data: { followerId: viewer.id, followingId: followed.id } });
+
+        expect((await get(`/api/profiles/${followed.id}`, viewer.token)).body.followedByMe).toBe(true);
+        expect((await get(`/api/profiles/${other.id}`, viewer.token)).body.followedByMe).toBe(false);
+        // The profile is cached for everyone: the answer stays the viewer's own.
+        expect((await get(`/api/profiles/${followed.id}`, other.token)).body.followedByMe).toBe(false);
+        expect((await get(`/api/profiles/${viewer.id}`, viewer.token)).body.followedByMe).toBe(false);
+    });
+});
