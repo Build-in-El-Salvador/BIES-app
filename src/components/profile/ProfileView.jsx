@@ -18,9 +18,12 @@ import BackButton from '../BackButton';
 import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
 import TalentSummary from '../talent/TalentSummary';
 import { MAX_TALENTS } from '../talent/talentOptions';
+import DirectoryListingCard from '../directory/DirectoryListingCard';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
+// Recommendations come a page at a time (the server's most is 50).
+const RECOMMENDATIONS_PAGE = 20;
 
 function isSafeUrl(url) {
     try {
@@ -40,11 +43,13 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
 /**
  * A member's profile, laid out like Facebook's: the cover against the top
  * bar, the photo with the name and follower counts beside it, the bio, the
- * buttons, then All / Photos / Talent. All has their details (role, the
- * BIES business they run, projects, place, links), their Network, and their
- * posts in the BIES feed, as the Feed shows them (likes, reposts, replies);
- * Photos has the pictures from those posts; Talent has what they offer to
- * do, with their proof of work (BIES Talents), when they've listed any.
+ * buttons, then All / Photos / Talent / Recommendations. All has their
+ * details (role, the BIES business they run, projects, place, links), their
+ * Network, and their posts in the BIES feed, as the Feed shows them (likes,
+ * reposts, replies); Photos has the pictures from those posts; Talent has
+ * what they offer to do, with their proof of work (BIES Talents), when
+ * they've listed any; Recommendations has the businesses and farms they
+ * vouch for, their newest first, when they vouch for any.
  * Used by your own profile (Profile) and everyone else's (PublicProfile).
  *
  * @param {object}    profile      GET /profiles/:id or /profiles/me
@@ -60,11 +65,13 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const lightbox = useLightbox();
     const projectsEnabled = useFeature('projects');
     const talentEnabled = useFeature('talent');
+    const directoriesEnabled = useFeature('directories');
     const [tab, setTab] = useState('all');
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
     const [listings, setListings] = useState([]);
     const [talents, setTalents] = useState([]);
+    const [recommendations, setRecommendations] = useState({ list: [], total: 0, page: 0, loading: false });
     const [posts, setPosts] = useState({ list: [], loading: true });
 
     const userId = profile.user?.id || profile.userId;
@@ -101,6 +108,30 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         return () => { cancelled = true; };
     }, [userId, talentEnabled]);
 
+    // The businesses and farms they recommend (vouch for), newest first.
+    useEffect(() => {
+        setRecommendations({ list: [], total: 0, page: 0, loading: false });
+        if (!userId || !directoriesEnabled) return undefined;
+        let cancelled = false;
+        directoryApi.recommendedBy(userId, { page: 1, limit: RECOMMENDATIONS_PAGE })
+            .then((res) => {
+                if (!cancelled) setRecommendations({ list: res?.data || [], total: res?.pagination?.total ?? 0, page: 1, loading: false });
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [userId, directoriesEnabled]);
+
+    const moreRecommendations = () => {
+        const page = recommendations.page + 1;
+        setRecommendations((r) => ({ ...r, loading: true }));
+        directoryApi.recommendedBy(userId, { page, limit: RECOMMENDATIONS_PAGE })
+            .then((res) => setRecommendations((r) => {
+                const seen = new Set(r.list.map((l) => l.id));
+                return { list: [...r.list, ...(res?.data || []).filter((l) => !seen.has(l.id))], total: res?.pagination?.total ?? r.total, page, loading: false };
+            }))
+            .catch(() => setRecommendations((r) => ({ ...r, loading: false })));
+    };
+
     // Their network: everyone they're connected to, either way; people who
     // follow each other first, as close as BIES gets to Facebook friends.
     const network = useMemo(() => {
@@ -128,7 +159,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
 
     // Talent beside Photos: on your own profile (to add yours), or when they listed some.
     const showTalent = talentEnabled && (isOwn || talents.length > 0);
-    const tabs = ['all', 'photos', ...(showTalent ? ['talent'] : [])];
+    // Recommendations beside Talent: on your own profile, or when they vouch for any.
+    const showRecommendations = directoriesEnabled && (isOwn || recommendations.total > 0);
+    const tabs = ['all', 'photos', ...(showTalent ? ['talent'] : []), ...(showRecommendations ? ['recommendations'] : [])];
     // A tab that went away while open (Talents switched off): back to All.
     const openTab = tabs.includes(tab) ? tab : 'all';
 
@@ -231,6 +264,33 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     </Link>
                 </section>
             ))}
+            {openTab === 'recommendations' && (
+                <section className="pv-section">
+                    <h2 className="pv-h2">
+                        {t('profileView.tabs.recommendations')}
+                        {recommendations.total > 0 && <span className="pv-h2-count">{recommendations.total}</span>}
+                    </h2>
+                    {recommendations.list.length > 0 ? (
+                        <>
+                            <ul className="pv-recs">
+                                {recommendations.list.map((listing) => (
+                                    <li key={listing.id}><DirectoryListingCard listing={listing} type={listing.type} /></li>
+                                ))}
+                            </ul>
+                            {recommendations.list.length < recommendations.total && (
+                                <button type="button" className="pv-more" onClick={moreRecommendations} disabled={recommendations.loading}>
+                                    {t('profileView.showMore')}
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            <p className="pv-muted">{t('profileView.recommendationsEmptyOwn')}</p>
+                            <Link to="/trusted" className="pv-link pv-add-talent">{t('profileView.findBusinesses')}</Link>
+                        </>
+                    )}
+                </section>
+            )}
             {openTab === 'talent' && isOwn && talents.length > 0 && talents.length < MAX_TALENTS && (
                 <section className="pv-section">
                     <Link to="/talents/new" className="pv-link pv-add-talent">
@@ -474,8 +534,14 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 .pv-actions :global(.pv-btn.icon) { flex: 0 0 48px; width: 48px; min-width: 48px; padding: 0; }
                 .pv-actions :global(.pv-btn:disabled) { opacity: 0.6; cursor: wait; }
                 .pv-actions :global(.pv-menu-wrap) { position: relative; display: flex; flex: 0 0 auto; }
-                .pv-tabs { display: flex; gap: 6px; margin-top: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-gray-200); }
+                /* Four tabs can be wider than a phone: they scroll sideways, not the page. */
+                .pv-tabs {
+                    display: flex; gap: 6px; margin-top: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-gray-200);
+                    overflow-x: auto; scrollbar-width: none;
+                }
+                .pv-tabs::-webkit-scrollbar { display: none; }
                 .pv-tab {
+                    flex-shrink: 0;
                     min-height: 38px;
                     padding: 0 16px;
                     border: none;
@@ -487,6 +553,11 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     cursor: pointer;
                 }
                 .pv-tab.active { background: var(--color-blue-tint, #e8effb); color: var(--color-primary); }
+                @media (max-width: 768px) {
+                    /* All four (with Recommendations) fit a 390px phone, in Spanish too. */
+                    .pv-tabs { gap: 4px; }
+                    .pv-tab { padding: 0 10px; font-size: 0.9rem; }
+                }
 
                 .pv-section { padding: 18px 16px; border-bottom: 8px solid var(--color-gray-100); }
                 .pv-section:last-child { border-bottom: none; }
@@ -517,6 +588,15 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     font-size: 0.86rem; font-weight: 600; line-height: 1.25;
                     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
                 }
+
+                .pv-recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+                .pv-more {
+                    width: 100%; min-height: 44px; margin-top: 14px;
+                    border: none; border-radius: 10px;
+                    background: var(--color-gray-100); color: var(--color-gray-900);
+                    font-weight: 600; font-size: 0.95rem; cursor: pointer;
+                }
+                .pv-more:disabled { opacity: 0.6; cursor: wait; }
 
                 .pv-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
                 .pv-photo { padding: 0; border: none; aspect-ratio: 1; overflow: hidden; background: var(--color-gray-100); cursor: zoom-in; }
