@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate';
 import {
     listListings,
     listRecommendedBy,
+    listSimilar,
     getListing,
     createListing,
     createDirectoryListingSchema,
@@ -35,6 +36,7 @@ const LISTING_TEXT = ['name', 'hours', 'about', 'location', 'instagram', 'websit
 router.get('/', optionalAuth, listListings);
 // What a member recommends (their profile): members only, like the reviews.
 router.get('/recommended-by/:userId', authenticate, listRecommendedBy);
+router.get('/similar', authenticate, listSimilar);
 router.get('/:id', optionalAuth, getListing);
 
 // Handing a listing to the member who runs it

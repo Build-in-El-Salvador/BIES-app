@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
 import { nestedProfileForViewer } from '../services/profilePrivacy';
 import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds, priceLevel } from '../utils/listOrder';
+import { nameSimilarity, SIMILAR } from '../utils/similarNames';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -35,6 +36,9 @@ export const createDirectoryListingSchema = z.object({
     isOwnBusiness: z.boolean().optional(),
     // Create only: the member's own review, their vouch. Not a listing column.
     review: z.string().max(1000).optional(),
+    // Create only: the member saw the listings with a name like this one
+    // ("Did you mean…?") and says it's a different place. Not a column.
+    notADuplicate: z.boolean().optional(),
     about: z.string().max(5000).optional(),
     photo: z.string().max(500).optional().or(z.literal('')),
     logo: z.string().max(500).optional().or(z.literal('')),
@@ -61,7 +65,7 @@ export const createDirectoryListingSchema = z.object({
     memberUserId: z.string().max(64).optional().or(z.literal('')),
 });
 
-export const updateDirectoryListingSchema = createDirectoryListingSchema.omit({ review: true }).partial();
+export const updateDirectoryListingSchema = createDirectoryListingSchema.omit({ review: true, notADuplicate: true }).partial();
 
 /** A member's review: a vouch (1) or a downvote (-1), which needs a reason. */
 export const endorseSchema = z.object({
@@ -277,6 +281,43 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * The live listings, farms and businesses both, whose names are probably the
+ * same place as `name` (utils/similarNames.ts), most alike first: what a
+ * member adding a listing is asked about ("Did you mean…?"). Not those the
+ * viewer can't see (blocked either way, or run by a suspended member).
+ */
+async function similarListings(name: unknown, req: Request) {
+    if (typeof name !== 'string' || name.trim().length < 3) return [];
+    const typed = name.trim().slice(0, 120);
+    const listings = await prisma.directoryListing.findMany({
+        where: { status: 'active', isPublished: true, AND: [ACTIVE_MEMBER_RUNS_IT] },
+        select: { id: true, name: true, type: true, location: true, photo: true, ownerId: true, memberUserId: true },
+    });
+    const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
+    return listings
+        .filter((l) => !hidden.has(listingMember(l)))
+        .map((l) => ({ listing: l, score: nameSimilarity(typed, l.name) }))
+        .filter(({ score }) => score >= SIMILAR)
+        .sort((a, b) => b.score - a.score || a.listing.name.localeCompare(b.listing.name))
+        .slice(0, 5)
+        .map(({ listing: { id, name: listingName, type, location, photo } }) => ({ id, name: listingName, type, location, photo }));
+}
+
+/**
+ * GET /directory/similar?name=
+ * Listings already on BIES with a name like this one, for "Did you mean…?"
+ * while a member types the name of the one they're adding.
+ */
+export async function listSimilar(req: Request, res: Response): Promise<void> {
+    try {
+        res.json({ data: await similarListings(req.query.name, req) });
+    } catch (error) {
+        console.error('Similar directory listings error:', error);
+        res.status(500).json({ error: 'Failed to look for similar listings' });
+    }
+}
+
+/**
  * GET /directory/recommended-by/:userId
  * The businesses and farms a member recommends (vouched for), their newest
  * recommendation first: the Recommendations on their profile. Members only,
@@ -424,6 +465,16 @@ export async function getListing(req: Request, res: Response): Promise<void> {
  */
 export async function createListing(req: Request, res: Response): Promise<void> {
     try {
+        // A name like one already on BIES: "Did you mean…?" first, unless the
+        // member has said it's a different place.
+        if (req.body.notADuplicate !== true) {
+            const similar = await similarListings(req.body.name, req);
+            if (similar.length) {
+                res.status(409).json({ error: 'A listing with a name like this is already on BIES', reason: 'similar', similar });
+                return;
+            }
+        }
+
         const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') delete data.memberUserId;
 

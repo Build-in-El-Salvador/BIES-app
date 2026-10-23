@@ -1862,7 +1862,6 @@
     "noSaved": "Nothing saved yet. Tap Save on a farm or business to keep it here.",
     "mapUrlLabel": "Map link",
     "mapUrlHint": "For exact directions, paste the place’s link from Google Maps or Apple Maps (Share → Copy link).",
-    "alreadyListed": "Already on BIES? Recommend it instead of adding it again:",
     "recommendThisOne": "Recommend this one",
     "viewListing": "View",
     "ownership": {
@@ -1911,7 +1910,17 @@
     "adminEditMenu": "Edit as admin",
     "notYoursToEdit": "Only the member who added this listing can edit it.",
     "recommendedBy": "Recommended by",
-    "reviewsTitle": "Reviews"
+    "reviewsTitle": "Reviews",
+    "similar": {
+      "title": "Did you mean…?",
+      "hint": "Already on BIES: recommend it instead of adding it again.",
+      "hintOwn": "Already on BIES? If it's yours, open it to claim it instead of adding it again.",
+      "checkFirst": "Before adding it: is it one of these? Recommend it instead of adding it again.",
+      "different": "No, it's a different place",
+      "differentAdd": "No, it's a different place: add it",
+      "farm": "Farm",
+      "business": "Business"
+    }
   },
   "talent": {
     "search": "Search skills or people",

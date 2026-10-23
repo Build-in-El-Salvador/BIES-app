@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
@@ -17,6 +17,7 @@ import ImageCropModal from '../../components/ImageCropModal';
 import { getAssetUrl } from '../../utils/assets';
 import { PRODUCE_ICON_KEYS, getProduceIcon } from './produceIcons';
 import BackButton from '../../components/BackButton';
+import Avatar from '../../components/Avatar';
 import { cachedDetail, rememberDetail } from '../../utils/detailCache';
 import { listingPage } from '../../utils/detailPages';
 
@@ -91,23 +92,31 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | 'gallery' | null
     const [cropImage, setCropImage] = useState(null); // { src, target }
     const [submitted, setSubmitted] = useState(false);
-    // Listings already on BIES with a name like this one: recommend one of
-    // those instead of adding it twice (Nextdoor starts by finding the place).
+    // Listings already on BIES with a name like this one, however it's typed
+    // (a typo, a missing space, accents, the words in another order): "Did
+    // you mean…?", to recommend one of those instead of adding it twice
+    // (Nextdoor starts by finding the place). The server asks again when the
+    // listing is added, unless the member said it's a different place.
     const [matches, setMatches] = useState([]);
+    const typedName = form.name.trim();
+    const [differentPlace, setDifferentPlace] = useState(''); // the name they said is another place
+    const saidDifferent = !!typedName && differentPlace === typedName;
+    const [checkFirst, setCheckFirst] = useState(false); // asked when they tapped Add
+    const matchesRef = useRef(null);
     useEffect(() => {
-        const name = form.name.trim();
-        if (editMode || name.length < 3) { setMatches([]); return; }
+        setCheckFirst(false);
+        if (editMode || typedName.length < 3) { setMatches([]); return undefined; }
         let cancelled = false;
         const timer = setTimeout(async () => {
             try {
-                const result = await directoryApi.list({ type, search: name, limit: 4 });
-                if (!cancelled) setMatches((result?.data || []).slice(0, 4));
+                const result = await directoryApi.similar(typedName);
+                if (!cancelled) setMatches(result?.data || []);
             } catch {
                 if (!cancelled) setMatches([]);
             }
         }, 350);
         return () => { cancelled = true; clearTimeout(timer); };
-    }, [form.name, type, editMode]);
+    }, [typedName, editMode]);
 
     // Photos, about, hours, contact and the rest: folded away when adding,
     // open when editing.
@@ -263,6 +272,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             mapUrl: form.mapUrl.trim(),
             isOwnBusiness,
             ...(!editMode && !isOwnBusiness ? { review: form.review.trim() } : {}),
+            ...(!editMode && saidDifferent ? { notADuplicate: true } : {}),
         };
         if (isFarm) {
             return {
@@ -306,7 +316,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         } catch { /* non-blocking */ }
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (asDifferentPlace = false) => {
         setSubmitError('');
         const problem = !form.name.trim() ? { id: 'dir-name', message: t('directory.nameRequired') }
             : !isFarm && !form.category ? { id: 'dir-category', message: t('directory.categoryRequired') }
@@ -322,7 +332,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         }
         setSubmitting(true);
         try {
-            const payload = buildPayload();
+            const payload = { ...buildPayload(), ...(asDifferentPlace === true ? { notADuplicate: true } : {}) };
             if (editMode) {
                 const result = await directoryApi.update(id, payload);
                 const listing = result?.data || result;
@@ -348,6 +358,17 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 }
             }
         } catch (err) {
+            if (err.data?.reason === 'similar') {
+                // Already on BIES by another spelling: "Did you mean…?" first.
+                setMatches(err.data.similar || []);
+                setDifferentPlace('');
+                setCheckFirst(true);
+                requestAnimationFrame(() => {
+                    matchesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    matchesRef.current?.focus({ preventScroll: true });
+                });
+                return;
+            }
             if (objectionableMessage(t, err)) {
                 setSubmitError(objectionableMessage(t, err));
             } else if (err.data?.details) {
@@ -476,20 +497,45 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 required
                             />
                             {fieldError?.id === 'dir-name' && <p className="dir-field-error" id="dir-name-error">{fieldError.message}</p>}
-                            {matches.length > 0 && (
-                                <div className="dir-matches" role="region" aria-label={t('directory.alreadyListed')}>
-                                    <p className="dir-matches-title">{t('directory.alreadyListed')}</p>
-                                    {matches.map((m) => (
-                                        <Link
-                                            key={m.id}
-                                            to={`${isFarm ? '/farms' : '/trusted'}/${m.id}${isOwnBusiness ? '' : '?recommend=1'}`}
-                                            className="dir-match"
-                                        >
-                                            <span className="dir-match-name">{m.name}</span>
-                                            {m.location && <span className="dir-match-place">{m.location}</span>}
-                                            <span className="dir-match-cta">{isOwnBusiness ? t('directory.viewListing') : t('directory.recommendThisOne')}</span>
-                                        </Link>
-                                    ))}
+                            {matches.length > 0 && !saidDifferent && (
+                                <div className="dir-matches" role="region" aria-labelledby="dir-matches-title" ref={matchesRef} tabIndex={-1}>
+                                    <p className="dir-matches-title" id="dir-matches-title">{t('directory.similar.title')}</p>
+                                    <p className="dir-matches-hint">
+                                        {checkFirst ? t('directory.similar.checkFirst') : isOwnBusiness ? t('directory.similar.hintOwn') : t('directory.similar.hint')}
+                                    </p>
+                                    {matches.map((m) => {
+                                        const farm = m.type === 'FARM';
+                                        return (
+                                            <Link
+                                                key={m.id}
+                                                to={`${farm ? '/farms' : '/trusted'}/${m.id}${isOwnBusiness ? '' : '?recommend=1'}`}
+                                                className="dir-match"
+                                            >
+                                                <span className="dir-match-photo">
+                                                    <Avatar src={m.photo} alt="" size={40} fallback={<span className="dir-match-photo-none" />} />
+                                                </span>
+                                                <span className="dir-match-name">
+                                                    {m.name}
+                                                    {farm !== isFarm && <span className="dir-match-type"> · {t(farm ? 'directory.similar.farm' : 'directory.similar.business')}</span>}
+                                                </span>
+                                                {m.location && <span className="dir-match-place">{m.location}</span>}
+                                                <span className="dir-match-cta">{isOwnBusiness ? t('directory.viewListing') : t('directory.recommendThisOne')}</span>
+                                            </Link>
+                                        );
+                                    })}
+                                    <button
+                                        type="button"
+                                        className="dir-match-different"
+                                        onClick={() => {
+                                            setDifferentPlace(typedName);
+                                            // Asked when they tapped Add: go on and add it.
+                                            if (checkFirst) handleSubmit(true);
+                                            setCheckFirst(false);
+                                        }}
+                                        disabled={isBusy}
+                                    >
+                                        {checkFirst ? t('directory.similar.differentAdd') : t('directory.similar.different')}
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -863,7 +909,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <button type="button" onClick={() => navigate(-1)} className="btn btn-outline" disabled={submitting}>
                             {t('common.cancel')}
                         </button>
-                        <button type="button" onClick={handleSubmit} disabled={isBusy} className="btn btn-primary">
+                        <button type="button" onClick={() => handleSubmit()} disabled={isBusy} className="btn btn-primary">
                             {submitting && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', marginRight: 6, verticalAlign: '-3px' }} />}
                             {editMode ? t('directory.saveChanges')
                                 : isOwnBusiness ? t(isFarm ? 'directory.addMyFarm' : 'directory.addMyBusiness')
@@ -1178,9 +1224,15 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     font-weight: 700;
                     color: var(--color-primary);
                 }
+                .dir-matches:focus { outline: none; }
+                .dir-matches-hint {
+                    margin: 0 0 0.5rem;
+                    font-size: 0.82rem;
+                    color: var(--color-gray-700);
+                }
                 .dir-matches :global(.dir-match) {
                     display: grid;
-                    grid-template-columns: 1fr auto;
+                    grid-template-columns: 40px 1fr auto;
                     align-items: center;
                     column-gap: 8px;
                     min-height: 44px;
@@ -1191,15 +1243,38 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     text-decoration: none;
                     color: inherit;
                 }
-                .dir-matches :global(.dir-match-name) { font-weight: 600; font-size: 0.9rem; }
-                .dir-matches :global(.dir-match-place) { grid-column: 1; font-size: 0.78rem; color: var(--color-gray-500); }
+                .dir-matches :global(.dir-match-photo) {
+                    grid-column: 1;
+                    grid-row: 1 / span 2;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    background: var(--color-gray-100);
+                }
+                .dir-matches :global(.dir-match-photo img) { width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+                .dir-matches :global(.dir-match-name) { grid-column: 2; font-weight: 600; font-size: 0.9rem; }
+                .dir-matches :global(.dir-match-type) { font-weight: 500; color: var(--color-gray-500); }
+                .dir-matches :global(.dir-match-place) { grid-column: 2; font-size: 0.78rem; color: var(--color-gray-500); }
                 .dir-matches :global(.dir-match-cta) {
-                    grid-column: 2;
+                    grid-column: 3;
                     grid-row: 1 / span 2;
                     font-size: 0.8rem;
                     font-weight: 700;
                     color: var(--color-primary);
                     white-space: nowrap;
+                }
+                .dir-match-different {
+                    width: 100%;
+                    min-height: 44px;
+                    margin-top: 6px;
+                    border: 1px solid var(--color-gray-300);
+                    border-radius: var(--radius-sm);
+                    background: transparent;
+                    color: var(--color-gray-700);
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    cursor: pointer;
                 }
                 .dir-more-toggle {
                     width: 100%;

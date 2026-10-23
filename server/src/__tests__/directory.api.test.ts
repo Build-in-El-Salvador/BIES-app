@@ -201,7 +201,7 @@ describe('adding a business', () => {
 
         const mod = await member({ role: 'MOD' });
         const byStaff = await call('POST', '/api/directory', {
-            token: mod.token, body: { type: 'PROVIDER', name: 'Linked by staff', memberUserId: victim.id },
+            token: mod.token, body: { type: 'PROVIDER', name: 'Entered by staff', memberUserId: victim.id },
         });
         expect(byStaff.body.memberUserId).toBe(victim.id);
         // And the linked member can't review it.
@@ -371,6 +371,48 @@ describe('BIES Trusted', () => {
         const big = await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=500&page=1');
         expect(big.body.pagination.limit).toBe(50);
         expect(big.body.data.map((l: any) => l.id)).toEqual(whole.data.map((l: any) => l.id));
+    });
+});
+
+// ─── Already on BIES ──────────────────────────────────────────────────────────
+
+describe('a listing already on BIES', () => {
+    it('is found however its name is typed, and adding it again asks "Did you mean…?" first', async () => {
+        const poster = await member();
+        const other = await member();
+        const id = await liveListing(poster, { name: 'Panadería Lumbre' });
+
+        const similar = async (name: string) =>
+            (await call('GET', `/api/directory/similar?name=${encodeURIComponent(name)}`, { token: other.token })).body.data.map((l: any) => l.id);
+        expect(await similar('PanaderiaLumbre')).toContain(id);   // no space, no accent
+        expect(await similar('lumbre panaderia')).toContain(id);  // the other way round
+        expect(await similar('Panaderia Lumbe')).toContain(id);   // a typo
+        expect(await similar('Lumbre')).toContain(id);            // one of its words
+        expect(await similar('Panadería Sol')).not.toContain(id);
+        expect(await similar('Pa')).toEqual([]);
+        expect((await call('GET', '/api/directory/similar?name=Lumbre')).status).toBe(401);
+
+        // Adding it again by another spelling: the listing it may be, and nothing added.
+        const body = { type: 'PROVIDER', name: 'Panaderia  Lumbre', category: 'food', review: 'Best bread in town, really.' };
+        const asked = await call('POST', '/api/directory', { token: other.token, body });
+        expect(asked.status).toBe(409);
+        expect(asked.body.reason).toBe('similar');
+        expect(asked.body.similar[0]).toMatchObject({ id, name: 'Panadería Lumbre', type: 'PROVIDER' });
+        expect(await prisma.directoryListing.count({ where: { name: 'Panaderia  Lumbre' } })).toBe(0);
+
+        // They say it's a different place: added.
+        const added = await call('POST', '/api/directory', { token: other.token, body: { ...body, notADuplicate: true } });
+        expect(added.status).toBe(201);
+        expect(added.body).not.toHaveProperty('notADuplicate');
+    });
+
+    it("doesn't suggest a listing the member can't see", async () => {
+        const viewer = await member();
+        const blocked = await member();
+        const id = await liveListing(blocked, { name: 'Taller Bloqueado' });
+        await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blocked.id } });
+        const res = await call('GET', '/api/directory/similar?name=Taller Bloqueado', { token: viewer.token });
+        expect(res.body.data.map((l: any) => l.id)).not.toContain(id);
     });
 });
 

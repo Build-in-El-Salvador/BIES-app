@@ -276,6 +276,9 @@ export const directoryApi = {
     // The businesses and farms a member recommends, newest first (their profile).
     recommendedBy: (userId, params = {}) => get(`/directory/recommended-by/${encodeURIComponent(userId)}`, params),
 
+    // Listings with a name like this one (a typo, a missing space…), for "Did you mean…?".
+    similar: (name) => get('/directory/similar', { name }),
+
     get: (id) => get(`/directory/${id}`),
 
     create: (data) => post('/directory', data),
