@@ -1863,7 +1863,6 @@
     "noSaved": "Aún no has guardado nada. Toca Guardar en una finca o negocio para tenerlo aquí.",
     "mapUrlLabel": "Enlace del mapa",
     "mapUrlHint": "Para indicaciones exactas, pega el enlace del lugar en Google Maps o Apple Maps (Compartir → Copiar enlace).",
-    "alreadyListed": "¿Ya está en BIES? Recomiéndalo en vez de agregarlo otra vez:",
     "recommendThisOne": "Recomendar este",
     "viewListing": "Ver",
     "ownership": {
@@ -1912,7 +1911,17 @@
     "adminEditMenu": "Editar como admin",
     "notYoursToEdit": "Solo el miembro que agregó este listado puede editarlo.",
     "recommendedBy": "Recomendado por",
-    "reviewsTitle": "Reseñas"
+    "reviewsTitle": "Reseñas",
+    "similar": {
+      "title": "¿Quisiste decir…?",
+      "hint": "Ya está en BIES: recomiéndalo en vez de agregarlo otra vez.",
+      "hintOwn": "¿Ya está en BIES? Si es tuyo, ábrelo para reclamarlo en vez de agregarlo otra vez.",
+      "checkFirst": "Antes de agregarlo: ¿es uno de estos? Recomiéndalo en vez de agregarlo otra vez.",
+      "different": "No, es otro lugar",
+      "differentAdd": "No, es otro lugar: agregarlo",
+      "farm": "Finca",
+      "business": "Negocio"
+    }
   },
   "talent": {
     "search": "Buscar habilidades o personas",
