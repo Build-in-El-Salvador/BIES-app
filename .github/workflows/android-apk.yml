@@ -22,8 +22,9 @@
 #   ANDROID_CI_KEYSTORE_PASS  its password
 #
 # Pull requests that touch this file run the same release build with no
-# secrets (the APK comes out unsigned), so the toolchain is proven before the
-# change reaches main.
+# secrets, signed with a throwaway key made on the runner, so the toolchain
+# and the signature check are proven before the change reaches main. Only the
+# key and the publish step differ between a pull request and main.
 
 name: Android APK
 
@@ -52,7 +53,9 @@ env:
 jobs:
   apk:
     name: Build APK
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: that label is migrating to Ubuntu 26, and a
+    # signing job should not change its Android SDK or JDK underneath us.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       # SHA-256 of the signing certificate, for the release notes. Public.
@@ -115,6 +118,28 @@ jobs:
             echo "keyPassword=$STORE_PASS"
           } | install -m 600 /dev/stdin "$d/keystore.properties"
 
+      # Pull requests have no secrets, but they still sign, with a key made
+      # here and discarded with the runner. That way the signing wiring and
+      # the apksigner check below run on every PR, not for the first time on
+      # main. An APK from this step is never published.
+      - name: Throwaway signing key (pull requests)
+        if: github.event_name == 'pull_request'
+        run: |
+          d="$HOME/.bies-android"
+          install -d -m 700 "$d"
+          PASS=$(openssl rand -hex 16)
+          export PASS
+          keytool -genkeypair -storetype PKCS12 -keystore "$d/ci.keystore" -alias bies-ci \
+            -keyalg RSA -keysize 2048 -validity 1 -dname "CN=BIES PR throwaway" \
+            -storepass:env PASS -keypass:env PASS
+          chmod 600 "$d/ci.keystore"
+          {
+            echo "storeFile=$d/ci.keystore"
+            echo "storePassword=$PASS"
+            echo "keyAlias=bies-ci"
+            echo "keyPassword=$PASS"
+          } | install -m 600 /dev/stdin "$d/keystore.properties"
+
       - name: Gradle build
         working-directory: android
         run: ./gradlew --no-daemon assembleRelease
@@ -130,18 +155,29 @@ jobs:
           # A fixed name keeps the public download link the same for ever.
           mkdir -p out
           cp "$apk" out/BIES.apk
-          # On main the APK must verify against the CI key. A pull request has
-          # no key, so its APK is unsigned and only proves the build.
-          [ "$EVENT" = push ] || exit 0
+          # The APK must verify. apksigner exits non-zero on an unsigned or
+          # tampered APK, which stops the job before anything is published.
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)
           cert=$("$apksigner" verify --print-certs "$apk")
-          sha256=$(grep -m1 'Signer #1 certificate SHA-256 digest:' <<<"$cert" | sed 's/.*: *//')
-          [[ $sha256 =~ ^[0-9a-f]{64}$ ]] || { echo "::error::could not read the signing certificate digest"; exit 1; }
+          # Whatever the label before it ("Signer #1", or a "Signer (minSdk...)"
+          # form on newer build-tools) and whether the digest is plain or
+          # colon-separated hex, reduce it to 64 lowercase hex characters.
+          sha256=$(grep -m1 -iE 'certificate SHA-256 digest:' <<<"$cert" | sed -E 's/.*digest: *//' | tr -d ': ' | tr 'A-F' 'a-f')
+          if ! [[ $sha256 =~ ^[0-9a-f]{64}$ ]]; then
+            # Certificate details are public, so showing them is safe and makes
+            # a format change visible in the annotation, not just in the log.
+            echo "::error::could not read the signing certificate digest; apksigner printed: $(head -c 800 <<<"$cert" | tr '\n' '|')"
+            exit 1
+          fi
           echo "cert_sha256=$sha256" >> "$GITHUB_OUTPUT"
           {
             echo "### BIES APK \`${SHA:0:7}\`"
             echo
-            echo "Signing certificate SHA-256: \`$sha256\`"
+            if [ "$EVENT" = push ]; then
+              echo "Signing certificate SHA-256: \`$sha256\`"
+            else
+              echo "Pull request build, signed with a throwaway key: \`$sha256\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -157,7 +193,7 @@ jobs:
     name: Publish rolling release
     needs: apk
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
