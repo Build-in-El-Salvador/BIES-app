@@ -5,6 +5,7 @@ import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCi
 import { previewApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
+import { formatDay } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
 
 const FALLBACK_ICON = { trusted: Building2, farms: Leaf, opportunities: Briefcase, talents: Sparkles };
@@ -51,8 +52,6 @@ export default function SharePreview({ section }) {
         if (found.section === 'farms') return [t('sharePreview.farm'), ...(found.products || []).slice(0, 3)].join(' · ');
         return found.category ? t(`directory.categories.${found.category}`, { defaultValue: t('sharePreview.business') }) : t('sharePreview.business');
     };
-
-    const day = (value) => new Date(`${value}T12:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'long', year: 'numeric' });
 
     // What members see beyond this, as the listing has it.
     const behindSignIn = () => {
@@ -124,7 +123,7 @@ export default function SharePreview({ section }) {
                                     <li className="sp-closed"><XCircle size={18} aria-hidden="true" /><span>{t('sharePreview.closed')}</span></li>
                                 )}
                                 {found.section === 'opportunities' && found.isOpen && found.closesOn && (
-                                    <li><CalendarClock size={18} aria-hidden="true" /><span>{t('sharePreview.openUntil', { date: day(found.closesOn) })}</span></li>
+                                    <li><CalendarClock size={18} aria-hidden="true" /><span>{t('sharePreview.openUntil', { date: formatDay(found.closesOn, i18n.language?.split('-')[0]) })}</span></li>
                                 )}
                             </ul>
 
