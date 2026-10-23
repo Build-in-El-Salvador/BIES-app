@@ -502,7 +502,7 @@ const Media = () => {
                                                     </div>
                                                 )}
                                                 <div className="card-body">
-                                                    <div className="meta">{formatDate(item.date)} • {item.author || 'Build In El Salvador'}</div>
+                                                    <div className="meta">{formatDate(item.date)} • {item.author || 'Build in El Salvador'}</div>
                                                     <h3>{item.title}</h3>
                                                     <p>{item.excerpt}</p>
                                                     {!selectMode && <a href={item.link} target="_blank" rel="noopener noreferrer" className="read-more">
@@ -532,7 +532,7 @@ const Media = () => {
                                                 </div>
                                                 <div className="list-meta">
                                                     <span>{formatDate(item.date)}</span>
-                                                    <span>{item.author || 'Build In El Salvador'}</span>
+                                                    <span>{item.author || 'Build in El Salvador'}</span>
                                                 </div>
                                             </a>
                                         );
@@ -655,7 +655,7 @@ const Media = () => {
                                     <div className="live-placeholder">
                                         <div className="live-icon">📺</div>
                                         <h3>No livestream currently scheduled</h3>
-                                        <p>Check back soon for live content from the Build In El Salvador community.</p>
+                                        <p>Check back soon for live content from the Build in El Salvador community.</p>
                                     </div>
                                 );
                             }

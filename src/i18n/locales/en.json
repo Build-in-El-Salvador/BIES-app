@@ -103,7 +103,7 @@
     "adminPanel": "Admin Panel",
     "leaderboard": "Leaderboard",
     "farmDirectory": "Regenerative Farms",
-    "certifiedDirectory": "Business Directory",
+    "certifiedDirectory": "Businesses",
     "bounties": "Bounty Board",
     "wallet": "Wallet",
     "profile": "Profile",
@@ -691,8 +691,8 @@
     "noResources": "No resources yet."
   },
   "team": {
-    "title": "About Build In El Salvador",
-    "missionLead": "El Salvador is in the middle of a modern renaissance, and Build In El Salvador exists to tell that story.",
+    "title": "About Build in El Salvador",
+    "missionLead": "El Salvador is in the middle of a modern renaissance, and Build in El Salvador exists to tell that story.",
     "missionBody": "We spotlight the entrepreneurs, investors, and visionaries turning this small Central American nation into a hub of innovation, freedom, and opportunity. Through interviews, articles, and events, we connect the dots between Bitcoin, business, and the bold individuals reshaping what's possible here."
   },
   "profile": {
@@ -2685,7 +2685,7 @@
     "title": "Feature Toggles",
     "subtitle": "Turn app features on or off for everyone, instantly - no redeploy needed",
     "propagationNote": "Changes apply to you immediately. Other users pick them up within about 5 minutes (server cache) or on their next app focus. Disabled features disappear from navigation, their pages show Not Found and their APIs are blocked.",
-    "appNote": "The iOS and Android apps show only the Farm Directory, BIES Trusted, BIES Talents and Opportunities from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
+    "appNote": "The iOS and Android apps show only Businesses, Farms, BIES Talents and Opportunities from this list (plus the Feed, Members, Profile and Settings, which have no switch). Other features reach the apps with an app update; switching them on here changes the website only.",
     "adminOnly": "Only administrators can change feature toggles. Moderators have read-only access.",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -2693,7 +2693,7 @@
     "slugs": {
       "directories": {
         "name": "Directories",
-        "description": "Farm and certified provider directories under Discover"
+        "description": "Businesses and Farms: the places members recommend"
       },
       "points": {
         "name": "Points & Leaderboard",
@@ -3033,7 +3033,7 @@
         "desc": "Discover farms, producers, and regenerative projects."
       },
       "businesses": {
-        "title": "Business Directory",
+        "title": "Businesses",
         "desc": "Find local businesses and services in El Salvador."
       },
       "opportunities": {
@@ -3070,7 +3070,8 @@
     "networkEmptyOwn": "Follow members to build your network.",
     "findMembers": "Find members",
     "posts": "Posts",
-    "noPosts": "No posts yet.",
+    "noPosts": "Their posts in the BIES feed show here.",
+    "noPostsOwn": "Your posts in the BIES feed show here.",
     "noPhotos": "No photos yet.",
     "newMember": "New member",
     "photosFromPosts": "From posts",

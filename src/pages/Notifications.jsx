@@ -218,6 +218,7 @@ const Notifications = () => {
                 }
                 .tab {
                     padding: 0.75rem 1.5rem;
+                    font-size: 0.95rem;
                     font-weight: 500;
                     color: var(--color-gray-500);
                     border-bottom: 2px solid transparent;

@@ -448,7 +448,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                         <Feed
                             author={pubkey}
                             showCompose={!!isOwn}
-                            emptyText={t('profileView.noPosts')}
+                            emptyText={t(isOwn ? 'profileView.noPostsOwn' : 'profileView.noPosts')}
                             onPosts={(list, loading) => setPosts({ list, loading })}
                         />
                     </section>
