@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import {
-    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff, Plus,
+    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff, Plus, CalendarDays,
 } from 'lucide-react';
 import { profilesApi, directoryApi, talentApi } from '../../services/api';
 import { useFeature } from '../../context/FeatureFlagsContext';
@@ -11,6 +11,7 @@ import { useLightbox } from '../../context/LightboxContext';
 import { parseNoteContent } from '../../utils/noteUtils';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
+import { joinedDate } from '../../utils/joinedDate';
 import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
@@ -44,7 +45,8 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
  * A member's profile, laid out like Facebook's: the cover against the top
  * bar, the photo with the name and follower counts beside it, the bio, the
  * buttons, then All / Photos / Talent / Recommendations. All has their
- * details (role, the BIES business they run, projects, place, links), their
+ * details (role, the BIES business they run, projects, place, links, when
+ * they joined), their
  * Network, and their posts in the BIES feed, as the Feed shows them (likes,
  * reposts, replies); Photos has the pictures from those posts; Talent has
  * what they offer to do, with their proof of work (BIES Talents), when
@@ -61,7 +63,7 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
  * @param {ReactNode} children     page-specific panels, after the Network
  */
 const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, children }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const lightbox = useLightbox();
     const projectsEnabled = useFeature('projects');
     const talentEnabled = useFeature('talent');
@@ -180,7 +182,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         profile.linkedin && isSafeUrl(profile.linkedin) && { key: 'in', Icon: Linkedin, href: profile.linkedin, label: 'LinkedIn' },
     ].filter(Boolean);
     const role = profile.title && profile.company ? 'both' : profile.title ? 'title' : profile.company ? 'company' : null;
-    const hasDetails = role || otherBusinesses.length || projects.length || profile.location || links.length || profile.tags?.length;
+    const filledIn = role || otherBusinesses.length || projects.length || profile.location || links.length || profile.tags?.length;
+    const joined = joinedDate(profile.user?.createdAt, i18n.language);
 
     const companyText = companyListing
         ? <Link to={listingPath(companyListing)} className="pv-link">{profile.company}</Link>
@@ -325,7 +328,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
 
             {/* Kept mounted on Photos, so the posts stay loaded and as they were. */}
             <div hidden={openTab !== 'all'}>
-                {hasDetails ? (
+                {(filledIn || joined || isOwn) && (
                     <section className="pv-section">
                         <h2 className="pv-h2">{t('profileView.details')}</h2>
                         <ul className="pv-details">
@@ -363,19 +366,20 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                                     <a href={href} target="_blank" rel="noopener noreferrer" className="pv-link">{label}</a>
                                 </li>
                             ))}
+                            {joined && (
+                                <li><CalendarDays size={20} aria-hidden="true" /><span>{t('profileView.joined', { date: joined })}</span></li>
+                            )}
                         </ul>
                         {profile.tags?.length > 0 && (
                             <div className="pv-tags">
                                 {profile.tags.map((tag, i) => <ZappableTag key={`${tag}-${i}`} tag={tag} />)}
                             </div>
                         )}
-                    </section>
-                ) : isOwn && (
-                    <section className="pv-section">
-                        <h2 className="pv-h2">{t('profileView.details')}</h2>
-                        <p className="pv-muted">
-                            {t('profileView.addDetails')} <Link to="/profile/edit" className="pv-link">{t('profileView.editProfile')}</Link>
-                        </p>
+                        {isOwn && !filledIn && (
+                            <p className="pv-muted pv-add-details">
+                                {t('profileView.addDetails')} <Link to="/profile/edit" className="pv-link">{t('profileView.editProfile')}</Link>
+                            </p>
+                        )}
                     </section>
                 )}
 
@@ -574,6 +578,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                 .pv-details li { display: flex; align-items: flex-start; gap: 12px; font-size: 0.98rem; line-height: 1.4; color: var(--color-gray-800); }
                 .pv-details li :global(svg) { flex-shrink: 0; color: var(--color-gray-500); margin-top: 1px; }
                 .pv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+                /* A link keeps the phone's 36px tap height without spacing out the line under it. */
+                .pv-details li > a { min-height: 0; padding: 7px 0; margin: -7px 0; }
+                .pv-add-details { margin-top: 14px; }
 
                 .pv-network { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
                 .pv-network li:nth-child(n + 5) { display: none; }

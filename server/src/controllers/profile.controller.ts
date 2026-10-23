@@ -391,6 +391,8 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                     select: {
                         id: true, nostrPubkey: true, role: true, isAdmin: true, isVerified: true,
                         isBanned: true, deletedAt: true,
+                        // When they joined BIES ("Joined October 2026" in their Details).
+                        createdAt: true,
                         projects: {
                             // Open ones, and none while their member is suspended or deleted (as on /opportunities).
                             where: { isPublished: true, ...openNow(), owner: { isBanned: false, deletedAt: null } },
@@ -600,6 +602,7 @@ export async function getMyProfile(req: Request, res: Response): Promise<void> {
                 user: {
                     select: {
                         id: true, email: true, nostrPubkey: true, role: true, isAdmin: true, isVerified: true,
+                        createdAt: true,
                         projects: {
                             orderBy: { createdAt: 'desc' },
                             select: {

@@ -3064,6 +3064,7 @@
     "at": "en",
     "runs": "Dirige",
     "workingOn": "Trabaja en",
+    "joined": "Se unió en {{date}}",
     "addDetails": "Agrega tu cargo, tu negocio y dónde estás, para que los miembros sepan a qué te dedicas.",
     "network": "Red",
     "seeAll": "Ver todo",
