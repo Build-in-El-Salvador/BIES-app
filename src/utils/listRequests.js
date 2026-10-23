@@ -16,6 +16,39 @@ export function directoryRequest({ type, search = '', category = '', saved = fal
 
 export const directoryKey = (params) => `directory:${JSON.stringify(params)}`;
 
+/** One page of a directory list: `params` is directoryRequest's, its first page. */
+export function directoryPage(params, page) {
+    return page > 1 ? { ...params, page } : params;
+}
+
+/** The items of a list answer ({ data, pagination }, or a bare array). */
+export function listOf(result) {
+    const list = result?.data || result || [];
+    return Array.isArray(list) ? list : [];
+}
+
+/** Whether pages follow page `page` of a list answer. */
+export function morePages(result, page) {
+    return page < (result?.pagination?.totalPages || 1);
+}
+
+/**
+ * Pages of a list as one, each item once, in page order: an item can be on
+ * two pages when the order changed between asking for them.
+ */
+export function joinPages(pages) {
+    const seen = new Set();
+    const items = [];
+    for (const page of pages) {
+        for (const item of page) {
+            if (seen.has(item.id)) continue;
+            seen.add(item.id);
+            items.push(item);
+        }
+    }
+    return items;
+}
+
 /**
  * Opportunities with the page's filters. `types` (the phone app's) limits the
  * list to the kinds the app shows; `userId` is the member's own, for Mine.

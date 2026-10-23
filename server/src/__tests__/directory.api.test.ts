@@ -324,6 +324,33 @@ describe('BIES Trusted', () => {
         expect(home.body.data.every((l: any) => l.category === 'home')).toBe(true);
         expect((await call('GET', '/api/directory?type=PROVIDER&category=legal')).body.data).toHaveLength(0);
     });
+
+    it('pages through every listing once, in one order, ties included', async () => {
+        // Same score, same vouches, same moment: only the id tells them apart.
+        const poster = await member();
+        const tied = [];
+        for (let i = 0; i < 5; i++) tied.push(await liveListing(poster));
+        await prisma.directoryListing.updateMany({
+            where: { id: { in: tied } },
+            data: { createdAt: new Date('2026-01-01T00:00:00Z'), reputationScore: 50, vouchCount: 1 },
+        });
+
+        const whole = (await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=50')).body;
+        expect(whole.pagination.total).toBeLessThanOrEqual(50);
+        const paged: string[] = [];
+        for (let page = 1; ; page++) {
+            const res = await call('GET', `/api/directory?type=PROVIDER&sort=score&limit=2&page=${page}`);
+            expect(res.body.pagination).toMatchObject({ page, limit: 2 });
+            paged.push(...res.body.data.map((l: any) => l.id));
+            if (page >= res.body.pagination.totalPages) break;
+        }
+        expect(paged).toEqual(whole.data.map((l: any) => l.id));
+
+        // Asked for more than 50 at a time: pages of 50, page 2 after the first 50.
+        const big = await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=500&page=1');
+        expect(big.body.pagination.limit).toBe(50);
+        expect(big.body.data.map((l: any) => l.id)).toEqual(whole.data.map((l: any) => l.id));
+    });
 });
 
 // ─── Farms ────────────────────────────────────────────────────────────────────

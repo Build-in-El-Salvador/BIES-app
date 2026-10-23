@@ -17,6 +17,8 @@ import ImageCropModal from '../../components/ImageCropModal';
 import { getAssetUrl } from '../../utils/assets';
 import { PRODUCE_ICON_KEYS, getProduceIcon } from './produceIcons';
 import BackButton from '../../components/BackButton';
+import { cachedDetail, rememberDetail } from '../../utils/detailCache';
+import { listingPage } from '../../utils/detailPages';
 
 const FARM_PRACTICES = [
     { id: 'regenerative', tKey: 'directory.practices.regenerative' },
@@ -325,14 +327,21 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 const result = await directoryApi.update(id, payload);
                 const listing = result?.data || result;
                 mirrorFromDevice(listing);
-                navigate(detailPath(listing));
+                // Its page, if kept, shows the changes at once.
+                const [key] = listingPage(listing.id);
+                if (cachedDetail(key)) rememberDetail(key, { ...cachedDetail(key), ...listing });
+                // Back never reopens this form: an edited listing returns to
+                // where the form was opened from, or opens its page when the
+                // form was opened directly; a new one takes the form's place.
+                if (window.history.state?.idx > 0) navigate(-1);
+                else navigate(detailPath(listing), { replace: true });
             } else {
                 const result = await directoryApi.create(payload);
                 const listing = result?.data || result;
                 if (listing.status === 'active') {
                     // Live at once (unless the server holds members' listings for approval)
                     mirrorFromDevice(listing);
-                    navigate(detailPath(listing));
+                    navigate(detailPath(listing), { replace: true });
                 } else {
                     setSubmitted(true);
                     window.scrollTo(0, 0);

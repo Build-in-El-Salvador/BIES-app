@@ -204,7 +204,7 @@ const MarketListingDetail = () => {
                         </div>
                     )}
                     {isSold && <span className="mk-detail-sold">{t('marketplace.sold')}</span>}
-                    <BackButton to="/market" overlay label={t('marketplace.title')} />
+                    <BackButton fallback="/market" overlay label={t('marketplace.title')} />
                 </div>
                 {images.length > 1 && (
                     <div className="mk-thumbs">

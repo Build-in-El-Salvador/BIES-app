@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
+import useVisitState from '../../hooks/useVisitState';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound } from 'lucide-react';
@@ -19,32 +20,36 @@ const TalentList = () => {
     const { t } = useTranslation();
     const { user } = useAuth();
 
-    const [searchQuery, setSearchQuery] = useState('');
-    const [talents, setTalents] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filtersOpen, setFiltersOpen] = useState(false);
-    const [category, setCategory] = useState('');
-    const [mineOnly, setMineOnly] = useState(false);
-    const [availableOnly, setAvailableOnly] = useState(false);
-    const [remoteOnly, setRemoteOnly] = useState(false);
-    const [btcOnly, setBtcOnly] = useState(false);
-    const [workType, setWorkType] = useState('');
+    // What the page shows, as Back brings it back (hooks/useVisitState.js):
+    // the same list, at the same place. A new visit starts afresh.
+    const [searchQuery, setSearchQuery] = useVisitState('talents.search', '');
+    const [filtersOpen, setFiltersOpen] = useVisitState('talents.filtersOpen', false);
+    const [category, setCategory] = useVisitState('talents.category', '');
+    const [mineOnly, setMineOnly] = useVisitState('talents.mine', false);
+    const [availableOnly, setAvailableOnly] = useVisitState('talents.available', false);
+    const [remoteOnly, setRemoteOnly] = useVisitState('talents.remote', false);
+    const [btcOnly, setBtcOnly] = useVisitState('talents.btc', false);
+    const [workType, setWorkType] = useVisitState('talents.workType', '');
+
+    const params = { limit: 50 };
+    if (searchQuery) params.search = searchQuery;
+    if (category) params.category = category;
+    if (mineOnly && user?.id) params.userId = user.id;
+    if (availableOnly) params.available = 'true';
+    if (remoteOnly) params.remote = 'true';
+    if (btcOnly) params.btc = 'true';
+    if (workType) params.workType = workType;
+    const key = `talent:${JSON.stringify(params)}`;
+    // A list shown before, from the first frame (utils/listCache.js).
+    const [talents, setTalents] = useState(() => cachedList(key) || []);
+    const [loading, setLoading] = useState(() => !cachedList(key));
 
     // Fetch talent (same 300ms debounce pattern as the directories). An answer
     // that arrives after the search or filters changed again is dropped.
     useEffect(() => {
         let current = true;
-        const params = { limit: 50 };
-        if (searchQuery) params.search = searchQuery;
-        if (category) params.category = category;
-        if (mineOnly && user?.id) params.userId = user.id;
-        if (availableOnly) params.available = 'true';
-        if (remoteOnly) params.remote = 'true';
-        if (btcOnly) params.btc = 'true';
-        if (workType) params.workType = workType;
         // A list shown before appears at once (utils/listCache.js) and is then
         // refreshed; a new one shows the spinner.
-        const key = `talent:${JSON.stringify(params)}`;
         const seen = cachedList(key);
         if (seen) {
             setTalents(seen);
@@ -69,7 +74,7 @@ const TalentList = () => {
             current = false;
             clearTimeout(debounce);
         };
-    }, [searchQuery, category, mineOnly, availableOnly, remoteOnly, btcOnly, workType, user?.id]);
+    }, [key]);
 
     const activeFilterCount = [availableOnly, remoteOnly, btcOnly, !!workType].filter(Boolean).length;
     const filtering = !!(searchQuery || category || mineOnly || activeFilterCount);

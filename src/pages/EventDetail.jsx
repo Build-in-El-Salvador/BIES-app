@@ -354,7 +354,7 @@ const EventDetail = () => {
                             style={{ cursor: 'pointer' }}
                         />
                     )}
-                    <BackButton to="/events" overlay label={t('eventDetail.backToEvents', 'Back to Events')} />
+                    <BackButton fallback="/events" overlay label={t('eventDetail.backToEvents', 'Back to Events')} />
                     <span className={`category-badge ${(event.category || '').toLowerCase()}`}>
                         {event.category?.replace(/_/g, ' ')}
                     </span>

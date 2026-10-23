@@ -1,7 +1,7 @@
 import { directoryApi, profilesApi, projectsApi } from '../services/api';
 import { cachedList, rememberList } from './listCache';
 import {
-    directoryKey, directoryRequest, membersKey, membersPageSize, opportunitiesKey, opportunitiesRequest,
+    directoryKey, directoryRequest, listOf, membersKey, membersPageSize, morePages, opportunitiesKey, opportunitiesRequest,
 } from './listRequests';
 import { isTypeShown, typesShown } from '../components/opportunities/opportunityOptions';
 import { isNativePlatform } from './platform';
@@ -17,8 +17,7 @@ async function directory(type) {
     const params = directoryRequest({ type });
     if (cachedList(directoryKey(params))) return;
     const result = await directoryApi.list(params);
-    const list = result?.data || result || [];
-    rememberList(directoryKey(params), Array.isArray(list) ? list : []);
+    rememberList(directoryKey(params), { listings: listOf(result), pages: 1, hasMore: morePages(result, 1) });
 }
 
 async function opportunities() {

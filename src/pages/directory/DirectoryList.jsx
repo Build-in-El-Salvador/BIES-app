@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
-import { directoryKey, directoryRequest } from '../../utils/listRequests';
+import { directoryKey, directoryPage, directoryRequest, joinPages, listOf, morePages } from '../../utils/listRequests';
+import useVisitState from '../../hooks/useVisitState';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, Bookmark } from 'lucide-react';
@@ -28,72 +29,122 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const { t } = useTranslation();
     const isFarm = type === 'FARM';
 
-    const [searchQuery, setSearchQuery] = useState('');
-    // A list shown before (or fetched ahead by the bottom bar) from the first
-    // frame, not a frame of spinner first.
-    const firstSeen = () => cachedList(directoryKey(directoryRequest({ type })));
-    const [listings, setListings] = useState(() => firstSeen() || []);
-    const [loading, setLoading] = useState(() => !firstSeen());
-    const [filtersOpen, setFiltersOpen] = useState(false);
+    // What the page shows, as Back brings it back (hooks/useVisitState.js):
+    // the same list, at the same place. A new visit, or the other directory,
+    // starts afresh.
+    const [searchQuery, setSearchQuery] = useVisitState('directory.search', '');
+    const [filtersOpen, setFiltersOpen] = useVisitState('directory.filtersOpen', false);
 
     // Farm filters
-    const [selectedPractices, setSelectedPractices] = useState([]);
+    const [selectedPractices, setSelectedPractices] = useVisitState('directory.practices', []);
     // Shared / provider filters
-    const [certifiedOnly, setCertifiedOnly] = useState(false);
-    const [btcOnly, setBtcOnly] = useState(false);
-    const [category, setCategory] = useState('');
-    const [produce, setProduce] = useState(''); // FARM: a PRODUCE_KINDS key
-    const [savedOnly, setSavedOnly] = useState(false); // the member's saved listings
+    const [certifiedOnly, setCertifiedOnly] = useVisitState('directory.certified', false);
+    const [btcOnly, setBtcOnly] = useVisitState('directory.btc', false);
+    const [category, setCategory] = useVisitState('directory.category', '');
+    const [produce, setProduce] = useVisitState('directory.produce', ''); // FARM: a PRODUCE_KINDS key
+    const [savedOnly, setSavedOnly] = useVisitState('directory.saved', false); // the member's saved listings
 
-    // Reset state when switching between /farms and /trusted
-    useEffect(() => {
-        setSearchQuery('');
-        setSelectedPractices([]);
-        setCertifiedOnly(false);
-        setBtcOnly(false);
-        setCategory('');
-        setProduce('');
-        setSavedOnly(false);
-        setFiltersOpen(false);
-    }, [type]);
+    // The list for these filters, 50 at a time: more as its end comes near.
+    // A list shown before (or fetched ahead by the bottom bar) is there from
+    // the first frame, as far as it was scrolled, not a frame of spinner first.
+    const request = directoryRequest({ type, search: searchQuery, category, saved: savedOnly });
+    const key = directoryKey(request);
+    const firstSeen = () => cachedList(key);
+    const [listings, setListings] = useState(() => firstSeen()?.listings || []);
+    const [pages, setPages] = useState(() => firstSeen()?.pages || 1);
+    const [hasMore, setHasMore] = useState(() => firstSeen()?.hasMore || false);
+    const [loading, setLoading] = useState(() => !firstSeen());
+    const [loadingMore, setLoadingMore] = useState(false);
+    // A list shown from memory while it's asked for again: no next page until
+    // that answer is in, or it would put the list back as it was.
+    const [refreshing, setRefreshing] = useState(false);
+    // The current list's number: an answer for an earlier one is dropped.
+    const listRequest = useRef(0);
 
     // Fetch listings. Only typing in search waits (300 ms after the last key,
     // as Discover does); opening the page or tapping a filter loads at once.
     // A list shown before appears at once (utils/listCache.js) and is then
-    // refreshed; a new one shows the spinner.
+    // refreshed, as many pages as it had, so Back finds its place in it; a
+    // new one shows the spinner.
     const lastSearch = useRef(searchQuery);
     useEffect(() => {
         const typing = searchQuery !== lastSearch.current;
         lastSearch.current = searchQuery;
-        const params = directoryRequest({ type, search: searchQuery, category, saved: savedOnly });
-        const key = directoryKey(params);
         const seen = cachedList(key);
         if (seen) {
-            setListings(seen);
+            setListings(seen.listings);
+            setPages(seen.pages);
+            setHasMore(seen.hasMore);
             setLoading(false);
         } else {
             setLoading(true);
         }
-        let current = true;
+        setLoadingMore(false);
+        setRefreshing(!!seen);
+        const id = ++listRequest.current;
+        const upTo = seen?.pages || 1;
         const fetchListings = async () => {
             try {
-                const result = await directoryApi.list(params);
-                const list = result?.data || result || [];
-                const found = Array.isArray(list) ? list : [];
-                rememberList(key, found);
-                if (current) setListings(found);
+                const answers = await Promise.all(
+                    Array.from({ length: upTo }, (_, i) => directoryApi.list(directoryPage(request, i + 1))),
+                );
+                const found = joinPages(answers.map(listOf));
+                const more = morePages(answers[answers.length - 1], upTo);
+                rememberList(key, { listings: found, pages: upTo, hasMore: more });
+                if (id !== listRequest.current) return;
+                setListings(found);
+                setPages(upTo);
+                setHasMore(more);
             } catch {
-                if (current && !seen) setListings([]);
+                if (id === listRequest.current && !seen) {
+                    setListings([]);
+                    setHasMore(false);
+                }
             } finally {
-                if (current) setLoading(false);
+                if (id === listRequest.current) {
+                    setLoading(false);
+                    setRefreshing(false);
+                }
             }
         };
         const debounce = setTimeout(fetchListings, typing && !seen ? 300 : 0);
-        return () => {
-            current = false;
-            clearTimeout(debounce);
-        };
-    }, [searchQuery, type, category, savedOnly]);
+        return () => clearTimeout(debounce);
+    }, [key]);
+
+    // The next page once the end of the list comes near the screen. One that
+    // fails stops the list there (until the page is opened again), rather
+    // than asking again and again.
+    const loadMore = async () => {
+        const id = listRequest.current;
+        const next = pages + 1;
+        setLoadingMore(true);
+        try {
+            const answer = await directoryApi.list(directoryPage(request, next));
+            if (id !== listRequest.current) return;
+            const found = joinPages([listings, listOf(answer)]);
+            const more = morePages(answer, next);
+            rememberList(key, { listings: found, pages: next, hasMore: more });
+            setListings(found);
+            setPages(next);
+            setHasMore(more);
+        } catch {
+            if (id === listRequest.current) setHasMore(false);
+        } finally {
+            if (id === listRequest.current) setLoadingMore(false);
+        }
+    };
+    const loadMoreRef = useRef(loadMore);
+    loadMoreRef.current = loadMore;
+    const listEnd = useRef(null);
+    useEffect(() => {
+        const end = listEnd.current;
+        if (!end || !hasMore || loading || loadingMore || refreshing) return undefined;
+        const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) loadMoreRef.current();
+        }, { rootMargin: '600px 0px' });
+        observer.observe(end);
+        return () => observer.disconnect();
+    }, [hasMore, loading, loadingMore, refreshing, pages, key]);
 
     // Client-side filtering (minimal drawer for now)
     const filtered = listings.filter((l) => {
@@ -252,8 +303,9 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         ))}
                 </div>
 
-                {/* Listing cards */}
-                {loading ? (
+                {/* Listing cards. While a filter here has matched none of the
+                    pages so far, the next pages are still to look through. */}
+                {loading || (filtered.length === 0 && hasMore) ? (
                     <div className="dir-loading">
                         <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
                     </div>
@@ -262,6 +314,11 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         {filtered.map((listing) => (
                             <DirectoryListingCard key={listing.id} listing={listing} type={type} />
                         ))}
+                        {loadingMore && (
+                            <div className="dir-loading-more">
+                                <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <div className="dir-empty">
@@ -276,6 +333,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
                         )}
                     </div>
                 )}
+                {hasMore && !loading && <div ref={listEnd} aria-hidden="true" />}
             </div>
 
             <style jsx>{`
@@ -451,6 +509,13 @@ const DirectoryList = ({ type = 'FARM' }) => {
                     display: flex;
                     flex-direction: column;
                     gap: 1rem;
+                }
+
+                .dir-loading-more {
+                    display: flex;
+                    justify-content: center;
+                    padding: 1rem 0;
+                    color: var(--color-gray-500);
                 }
 
                 .dir-loading {

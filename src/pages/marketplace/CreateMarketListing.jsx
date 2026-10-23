@@ -158,7 +158,9 @@ const CreateMarketListing = ({ editMode = false }) => {
                 ? await nostrService.publishMarketplaceListing(payload)
                 : await marketplaceApi.publish(payload);
             const published = result?.data || result;
-            navigate(`/market/${published?.naddr || naddr}`);
+            // Back never reopens this form (as with a talent or a listing).
+            if (editMode && window.history.state?.idx > 0) navigate(-1);
+            else navigate(`/market/${published?.naddr || naddr}`, { replace: true });
         } catch (err) {
             setSubmitError(err.message || 'Failed to publish listing');
             window.scrollTo({ top: 0, behavior: 'smooth' });

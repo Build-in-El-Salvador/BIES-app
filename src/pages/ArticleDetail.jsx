@@ -64,7 +64,7 @@ const ArticleDetail = () => {
         <div className="article-page">
             <div className="container">
                 <div className="back-head">
-                    <BackButton to="/news" label={t('articleDetail.backToNews')} />
+                    <BackButton fallback="/news" label={t('articleDetail.backToNews')} />
                 </div>
 
                 {(article.image || article.coverImage) && (

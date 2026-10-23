@@ -187,7 +187,7 @@ const BountyDetail = () => {
             <div className="container">
                 <div className="bounty-detail-content">
                     <div className="back-head">
-                        <BackButton to="/bounties" label={t('bounties.backToBounties')} />
+                        <BackButton fallback="/bounties" label={t('bounties.backToBounties')} />
                     </div>
 
                     {actionError && (

@@ -8,7 +8,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    directoryKey, directoryRequest, membersKey, membersPageSize, opportunitiesKey, opportunitiesRequest,
+    directoryKey, directoryPage, directoryRequest, joinPages, listOf, membersKey, membersPageSize, morePages,
+    opportunitiesKey, opportunitiesRequest,
 } from '../../src/utils/listRequests.js';
 
 test('a directory list opened from the bar has the key the page looks up', () => {
@@ -40,3 +41,27 @@ test("members: the page size follows the view, and the key the page's", () => {
     assert.equal(membersKey(48), 'members:48:');
     assert.equal(membersKey(24, 'ana'), 'members:24:ana');
 });
+
+test('a directory list goes on page by page; its key is its first page', () => {
+    const first = directoryRequest({ type: 'PROVIDER', category: 'food' });
+    assert.equal(directoryPage(first, 1), first);
+    assert.deepEqual(directoryPage(first, 2), { ...first, page: 2 });
+    assert.equal(first.page, undefined); // the key stays the list's, not a page's
+});
+
+test('pages join in order, each item once, and say whether more follow', () => {
+    const one = [{ id: 'a' }, { id: 'b' }];
+    const two = [{ id: 'b' }, { id: 'c' }]; // b moved down a place between the two asks
+    assert.deepEqual(joinPages([one, two]).map((x) => x.id), ['a', 'b', 'c']);
+    assert.deepEqual(joinPages([]), []);
+
+    assert.deepEqual(listOf({ data: one, pagination: { totalPages: 2 } }), one);
+    assert.deepEqual(listOf(one), one);
+    assert.deepEqual(listOf(null), []);
+    assert.deepEqual(listOf({ error: 'x' }), []);
+
+    assert.equal(morePages({ pagination: { totalPages: 2 } }, 1), true);
+    assert.equal(morePages({ pagination: { totalPages: 2 } }, 2), false);
+    assert.equal(morePages({ data: [] }, 1), false); // no pagination: one page
+});
+
