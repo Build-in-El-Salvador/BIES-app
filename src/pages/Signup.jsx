@@ -473,6 +473,7 @@ const Signup = () => {
                 .btn-outline {
                     border: 1px solid var(--color-gray-300);
                     color: var(--color-gray-600);
+                    font-size: 0.95rem;
                     border-radius: 1rem;
                     background: transparent;
                     transition: all 0.2s;
