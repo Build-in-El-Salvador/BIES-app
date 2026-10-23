@@ -7,7 +7,8 @@ import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import Avatar from '../components/Avatar';
 import { cachedList, rememberList } from '../utils/listCache';
-import { membersKey, membersPageSize } from '../utils/listRequests';
+import useVisitState from '../hooks/useVisitState';
+import { joinPages, listOf, membersKey, membersPageSize, morePages } from '../utils/listRequests';
 import { prefetchDetail } from '../utils/detailCache';
 import { profilePage } from '../utils/detailPages';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +28,8 @@ const Discover = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const { user } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
+  // As Back brings it back (hooks/useVisitState.js): the same members, at the same place.
+  const [searchQuery, setSearchQuery] = useVisitState('members.search', '');
   // Icons until a member picks another layout, here or in Settings.
   const [memberViewType, setMemberViewType] = useState(() => localStorage.getItem('bies_members_view') || 'icons');
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -40,11 +42,18 @@ const Discover = () => {
     preferencesApi.save({ membersView: value }).catch(() => {});
   };
 
-  const [builders, setBuilders] = useState([]);
+  // Members load a screenful or more at a time as you scroll down (Icons
+  // shows many per screen, so 48; cards fewer, so 24); a new search starts
+  // again from the top. Coming back shows what was loaded (utils/listCache.js),
+  // from the first frame.
+  const pageSize = membersPageSize(memberViewType);
+  const listKey = membersKey(pageSize, searchQuery);
+  const firstSeen = () => cachedList(listKey);
+  const [builders, setBuilders] = useState(() => firstSeen()?.builders || []);
   // Loading until the first answer: a spinner, never a moment of "No members found".
-  const [buildersLoading, setBuildersLoading] = useState(true);
-  const [buildersPage, setBuildersPage] = useState(1);
-  const [buildersHasMore, setBuildersHasMore] = useState(false);
+  const [buildersLoading, setBuildersLoading] = useState(() => !firstSeen());
+  const [buildersPage, setBuildersPage] = useState(() => firstSeen()?.page || 1);
+  const [buildersHasMore, setBuildersHasMore] = useState(() => firstSeen()?.hasMore || false);
   const buildersRequest = useRef(0);
   const buildersEnd = useRef(null);
   const [followingIds, setFollowingIds] = useState(new Set());
@@ -58,34 +67,26 @@ const Discover = () => {
     }
   }, [location.search]);
 
-  // Members load a screenful or more at a time as you scroll down (Icons
-  // shows many per screen, so 48; cards fewer, so 24); a new search starts
-  // again from the top. Coming back shows what was loaded (utils/listCache.js).
-  const pageSize = membersPageSize(memberViewType);
-  const listKey = membersKey(pageSize, searchQuery);
-  const loadBuilders = useCallback(async (pageToLoad) => {
+  // Pages pageToLoad to upTo: the next page, or a refresh of every page shown
+  // (so the list keeps its length, and Back its place in it).
+  const loadBuilders = useCallback(async (pageToLoad, upTo = pageToLoad) => {
     const request = ++buildersRequest.current;
     setBuildersLoading(true);
     try {
       // Only what the cards show; a member's page fetches their full profile.
-      const params = { page: pageToLoad, limit: pageSize, fields: 'card' };
-      if (searchQuery) params.search = searchQuery;
-
-      const result = await profilesApi.list(params);
+      const params = (page) => ({ page, limit: pageSize, fields: 'card', ...(searchQuery ? { search: searchQuery } : {}) });
+      const pages = Array.from({ length: upTo - pageToLoad + 1 }, (_, i) => pageToLoad + i);
+      const answers = await Promise.all(pages.map((page) => profilesApi.list(params(page))));
       if (request !== buildersRequest.current) return;
 
-      const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
-      const hasMore = pageToLoad < (result?.pagination?.totalPages || 1);
+      const list = joinPages(answers.map(listOf));
+      const hasMore = morePages(answers[answers.length - 1], upTo);
       setBuilders((prev) => {
-        let next = list;
-        if (pageToLoad !== 1) {
-          const seen = new Set(prev.map((b) => b.id));
-          next = [...prev, ...list.filter((b) => !seen.has(b.id))];
-        }
-        rememberList(listKey, { builders: next, page: pageToLoad, hasMore, at: Date.now() });
+        const next = pageToLoad === 1 ? list : joinPages([prev, list]);
+        rememberList(listKey, { builders: next, page: upTo, hasMore, at: Date.now() });
         return next;
       });
-      setBuildersPage(pageToLoad);
+      setBuildersPage(upTo);
       setBuildersHasMore(hasMore);
     } catch (err) {
       if (request !== buildersRequest.current) return;
@@ -98,7 +99,7 @@ const Discover = () => {
   }, [searchQuery, pageSize, listKey]);
 
   // Shown in the last 2 minutes: as it was, scrolled-in members included.
-  // Older: shown at once, then the first page is fetched again. Only typing
+  // Older: shown at once, then its pages are fetched again. Only typing
   // in search waits (300 ms after the last key); opening the page doesn't.
   const lastSearch = useRef(searchQuery);
   useEffect(() => {
@@ -114,7 +115,7 @@ const Discover = () => {
         return undefined;
       }
     }
-    const debounce = setTimeout(() => loadBuilders(1), typing && !seen ? 300 : 0);
+    const debounce = setTimeout(() => loadBuilders(1, seen?.page || 1), typing && !seen ? 300 : 0);
     return () => clearTimeout(debounce);
   }, [loadBuilders, listKey, searchQuery]);
 

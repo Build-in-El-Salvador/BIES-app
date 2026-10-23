@@ -19,6 +19,9 @@ import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
 import TalentSummary from '../talent/TalentSummary';
 import { MAX_TALENTS } from '../talent/talentOptions';
 import DirectoryListingCard from '../directory/DirectoryListingCard';
+import useVisitState from '../../hooks/useVisitState';
+import { cachedList, rememberList } from '../../utils/listCache';
+import { joinPages, listOf } from '../../utils/listRequests';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -66,15 +69,17 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const projectsEnabled = useFeature('projects');
     const talentEnabled = useFeature('talent');
     const directoriesEnabled = useFeature('directories');
-    const [tab, setTab] = useState('all');
+    const userId = profile.user?.id || profile.userId;
+    // The tab open, as Back brings it back (hooks/useVisitState.js).
+    const [tab, setTab] = useVisitState('profile.tab', 'all');
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
     const [listings, setListings] = useState([]);
     const [talents, setTalents] = useState([]);
-    const [recommendations, setRecommendations] = useState({ list: [], total: 0, page: 0, loading: false });
+    // As far as "Show more" went, kept for Back (utils/listCache.js).
+    const recommendationsKey = `recommended-by:${userId}`;
+    const [recommendations, setRecommendations] = useState(() => cachedList(recommendationsKey) || { list: [], total: 0, page: 0, loading: false });
     const [posts, setPosts] = useState({ list: [], loading: true });
-
-    const userId = profile.user?.id || profile.userId;
     const pubkey = useMemo(() => {
         if (profile.user?.nostrPubkey) return profile.user.nostrPubkey;
         try {
@@ -109,13 +114,19 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     }, [userId, talentEnabled]);
 
     // The businesses and farms they recommend (vouch for), newest first.
+    // Shown before: at once, and as many pages as were shown are asked
+    // again, so Back finds its place in them.
     useEffect(() => {
-        setRecommendations({ list: [], total: 0, page: 0, loading: false });
+        const kept = cachedList(recommendationsKey);
+        setRecommendations(kept || { list: [], total: 0, page: 0, loading: false });
         if (!userId || !directoriesEnabled) return undefined;
         let cancelled = false;
-        directoryApi.recommendedBy(userId, { page: 1, limit: RECOMMENDATIONS_PAGE })
-            .then((res) => {
-                if (!cancelled) setRecommendations({ list: res?.data || [], total: res?.pagination?.total ?? 0, page: 1, loading: false });
+        const upTo = kept?.page || 1;
+        Promise.all(Array.from({ length: upTo }, (_, i) => directoryApi.recommendedBy(userId, { page: i + 1, limit: RECOMMENDATIONS_PAGE })))
+            .then((answers) => {
+                const next = { list: joinPages(answers.map(listOf)), total: answers[0]?.pagination?.total ?? 0, page: upTo, loading: false };
+                rememberList(recommendationsKey, next);
+                if (!cancelled) setRecommendations(next);
             })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -126,8 +137,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         setRecommendations((r) => ({ ...r, loading: true }));
         directoryApi.recommendedBy(userId, { page, limit: RECOMMENDATIONS_PAGE })
             .then((res) => setRecommendations((r) => {
-                const seen = new Set(r.list.map((l) => l.id));
-                return { list: [...r.list, ...(res?.data || []).filter((l) => !seen.has(l.id))], total: res?.pagination?.total ?? r.total, page, loading: false };
+                const next = { list: joinPages([r.list, listOf(res)]), total: res?.pagination?.total ?? r.total, page, loading: false };
+                rememberList(recommendationsKey, next);
+                return next;
             }))
             .catch(() => setRecommendations((r) => ({ ...r, loading: false })));
     };

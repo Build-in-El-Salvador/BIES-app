@@ -173,8 +173,10 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             sort = 'newest',
         } = req.query;
 
-        const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
-        const take = Math.min(parseInt(limit as string, 10), 50);
+        // Pages of up to 50; page N starts after N-1 of them.
+        const take = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 50);
+        const pageNumber = Math.max(parseInt(String(page), 10) || 1, 1);
+        const skip = (pageNumber - 1) * take;
 
         const where: any = { status: 'active', isPublished: true };
 
@@ -207,9 +209,11 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         // Not while the member who runs it is suspended or deleted (their own list aside).
         if (!(req.user && where.ownerId === req.user.id)) where.AND = [ACTIVE_MEMBER_RUNS_IT];
 
-        let orderBy: any = { createdAt: 'desc' };
-        if (sort === 'name') orderBy = { name: 'asc' };
-        if (sort === 'score') orderBy = [{ reputationScore: 'desc' }, { vouchCount: 'desc' }, { createdAt: 'desc' }];
+        // The id last, so listings that tie keep one order from page to page
+        // (none shown twice, none skipped).
+        let orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+        if (sort === 'name') orderBy = [{ name: 'asc' }, { id: 'asc' }];
+        if (sort === 'score') orderBy = [{ reputationScore: 'desc' }, { vouchCount: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
 
         const [listings, total] = await Promise.all([
             prisma.directoryListing.findMany({
@@ -235,7 +239,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             data: visible.map(parseListing),
             trustedThreshold: TRUSTED_THRESHOLD,
             pagination: {
-                page: parseInt(page as string, 10),
+                page: pageNumber,
                 limit: take,
                 total,
                 totalPages: Math.ceil(total / take),

@@ -244,7 +244,7 @@ const CourseDetail = () => {
                             <BookOpen size={48} />
                         </div>
                     )}
-                    <BackButton to="/courses" overlay />
+                    <BackButton fallback="/courses" overlay />
                 </div>
 
                 <div className="detail-grid">

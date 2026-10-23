@@ -346,7 +346,7 @@ const ListingDetail = () => {
                             {isFarm ? <Leaf size={56} /> : <Building2 size={56} />}
                         </div>
                     )}
-                    <BackButton to={backPath} overlay label={t('directory.backToDirectory')} />
+                    <BackButton fallback={backPath} overlay label={t('directory.backToDirectory')} />
                 </div>
                 {/* Outside the photo's clipping, so the menu can open below it */}
                 {(isOwner || hasMenu) && (

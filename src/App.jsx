@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigationType, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { UserModeProvider, useUserMode } from './context/UserModeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -9,6 +9,7 @@ import { BottomNavProvider, useBottomNav } from './context/BottomNavContext';
 import { FeatureFlagsProvider, useFeature } from './context/FeatureFlagsContext';
 import { BOUNTIES_ENABLED, COWORK_ENABLED, CUSTOM_BOTTOM_NAV_ENABLED, COURSES_ENABLED, MARKETPLACE_ENABLED } from './config/featureFlags';
 import { preferencesApi } from './services/api';
+import useScrollMemory from './hooks/useScrollMemory';
 import i18n from './i18n';
 import Navbar from './components/Navbar';
 import MobileBottomNav from './components/MobileBottomNav';
@@ -248,38 +249,9 @@ const AppContent = () => {
         }).catch(() => {});
     }, [user?.id]);
 
-    // Each page visit's scroll position, so Back returns to the same place in
-    // a list (its items come back at once, utils/listCache.js); any other
+    // Back returns to the same place on the page, a list included; any other
     // move starts at the top.
-    const navigationType = useNavigationType();
-    const scrollPositions = useRef(new Map());
-    useEffect(() => {
-        const visit = location.key;
-        let frame = 0;
-        const onScroll = () => {
-            cancelAnimationFrame(frame);
-            frame = requestAnimationFrame(() => scrollPositions.current.set(visit, window.scrollY));
-        };
-        window.addEventListener('scroll', onScroll, { passive: true });
-        return () => {
-            window.removeEventListener('scroll', onScroll);
-            cancelAnimationFrame(frame);
-        };
-    }, [location.key]);
-    const lastPath = useRef(location.pathname);
-    useEffect(() => {
-        const samePage = lastPath.current === location.pathname;
-        lastPath.current = location.pathname;
-        const saved = navigationType === 'POP' ? scrollPositions.current.get(location.key) : undefined;
-        if (saved === undefined) {
-            // A filter in the address (Opportunities) stays where it is.
-            if (!samePage) window.scrollTo(0, 0);
-            return undefined;
-        }
-        // After the page has drawn its remembered list.
-        const timer = setTimeout(() => window.scrollTo(0, saved), 60);
-        return () => clearTimeout(timer);
-    }, [location.key]);
+    useScrollMemory();
 
     // Report / Feedback starts on the page the member was on (utils/lastPage.js).
     useEffect(() => { rememberPage(location.pathname); }, [location.pathname]);
