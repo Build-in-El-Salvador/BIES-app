@@ -325,6 +325,27 @@ describe('BIES Trusted', () => {
         expect((await call('GET', '/api/directory?type=PROVIDER&category=legal')).body.data).toHaveLength(0);
     });
 
+    it('sorts A–Z as people read it, by price (none last) and by the most recommended', async () => {
+        const poster = await member();
+        const zona = await liveListing(poster, { name: 'Zona Motors', category: 'auto', pricing: '$$$' });
+        const arbol = await liveListing(poster, { name: 'árbol Autos', category: 'auto' });
+        const taller = await liveListing(poster, { name: 'Bmw Taller', category: 'auto', pricing: '$' });
+        for (const voter of await Promise.all([1, 2].map(() => member()))) await vote(voter, arbol, 1);
+
+        const ids = async (query: string) =>
+            (await call('GET', `/api/directory?type=PROVIDER&category=auto&limit=50&${query}`)).body.data.map((l: any) => l.id);
+        expect(await ids('sort=name')).toEqual([arbol, taller, zona]);
+        expect(await ids('sort=price-low')).toEqual([taller, zona, arbol]);
+        expect(await ids('sort=price-high')).toEqual([zona, taller, arbol]);
+        expect((await ids('sort=vouches'))[0]).toBe(arbol);
+        expect(await ids('sort=newest')).toEqual([taller, arbol, zona]);
+
+        // Pages follow the order sorted in code, and count every match.
+        const second = await call('GET', '/api/directory?type=PROVIDER&category=auto&sort=name&limit=2&page=2');
+        expect(second.body.data.map((l: any) => l.id)).toEqual([zona]);
+        expect(second.body.pagination).toMatchObject({ page: 2, total: 3, totalPages: 2 });
+    });
+
     it('pages through every listing once, in one order, ties included', async () => {
         // Same score, same vouches, same moment: only the id tells them apart.
         const poster = await member();

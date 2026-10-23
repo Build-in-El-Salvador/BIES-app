@@ -5,9 +5,9 @@
  * Pure, so tests can import it.
  */
 
-/** Businesses (PROVIDER) or Farms (FARM), best Trust Score first. */
-export function directoryRequest({ type, search = '', category = '', saved = false }) {
-    const params = { type, limit: 50, sort: 'score' };
+/** Businesses (PROVIDER) or Farms (FARM), best Trust Score first, or in `sort`'s order (listSorts.js). */
+export function directoryRequest({ type, search = '', category = '', saved = false, sort = '' }) {
+    const params = { type, limit: 50, sort: sort || 'score' };
     if (search) params.search = search;
     if (category) params.category = category;
     if (saved) params.saved = 'true';
@@ -56,7 +56,7 @@ export function joinPages(pages) {
 export function opportunitiesRequest(filters = {}, { types = null, userId = null } = {}) {
     const {
         query, type, kind, stage, category, minAmount, maxAmount,
-        remoteOnly, btcOnly, mineOnly, savedOnly,
+        remoteOnly, btcOnly, mineOnly, savedOnly, sort,
     } = filters;
     const request = { limit: 50 };
     if (query) request.search = query;
@@ -70,6 +70,7 @@ export function opportunitiesRequest(filters = {}, { types = null, userId = null
     if (btcOnly) request.btc = 'true';
     if (mineOnly && userId) request.ownerId = userId;
     if (savedOnly) request.saved = 'true';
+    if (sort) request.sort = sort;
     if (types) request.types = types.join(',');
     return request;
 }
@@ -79,4 +80,4 @@ export const opportunitiesKey = (request) => `opportunities:${JSON.stringify(req
 /** Members come a screenful at a time: Icons shows many per screen, cards fewer. */
 export const membersPageSize = (view) => (view === 'icons' ? 48 : 24);
 
-export const membersKey = (pageSize, search = '') => `members:${pageSize}:${search}`;
+export const membersKey = (pageSize, search = '', sort = '') => `members:${pageSize}:${search}${sort ? `:${sort}` : ''}`;

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
 import useVisitState from '../../hooks/useVisitState';
+import SortBy from '../../components/SortBy';
+import { TALENT_SORTS, sortOf } from '../../utils/listSorts';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound } from 'lucide-react';
@@ -30,6 +32,9 @@ const TalentList = () => {
     const [remoteOnly, setRemoteOnly] = useVisitState('talents.remote', false);
     const [btcOnly, setBtcOnly] = useVisitState('talents.btc', false);
     const [workType, setWorkType] = useVisitState('talents.workType', '');
+    // Members taking on work first (''), or another order (utils/listSorts.js).
+    const [sortChoice, setSort] = useVisitState('talents.sort', '');
+    const sort = sortOf(TALENT_SORTS, sortChoice);
 
     const params = { limit: 50 };
     if (searchQuery) params.search = searchQuery;
@@ -39,6 +44,7 @@ const TalentList = () => {
     if (remoteOnly) params.remote = 'true';
     if (btcOnly) params.btc = 'true';
     if (workType) params.workType = workType;
+    if (sort) params.sort = sort;
     const key = `talent:${JSON.stringify(params)}`;
     // A list shown before, from the first frame (utils/listCache.js).
     const [talents, setTalents] = useState(() => cachedList(key) || []);
@@ -76,10 +82,12 @@ const TalentList = () => {
         };
     }, [key]);
 
-    const activeFilterCount = [availableOnly, remoteOnly, btcOnly, !!workType].filter(Boolean).length;
-    const filtering = !!(searchQuery || category || mineOnly || activeFilterCount);
+    const filterCount = [availableOnly, remoteOnly, btcOnly, !!workType].filter(Boolean).length;
+    // On the filter button: the filters, and an order other than the usual.
+    const activeFilterCount = filterCount + (sort ? 1 : 0);
+    const filtering = !!(searchQuery || category || mineOnly || filterCount);
     // "Yours" alone and nothing found: they haven't listed any talent yet.
-    const noneOfYours = mineOnly && !searchQuery && !category && !activeFilterCount;
+    const noneOfYours = mineOnly && !searchQuery && !category && !filterCount;
 
     return (
         <div className="talent-page container">
@@ -127,6 +135,12 @@ const TalentList = () => {
 
                 {filtersOpen && (
                     <div className="tal-filters">
+                        <SortBy
+                            id="tal-sort"
+                            value={sort}
+                            onChange={setSort}
+                            options={TALENT_SORTS.map((s) => [s, t(`sort.talent.${s || 'usual'}`)])}
+                        />
                         <div className="tal-checkbox-list">
                             <label>
                                 <input type="checkbox" checked={availableOnly} onChange={() => setAvailableOnly((v) => !v)} />

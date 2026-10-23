@@ -3243,5 +3243,36 @@
       "signin": "Iniciar sesión o registrarse",
       "other": "Otro lugar"
     }
+  },
+  "sort": {
+    "label": "Ordenar por",
+    "directory": {
+      "usual": "Mejor valorados",
+      "vouches": "Más recomendados",
+      "newest": "Más recientes",
+      "name": "Nombre (A–Z)",
+      "price-low": "Precio: de menor a mayor",
+      "price-high": "Precio: de mayor a menor"
+    },
+    "opportunities": {
+      "usual": "Más recientes",
+      "closing": "Cierran pronto",
+      "name": "Título (A–Z)",
+      "price-low": "Precio: de menor a mayor",
+      "price-high": "Precio: de mayor a menor",
+      "price-low_program": "Monto: de menor a mayor",
+      "price-high_program": "Monto: de mayor a menor"
+    },
+    "talent": {
+      "usual": "Disponibles primero",
+      "newest": "Más recientes",
+      "name": "Título (A–Z)"
+    },
+    "members": {
+      "usual": "Más vistos",
+      "newest": "Miembros nuevos",
+      "name": "Nombre (A–Z)",
+      "followers": "Más seguidores"
+    }
   }
 }

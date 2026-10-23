@@ -8,6 +8,7 @@ import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
 import { nestedProfileForViewer } from '../services/profilePrivacy';
+import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds, priceLevel } from '../utils/listOrder';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -160,9 +161,30 @@ export function mirrorToNostr(listing: any, editorId?: string): void {
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
+// The directory's orders (?sort=). Each ends with the id, so listings that tie
+// keep one order from page to page (none shown twice, none skipped).
+const DIRECTORY_ORDERS: Record<string, any> = {
+    newest: [{ createdAt: 'desc' }, { id: 'asc' }],
+    // Top rated: the BIES Trust Score, then the most vouches.
+    score: [{ reputationScore: 'desc' }, { vouchCount: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+    // Most recommended: the most members vouching.
+    vouches: [{ vouchCount: 'desc' }, { reputationScore: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+};
+// A–Z and price, sorted in code (utils/listOrder.ts); at the same price, the top rated first.
+type ListingSortKeys = { id: string; name: string; pricing: string; reputationScore: number; vouchCount: number; createdAt: Date };
+const newestListing = newestFirst<ListingSortKeys>((l) => l.createdAt);
+const topRated = (a: ListingSortKeys, b: ListingSortKeys) =>
+    b.reputationScore - a.reputationScore || b.vouchCount - a.vouchCount || newestListing(a, b);
+const DIRECTORY_ORDERS_IN_CODE: Record<string, (a: ListingSortKeys, b: ListingSortKeys) => number> = {
+    name: inOrder(alphabetical((l) => l.name)),
+    'price-low': inOrder(missingLast((l) => priceLevel(l.pricing), 1), topRated),
+    'price-high': inOrder(missingLast((l) => priceLevel(l.pricing), -1), topRated),
+};
+
 /**
  * GET /directory
- * List directory listings with filtering, sorting, and pagination.
+ * List directory listings with filtering, sorting (?sort=newest|score|vouches|
+ * name|price-low|price-high), and pagination.
  * Public scope: active + published. Owners see all statuses of their own.
  */
 export async function listListings(req: Request, res: Response): Promise<void> {
@@ -209,26 +231,29 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         // Not while the member who runs it is suspended or deleted (their own list aside).
         if (!(req.user && where.ownerId === req.user.id)) where.AND = [ACTIVE_MEMBER_RUNS_IT];
 
-        // The id last, so listings that tie keep one order from page to page
-        // (none shown twice, none skipped).
-        let orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
-        if (sort === 'name') orderBy = [{ name: 'asc' }, { id: 'asc' }];
-        if (sort === 'score') orderBy = [{ reputationScore: 'desc' }, { vouchCount: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
-
-        const [listings, total] = await Promise.all([
-            prisma.directoryListing.findMany({
+        const include = {
+            owner: ownerSelect,
+            memberUser: ownerSelect,
+            _count: { select: { endorsements: true } },
+        };
+        const inCode = typeof sort === 'string' ? DIRECTORY_ORDERS_IN_CODE[sort] : undefined;
+        let listings: any[];
+        let total: number;
+        if (inCode) {
+            const keys = await prisma.directoryListing.findMany({
                 where,
-                include: {
-                    owner: ownerSelect,
-                    memberUser: ownerSelect,
-                    _count: { select: { endorsements: true } },
-                },
-                skip,
-                take,
-                orderBy,
-            }),
-            prisma.directoryListing.count({ where }),
-        ]);
+                select: { id: true, name: true, pricing: true, reputationScore: true, vouchCount: true, createdAt: true },
+            });
+            const ids = pageIds(keys, inCode, skip, take);
+            listings = inIdOrder(ids, await prisma.directoryListing.findMany({ where: { id: { in: ids } }, include }));
+            total = keys.length;
+        } else {
+            const orderBy = (typeof sort === 'string' && DIRECTORY_ORDERS[sort]) || DIRECTORY_ORDERS.newest;
+            [listings, total] = await Promise.all([
+                prisma.directoryListing.findMany({ where, include, skip, take, orderBy }),
+                prisma.directoryListing.count({ where }),
+            ]);
+        }
 
         // Listings run by a member the viewer blocked, or who blocked the
         // viewer, are left out.

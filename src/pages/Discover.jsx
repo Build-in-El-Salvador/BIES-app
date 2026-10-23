@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, MapPin, Loader2, User, LayoutGrid, List as ListIcon, Columns } from 'lucide-react';
+import { Search, MapPin, Loader2, User, LayoutGrid, List as ListIcon, Columns, ArrowUpDown } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { profilesApi, preferencesApi } from '../services/api';
@@ -8,6 +8,7 @@ import FollowIconButton from '../components/FollowIconButton';
 import Avatar from '../components/Avatar';
 import { cachedList, rememberList } from '../utils/listCache';
 import useVisitState from '../hooks/useVisitState';
+import { MEMBER_SORTS, sortOf } from '../utils/listSorts';
 import { joinPages, listOf, membersKey, membersPageSize, morePages } from '../utils/listRequests';
 import { prefetchDetail } from '../utils/detailCache';
 import { profilePage } from '../utils/detailPages';
@@ -30,6 +31,9 @@ const Discover = () => {
   const { user } = useAuth();
   // As Back brings it back (hooks/useVisitState.js): the same members, at the same place.
   const [searchQuery, setSearchQuery] = useVisitState('members.search', '');
+  // Most viewed (''), or another order (utils/listSorts.js), picked in the layout menu.
+  const [sortChoice, setSort] = useVisitState('members.sort', '');
+  const sort = sortOf(MEMBER_SORTS, sortChoice);
   // Icons until a member picks another layout, here or in Settings.
   const [memberViewType, setMemberViewType] = useState(() => localStorage.getItem('bies_members_view') || 'icons');
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
@@ -47,7 +51,7 @@ const Discover = () => {
   // again from the top. Coming back shows what was loaded (utils/listCache.js),
   // from the first frame.
   const pageSize = membersPageSize(memberViewType);
-  const listKey = membersKey(pageSize, searchQuery);
+  const listKey = membersKey(pageSize, searchQuery, sort);
   const firstSeen = () => cachedList(listKey);
   const [builders, setBuilders] = useState(() => firstSeen()?.builders || []);
   // Loading until the first answer: a spinner, never a moment of "No members found".
@@ -74,7 +78,9 @@ const Discover = () => {
     setBuildersLoading(true);
     try {
       // Only what the cards show; a member's page fetches their full profile.
-      const params = (page) => ({ page, limit: pageSize, fields: 'card', ...(searchQuery ? { search: searchQuery } : {}) });
+      const params = (page) => ({
+        page, limit: pageSize, fields: 'card', ...(searchQuery ? { search: searchQuery } : {}), ...(sort ? { sort } : {}),
+      });
       const pages = Array.from({ length: upTo - pageToLoad + 1 }, (_, i) => pageToLoad + i);
       const answers = await Promise.all(pages.map((page) => profilesApi.list(params(page))));
       if (request !== buildersRequest.current) return;
@@ -96,7 +102,7 @@ const Discover = () => {
     } finally {
       if (request === buildersRequest.current) setBuildersLoading(false);
     }
-  }, [searchQuery, pageSize, listKey]);
+  }, [searchQuery, sort, pageSize, listKey]);
 
   // Shown in the last 2 minutes: as it was, scrolled-in members included.
   // Older: shown at once, then its pages are fetched again. Only typing
@@ -182,6 +188,20 @@ const Discover = () => {
                   <button onClick={() => pickView('standard')} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: memberViewType==='standard'?'var(--color-primary)':'transparent', color: memberViewType==='standard'?'white':'inherit', borderRadius: '4px', cursor:'pointer', fontWeight: 500 }}>
                     <Columns size={16}/> Standard
                   </button>
+                  <div role="group" aria-labelledby="members-sort-label" style={{ borderTop: '1px solid var(--color-gray-200)', marginTop: '4px', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span id="members-sort-label" style={{ padding: '0 8px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-gray-500)' }}>{t('sort.label')}</span>
+                    {MEMBER_SORTS.map((s) => (
+                      <button
+                        key={s || 'usual'}
+                        type="button"
+                        aria-pressed={sort === s}
+                        onClick={() => { setSort(s); setViewMenuOpen(false); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px', border: 'none', background: sort === s ? 'var(--color-primary)' : 'transparent', color: sort === s ? 'white' : 'inherit', borderRadius: '4px', cursor: 'pointer', fontWeight: 500, textAlign: 'left' }}
+                      >
+                        <ArrowUpDown size={16} aria-hidden="true" /> {t(`sort.members.${s || 'usual'}`)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

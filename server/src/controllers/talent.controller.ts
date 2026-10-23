@@ -17,6 +17,7 @@ import { z } from 'zod';
 import prisma from '../lib/prisma';
 import { blockedIds, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { discardUploads, ownsUploads } from '../services/uploads.service';
+import { alphabetical, inIdOrder, inOrder, newestFirst, pageIds } from '../utils/listOrder';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -152,9 +153,21 @@ function parseTalent(talent: any) {
 
 // ─── Controllers ──────────────────────────────────────────────────────────────
 
+// Talent's orders (?sort=): members taking on work first (the default), the
+// newest, or A–Z by what they offer (in code: utils/listOrder.ts).
+const TALENT_ORDERS: Record<string, any> = {
+    available: [{ available: 'desc' }, { updatedAt: 'desc' }, { id: 'asc' }],
+    newest: [{ createdAt: 'desc' }, { id: 'asc' }],
+};
+type TalentSortKeys = { id: string; title: string; createdAt: Date };
+const TALENT_ORDERS_IN_CODE: Record<string, (a: TalentSortKeys, b: TalentSortKeys) => number> = {
+    name: inOrder(alphabetical((t) => t.title), newestFirst<TalentSortKeys>((t) => t.createdAt)),
+};
+
 /**
- * GET /talent?search&category&workType&available&remote&btc&userId&page&limit
- * Members taking on work first, then the most recently updated. Not the
+ * GET /talent?search&category&workType&available&remote&btc&userId&sort&page&limit
+ * Members taking on work first, then the most recently updated; or
+ * ?sort=newest, or name (A–Z). Not the
  * talent of suspended or deleted members, nor of members blocked either way.
  */
 export async function listTalent(req: Request, res: Response): Promise<void> {
@@ -187,16 +200,27 @@ export async function listTalent(req: Request, res: Response): Promise<void> {
         if (hidden.length) and.push({ userId: { notIn: hidden } });
         if (and.length) where.AND = and;
 
-        const [talents, total] = await Promise.all([
-            prisma.talentListing.findMany({
-                where,
-                include: { user: memberSelect },
-                orderBy: [{ available: 'desc' }, { updatedAt: 'desc' }],
-                skip: (page - 1) * take,
-                take,
-            }),
-            prisma.talentListing.count({ where }),
-        ]);
+        const sort = typeof req.query.sort === 'string' ? req.query.sort : '';
+        const inCode = TALENT_ORDERS_IN_CODE[sort];
+        let talents: any[];
+        let total: number;
+        if (inCode) {
+            const keys = await prisma.talentListing.findMany({ where, select: { id: true, title: true, createdAt: true } });
+            const ids = pageIds(keys, inCode, (page - 1) * take, take);
+            talents = inIdOrder(ids, await prisma.talentListing.findMany({ where: { id: { in: ids } }, include: { user: memberSelect } }));
+            total = keys.length;
+        } else {
+            [talents, total] = await Promise.all([
+                prisma.talentListing.findMany({
+                    where,
+                    include: { user: memberSelect },
+                    orderBy: TALENT_ORDERS[sort] || TALENT_ORDERS.available,
+                    skip: (page - 1) * take,
+                    take,
+                }),
+                prisma.talentListing.count({ where }),
+            ]);
+        }
 
         res.json({
             data: talents.map(listedTalent),
