@@ -354,6 +354,20 @@ describe('finding talent', () => {
         expect(ids(await call('GET', '/api/talent?search=Gardener Filters', { token: viewer.token }))).toEqual([garden.id]);
     });
 
+    it('sorts by the newest, or A–Z as people read it', async () => {
+        const viewer = await member();
+        const tag = `S${Date.now()}`;
+        const zumba = await addTalent(await member(), { title: `Zumba classes ${tag}` });
+        const arbol = await addTalent(await member(), { title: `árbol pruning ${tag}`, available: false });
+        const baking = await addTalent(await member(), { title: `Baking ${tag}` });
+
+        const find = async (query: string) => ids(await call('GET', `/api/talent?search=${tag}&${query}`, { token: viewer.token }));
+        expect(await find('sort=newest')).toEqual([baking.id, arbol.id, zumba.id]);
+        expect(await find('sort=name')).toEqual([arbol.id, baking.id, zumba.id]);
+        // Unknown: members taking on work first, as before.
+        expect((await find('sort=whatever')).at(-1)).toBe(arbol.id);
+    });
+
     it("leaves out suspended members' talent", async () => {
         const viewer = await member();
         const ana = await member();

@@ -23,6 +23,7 @@ import { withoutDeckKey } from '../utils/projectFields';
 import { nestedProfileForViewer } from '../services/profilePrivacy';
 import { blockedIds, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { discardUploadNames, discardUploads, ownsUploads, uploadNameOf } from '../services/uploads.service';
+import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds } from '../utils/listOrder';
 
 // ─── Lists ────────────────────────────────────────────────────────────────────
 
@@ -264,9 +265,22 @@ function amountRange(min: unknown, max: unknown): { gte?: number; lte?: number }
 
 // ─── Controllers ──────────────────────────────────────────────────────────────
 
+// Opportunities' orders other than the newest, sorted in code (utils/listOrder.ts):
+// closing days and prices can be missing, and those go last. Ties, newest first.
+type OpportunitySortKeys = { id: string; title: string; closesOn: string; price: number | null; createdAt: Date };
+const newestOpportunity = newestFirst<OpportunitySortKeys>((o) => o.createdAt);
+const OPPORTUNITY_ORDERS_IN_CODE: Record<string, (a: OpportunitySortKeys, b: OpportunitySortKeys) => number> = {
+    closing: inOrder(missingLast((o) => o.closesOn, 1), newestOpportunity),
+    name: inOrder(alphabetical((o) => o.title), newestOpportunity),
+    'price-low': inOrder(missingLast((o) => o.price, 1), newestOpportunity),
+    'price-high': inOrder(missingLast((o) => o.price, -1), newestOpportunity),
+};
+
 /**
- * GET /projects?type&kind&category&stage&search&btc&remote&minAmount&maxAmount&ownerId&saved&page&limit
- * Open opportunities, featured then newest. A member's own (?ownerId=<them>)
+ * GET /projects?type&kind&category&stage&search&btc&remote&minAmount&maxAmount&ownerId&saved&sort&page&limit
+ * Open opportunities, featured then newest; or ?sort=closing (the soonest
+ * closing day first), name (A–Z), price-low or price-high (a business's
+ * price, the most a program gives; those without one last). A member's own (?ownerId=<them>)
  * come closed or not; the ones they saved (?saved=true) too. Never those of
  * suspended or deleted members, nor of members blocked either way.
  */
@@ -326,16 +340,29 @@ export async function listProjects(req: Request, res: Response): Promise<void> {
         if (hidden.length) and.push({ ownerId: { notIn: hidden } });
         if (and.length) where.AND = and;
 
-        const [projects, total] = await Promise.all([
-            prisma.project.findMany({
+        const inCode = typeof req.query.sort === 'string' ? OPPORTUNITY_ORDERS_IN_CODE[req.query.sort] : undefined;
+        let projects: any[];
+        let total: number;
+        if (inCode) {
+            const keys = await prisma.project.findMany({
                 where,
-                include: { owner: ownerSelect },
-                orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
-                skip: (page - 1) * take,
-                take,
-            }),
-            prisma.project.count({ where }),
-        ]);
+                select: { id: true, title: true, closesOn: true, price: true, createdAt: true },
+            });
+            const ids = pageIds(keys, inCode, (page - 1) * take, take);
+            projects = inIdOrder(ids, await prisma.project.findMany({ where: { id: { in: ids } }, include: { owner: ownerSelect } }));
+            total = keys.length;
+        } else {
+            [projects, total] = await Promise.all([
+                prisma.project.findMany({
+                    where,
+                    include: { owner: ownerSelect },
+                    orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+                    skip: (page - 1) * take,
+                    take,
+                }),
+                prisma.project.count({ where }),
+            ]);
+        }
 
         res.json({
             data: projects.map(listed),

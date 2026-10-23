@@ -122,6 +122,33 @@ describe('member cards', () => {
     });
 });
 
+describe('sorting members', () => {
+    it('by name as people read it, the most followed, or the newest', async () => {
+        const viewer = await member('Sort Viewer');
+        const tag = `Sort${Date.now()}`;
+        const zoe = await member(`Zoe ${tag}`);
+        const alba = await member(`Álvaro ${tag}`);
+        const beto = await member(`beto ${tag}`);
+        for (const fan of [viewer, alba]) await prisma.follow.create({ data: { followerId: fan.id, followingId: zoe.id } });
+        await prisma.follow.create({ data: { followerId: viewer.id, followingId: beto.id } });
+
+        const order = async (query: string) =>
+            (await get(`/api/profiles?search=${tag}&limit=46&fields=card&${query}`, viewer.token)).body.data.map((p: any) => p.userId);
+        expect(await order('sort=name')).toEqual([alba.id, beto.id, zoe.id]);
+        expect(await order('sort=followers')).toEqual([zoe.id, beto.id, alba.id]);
+        expect(await order('sort=newest')).toEqual([beto.id, alba.id, zoe.id]);
+
+        // Without a search too, page by page in that order (each sort is its own cached list).
+        const all = (await get('/api/profiles?limit=45&fields=card&sort=name', viewer.token)).body;
+        const names = all.data.map((p: any) => p.name);
+        expect(names.indexOf(`Álvaro ${tag}`)).toBeLessThan(names.indexOf(`beto ${tag}`));
+        expect(names.indexOf(`beto ${tag}`)).toBeLessThan(names.indexOf(`Zoe ${tag}`));
+        const second = (await get('/api/profiles?page=2&limit=2&fields=card&sort=name', viewer.token)).body;
+        expect(second.data.map((p: any) => p.name)).toEqual(names.slice(2, 4));
+        expect(second.pagination.total).toBe(all.pagination.total);
+    });
+});
+
 describe('a profile page', () => {
     it("says whether the viewer follows them, so the app needn't fetch who they follow", async () => {
         const viewer = await member('Follow Viewer');

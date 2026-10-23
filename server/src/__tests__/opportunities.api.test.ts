@@ -296,6 +296,27 @@ describe('finding opportunities', () => {
         expect(ids(await call('GET', '/api/projects?search=Ana Filters', { token: viewer.token }))).toEqual(sorted(job.id, raise.id, sale.id, partner.id, grant.id));
     });
 
+    it('sorts by the soonest closing day, A–Z or price, those without one last', async () => {
+        const viewer = await member();
+        const [a, b, c, d, e] = await Promise.all([1, 2, 3, 4, 5].map(() => member()));
+        const tag = `S${Date.now()}`;
+        const later = await post(a, { ...JOB, title: `Zumba teacher ${tag}`, closesOn: dayFromToday(20) });
+        const soon = await post(b, { ...JOB, title: `árbol care ${tag}`, closesOn: dayFromToday(3) });
+        const open = await post(c, { ...JOB, title: `Baker ${tag}` });
+        const cheap = await post(d, { ...SALE, title: `Cafe ${tag}`, price: 50000 });
+        const dear = await post(e, { ...SALE, title: `Hotel ${tag}`, price: 900000 });
+
+        // The list's own order, not sorted for comparing.
+        const find = async (query: string) => (await call('GET', `/api/projects?search=${tag}&${query}`, { token: viewer.token })).body.data.map((o: any) => o.id);
+        expect((await find('type=job&sort=closing'))).toEqual([soon.id, later.id, open.id]);
+        expect(await find('type=job&sort=name')).toEqual([soon.id, open.id, later.id]);
+        expect(await find('type=business-for-sale&sort=price-low')).toEqual([cheap.id, dear.id]);
+        expect(await find('type=business-for-sale&sort=price-high')).toEqual([dear.id, cheap.id]);
+        // Without a price (jobs), last either way.
+        expect((await find('sort=price-high')).slice(0, 2)).toEqual([dear.id, cheap.id]);
+        expect(await find('sort=newest')).toEqual([dear.id, cheap.id, open.id, soon.id, later.id]);
+    });
+
     it('a closed one is gone from the list, but not from its member\'s own', async () => {
         const ana = await member();
         const ben = await member();

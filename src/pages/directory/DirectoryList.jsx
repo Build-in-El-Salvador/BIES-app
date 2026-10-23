@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
 import { directoryKey, directoryPage, directoryRequest, joinPages, listOf, morePages } from '../../utils/listRequests';
 import useVisitState from '../../hooks/useVisitState';
+import SortBy from '../../components/SortBy';
+import { directorySorts, sortOf } from '../../utils/listSorts';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, Bookmark } from 'lucide-react';
@@ -43,11 +45,15 @@ const DirectoryList = ({ type = 'FARM' }) => {
     const [category, setCategory] = useVisitState('directory.category', '');
     const [produce, setProduce] = useVisitState('directory.produce', ''); // FARM: a PRODUCE_KINDS key
     const [savedOnly, setSavedOnly] = useVisitState('directory.saved', false); // the member's saved listings
+    // Top rated (''), or another order the directory offers (utils/listSorts.js).
+    const sorts = directorySorts(type);
+    const [sortChoice, setSort] = useVisitState('directory.sort', '');
+    const sort = sortOf(sorts, sortChoice);
 
     // The list for these filters, 50 at a time: more as its end comes near.
     // A list shown before (or fetched ahead by the bottom bar) is there from
     // the first frame, as far as it was scrolled, not a frame of spinner first.
-    const request = directoryRequest({ type, search: searchQuery, category, saved: savedOnly });
+    const request = directoryRequest({ type, search: searchQuery, category, saved: savedOnly, sort });
     const key = directoryKey(request);
     const firstSeen = () => cachedList(key);
     const [listings, setListings] = useState(() => firstSeen()?.listings || []);
@@ -161,7 +167,7 @@ const DirectoryList = ({ type = 'FARM' }) => {
         return true;
     });
 
-    const activeFilterCount = (isFarm ? selectedPractices.length : (btcOnly ? 1 : 0)) + (certifiedOnly ? 1 : 0);
+    const activeFilterCount = (isFarm ? selectedPractices.length : (btcOnly ? 1 : 0)) + (certifiedOnly ? 1 : 0) + (sort ? 1 : 0);
 
     const togglePractice = (id) => {
         setSelectedPractices((prev) =>
@@ -215,6 +221,12 @@ const DirectoryList = ({ type = 'FARM' }) => {
                 {/* Filter drawer (minimal for now) */}
                 {filtersOpen && (
                     <div className="dir-filters">
+                        <SortBy
+                            id="dir-sort"
+                            value={sort}
+                            onChange={setSort}
+                            options={sorts.map((s) => [s, t(`sort.directory.${s || 'usual'}`)])}
+                        />
                         {isFarm ? (
                             <>
                                 <div className="dir-filter-group">

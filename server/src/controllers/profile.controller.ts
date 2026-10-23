@@ -10,6 +10,7 @@ import { discardUploads } from '../services/uploads.service';
 import { isEnabled } from '../services/featureFlags.service';
 import { openNow } from './project.controller';
 import { removeTags } from '../middleware/sanitize';
+import { alphabetical, inOrder } from '../utils/listOrder';
 
 // What a member card shows (Members: icons, list and cards). Everything else
 // comes with the profile page itself (GET /profiles/:id), so a list of 48
@@ -119,9 +120,19 @@ export function isReservedNip05(name: string): boolean {
 const viewerOf = (req: Request, profileUserId: string): Viewer =>
     !req.user ? 'public' : req.user.id === profileUserId ? 'self' : 'member';
 
+// Members' orders sorted in code (utils/listOrder.ts): A–Z as people read
+// names, and the most followed first (then A–Z).
+type MemberSortKeys = { id: string; name: string; user: { _count: { followers: number } } };
+const byName = alphabetical<MemberSortKeys>((p) => p.name);
+const MEMBER_ORDERS_IN_CODE: Record<string, (a: MemberSortKeys, b: MemberSortKeys) => number> = {
+    name: inOrder(byName),
+    followers: inOrder((a, b) => b.user._count.followers - a.user._count.followers, byName),
+};
+
 /**
  * GET /profiles
- * List profiles (cached), filterable by role, location, search. After the
+ * List profiles (cached), filterable by role, location, search; the most
+ * viewed first, or ?sort=newest, name or followers. After the
  * cache, which all viewers share: members the viewer blocked are left out,
  * each profile shows only what this viewer may see (profilePrivacy.ts), and
  * a search or location only finds what the viewer can see.
@@ -168,7 +179,13 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         const role = ['BUILDER', 'EVENT_HOST', 'EDUCATOR'].includes(asked) ? asked
             : asked && isStaffUser(req.user) ? `STAFF:${asked}` : '';
 
-        const cKey = cacheKey.profiles({ role, location, search, page: String(pageNumber), limit: String(take) });
+        // ?sort=newest, name (A–Z) or followers (the most first); the most
+        // viewed otherwise. A–Z and followers are sorted in code, over every
+        // member (utils/listOrder.ts).
+        const sort = ['newest', 'name', 'followers'].includes(text(req.query.sort)) ? text(req.query.sort) : '';
+        const inCode = MEMBER_ORDERS_IN_CODE[sort];
+
+        const cKey = cacheKey.profiles({ role, location, search, page: String(pageNumber), limit: String(take), ...(sort ? { sort } : {}) });
 
         const cached = await cache.getJson<any>(cKey);
         if (cached) { res.setHeader('X-Cache', 'HIT'); await respond(cached); return; }
@@ -202,8 +219,9 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         }
 
         // With a search or location, fetch every candidate (up to 500) and
-        // let respond() page through what the viewer can see.
-        const searched = !!(search || location);
+        // let respond() page through what the viewer can see; with an order
+        // sorted in code too, so the pages follow it.
+        const searched = !!(search || location) || !!inCode;
         const [profiles, total] = await Promise.all([
             prisma.profile.findMany({
                 where,
@@ -218,12 +236,14 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                 },
                 skip: searched ? 0 : skip,
                 take: searched ? 500 : take,
-                // Most viewed first; the id keeps members with equal counts in
-                // one order, so the next page neither repeats nor skips them.
-                orderBy: [{ viewCount: 'desc' }, { id: 'asc' }],
+                // Most viewed first (or the newest); the id keeps members with
+                // equal counts in one order, so the next page neither repeats
+                // nor skips them.
+                orderBy: sort === 'newest' ? [{ createdAt: 'desc' }, { id: 'asc' }] : [{ viewCount: 'desc' }, { id: 'asc' }],
             }),
             searched ? Promise.resolve(0) : prisma.profile.count({ where }),
         ]);
+        if (inCode) profiles.sort(inCode);
 
         const parsed = profiles.map((p) => ({
             ...p,

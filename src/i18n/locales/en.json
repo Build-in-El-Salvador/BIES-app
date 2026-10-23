@@ -3242,5 +3242,36 @@
       "signin": "Signing in or signing up",
       "other": "Somewhere else"
     }
+  },
+  "sort": {
+    "label": "Sort by",
+    "directory": {
+      "usual": "Top rated",
+      "vouches": "Most recommended",
+      "newest": "Newest",
+      "name": "Name (A–Z)",
+      "price-low": "Price: low to high",
+      "price-high": "Price: high to low"
+    },
+    "opportunities": {
+      "usual": "Newest",
+      "closing": "Closing soon",
+      "name": "Title (A–Z)",
+      "price-low": "Price: low to high",
+      "price-high": "Price: high to low",
+      "price-low_program": "Amount: low to high",
+      "price-high_program": "Amount: high to low"
+    },
+    "talent": {
+      "usual": "Available first",
+      "newest": "Newest",
+      "name": "Title (A–Z)"
+    },
+    "members": {
+      "usual": "Most viewed",
+      "newest": "Newest members",
+      "name": "Name (A–Z)",
+      "followers": "Most followers"
+    }
   }
 }

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { cachedList, rememberList } from '../../utils/listCache';
 import { opportunitiesKey, opportunitiesRequest } from '../../utils/listRequests';
+import { opportunitySorts, sortOf } from '../../utils/listSorts';
+import SortBy from '../../components/SortBy';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, SlidersHorizontal, Plus, Loader2, UserRound, Bookmark } from 'lucide-react';
@@ -41,6 +43,8 @@ function filtersFrom(params) {
         remoteOnly: params.get('remote') === '1' && (!type || hasField(type, 'remote')),
         btcOnly: params.get('btc') === '1' && (!type || hasField(type, 'btcAccepted')),
         query: (params.get('q') || '').slice(0, 100),
+        // Newest (''), or another order this type offers (utils/listSorts.js).
+        sort: sortOf(opportunitySorts(type), params.get('sort')),
     };
 }
 
@@ -50,22 +54,22 @@ function filtersFrom(params) {
  * chips for your own, the ones you saved and each type, then the cards.
  * The filters follow the type: a job's hours, a raise's stage and size, a
  * business's price; then the industry, remote and bitcoin. All of it is in
- * the address (?type=job&kind=part-time&q=…, ?mine=1, ?saved=1), so Back, a
+ * the address (?type=job&kind=part-time&q=…, ?mine=1, ?saved=1, ?sort=closing), so Back, a
  * refresh, the Opportunities tab and a shared link show what they say.
  */
 const OpportunityList = () => {
     const { t } = useTranslation();
     const { user } = useAuth();
     const [params, setParams] = useSearchParams();
-    const { type, mineOnly, savedOnly, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, query } = filtersFrom(params);
+    const { type, mineOnly, savedOnly, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, query, sort } = filtersFrom(params);
 
     // What's typed in the search box; it goes into the address after a pause.
     const [searchQuery, setSearchQuery] = useState(query);
-    const [filtersOpen, setFiltersOpen] = useState(() => [...params.keys()].some((key) => ['kind', 'stage', 'industry', 'min', 'max', 'remote', 'btc'].includes(key)));
+    const [filtersOpen, setFiltersOpen] = useState(() => [...params.keys()].some((key) => ['kind', 'stage', 'industry', 'min', 'max', 'remote', 'btc', 'sort'].includes(key)));
     // A list shown before (or fetched ahead by the bottom bar) from the first
     // frame, not a frame of spinner first.
     const firstSeen = () => cachedList(opportunitiesKey(opportunitiesRequest(
-        { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly },
+        { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly, sort },
         { types: NATIVE ? TYPES : null, userId: user?.id },
     )));
     const [opportunities, setOpportunities] = useState(() => firstSeen() || []);
@@ -120,10 +124,11 @@ const OpportunityList = () => {
             ...(!next || !amountOf({ type: next }) ? { min: '', max: '' } : {}),
             ...(next && !hasField(next, 'remote') ? { remote: '' } : {}),
             ...(next && !hasField(next, 'btcAccepted') ? { btc: '' } : {}),
+            ...(!opportunitySorts(next).includes(sort) ? { sort: '' } : {}),
         });
     };
 
-    const clearFilters = () => update({ kind: '', stage: '', industry: '', min: '', max: '', remote: '', btc: '' });
+    const clearFilters = () => update({ kind: '', stage: '', industry: '', min: '', max: '', remote: '', btc: '', sort: '' });
 
     // Fetch on each change (the search is already paused for). An answer that
     // arrives after the search or filters changed again is dropped.
@@ -131,7 +136,7 @@ const OpportunityList = () => {
         let current = true;
         (async () => {
             const request = opportunitiesRequest(
-                { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly },
+                { query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly, sort },
                 { types: NATIVE ? TYPES : null, userId: user?.id },
             );
             // A list shown before appears at once (utils/listCache.js) and is
@@ -156,18 +161,20 @@ const OpportunityList = () => {
             }
         })();
         return () => { current = false; };
-    }, [query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly, user?.id]);
+    }, [query, type, kind, stage, category, minAmount, maxAmount, remoteOnly, btcOnly, mineOnly, savedOnly, sort, user?.id]);
 
-    const activeFilterCount = [kind, stage, category, minAmount || maxAmount, remoteOnly, btcOnly].filter(Boolean).length;
-    const filtering = !!(query || type || mineOnly || savedOnly || activeFilterCount);
+    const filterCount = [kind, stage, category, minAmount || maxAmount, remoteOnly, btcOnly].filter(Boolean).length;
+    // On the filter button (and what Clear undoes): the filters, and an order other than the newest.
+    const activeFilterCount = filterCount + (sort ? 1 : 0);
+    const filtering = !!(query || type || mineOnly || savedOnly || filterCount);
     const newLink = type ? `/opportunities/new?type=${type}` : '/opportunities/new';
     const btcLabel = t(`opportunities.filters.btc.${type || 'any'}`);
 
     const emptyText = query ? t('opportunities.noResultsSearch', { query })
-        : mineOnly && !type && !activeFilterCount ? t('opportunities.noneYours')
-            : savedOnly && !type && !activeFilterCount ? t('opportunities.noneSaved')
+        : mineOnly && !type && !filterCount ? t('opportunities.noneYours')
+            : savedOnly && !type && !filterCount ? t('opportunities.noneSaved')
                 : filtering ? t('opportunities.noMatches') : t('opportunities.empty');
-    const offerToPost = !filtering || (mineOnly && !activeFilterCount && !query);
+    const offerToPost = !filtering || (mineOnly && !filterCount && !query);
 
     const chip = (active, onClick, label, key, extra = {}) => (
         <button key={key} type="button" className={`opp-chip${active ? ' active' : ''}`} aria-pressed={active} onClick={onClick} {...extra}>
@@ -222,6 +229,12 @@ const OpportunityList = () => {
 
                 {filtersOpen && (
                     <div className="opp-filters">
+                        <SortBy
+                            id="opp-sort"
+                            value={sort}
+                            onChange={(value) => update({ sort: value })}
+                            options={opportunitySorts(type).map((s) => [s, t(`sort.opportunities.${s || 'usual'}`, { context: type === 'program' ? 'program' : undefined })])}
+                        />
                         {kinds.length > 0 && (
                             <div role="group" aria-labelledby="opp-kind-label">
                                 <span className="opp-filter-label" id="opp-kind-label">{t(`opportunities.filters.kind.${type}`)}</span>
