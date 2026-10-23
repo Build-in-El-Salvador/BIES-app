@@ -47,8 +47,15 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
         });
 
         if (!settings) {
+            // Two requests at once (two screens asking) can both find none:
+            // the second one reads the row the first made.
             settings = await prisma.userSettings.create({
                 data: { userId: req.user!.id },
+            }).catch(async (error) => {
+                if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                    return prisma.userSettings.findUniqueOrThrow({ where: { userId: req.user!.id } });
+                }
+                throw error;
             });
         }
 

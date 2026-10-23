@@ -103,7 +103,7 @@
     "adminPanel": "Panel de Admin",
     "leaderboard": "Clasificacion",
     "farmDirectory": "Fincas regenerativas",
-    "certifiedDirectory": "Directorio de negocios",
+    "certifiedDirectory": "Negocios",
     "bounties": "Tablero de recompensas",
     "wallet": "Billetera",
     "profile": "Perfil",
@@ -648,8 +648,8 @@
     "noResources": "Aun no hay recursos."
   },
   "team": {
-    "title": "Acerca de Build In El Salvador",
-    "missionLead": "El Salvador esta en medio de un renacimiento moderno, y Build In El Salvador existe para contar esa historia.",
+    "title": "Acerca de Build in El Salvador",
+    "missionLead": "El Salvador esta en medio de un renacimiento moderno, y Build in El Salvador existe para contar esa historia.",
     "missionBody": "Destacamos a los emprendedores, inversionistas y visionarios que estan convirtiendo a esta pequena nacion centroamericana en un centro de innovacion, libertad y oportunidad. A traves de entrevistas, articulos y eventos, conectamos los puntos entre Bitcoin, los negocios y las personas audaces que estan redefiniendo lo posible aqui."
   },
   "profile": {
@@ -2728,7 +2728,7 @@
     "title": "Funciones de la App",
     "subtitle": "Activa o desactiva funciones para todos al instante, sin redesplegar",
     "propagationNote": "Los cambios se aplican de inmediato para ti. Los demas usuarios los reciben en unos 5 minutos (cache del servidor) o al volver a la app. Las funciones desactivadas desaparecen de la navegacion, sus paginas muestran No Encontrado y sus APIs quedan bloqueadas.",
-    "appNote": "Las apps de iOS y Android muestran solo el Directorio de Fincas, Confianza BIES, Talentos BIES y Oportunidades de esta lista (además del Feed, Miembros, Perfil y Ajustes, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
+    "appNote": "Las apps de iOS y Android muestran solo Negocios, Fincas, Talentos BIES y Oportunidades de esta lista (además del Feed, Miembros, Perfil y Configuración, que no tienen interruptor). Las demás funciones llegan a las apps con una actualización; activarlas aquí solo cambia el sitio web.",
     "adminOnly": "Solo los administradores pueden cambiar las funciones. Los moderadores tienen acceso de solo lectura.",
     "enabled": "Activada",
     "disabled": "Desactivada",
@@ -2736,7 +2736,7 @@
     "slugs": {
       "directories": {
         "name": "Directorios",
-        "description": "Directorios de fincas y proveedores certificados en Descubrir"
+        "description": "Negocios y Fincas: los lugares que recomiendan los miembros"
       },
       "points": {
         "name": "Puntos y Ranking",
@@ -3076,7 +3076,7 @@
         "desc": "Descubre fincas, productores y proyectos regenerativos."
       },
       "businesses": {
-        "title": "Directorio de negocios",
+        "title": "Negocios",
         "desc": "Encuentra negocios y servicios locales en El Salvador."
       },
       "opportunities": {
@@ -3114,7 +3114,8 @@
     "networkEmptyOwn": "Sigue a miembros para crear tu red.",
     "findMembers": "Buscar miembros",
     "posts": "Publicaciones",
-    "noPosts": "Aún no hay publicaciones.",
+    "noPosts": "Sus publicaciones en el feed de BIES aparecen aquí.",
+    "noPostsOwn": "Tus publicaciones en el feed de BIES aparecen aquí.",
     "noPhotos": "Aún no hay fotos.",
     "newMember": "Miembro nuevo",
     "photosFromPosts": "De publicaciones",

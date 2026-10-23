@@ -55,7 +55,7 @@ export async function fetchSubstackFeed(): Promise<SubstackItem[]> {
             link: item.link || '',
             date: item.pubDate || item.published,
             thumbnail: item['media:thumbnail']?.[0]?.$.url || item.enclosure?.url || null,
-            author: item.creator || feed.title || 'Build In El Salvador',
+            author: item.creator || feed.title || 'Build in El Salvador',
         }));
 
         // Cache the result

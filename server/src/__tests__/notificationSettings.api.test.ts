@@ -112,6 +112,13 @@ describe('Settings → Notifications', () => {
     it('needs a signed-in member', async () => {
         expect((await call('PUT', '/api/settings/notifications', { body: { notifyLikes: false } })).status).toBe(401);
     });
+
+    it('a member without settings yet, asking from two screens at once, gets them both times', async () => {
+        const ana = await member('Ana C');
+        const answers = await Promise.all(Array.from({ length: 4 }, () => call('GET', '/api/settings', { token: ana.token })));
+        expect(answers.map((a) => a.status)).toEqual([200, 200, 200, 200]);
+        expect(await prisma.userSettings.count({ where: { userId: ana.id } })).toBe(1);
+    });
 });
 
 describe('push follows the switches; the bell keeps everything', () => {
