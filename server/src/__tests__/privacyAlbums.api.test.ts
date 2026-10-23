@@ -132,6 +132,15 @@ describe('who sees what on a profile', () => {
         expect(res.body).toMatchObject({ website: 'https://example.test', tags: ['coffee'], privacy: { location: 'ONLY_ME', bio: 'PUBLIC' } });
     });
 
+    it('when they joined: for members and the member, not for signed-out visitors', async () => {
+        const ana = await member('Ana J');
+        const ben = await member('Ben J');
+        const { createdAt } = await prisma.user.findUniqueOrThrow({ where: { id: ana.id }, select: { createdAt: true } });
+        expect((await call('GET', `/api/profiles/${ana.id}`, { token: ben.token })).body.user.createdAt).toBe(createdAt.toISOString());
+        expect((await call('GET', '/api/profiles/me', { token: ana.token })).body.user.createdAt).toBe(createdAt.toISOString());
+        expect((await call('GET', `/api/profiles/${ana.id}`)).body.user.createdAt).toBeUndefined();
+    });
+
     it('a search finds a member only by what the searcher can see', async () => {
         const cara = await member('Cara', { location: 'Perquin' });
         const ben = await member('Ben C');

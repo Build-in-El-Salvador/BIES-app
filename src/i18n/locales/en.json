@@ -3072,6 +3072,7 @@
     "at": "at",
     "runs": "Runs",
     "workingOn": "Working on",
+    "joined": "Joined {{date}}",
     "addDetails": "Add your role, your business and where you are, so members know what you do.",
     "network": "Network",
     "seeAll": "See all",
