@@ -62,6 +62,7 @@ import coursesRoutes from './routes/courses.routes';
 import voucherRoutes from './routes/voucher.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import bountyRoutes from './routes/bounty.routes';
+import previewRoutes from './routes/preview.routes';
 import flagsRoutes from './routes/flags.routes';
 import signerRoutes from './routes/signer.routes';
 import moderationRoutes from './routes/moderation.routes';
@@ -262,6 +263,8 @@ app.use('/api/courses', featureGate('courses'), coursesRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/marketplace', featureGate('marketplace'), marketplaceRoutes);
 app.use('/api/bounties', featureGate('bounties'), bountyRoutes);
+// Shared pages for people not signed in (each checks its own feature flag).
+app.use('/api/preview', previewRoutes);
 app.use('/api', moderationRoutes); // /api/reports, /api/blocks
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────

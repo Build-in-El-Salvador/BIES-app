@@ -83,6 +83,7 @@ const CreateListing = lazyPage(() => import('./pages/directory/CreateListing'));
 const TalentList = lazyPage(() => import('./pages/talent/TalentList'));
 const TalentDetail = lazyPage(() => import('./pages/talent/TalentDetail'));
 const TalentForm = lazyPage(() => import('./pages/talent/TalentForm'));
+const SharePreview = lazyPage(() => import('./pages/SharePreview'));
 const OpportunityList = lazyPage(() => import('./pages/opportunities/OpportunityList'));
 const OpportunityDetail = lazyPage(() => import('./pages/opportunities/OpportunityDetail'));
 const OpportunityForm = lazyPage(() => import('./pages/opportunities/OpportunityForm'));
@@ -155,6 +156,18 @@ const ProtectedRoute = ({ children }) => {
     if (!user) {
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
+
+    return children;
+};
+
+// A page members share (a business, farm, opportunity or talent): the page
+// itself when signed in; for anyone else its public preview, whose "See all
+// details" signs in and comes back here.
+const MemberOrPreview = ({ section, children }) => {
+    const { user, loading } = useAuth();
+
+    if (loading) return <div className="p-10 text-center">Loading...</div>;
+    if (!user) return <SharePreview section={section} />;
 
     return children;
 };
@@ -337,21 +350,21 @@ const AppContent = () => {
                     {/* Farm Directory and BIES Trusted: pages of their own, so members can put them in their bottom bar */}
                     <Route path="/farms" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="FARM" /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/farms/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing key="new-farm" type="FARM" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/farms/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/farms/:id" element={<FeatureRoute flag="directories"><MemberOrPreview section="farms"><ListingDetail /></MemberOrPreview></FeatureRoute>} />
                     <Route path="/farms/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/trusted" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/trusted/new" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing key="new-business" type="PROVIDER" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/trusted/:id" element={<FeatureRoute flag="directories"><ProtectedRoute><ListingDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/trusted/:id" element={<FeatureRoute flag="directories"><MemberOrPreview section="trusted"><ListingDetail /></MemberOrPreview></FeatureRoute>} />
                     <Route path="/trusted/:id/edit" element={<FeatureRoute flag="directories"><ProtectedRoute><CreateListing editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* BIES Talents: members' skills and services, with their proof of work */}
                     <Route path="/talents" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentList /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/talents/new" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm key="new-talent" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/talents/:id" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/talents/:id" element={<FeatureRoute flag="talent"><MemberOrPreview section="talents"><TalentDetail /></MemberOrPreview></FeatureRoute>} />
                     <Route path="/talents/:id/edit" element={<FeatureRoute flag="talent"><ProtectedRoute><TalentForm editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* Opportunities: investments, businesses for sale, jobs, partnerships, programs (the projects flag) */}
                     <Route path="/opportunities" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityList /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/opportunities/new" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityForm key="new-opportunity" /></ProtectedRoute></FeatureRoute>} />
-                    <Route path="/opportunities/:id" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityDetail /></ProtectedRoute></FeatureRoute>} />
+                    <Route path="/opportunities/:id" element={<FeatureRoute flag="projects"><MemberOrPreview section="opportunities"><OpportunityDetail /></MemberOrPreview></FeatureRoute>} />
                     <Route path="/opportunities/:id/edit" element={<FeatureRoute flag="projects"><ProtectedRoute><OpportunityForm editMode /></ProtectedRoute></FeatureRoute>} />
                     {/* Marketplace: its own page too */}
                     {MARKETPLACE_ENABLED && (
