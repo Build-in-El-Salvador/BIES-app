@@ -157,7 +157,7 @@ export function openNow() {
     return { closedAt: null, OR: [{ closesOn: '' }, { closesOn: { gte: elSalvadorToday() } }] };
 }
 
-function isOpen(project: { closedAt: Date | null; closesOn: string }): boolean {
+export function isOpen(project: { closedAt: Date | null; closesOn: string }): boolean {
     return !project.closedAt && (!project.closesOn || project.closesOn >= elSalvadorToday());
 }
 

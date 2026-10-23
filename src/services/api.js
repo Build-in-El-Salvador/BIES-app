@@ -779,6 +779,12 @@ export const talentApi = {
     delete: (id) => del(`/talent/${id}`),
 };
 
+// A shared page's public preview, for people not signed in (server: preview.controller.ts).
+// section: 'trusted' | 'farms' | 'opportunities' | 'talents'
+export const previewApi = {
+    get: (section, id) => get(`/preview/${section}/${encodeURIComponent(id)}`),
+};
+
 // Photo albums: a member's, or a farm's or business's (server: album.controller.ts)
 export const albumsApi = {
     forUser: (userId) => get('/albums', { user: userId }),
