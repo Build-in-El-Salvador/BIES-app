@@ -1,0 +1,39 @@
+name: Install zsp
+description: >-
+  Builds the pinned zsp release (the Zapstore publisher) from source and
+  refuses to continue unless the source is exactly the commit pinned here. The
+  one place the pin lives; bump it by pull request.
+
+runs:
+  using: composite
+  steps:
+    # zsp publishes GitHub Releases only up to v0.4.17 (Aug 2026); v0.5.x, the
+    # line that adds the certificate proof the relay checks, ships as source.
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: '1.25.1' # zsp v0.5.13 go.mod: `go 1.25`
+        cache: false
+
+    # Built from a clone at a pinned COMMIT, against the go.sum that commit
+    # carries (-mod=readonly), so every dependency is pinned by hash and not
+    # only the root module. The tag is only a convenience for the clone; the
+    # commit is the pin. To bump: take the new tag's commit from
+    # `git ls-remote https://github.com/zapstore/zsp 'refs/tags/v*'`.
+    - name: Build the pinned zsp
+      shell: bash
+      env:
+        ZSP_VERSION: v0.5.13
+        ZSP_COMMIT: 90be2a99e55e238fab4a65f5c8f61b1e652de33b
+        GOTOOLCHAIN: local
+        GOFLAGS: -mod=readonly -trimpath
+      run: |
+        src="$RUNNER_TEMP/zsp-src"
+        git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$ZSP_VERSION" https://github.com/zapstore/zsp "$src"
+        got=$(git -C "$src" rev-parse HEAD)
+        if [ "$got" != "$ZSP_COMMIT" ]; then
+          echo "::error::zsp $ZSP_VERSION is commit $got, not the pinned $ZSP_COMMIT"
+          exit 1
+        fi
+        mkdir -p "$RUNNER_TEMP/zsp-bin"
+        (cd "$src" && go build -o "$RUNNER_TEMP/zsp-bin/zsp" ./cmd/zsp)
+        echo "$RUNNER_TEMP/zsp-bin" >> "$GITHUB_PATH"
