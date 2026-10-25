@@ -12,6 +12,7 @@ import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
 import { notificationsApi, profilesApi, uploadApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
+import Avatar from '../components/Avatar';
 import NostrIcon from '../components/NostrIcon';
 import ZapModal from '../components/ZapModal';
 import EmojiPicker from '../components/EmojiPicker';
@@ -1678,11 +1679,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     <div className="primal-compose">
                         <div className="primal-compose-row">
                             <div className="primal-compose-avatar">
-                                {user?.profile?.avatar ? (
-                                    <img src={getAssetUrl(user.profile.avatar)} alt="" />
-                                ) : (
-                                    <NostrIcon size={18} />
-                                )}
+                                <Avatar src={user?.profile?.avatar} size={40} fallback={<NostrIcon size={18} />} />
                             </div>
                             <textarea
                                 ref={composeInputRef}
@@ -1907,11 +1904,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                             {/* Reply compose */}
                                             <div className="primal-comment-compose">
                                                 <div className="primal-avatar primal-avatar-sm">
-                                                    {user?.profile?.avatar ? (
-                                                        <img src={getAssetUrl(user.profile.avatar)} alt="" />
-                                                    ) : (
-                                                        <NostrIcon size={13} />
-                                                    )}
+                                                    <Avatar src={user?.profile?.avatar} size={28} fallback={<NostrIcon size={13} />} />
                                                 </div>
                                                 <div className="primal-comment-input-row">
                                                     <textarea

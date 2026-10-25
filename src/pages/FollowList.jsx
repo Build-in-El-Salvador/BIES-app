@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
 import { isPlaceholderName } from '../utils/profileComplete';
 import BackButton from '../components/BackButton';
-import { getAssetUrl } from '../utils/assets';
+import Avatar from '../components/Avatar';
 
 /**
  * A member's followers, who they follow, or their whole network (both,
@@ -80,7 +80,7 @@ const FollowList = ({ kind }) => {
                             <li key={p.id} className="follow-row">
                                 <Link to={`/builder/${p.nostrPubkey}`} className="follow-person">
                                     <span className="follow-avatar">
-                                        {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <User size={20} />}
+                                        <Avatar src={p.profile?.avatar} size={44} fallback={<User size={20} />} />
                                     </span>
                                     <span className="follow-text">
                                         <span className="follow-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>
@@ -126,7 +126,7 @@ const FollowList = ({ kind }) => {
                     display: flex; align-items: center; justify-content: center;
                     background: var(--color-gray-100); color: var(--color-gray-400);
                 }
-                .follow-avatar img { width: 100%; height: 100%; object-fit: cover; }
+                .follow-avatar :global(img) { width: 100%; height: 100%; object-fit: cover; }
                 .follow-text { min-width: 0; display: flex; flex-direction: column; }
                 .follow-name { font-weight: 700; }
                 .follow-sub {
