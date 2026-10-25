@@ -1,17 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema, ZodError } from 'zod';
+import { ZodType, ZodError } from 'zod';
 
 /**
  * Validate request body against a Zod schema.
  */
-export function validate(schema: ZodSchema) {
+export function validate(schema: ZodType) {
     return (req: Request, res: Response, next: NextFunction): void => {
         try {
             req.body = schema.parse(req.body);
             next();
         } catch (error) {
             if (error instanceof ZodError) {
-                const formattedErrors = error.errors.map((e) => ({
+                const formattedErrors = error.issues.map((e) => ({
                     field: e.path.join('.'),
                     message: e.message,
                 }));
@@ -26,14 +26,14 @@ export function validate(schema: ZodSchema) {
 /**
  * Validate request query params against a Zod schema.
  */
-export function validateQuery(schema: ZodSchema) {
+export function validateQuery(schema: ZodType) {
     return (req: Request, res: Response, next: NextFunction): void => {
         try {
-            req.query = schema.parse(req.query);
+            req.query = schema.parse(req.query) as Request['query'];
             next();
         } catch (error) {
             if (error instanceof ZodError) {
-                const formattedErrors = error.errors.map((e) => ({
+                const formattedErrors = error.issues.map((e) => ({
                     field: e.path.join('.'),
                     message: e.message,
                 }));

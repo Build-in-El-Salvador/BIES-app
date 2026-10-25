@@ -127,7 +127,7 @@ export const reorderLessonsSchema = z.object({
 
 export const progressSchema = z.object({
     completed: z.literal(true),
-    meta: z.record(z.unknown()).optional(),
+    meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const quizSubmitSchema = z.object({

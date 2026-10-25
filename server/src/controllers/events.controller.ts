@@ -594,7 +594,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Create event error:', error);
         if (error instanceof z.ZodError) {
-            res.status(400).json({ error: 'Validation failed', details: error.errors });
+            res.status(400).json({ error: 'Validation failed', details: error.issues });
             return;
         }
         res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create event' });

@@ -139,7 +139,7 @@ export const toggleMediaReadSchema = z.object({
 const mediaReadDeltaSchema = z.object({
     watched: z.array(mediaItemId).max(5000).optional().default([]),
     read: z.array(mediaItemId).max(5000).optional().default([]),
-}).optional().default({});
+}).optional().default(() => ({ watched: [], read: [] }));
 
 export const bulkMediaReadSchema = z.object({
     add: mediaReadDeltaSchema,
