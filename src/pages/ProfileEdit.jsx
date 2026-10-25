@@ -294,7 +294,7 @@ const ProfileEdit = () => {
                 name: form.name || undefined,
                 bio: form.bio,
                 location: form.location,
-                website: website || undefined,
+                website, // '' when cleared, so the old one goes too
                 twitter: form.twitter,
                 linkedin: form.linkedin,
                 company: form.company,

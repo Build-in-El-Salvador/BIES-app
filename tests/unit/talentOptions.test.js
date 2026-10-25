@@ -59,6 +59,8 @@ test('the cover is the photo chosen, else the first picture of the work', () => 
 test('links typed without https get it', () => {
     assert.equal(asWebLink(' example.com/portfolio '), 'https://example.com/portfolio');
     assert.equal(asWebLink('http://example.com'), 'http://example.com');
+    // Another scheme is kept as typed (the server says if it can't be a link), never https://ftp://….
+    assert.equal(asWebLink('ftp://files.example.com'), 'ftp://files.example.com');
     assert.equal(asWebLink(''), '');
     assert.equal(shortLink('https://www.example.com/work/'), 'example.com/work');
 });

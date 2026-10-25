@@ -52,7 +52,7 @@ export function coverOf(talent) {
 /** A link as typed ("example.com"), as a web link. */
 export function asWebLink(text) {
     const link = (text || '').trim();
-    return link && !/^https?:\/\//i.test(link) ? `https://${link}` : link;
+    return link && !/^[a-z][a-z0-9+.-]*:\/\//i.test(link) ? `https://${link}` : link;
 }
 
 /** A web link without its scheme, "www." and closing slash, to show. */

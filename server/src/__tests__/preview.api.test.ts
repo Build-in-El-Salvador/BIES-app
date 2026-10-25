@@ -95,8 +95,8 @@ describe('a shared business or farm', () => {
         expect(res.body.about.length).toBeLessThanOrEqual(241);
         expect(res.body.about.endsWith('…')).toBe(true);
         const shown = JSON.stringify(res.body);
-        // The numbers as written ('7000 000…'): a bare '7000' can turn up inside a generated id.
-        for (const kept of ['7000 000', 'hola@', 'casafuego.test', 'Tue–Sun', 'maps.test', 'Best pizza', 'Owner', 'Fan', listing.ownerId]) {
+        // The numbers as written and as digits only: a bare '7000' can turn up inside a generated id.
+        for (const kept of ['7000 000', '70000000', '70000001', 'hola@', 'casafuego.test', 'Tue–Sun', 'maps.test', 'Best pizza', 'Owner', 'Fan', listing.ownerId]) {
             expect(shown, kept).not.toContain(kept);
         }
     });
@@ -189,7 +189,7 @@ describe('the link card', () => {
         expect(res.text).toContain('content="https://app.example.test/uploads/public/tacos.jpg"');
         expect(res.text).toContain(`content="https://app.example.test/trusted/${listing.id}"`);
         expect(res.text).toContain('Coatepeque · Recommended by 3 members');
-        expect(res.text).not.toContain('7000 000');
+        for (const number of ['7000 000', '70000000', '70000001']) expect(res.text).not.toContain(number);
     });
 
     it('the BIES card when there is nothing to show; a bad link is refused', async () => {

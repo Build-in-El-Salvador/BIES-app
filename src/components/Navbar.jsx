@@ -702,10 +702,14 @@ const Navbar = () => {
           -webkit-overflow-scrolling: touch;
         }
         .mobile-drawer-body {
-          /* A pixel taller than the menu, so it always bounces, even when everything fits. */
-          min-height: calc(100% + 1px);
+          min-height: 100%;
           display: flex;
           flex-direction: column;
+        }
+        /* On touch screens, a pixel taller than the menu, so it always bounces,
+           even when everything fits (no 1px scrollbar with a mouse). */
+        @media (pointer: coarse) {
+          .mobile-drawer-body { min-height: calc(100% + 1px); }
         }
 
         .mobile-drawer-header {
