@@ -6,6 +6,7 @@ import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
 import { isPlaceholderName } from '../utils/profileComplete';
+import { myFollowingIds } from '../utils/myFollowing';
 import BackButton from '../components/BackButton';
 
 /**
@@ -49,9 +50,7 @@ const FollowList = ({ kind }) => {
     // Whom the viewer follows, for the Follow / Following buttons.
     useEffect(() => {
         if (!user?.id) return;
-        profilesApi.getFollowing(user.id, { limit: 50 })
-            .then((res) => setMyFollowing(new Set((res?.data || []).map((p) => p.id))))
-            .catch(() => {});
+        myFollowingIds(user.id).then(setMyFollowing).catch(() => {});
     }, [user?.id]);
 
     const title = kind === 'network' ? t('profileView.network')

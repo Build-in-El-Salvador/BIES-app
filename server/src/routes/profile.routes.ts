@@ -17,6 +17,7 @@ import {
     unfollowUser,
     getFollowers,
     getFollowing,
+    getMyFollowingIds,
 } from '../controllers/follow.controller';
 
 const router = Router();
@@ -38,6 +39,8 @@ router.get('/me', authenticate, getMyProfile);
 // A profile is public: the terms come first. (The app copies a new Nostr
 // member's Nostr profile in only once they accept them.)
 router.put('/me', authenticate, requireTerms, validate(updateProfileSchema), screenContent(PROFILE_TEXT), updateMyProfile);
+// Everyone I follow, as ids (the Follow buttons on member lists).
+router.get('/me/following-ids', authenticate, getMyFollowingIds);
 
 // Follow routes (before generic /:id)
 router.post('/:id/follow', authenticate, requireTerms, followUser);
