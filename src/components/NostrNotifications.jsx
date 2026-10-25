@@ -53,7 +53,7 @@ const NostrNotifications = ({ mobile = false }) => {
     const subRef = useRef(null);
     const postsSubRef = useRef(null);
 
-    const { notifications: appNotifications, refreshNotifications } = useAuth();
+    const { user, notifications: appNotifications, refreshNotifications } = useAuth();
     useEffect(() => { refreshNotifications?.(); }, []);
     // Nothing from members blocked either way, or muted on this device:
     // filtered when shown, so a new block clears what came before too.
@@ -86,12 +86,18 @@ const NostrNotifications = ({ mobile = false }) => {
         });
     }, []);
 
-    // Get current user pubkey
+    // My key, to find replies and likes on my posts: my BIES account's, at
+    // once, as on the Feed. The signer only without one (a signer app may
+    // never answer); nothing is signed with it here.
+    const accountPubkey = user?.nostrPubkey || null;
     useEffect(() => {
+        if (accountPubkey) { setMyPubkey(accountPubkey); return undefined; }
+        let cancelled = false;
         nostrSigner.getPublicKey().then(pk => {
-            if (pk) setMyPubkey(pk);
+            if (pk && !cancelled) setMyPubkey(pk);
         }).catch(() => {});
-    }, []);
+        return () => { cancelled = true; };
+    }, [accountPubkey]);
 
     // Batch-fetch profiles for notification actors
     const fetchProfiles = useCallback(async (pubkeys) => {
