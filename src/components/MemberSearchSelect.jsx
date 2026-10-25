@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, UserPlus, Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
+import { getAssetUrl } from '../utils/assets';
 
 /**
  * MemberSearchSelect — search BIES members and build a guestlist.
@@ -75,7 +76,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     {value.map(g => (
                         <div key={g.userId || g.name} className="chip">
                             {g.avatar ? (
-                                <img src={g.avatar} alt={g.name} className="chip-avatar" />
+                                <img src={getAssetUrl(g.avatar)} alt={g.name} className="chip-avatar" />
                             ) : (
                                 <span className="chip-initials">{(g.name || '?')[0].toUpperCase()}</span>
                             )}
@@ -128,7 +129,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                             >
                                 <div className="result-avatar">
                                     {avatar ? (
-                                        <img src={avatar} alt={name} />
+                                        <img src={getAssetUrl(avatar)} alt={name} />
                                     ) : (
                                         <span>{(name || '?')[0].toUpperCase()}</span>
                                     )}

@@ -1668,7 +1668,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         <div className="primal-compose-row">
                             <div className="primal-compose-avatar">
                                 {user?.profile?.avatar ? (
-                                    <img src={user.profile.avatar} alt="" />
+                                    <img src={getAssetUrl(user.profile.avatar)} alt="" />
                                 ) : (
                                     <NostrIcon size={18} />
                                 )}
@@ -1897,7 +1897,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                             <div className="primal-comment-compose">
                                                 <div className="primal-avatar primal-avatar-sm">
                                                     {user?.profile?.avatar ? (
-                                                        <img src={user.profile.avatar} alt="" />
+                                                        <img src={getAssetUrl(user.profile.avatar)} alt="" />
                                                     ) : (
                                                         <NostrIcon size={13} />
                                                     )}

@@ -15,6 +15,7 @@ import NostrFeed from '../components/NostrFeed';
 import ImageCropModal from '../components/ImageCropModal';
 import RichTextEditor from '../components/RichTextEditor';
 import { useSectionDrag, reorderArray } from '../hooks/useSectionDrag';
+import { getAssetUrl } from '../utils/assets';
 
 // Defined outside component to prevent re-mount on every render (which causes input focus loss)
 const SectionHeader = ({ icon, title, children }) => (
@@ -659,7 +660,7 @@ const ProfileEdit = () => {
                 <div className="pe-card" style={{ padding: 0, overflow: 'hidden' }}>
                     <div className="pe-banner" style={{
                         background: (form.banner || nostrProfile?.banner)
-                            ? `url(${form.banner || nostrProfile?.banner}) center/cover no-repeat`
+                            ? `url(${getAssetUrl(form.banner || nostrProfile?.banner)}) center/cover no-repeat`
                             : 'linear-gradient(135deg, #0052cc, #0a192f)'
                     }}>
                         {(uploadingBanner || bannerImageLoading) && (
@@ -691,7 +692,7 @@ const ProfileEdit = () => {
                         <div className="pe-avatar-wrapper">
                             <div className="pe-avatar">
                                 {(form.avatar || nostrProfile?.picture) ? (
-                                    <img src={form.avatar || nostrProfile?.picture} alt={form.name} />
+                                    <img src={getAssetUrl(form.avatar || nostrProfile?.picture)} alt={form.name} />
                                 ) : (
                                     <div className="pe-avatar-placeholder">
                                         {(form.name || user?.email || '?').charAt(0).toUpperCase()}

@@ -216,7 +216,7 @@ const PublicProfile = ({ type }) => {
         return (
             <div className="container py-8">
                 <div className="mod-blocked-card">
-                    {profile.avatar && <img src={profile.avatar} alt="" />}
+                    {profile.avatar && <img src={getAssetUrl(profile.avatar)} alt="" />}
                     <h1 className="mod-title">{t('moderation.blockedProfile.title', { name: profile.name || t('common.unnamed') })}</h1>
                     <p className="mod-muted">{t('moderation.blockedProfile.body')}</p>
                     <button type="button" className="mod-button secondary" onClick={doUnblock} disabled={unblocking}>

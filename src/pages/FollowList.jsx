@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
 import { isPlaceholderName } from '../utils/profileComplete';
 import BackButton from '../components/BackButton';
+import { getAssetUrl } from '../utils/assets';
 
 /**
  * A member's followers, who they follow, or their whole network (both,
@@ -79,7 +80,7 @@ const FollowList = ({ kind }) => {
                             <li key={p.id} className="follow-row">
                                 <Link to={`/builder/${p.nostrPubkey}`} className="follow-person">
                                     <span className="follow-avatar">
-                                        {p.profile?.avatar ? <img src={p.profile.avatar} alt="" /> : <User size={20} />}
+                                        {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <User size={20} />}
                                     </span>
                                     <span className="follow-text">
                                         <span className="follow-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>

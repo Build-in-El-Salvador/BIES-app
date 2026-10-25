@@ -6,6 +6,7 @@ import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
 import { resolveLud16, requestInvoice, payWithWebLN, createZapRequest } from '../services/lightningService';
 import { profilesApi } from '../services/api';
 import { useWallet } from '../hooks/useWallet';
+import { getAssetUrl } from '../utils/assets';
 
 const AMOUNT_PRESETS = [21, 100, 500, 1000, 5000];
 
@@ -299,7 +300,7 @@ const ZapModal = ({ recipients = [], eventId, aTag, fixedAmount, onPaid, onClose
                                             <div key={i} className="zap-recipient">
                                                 <div className="zap-recipient-avatar">
                                                     {r.avatar
-                                                        ? <img src={r.avatar} alt={r.name} />
+                                                        ? <img src={getAssetUrl(r.avatar)} alt={r.name} />
                                                         : <span>{(r.name || '?')[0]?.toUpperCase()}</span>
                                                     }
                                                 </div>
@@ -317,7 +318,7 @@ const ZapModal = ({ recipients = [], eventId, aTag, fixedAmount, onPaid, onClose
                                 <div className="zap-single-recipient">
                                     <div className="zap-recipient-avatar lg">
                                         {resolvedRecipients[0].avatar
-                                            ? <img src={resolvedRecipients[0].avatar} alt={resolvedRecipients[0].name} />
+                                            ? <img src={getAssetUrl(resolvedRecipients[0].avatar)} alt={resolvedRecipients[0].name} />
                                             : <span>{(resolvedRecipients[0].name || '?')[0]?.toUpperCase()}</span>
                                         }
                                     </div>

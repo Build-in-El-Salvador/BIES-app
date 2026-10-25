@@ -14,6 +14,7 @@ import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config
 import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
 import logoIconDark from '../assets/logo-icon-dark.svg';
+import Avatar from './Avatar';
 
 const Navbar = () => {
   const { t } = useTranslation();
@@ -214,11 +215,7 @@ const Navbar = () => {
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               >
                 <div className="avatar">
-                  {user?.profile?.avatar ? (
-                    <img src={user.profile.avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <User size={18} />
-                  )}
+                  <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
                 </div>
                 <div className="flex flex-col items-start hidden-mobile" style={{ lineHeight: 1.2, color: 'white' }}>
                   <span className="text-sm font-semibold">{user?.profile?.name || user?.name || 'Guest'}</span>
@@ -293,11 +290,7 @@ const Navbar = () => {
               aria-expanded={isMenuOpen}
             >
               <div className="avatar" style={{ width: 32, height: 32 }}>
-                {user?.profile?.avatar ? (
-                  <img src={user.profile.avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <User size={18} />
-                )}
+                <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
               </div>
             </button>
           </div>
@@ -558,6 +551,14 @@ const Navbar = () => {
           border-color: rgba(255, 255, 255, 0.4);
         }
 
+        /* Their photo from BIES (an /uploads path) needs the API's address in the phone app: Avatar adds it. */
+        .avatar :global(img) {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          object-fit: cover;
+          display: block;
+        }
         .avatar {
           width: 32px;
           height: 32px;

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircle, Ban, ExternalLink, Loader2, Search, Shield, Trash2, RefreshCw, X, RotateCcw, AlertTriangle, UserX } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { getAssetUrl } from '../../utils/assets';
 
 const ROLE_OPTIONS = ['', 'MEMBER', 'BUILDER', 'INVESTOR', 'EVENT_HOST', 'EDUCATOR', 'MOD', 'ADMIN'];
 
@@ -113,7 +114,7 @@ const SyncModal = ({ isOpen, onClose, users, onSync }) => {
                                     >
                                         <div className="user-option-info">
                                             {u.profile?.avatar ? (
-                                                <img src={u.profile.avatar} alt="" className="user-option-avatar" />
+                                                <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
                                                     {(u.profile?.name || '?')[0].toUpperCase()}
@@ -148,7 +149,7 @@ const SyncModal = ({ isOpen, onClose, users, onSync }) => {
                                     >
                                         <div className="user-option-info">
                                             {u.profile?.avatar ? (
-                                                <img src={u.profile.avatar} alt="" className="user-option-avatar" />
+                                                <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
                                                     {(u.profile?.name || '?')[0].toUpperCase()}
@@ -577,7 +578,7 @@ const AdminUsers = () => {
                                             <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                     {u.profile?.avatar ? (
-                                                        <img src={u.profile.avatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
+                                                        <img src={getAssetUrl(u.profile.avatar)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
                                                     ) : (
                                                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'var(--color-gray-500)' }}>
                                                             {(u.profile?.name || '?')[0].toUpperCase()}
@@ -723,7 +724,7 @@ const AdminUsers = () => {
                                             <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                     {u.profile?.avatar ? (
-                                                        <img src={u.profile.avatar} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', filter: 'grayscale(1)' }} />
+                                                        <img src={getAssetUrl(u.profile.avatar)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', filter: 'grayscale(1)' }} />
                                                     ) : (
                                                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'var(--color-gray-500)' }}>
                                                             {(u.profile?.name || '?')[0].toUpperCase()}

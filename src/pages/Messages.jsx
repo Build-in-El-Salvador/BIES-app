@@ -10,6 +10,7 @@ import { nip19 } from 'nostr-tools';
 import { notifyIncomingMessage, requestNotificationPermission, getNotificationPermission, subscribeToPush } from '../utils/notificationManager';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import BackButton from '../components/BackButton';
+import { getAssetUrl } from '../utils/assets';
 
 const Messages = () => {
     const { t } = useTranslation();
@@ -395,7 +396,7 @@ const Messages = () => {
                                             >
                                                 <div className="chat-avatar small">
                                                     {user.avatar ? (
-                                                        <img src={user.avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                                        <img src={getAssetUrl(user.avatar)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                                                     ) : (
                                                         (user.name || '??').substring(0, 2).toUpperCase()
                                                     )}
@@ -434,7 +435,7 @@ const Messages = () => {
                                     >
                                         <div className="chat-avatar">
                                             {avatar ? (
-                                                <img src={avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                                <img src={getAssetUrl(avatar)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                                             ) : (
                                                 getDisplayName(pubkey).substring(0, 2).toUpperCase()
                                             )}
