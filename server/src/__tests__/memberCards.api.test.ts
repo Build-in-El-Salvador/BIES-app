@@ -173,6 +173,32 @@ describe('the network line on a card', () => {
         expect(card.network.people.map((p: any) => p.id).sort()).toEqual([fan.id, idol.id].sort());
     });
 
+    it('counts a big network in full, though only a few of its people are looked up for faces', async () => {
+        const tag = `Big${Date.now()}`;
+        const viewer = await member('Big Viewer');
+        const target = await member(`Target ${tag}`);
+        const people = [];
+        for (let i = 0; i < 33; i++) {
+            people.push(await prisma.user.create({ data: { nostrPubkey: getPublicKey(generateSecretKey()), profile: { create: { name: `Big Fan ${i}` } } } }));
+        }
+        // 0–29 follow the target, which follows 28–32 (28 and 29 both ways); the viewer follows 0–11.
+        await prisma.follow.createMany({
+            data: [
+                ...people.slice(0, 30).map((p) => ({ followerId: p.id, followingId: target.id })),
+                ...people.slice(28).map((p) => ({ followerId: target.id, followingId: p.id })),
+                ...people.slice(0, 12).map((p) => ({ followerId: viewer.id, followingId: p.id })),
+            ],
+        });
+
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toMatchObject({ hidden: false, total: 33, youFollow: 12 });
+        const known = new Set(people.slice(0, 12).map((p) => p.id));
+        expect(card.network.people).toHaveLength(3);
+        expect(card.network.people.every((p: any) => known.has(p.id))).toBe(true);
+        // Out of the other tests' member lists (their follows go with them).
+        await prisma.user.deleteMany({ where: { id: { in: people.map((p) => p.id) } } });
+    });
+
     it('keeps a private network to the follower count, with no one named', async () => {
         const tag = `Private${Date.now()}`;
         const viewer = await member('Private Viewer');

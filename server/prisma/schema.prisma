@@ -608,6 +608,8 @@ model Follow {
   following User @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+  // A member's followers (the unique index above only serves "who they follow").
+  @@index([followingId])
   @@map("follows")
 }
 
