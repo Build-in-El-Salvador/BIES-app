@@ -40,6 +40,13 @@ const short = z.string().max(200);
 const url = z.string().max(2000);
 const longText = z.string().max(10_000);
 const list = (item: z.ZodTypeAny = short, max = 50) => z.array(item).max(max);
+// A website as people type it: "mywebsite.com" is https://mywebsite.com. The
+// app sends it that way too; app builds from before that still save.
+const withHttps = (value: unknown) => {
+    if (typeof value !== 'string') return value;
+    const typed = value.trim();
+    return typed && !/^[a-z][a-z0-9+.-]*:\/\//i.test(typed) ? `https://${typed.replace(/^\/+/, '')}` : typed;
+};
 
 export const updateProfileSchema = z.object({
     name: z.string().max(100).optional(),
@@ -48,7 +55,7 @@ export const updateProfileSchema = z.object({
     banner: url.optional(),
     location: short.optional(),
     skills: list().optional(),
-    website: z.string().max(2000).url().optional().or(z.literal('')),
+    website: z.preprocess(withHttps, z.string().max(2000).url()).optional().or(z.literal('')),
     twitter: short.optional(),
     linkedin: url.optional(),
     github: short.optional(),

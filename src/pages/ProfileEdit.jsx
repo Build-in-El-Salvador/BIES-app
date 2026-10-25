@@ -16,6 +16,7 @@ import ImageCropModal from '../components/ImageCropModal';
 import RichTextEditor from '../components/RichTextEditor';
 import { useSectionDrag, reorderArray } from '../hooks/useSectionDrag';
 import { getAssetUrl } from '../utils/assets';
+import { asWebLink } from '../components/talent/talentOptions';
 
 // Defined outside component to prevent re-mount on every render (which causes input focus loss)
 const SectionHeader = ({ icon, title, children }) => (
@@ -284,13 +285,16 @@ const ProfileEdit = () => {
         e?.preventDefault();
         setSaving(true);
         setError('');
+        // "mywebsite.com" is saved as https://mywebsite.com, as on listings and talents.
+        const website = asWebLink(form.website);
+        if (website !== form.website) setForm(prev => ({ ...prev, website }));
         try {
             // Only send fields the backend accepts
             const payload = {
                 name: form.name || undefined,
                 bio: form.bio,
                 location: form.location,
-                website: form.website || undefined,
+                website: website || undefined,
                 twitter: form.twitter,
                 linkedin: form.linkedin,
                 company: form.company,
@@ -326,7 +330,7 @@ const ProfileEdit = () => {
                     if (form.banner) nostrData.banner = form.banner;
                     // Links as Settings → Privacy allows ("Only me" leaves them out).
                     const privacy = await settingsApi.getPrivacy().catch(() => null);
-                    Object.assign(nostrData, nostrLinkFields(form, privacy));
+                    Object.assign(nostrData, nostrLinkFields({ ...form, website }, privacy));
                     if (publishPublic) {
                         await nostrService.updateProfile(nostrData);
                     } else {
