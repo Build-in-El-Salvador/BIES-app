@@ -735,6 +735,7 @@ const Discover = () => {
           font-size: 0.75rem;
           padding: 2px 10px;
           background: var(--color-surface-raised);
+          border: 1px solid var(--color-gray-200); /* the pill shows on a card of the same colour, light or dark */
           border-radius: 99px;
           color: var(--color-gray-600);
           font-weight: 500;
