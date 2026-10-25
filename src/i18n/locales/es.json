@@ -475,7 +475,18 @@
       "scaling": "Escalando"
     },
     "searchMembers": "Buscar miembros",
-    "noMembersSearch": "No se encontraron miembros para \"{{query}}\""
+    "noMembersSearch": "No se encontraron miembros para \"{{query}}\"",
+    "card": {
+      "followedBy": "Le sigue {{name}}",
+      "followedByMore_one": "Le siguen {{name}} y {{count}} persona más que sigues",
+      "followedByMore_other": "Le siguen {{name}} y {{count}} personas más que sigues",
+      "followedByCount_one": "Le sigue {{count}} persona que sigues",
+      "followedByCount_other": "Le siguen {{count}} personas que sigues",
+      "network_one": "{{count}} en su red",
+      "network_other": "{{count}} en su red",
+      "networkPrivate_one": "{{count}} seguidor · red privada",
+      "networkPrivate_other": "{{count}} seguidores · red privada"
+    }
   },
   "members": {
     "title": "Directorio de Miembros",
