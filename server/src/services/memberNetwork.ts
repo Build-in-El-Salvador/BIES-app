@@ -24,8 +24,8 @@ const FACES = 3;
 // Looked up per member to find FACES with a real name, photos first.
 const CANDIDATES = 8;
 
-// A name the app shows: set, and not the nostr: placeholder of an unfinished profile.
-const realName = (name: string | null | undefined): name is string => !!name && !name.startsWith('nostr:');
+// A name the app shows: not blank, and not the nostr: placeholder of an unfinished profile.
+const realName = (name: string | null | undefined): name is string => !!name?.trim() && !name.startsWith('nostr:');
 
 export async function networkPreviews(viewerId: string, cards: NetworkCard[], hidden: string[]): Promise<Map<string, NetworkPreview>> {
     const out = new Map<string, NetworkPreview>();
@@ -33,16 +33,18 @@ export async function networkPreviews(viewerId: string, cards: NetworkCard[], hi
     const open = cards.filter((c) => !c.networkHidden).map((c) => c.userId);
     if (!open.length) return out;
 
+    // Both ends of each follow: a member on this page may have been suspended
+    // or blocked since the shared list was cached.
     const active = { isBanned: false, deletedAt: null };
-    const notHidden = hidden.length ? { notIn: hidden } : undefined;
+    const shown = hidden.length ? { followerId: { notIn: hidden }, followingId: { notIn: hidden } } : {};
     const [mine, links] = await Promise.all([
         prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } }),
         prisma.follow.findMany({
             where: {
-                OR: [
-                    { followingId: { in: open }, follower: active, ...(notHidden ? { followerId: notHidden } : {}) },
-                    { followerId: { in: open }, following: active, ...(notHidden ? { followingId: notHidden } : {}) },
-                ],
+                follower: active,
+                following: active,
+                ...shown,
+                OR: [{ followingId: { in: open } }, { followerId: { in: open } }],
             },
             select: { followerId: true, followingId: true },
             orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],

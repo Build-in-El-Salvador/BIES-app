@@ -154,10 +154,11 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                 || String(profileForViewer(p, viewerOf(req, p.userId)).location || '').toLowerCase().includes(location.toLowerCase()))
             .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
         const data = asCard ? shown.map(memberCard) : shown;
-        // Cards for a member also carry the network line, as this viewer may
-        // see it (services/memberNetwork.ts): live, not from the shared cache.
+        // Cards asked for with ?network=1 (the Cards layout) also carry the
+        // network line, as this viewer may see it (services/memberNetwork.ts):
+        // live, not from the shared cache, and for members only.
         const withNetwork = async (cards: any[]) => {
-            if (!asCard || !req.user) return cards;
+            if (!asCard || req.query.network !== '1' || !req.user) return cards;
             const full = new Map<string, any>(shown.map((p: any) => [p.userId, p]));
             const previews = await networkPreviews(req.user.id, cards.map((c) => ({
                 userId: c.userId,

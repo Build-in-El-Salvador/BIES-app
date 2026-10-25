@@ -89,8 +89,11 @@ describe('member cards', () => {
         expect(res.status).toBe(200);
         const card = res.body.data.find((p: any) => p.userId === m.id);
         expect(card).toBeTruthy();
+        // The network line only when asked for (the Cards layout).
         expect(Object.keys(card).sort()).toEqual(
-            ['avatar', 'bio', 'company', 'id', 'joinedAt', 'location', 'name', 'network', 'skills', 'tags', 'title', 'user', 'userId'].sort());
+            ['avatar', 'bio', 'company', 'id', 'joinedAt', 'location', 'name', 'skills', 'tags', 'title', 'user', 'userId'].sort());
+        const withNetwork = (await get('/api/profiles?limit=50&fields=card&network=1', viewer.token)).body.data.find((p: any) => p.userId === m.id);
+        expect(withNetwork.network).toEqual({ hidden: false, total: 0, youFollow: 0, people: [] });
         expect(card.user).toEqual({ id: m.id, nostrPubkey: m.pubkey });
         expect(card.bio).not.toContain('<');
         expect(card.bio.length).toBeLessThanOrEqual(200);
@@ -127,7 +130,7 @@ describe('the network line on a card', () => {
     const follow = (from: { id: string }, to: { id: string }) => prisma.follow.create({ data: { followerId: from.id, followingId: to.id } });
     // A search for the test's own tag: its own cached list, and only its members.
     const cards = async (tag: string, token: string) => {
-        const res = await get(`/api/profiles?search=${tag}&limit=44&fields=card`, token);
+        const res = await get(`/api/profiles?search=${tag}&limit=44&fields=card&network=1`, token);
         return new Map(res.body.data.map((c: any) => [c.userId, c]));
     };
 
@@ -187,10 +190,24 @@ describe('the network line on a card', () => {
         expect(own.network).toMatchObject({ hidden: false, total: 2 });
     });
 
+    it("leaves out a member suspended since the list was cached, on others' cards too", async () => {
+        const tag = `Banned${Date.now()}`;
+        const viewer = await member('Banned Viewer');
+        const target = await member(`Target ${tag}`);
+        const later = await member(`Later ${tag}`);
+        await follow(later, target);
+        await follow(viewer, later);
+        expect(((await cards(tag, viewer.token)).get(target.id) as any).network).toMatchObject({ total: 1, youFollow: 1 });
+        // Suspended now; the list (and Later's card in it) is still cached.
+        await prisma.user.update({ where: { id: later.id }, data: { isBanned: true } });
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toMatchObject({ total: 0, youFollow: 0, people: [] });
+    });
+
     it('is left out for signed-out visitors', async () => {
         const tag = `Public${Date.now()}`;
         const target = await member(`Target ${tag}`);
-        const res = await fetch(`${base}/api/profiles?search=${tag}&limit=43&fields=card`);
+        const res = await fetch(`${base}/api/profiles?search=${tag}&limit=43&fields=card&network=1`);
         const body: any = await res.json();
         const card = body.data.find((c: any) => c.userId === target.id);
         expect(card).toBeTruthy();

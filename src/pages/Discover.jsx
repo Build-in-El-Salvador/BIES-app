@@ -9,7 +9,7 @@ import Avatar from '../components/Avatar';
 import { cachedList, rememberList } from '../utils/listCache';
 import useVisitState from '../hooks/useVisitState';
 import { MEMBER_SORTS, sortOf } from '../utils/listSorts';
-import { joinPages, listOf, membersKey, membersPageSize, morePages } from '../utils/listRequests';
+import { joinPages, listOf, membersKey, membersPageSize, membersWithNetwork, morePages } from '../utils/listRequests';
 import { prefetchDetail } from '../utils/detailCache';
 import { profilePage } from '../utils/detailPages';
 import { useAuth } from '../context/AuthContext';
@@ -136,7 +136,8 @@ const Discover = () => {
   // again from the top. Coming back shows what was loaded (utils/listCache.js),
   // from the first frame.
   const pageSize = membersPageSize(memberViewType);
-  const listKey = membersKey(pageSize, searchQuery, sort);
+  const network = membersWithNetwork(memberViewType);
+  const listKey = membersKey(pageSize, searchQuery, sort, network);
   const firstSeen = () => cachedList(listKey);
   const [builders, setBuilders] = useState(() => firstSeen()?.builders || []);
   // Loading until the first answer: a spinner, never a moment of "No members found".
@@ -164,7 +165,7 @@ const Discover = () => {
     try {
       // Only what the cards show; a member's page fetches their full profile.
       const params = (page) => ({
-        page, limit: pageSize, fields: 'card', ...(searchQuery ? { search: searchQuery } : {}), ...(sort ? { sort } : {}),
+        page, limit: pageSize, fields: 'card', ...(network ? { network: 1 } : {}), ...(searchQuery ? { search: searchQuery } : {}), ...(sort ? { sort } : {}),
       });
       const pages = Array.from({ length: upTo - pageToLoad + 1 }, (_, i) => pageToLoad + i);
       const answers = await Promise.all(pages.map((page) => profilesApi.list(params(page))));
@@ -187,7 +188,7 @@ const Discover = () => {
     } finally {
       if (request === buildersRequest.current) setBuildersLoading(false);
     }
-  }, [searchQuery, sort, pageSize, listKey]);
+  }, [searchQuery, sort, pageSize, network, listKey]);
 
   // Shown in the last 2 minutes: as it was, scrolled-in members included.
   // Older: shown at once, then its pages are fetched again. Only typing
