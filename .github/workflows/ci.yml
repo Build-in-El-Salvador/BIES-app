@@ -27,7 +27,7 @@ jobs:
     name: Frontend — lint & unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -40,7 +40,7 @@ jobs:
     name: Frontend — production build (Node 24 parity)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24' # matches node:24-alpine in Dockerfile stage 1
@@ -57,7 +57,7 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24' # matches node:24-alpine in Dockerfile stage 2
@@ -78,7 +78,7 @@ jobs:
       run:
         working-directory: relay-proxy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -97,7 +97,7 @@ jobs:
     # users. Drop continue-on-error to make this a hard gate once those land.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

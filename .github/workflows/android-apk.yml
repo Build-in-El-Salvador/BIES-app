@@ -61,7 +61,7 @@ jobs:
       # SHA-256 of the signing certificate, for the release notes. Public.
       cert_sha256: ${{ steps.verify.outputs.cert_sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '24' # .nvmrc
