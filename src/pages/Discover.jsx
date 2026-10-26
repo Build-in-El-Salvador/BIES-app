@@ -13,6 +13,7 @@ import { joinPages, listOf, membersKey, membersPageSize, membersWithNetwork, mor
 import { prefetchDetail } from '../utils/detailCache';
 import { profilePage } from '../utils/detailPages';
 import { useAuth } from '../context/AuthContext';
+import { myFollowingIds } from '../utils/myFollowing';
 import { stripHtml } from '../utils/text';
 import { joinedDate } from '../utils/joinedDate';
 
@@ -218,10 +219,7 @@ const Discover = () => {
   useEffect(() => {
     if (!showsFollow || !user?.id || followingLoaded.current) return;
     followingLoaded.current = true;
-    profilesApi.getFollowing(user.id, { limit: 100 }).then((res) => {
-      const fList = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-      setFollowingIds(new Set(fList.map((u) => u.id)));
-    }).catch(() => { followingLoaded.current = false; });
+    myFollowingIds(user.id).then(setFollowingIds).catch(() => { followingLoaded.current = false; });
   }, [showsFollow, user?.id]);
 
   // The next batch once the end of the list comes near the screen.
