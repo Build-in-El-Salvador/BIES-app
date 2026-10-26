@@ -1,3 +1,5 @@
+import { isPlaceholderName } from './profileComplete.js';
+
 /**
  * Events in words: when (always in El Salvador time, where BIES events
  * happen, so a member abroad sees the time on the ticket), where tickets
@@ -100,7 +102,8 @@ export function hostOf(event) {
         return { kind: 'listing', name: l.name, image: l.logo || l.photo || '', path: `${l.type === 'FARM' ? '/farms' : '/trusted'}/${l.id}`, isOfficial: !!l.isOfficial };
     }
     const h = event.host || {};
-    return { kind: 'member', name: h.profile?.name || '', image: h.profile?.avatar || '', path: `/builder/${h.nostrPubkey || h.id}` };
+    const name = isPlaceholderName(h.profile?.name) ? '' : h.profile.name.trim();
+    return { kind: 'member', name, image: h.profile?.avatar || '', path: `/builder/${h.nostrPubkey || h.id}` };
 }
 
 /** Where a co-host or sponsor's page is in the app ('' for someone not on BIES). */

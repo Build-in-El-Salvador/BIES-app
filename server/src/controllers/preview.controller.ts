@@ -151,7 +151,7 @@ async function talentTeaser(id: string) {
 
 /** A member's name as the app shows it, or '' for a placeholder. */
 const shownName = (name: string | null | undefined) => (name && !name.startsWith('nostr:') ? name.trim() : '');
-const LIVE_LISTING = { name: true, status: true, isPublished: true } as const;
+const LIVE_LISTING = { name: true, status: true, isPublished: true, isOfficial: true } as const;
 const liveListing = (l: { status: string; isPublished: boolean } | null) => !!l && l.status === 'active' && l.isPublished;
 
 async function eventTeaser(id: string) {
@@ -191,11 +191,14 @@ async function eventTeaser(id: string) {
         endDate: event.endDate,
         photo: event.thumbnail || '',
         about: about.text,
-        isOfficial: event.isOfficial,
+        isOfficial: liveListing(event.hostListing) && event.hostListing!.isOfficial,
         priceLabel: event.priceLabel,
         ticketUrl: /^https:\/\//i.test(event.ticketUrl) ? event.ticketUrl : '',
         bitcoinUrl: /^https:\/\//i.test(event.bitcoinUrl) ? event.bitcoinUrl : '',
-        host: (liveListing(event.hostListing) ? event.hostListing!.name : shownName(event.host.profile?.name)) || 'A BIES member',
+        // Hosted as a business that's since been taken down: no name at all.
+        host: (event.hostListingId
+            ? (liveListing(event.hostListing) ? event.hostListing!.name : '')
+            : shownName(event.host.profile?.name)) || 'A BIES member',
         cohosts: named('COHOST'),
         sponsors: named('SPONSOR'),
         members: {

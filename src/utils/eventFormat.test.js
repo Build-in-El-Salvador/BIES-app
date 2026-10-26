@@ -76,3 +76,8 @@ test('both ticket links: a ticket page and a bitcoin one', () => {
     assert.equal(bothTicketLinks({ ticketUrl: 'https://lu.ma/x', bitcoinUrl: '' }), false);
     assert.equal(bothTicketLinks({ bitcoinUrl: 'https://pretix.eu/x' }), false);
 });
+
+test('a host without a chosen name has no name to show', () => {
+    assert.equal(hostOf({ host: { id: 'u1', profile: { name: 'nostr:1a2b3c4d' } } }).name, '');
+    assert.equal(hostOf({ host: { id: 'u1', profile: { name: ' Ana ' } } }).name, 'Ana');
+});

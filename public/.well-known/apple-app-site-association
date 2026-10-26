@@ -8,7 +8,6 @@
           { "/": "/trusted/*", "comment": "business listings" },
           { "/": "/talents/*", "comment": "talents" },
           { "/": "/opportunities/*", "comment": "opportunities and projects" },
-          { "/": "/events/*", "comment": "events" },
           { "/": "/feed", "?": { "post": "?*" }, "comment": "a shared post" }
         ]
       }

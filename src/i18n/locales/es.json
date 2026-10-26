@@ -682,7 +682,8 @@
       "online": "En línea",
       "goingCount_one": "{{count}} va",
       "goingCount_other": "{{count}} van",
-      "bySponsored": "Por {{names}} · patrocinado por {{sponsors}}"
+      "bySponsored": "Por {{names}} · patrocinado por {{sponsors}}",
+      "aMember": "un miembro de BIES"
     },
     "detail": {
       "back": "Eventos",
@@ -801,8 +802,11 @@
         "logo_not_yours": "Sube el logo aquí en vez de enlazarlo.",
         "no_member": "Uno de los miembros que agregaste ya no está en BIES.",
         "no_listing": "Uno de los negocios que agregaste ya no está en BIES.",
-        "too_many_partners": "Un evento tiene como máximo 12 coorganizadores y patrocinadores."
-      }
+        "too_many_partners": "Un evento tiene como máximo 12 coorganizadores y patrocinadores.",
+        "host_only": "Solo el anfitrión puede cambiar las entradas, los coorganizadores, los patrocinadores o quién puede ver el evento.",
+        "official_listing": "Solo BIES puede agregar a BIES a un evento."
+      },
+      "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión."
     },
     "kinds": {
       "NETWORKING": "Networking",

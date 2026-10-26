@@ -67,8 +67,8 @@ export default function PartnerPicker({ value, onChange, exclude = {} }) {
     const addOutside = () => {
         const name = (outside?.name || '').trim();
         if (!name) return;
-        let url = (outside.url || '').trim();
-        if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+        let url = (outside.url || '').trim().replace(/^http:\/\//i, 'https://');
+        if (url && !/^https:\/\//i.test(url)) url = `https://${url}`;
         onChange([...value, { role: 'SPONSOR', kind: 'other', name, image: outside.logo || '', url }]);
         setOutside(null);
     };

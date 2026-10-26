@@ -254,6 +254,106 @@ describe('co-hosts and sponsors', () => {
     });
 });
 
+describe('who keeps control of an event', () => {
+    it("someone who leaves the business's team stops running the events they hosted as it", async () => {
+        const owner = await member();
+        const mate = await member();
+        const biz = await business(owner, true);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        const created = await event(mate, { hostListingId: biz, ticketUrl: 'https://lu.ma/night' });
+        expect(created.status).toBe(201);
+
+        expect((await call('DELETE', `/api/directory/${biz}/team/${mate.id}`, { token: owner.token })).status).toBe(200);
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: mate.token, body: { ticketUrl: 'https://elsewhere.example/pay' } })).status).toBe(403);
+        expect((await call('GET', `/api/events/${created.body.id}`, { token: mate.token })).body).toMatchObject({ canEdit: false, canDelete: false });
+        expect((await call('DELETE', `/api/events/${created.body.id}`, { token: mate.token })).status).toBe(403);
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { title: 'Still ours' } })).status).toBe(200);
+    });
+
+    it('co-hosts edit what it is; tickets, money, hosts and who sees it stay with the host side', async () => {
+        const host = await member();
+        const cohost = await member();
+        const extra = await member();
+        const created = await event(host, {
+            ticketUrl: 'https://lu.ma/night', priceLabel: 'From $25', payoutLightningAddress: 'host@ln.example',
+            partners: [{ role: 'COHOST', userId: cohost.id }],
+        });
+        const id = created.body.id;
+        const put = (body: Record<string, unknown>) => call('PUT', `/api/events/${id}`, { token: cohost.token, body });
+
+        expect((await put({ title: 'Renamed', description: 'Better words.' })).status).toBe(200);
+        // Sending the same tickets back (as a form does) is fine; changing them isn't.
+        expect((await put({ title: 'Renamed again', ticketUrl: 'https://lu.ma/night', priceLabel: 'From $25' })).status).toBe(200);
+        for (const body of [
+            { ticketUrl: 'https://elsewhere.example/pay' },
+            { bitcoinUrl: 'https://elsewhere.example/btc' },
+            { payoutLightningAddress: 'cohost@ln.example' },
+            { visibility: 'DRAFT' },
+            { partners: [{ role: 'COHOST', userId: cohost.id }, { role: 'COHOST', userId: extra.id }] },
+        ]) {
+            const res = await put(body);
+            expect(res.status, JSON.stringify(body)).toBe(403);
+            expect(res.body.reason).toBe('host_only');
+        }
+        const seen = (await call('GET', `/api/events/${id}`, { token: cohost.token })).body;
+        expect(seen).toMatchObject({ canEdit: true, canDelete: false, ticketUrl: 'https://lu.ma/night', title: 'Renamed again' });
+        expect(seen.payoutLightningAddress).toBeUndefined();
+        expect(seen.guestList).toBeUndefined();
+    });
+
+    it("saving keeps the co-hosts and sponsors the editor can't see", async () => {
+        const host = await member();
+        const cohost = await member();
+        const sponsorOwner = await member();
+        const sponsor = await business(sponsorOwner, true);
+        const created = await event(host, { partners: [{ role: 'COHOST', userId: cohost.id }, { role: 'SPONSOR', listingId: sponsor }] });
+        await prisma.directoryListing.update({ where: { id: sponsor }, data: { isPublished: false } });
+
+        const res = await call('PUT', `/api/events/${created.body.id}`, { token: host.token, body: { title: 'Typo fixed', partners: [{ role: 'COHOST', userId: cohost.id }] } });
+        expect(res.status).toBe(200);
+        const rows = await prisma.eventPartner.findMany({ where: { eventId: created.body.id } });
+        expect(rows.map((r) => r.listingId || r.userId).sort()).toEqual([cohost.id, sponsor].sort());
+    });
+
+    it('only BIES names BIES on an event', async () => {
+        const admin = await member({ admin: true });
+        const core = await member();
+        const stranger = await member();
+        const bies = await business(core, true, `BIES Hub ${++counter}`);
+        await call('PUT', `/api/admin/directory/${bies}/official`, { token: admin.token, body: { official: true } });
+
+        const res = await event(stranger, { partners: [{ role: 'SPONSOR', listingId: bies }] });
+        expect(res.status).toBe(400);
+        expect(res.body.reason).toBe('official_listing');
+        expect((await event(core, { partners: [{ role: 'SPONSOR', listingId: bies }] })).status).toBe(201);
+        expect((await event(admin, { partners: [{ role: 'SPONSOR', listingId: bies }] })).status).toBe(201);
+    });
+
+    it("a business that's been taken down shows as neither the host nor BIES", async () => {
+        const admin = await member({ admin: true });
+        const core = await member({ name: 'Core Person' });
+        const viewer = await member();
+        const bies = await business(core, true, `BIES Hub ${++counter}`);
+        await call('PUT', `/api/admin/directory/${bies}/official`, { token: admin.token, body: { official: true } });
+        const created = await event(core, { hostListingId: bies });
+        expect(created.body.isOfficial).toBe(true);
+
+        await prisma.directoryListing.update({ where: { id: bies }, data: { status: 'inactive', isPublished: false } });
+        const card = (await call('GET', `/api/events?upcoming=true&isOfficial=false`, { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
+        expect(card).toMatchObject({ isOfficial: false, hostListing: null });
+        const preview = (await call('GET', `/api/preview/events/${created.body.id}`)).body;
+        expect(preview).toMatchObject({ isOfficial: false, host: 'A BIES member' });
+    });
+
+    it('an edit reaches the shared preview at once', async () => {
+        const host = await member();
+        const created = await event(host);
+        expect((await call('GET', `/api/preview/events/${created.body.id}`)).status).toBe(200);
+        await call('PUT', `/api/events/${created.body.id}`, { token: host.token, body: { visibility: 'DRAFT' } });
+        expect((await call('GET', `/api/preview/events/${created.body.id}`)).status).toBe(404);
+    });
+});
+
 describe('the events list and page', () => {
     it("shows what's still on, past events apart, and no host blocked either way", async () => {
         const host = await member();

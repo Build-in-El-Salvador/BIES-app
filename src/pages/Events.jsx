@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, CalendarDays, Loader2 } from 'lucide-react';
@@ -34,12 +34,15 @@ const Events = () => {
     const [error, setError] = useState(false);
     const [going, setGoing] = useState({}); // eventId → true/false after a tap
 
+    const latest = useRef(0); // only the newest answer is shown
     const load = useCallback(async (q) => {
+        const ask = ++latest.current;
         setError(false);
         try {
             const res = await eventsApi.list({ ...(past ? { past: 'true' } : { upcoming: 'true' }), ...(q ? { search: q } : {}), limit: 50 });
-            setEvents(res?.data || []);
+            if (ask === latest.current) setEvents(res?.data || []);
         } catch {
+            if (ask !== latest.current) return;
             setError(true);
             setEvents([]);
         }

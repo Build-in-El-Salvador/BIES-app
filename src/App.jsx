@@ -204,6 +204,12 @@ const FeatureRoute = ({ flag, children }) => {
     return children;
 };
 
+/** An event's page, started afresh for each event (a link from one event to another). */
+const EventDetailById = () => {
+    const { id } = useParams();
+    return <EventDetail key={id} />;
+};
+
 /**
  * A link from before the directories and the marketplace had their own pages
  * (/discover/farms/…, /discover/certified/…): the same place at its new path.
@@ -365,7 +371,7 @@ const AppContent = () => {
                     <Route path="/events/edit/:id" element={
                         <FeatureRoute flag="events"><ProtectedRoute><EventForm key="edit" /></ProtectedRoute></FeatureRoute>
                     } />
-                    <Route path="/events/:id" element={<FeatureRoute flag="events"><MemberOrPreview section="events"><EventDetail /></MemberOrPreview></FeatureRoute>} />
+                    <Route path="/events/:id" element={<FeatureRoute flag="events"><MemberOrPreview section="events"><EventDetailById /></MemberOrPreview></FeatureRoute>} />
                     <Route path="/members" element={<ProtectedRoute><Discover key="members" /></ProtectedRoute>} />
                     <Route path="/members/:userId/followers" element={<ProtectedRoute><FollowList key="followers" kind="followers" /></ProtectedRoute>} />
                     <Route path="/members/:userId/following" element={<ProtectedRoute><FollowList key="following" kind="following" /></ProtectedRoute>} />

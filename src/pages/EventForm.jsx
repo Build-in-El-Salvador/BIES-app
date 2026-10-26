@@ -21,6 +21,8 @@ import PartnerPicker from '../components/events/PartnerPicker';
 
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
+// What only the host side changes (a co-host edits the rest): the server says the same.
+const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility'];
 
 const EMPTY = {
     hostListingId: '', thumbnail: '', title: '', category: 'NETWORKING', description: '',
@@ -61,6 +63,7 @@ export default function EventForm() {
     const [importing, setImporting] = useState(false);
     const [imported, setImported] = useState(false);
     const [otherVisibility, setOtherVisibility] = useState(''); // an older event's invite-only or limited setting
+    const [hostSide, setHostSide] = useState(true); // false for a co-host editing
 
     const set = (key) => (e) => {
         const value = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
@@ -75,6 +78,7 @@ export default function EventForm() {
         if (!editing) return;
         eventsApi.get(id).then((e) => {
             if (!e.canEdit) { setNotYours(true); return; }
+            setHostSide(!!e.canDelete);
             const start = toFormFields(e.startDate);
             const end = toFormFields(e.endDate);
             setForm({
@@ -176,6 +180,7 @@ export default function EventForm() {
             ...(visibility === 'PRIVATE' || visibility === 'INVITE_ONLY' ? { guestList: guests.map((g) => ({ name: g.name, userId: g.userId })) } : {}),
             ...(editing ? {} : { nostrPublish: 'bies' }),
         };
+        if (!hostSide) for (const key of HOST_ONLY) delete payload[key];
         setSaving(true);
         try {
             const saved = editing ? await eventsApi.update(id, payload) : await eventsApi.create(payload);
@@ -221,7 +226,7 @@ export default function EventForm() {
                 </section>
             )}
 
-            {(represented.length > 0 || form.hostListingId) && (
+            {hostSide && (represented.length > 0 || form.hostListingId) && (
                 <section className="ef-group">
                     <label className="ef-label" htmlFor="ef-host">{t('events.form.hostAs')}</label>
                     <select id="ef-host" className="ef-input" value={form.hostListingId} onChange={set('hostListingId')}>
@@ -305,41 +310,47 @@ export default function EventForm() {
                 )}
             </section>
 
-            <section className="ef-group">
-                <h2 className="ef-h">{t('events.form.tickets')}</h2>
-                <label className="ef-label" htmlFor="ef-tickets">{t('events.form.ticketLink')}</label>
-                <input id="ef-tickets" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" value={form.ticketUrl} onChange={set('ticketUrl')} />
-                <p className="ef-hint">{t('events.form.ticketLinkHint')}</p>
-                <label className="ef-label" htmlFor="ef-bitcoin">{t('events.form.bitcoinLink')}</label>
-                <input id="ef-bitcoin" className="ef-input" inputMode="url" placeholder="https://pretix.eu/…" value={form.bitcoinUrl} onChange={set('bitcoinUrl')} />
-                <p className="ef-hint">{t('events.form.bitcoinLinkHint')}</p>
-                <label className="ef-label" htmlFor="ef-price">{t('events.form.price')}</label>
-                <input id="ef-price" className="ef-input" maxLength={40} placeholder={t('events.form.pricePlaceholder')} value={form.priceLabel} onChange={set('priceLabel')} />
-            </section>
+            {hostSide ? (
+                <>
+                    <section className="ef-group">
+                        <h2 className="ef-h">{t('events.form.tickets')}</h2>
+                        <label className="ef-label" htmlFor="ef-tickets">{t('events.form.ticketLink')}</label>
+                        <input id="ef-tickets" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" value={form.ticketUrl} onChange={set('ticketUrl')} />
+                        <p className="ef-hint">{t('events.form.ticketLinkHint')}</p>
+                        <label className="ef-label" htmlFor="ef-bitcoin">{t('events.form.bitcoinLink')}</label>
+                        <input id="ef-bitcoin" className="ef-input" inputMode="url" placeholder="https://pretix.eu/…" value={form.bitcoinUrl} onChange={set('bitcoinUrl')} />
+                        <p className="ef-hint">{t('events.form.bitcoinLinkHint')}</p>
+                        <label className="ef-label" htmlFor="ef-price">{t('events.form.price')}</label>
+                        <input id="ef-price" className="ef-input" maxLength={40} placeholder={t('events.form.pricePlaceholder')} value={form.priceLabel} onChange={set('priceLabel')} />
+                    </section>
 
-            <section className="ef-group">
-                <h2 className="ef-h">{t('events.form.partners')}</h2>
-                <p className="ef-hint">{t('events.form.partnersHint')}</p>
-                <PartnerPicker value={partners} onChange={setPartners} exclude={{ userId: form.hostListingId ? '' : user?.id, listingId: form.hostListingId }} />
-            </section>
+                    <section className="ef-group">
+                        <h2 className="ef-h">{t('events.form.partners')}</h2>
+                        <p className="ef-hint">{t('events.form.partnersHint')}</p>
+                        <PartnerPicker value={partners} onChange={setPartners} exclude={{ userId: form.hostListingId ? '' : user?.id, listingId: form.hostListingId }} />
+                    </section>
 
-            <section className="ef-group">
-                <h2 className="ef-h">{t('events.form.visibility')}</h2>
-                <div className="ef-choices">
-                    {VISIBILITIES.map((v) => (
-                        <label key={v} className={`ef-choice${form.visibility === v ? ' on' : ''}`}>
-                            <input type="radio" name="visibility" value={v} checked={form.visibility === v} onChange={set('visibility')} />
-                            {t(`events.form.visibilities.${v}`)}
-                        </label>
-                    ))}
-                </div>
-                {(form.visibility === 'PRIVATE' || otherVisibility === 'INVITE_ONLY') && (
-                    <>
-                        <span className="ef-label">{t('events.form.guests')}</span>
-                        <MemberSearchSelect value={guests} onChange={setGuests} />
-                    </>
-                )}
-            </section>
+                    <section className="ef-group">
+                        <h2 className="ef-h">{t('events.form.visibility')}</h2>
+                        <div className="ef-choices">
+                            {VISIBILITIES.map((v) => (
+                                <label key={v} className={`ef-choice${form.visibility === v ? ' on' : ''}`}>
+                                    <input type="radio" name="visibility" value={v} checked={form.visibility === v} onChange={set('visibility')} />
+                                    {t(`events.form.visibilities.${v}`)}
+                                </label>
+                            ))}
+                        </div>
+                        {(form.visibility === 'PRIVATE' || otherVisibility === 'INVITE_ONLY') && (
+                            <>
+                                <span className="ef-label">{t('events.form.guests')}</span>
+                                <MemberSearchSelect value={guests} onChange={setGuests} />
+                            </>
+                        )}
+                    </section>
+                </>
+            ) : (
+                <p className="ef-hint ef-host-only">{t('events.form.hostOnly')}</p>
+            )}
 
             {error && <div className="ef-error" role="alert"><AlertCircle size={16} /> <span>{error}</span></div>}
             <button type="submit" className="ef-submit" disabled={saving || uploading}>
@@ -350,6 +361,7 @@ export default function EventForm() {
                 .event-form { max-width: 640px; margin: 0 auto; padding-top: var(--page-top, 1.5rem); padding-bottom: 3rem; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
                 .ef-head { display: flex; align-items: center; gap: 10px; }
                 .ef-head h1 { margin: 0; font-family: var(--font-display); font-size: 1.8rem; color: var(--color-gray-900); }
+                .ef-host-only { padding: 12px 14px; border-radius: 12px; background: var(--color-gray-100); }
                 .ef-group { background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
                 .ef-h { margin: 0; font-family: var(--font-display); font-size: 1.3rem; color: var(--color-gray-900); }
                 .ef-label { font-size: 0.85rem; font-weight: 600; color: var(--color-gray-800); margin-top: 4px; }

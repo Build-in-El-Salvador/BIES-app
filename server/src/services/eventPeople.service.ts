@@ -47,7 +47,7 @@ const listingSelect = { id: true, name: true, type: true, category: true, logo: 
 /** Prisma include for an event's people, as the app shows them. */
 export const EVENT_PEOPLE = {
     host: { select: personSelect },
-    hostListing: { select: listingSelect },
+    hostListing: { select: { ...listingSelect, status: true, isPublished: true } },
     partners: {
         orderBy: [{ position: 'asc' as const }, { createdAt: 'asc' as const }],
         include: {
@@ -95,25 +95,33 @@ export async function actedForIds(userId: string): Promise<string[]> {
 type EventRef = { id: string; hostId: string; hostListingId: string | null };
 type Viewer = { id: string; isAdmin?: boolean } | undefined;
 
-/** May edit the event: its host, a co-host, the host business's people, or an admin. */
+/** A listing that's up: active and published. */
+export const isLiveListing = (l: { status: string; isPublished: boolean } | null | undefined): boolean =>
+    !!l && l.status === 'active' && l.isPublished;
+
+/**
+ * The host side, who decides everything about the event and may delete it:
+ * an admin; for an event hosted as a business or farm, whoever acts for it
+ * now (a member who left its team doesn't any more); otherwise its host.
+ */
+export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: string[]): Promise<boolean> {
+    if (!user) return false;
+    if (user.isAdmin) return true;
+    if (!event.hostListingId) return event.hostId === user.id;
+    const mine = acted ?? await actedForIds(user.id);
+    return mine.includes(event.hostListingId);
+}
+
+/** May edit the event: the host side, or a co-host (a member, or a business they act for). */
 export async function canEditEvent(event: EventRef, user: Viewer, acted?: string[]): Promise<boolean> {
     if (!user) return false;
-    if (user.isAdmin || event.hostId === user.id) return true;
     const mine = acted ?? await actedForIds(user.id);
-    if (event.hostListingId && mine.includes(event.hostListingId)) return true;
+    if (await canDeleteEvent(event, user, mine)) return true;
     const cohost = await prisma.eventPartner.findFirst({
         where: { eventId: event.id, role: 'COHOST', OR: [{ userId: user.id }, ...(mine.length ? [{ listingId: { in: mine } }] : [])] },
         select: { id: true },
     });
     return !!cohost;
-}
-
-/** May delete the event: its host, the host business's people, or an admin (not co-hosts). */
-export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: string[]): Promise<boolean> {
-    if (!user) return false;
-    if (user.isAdmin || event.hostId === user.id) return true;
-    const mine = acted ?? await actedForIds(user.id);
-    return !!event.hostListingId && mine.includes(event.hostListingId);
 }
 
 export class PartnerError extends Error {
@@ -125,11 +133,17 @@ export class PartnerError extends Error {
  * of people not on BIES are BIES uploads of this member, or ones the event
  * already shows. Returns rows to store (in order), without duplicates.
  */
-export async function checkPartners(me: string, inputs: PartnerInput[], opts: { hostListingId: string | null; eventId?: string }) {
+export async function checkPartners(
+    me: string,
+    inputs: PartnerInput[],
+    opts: { hostListingId: string | null; eventId?: string; isAdmin?: boolean; acted?: string[] },
+) {
     if (inputs.length > MAX_PARTNERS) throw new PartnerError(`At most ${MAX_PARTNERS} co-hosts and sponsors`, 'too_many_partners');
-    const keptLogos = new Set(opts.eventId
-        ? (await prisma.eventPartner.findMany({ where: { eventId: opts.eventId }, select: { logo: true } })).map((p) => p.logo).filter(Boolean)
-        : []);
+    const had = opts.eventId
+        ? await prisma.eventPartner.findMany({ where: { eventId: opts.eventId }, select: { logo: true, listingId: true } })
+        : [];
+    const keptLogos = new Set(had.map((p) => p.logo).filter(Boolean));
+    const keptListings = new Set(had.map((p) => p.listingId).filter(Boolean));
     const seen = new Set<string>();
     const rows: Array<{ role: string; userId: string | null; listingId: string | null; name: string; logo: string; url: string; position: number }> = [];
     for (const p of inputs) {
@@ -142,8 +156,13 @@ export async function checkPartners(me: string, inputs: PartnerInput[], opts: { 
             if (p.userId !== me && await blockedEitherWay(me, p.userId)) throw new PartnerError('You can\'t add this member', 'blocked');
         } else if (p.listingId) {
             if (p.listingId === opts.hostListingId) continue; // it's the host already
-            const listing = await prisma.directoryListing.findFirst({ where: { id: p.listingId, ...LIVE }, select: { id: true } });
+            const listing = await prisma.directoryListing.findFirst({ where: { id: p.listingId, ...LIVE }, select: { id: true, isOfficial: true } });
             if (!listing) throw new PartnerError('Business not found', 'no_listing');
+            // BIES's own page is named on an event by BIES (its people or an admin) only.
+            if (listing.isOfficial && !keptListings.has(listing.id) && !opts.isAdmin
+                && !(opts.acted ?? await actedForIds(me)).includes(listing.id)) {
+                throw new PartnerError('Only BIES can add BIES to an event', 'official_listing');
+            }
         } else {
             const logo = p.logo || '';
             if (logo && !keptLogos.has(logo) && !await ownsUploads(me, [logo])) throw new PartnerError('Use a logo you uploaded', 'logo_not_yours');
@@ -159,6 +178,15 @@ export async function checkPartners(me: string, inputs: PartnerInput[], opts: { 
         });
     }
     return rows;
+}
+
+/** Whether `inputs` are the co-hosts and sponsors the editor sees (`shown`), in order. */
+export function samePartners(inputs: PartnerInput[], shown: PartnerView[]): boolean {
+    const keyIn = (p: PartnerInput) => p.userId ? `${p.role}|u:${p.userId}` : p.listingId ? `${p.role}|l:${p.listingId}`
+        : `${p.role}|n:${(p.name || '').trim().toLowerCase()}|${p.url || ''}|${p.logo || ''}`;
+    const keyOf = (p: PartnerView) => p.kind === 'member' ? `${p.role}|u:${p.userId}` : p.kind === 'listing' ? `${p.role}|l:${p.listingId}`
+        : `${p.role}|n:${p.name.trim().toLowerCase()}|${p.url || ''}|${p.image || ''}`;
+    return JSON.stringify(inputs.map(keyIn)) === JSON.stringify(shown.map(keyOf));
 }
 
 /** The member who runs a listing, to hear about it (none for a listing only recommended). */

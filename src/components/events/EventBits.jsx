@@ -84,7 +84,7 @@ export function WhoLine({ event, className = '' }) {
             : cohosts.length ? t('events.card.with', { names: namesText(cohosts.map(nameOf), t) })
                 : t('events.card.by', { names: 'BIES' });
     } else {
-        const names = namesText([host.name, ...cohosts.map(nameOf)], t);
+        const names = namesText([host.name, ...cohosts.map(nameOf)], t) || t('events.card.aMember');
         text = sponsors.length
             ? t('events.card.bySponsored', { names, sponsors: namesText(sponsors.map(nameOf), t) })
             : t('events.card.by', { names });

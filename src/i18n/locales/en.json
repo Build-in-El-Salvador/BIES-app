@@ -682,7 +682,8 @@
       "online": "Online",
       "goingCount_one": "{{count}} going",
       "goingCount_other": "{{count}} going",
-      "bySponsored": "By {{names}} · sponsored by {{sponsors}}"
+      "bySponsored": "By {{names}} · sponsored by {{sponsors}}",
+      "aMember": "a BIES member"
     },
     "detail": {
       "back": "Events",
@@ -801,8 +802,11 @@
         "logo_not_yours": "Upload the logo here instead of linking to it.",
         "no_member": "One of the members you added isn't on BIES anymore.",
         "no_listing": "One of the businesses you added isn't on BIES anymore.",
-        "too_many_partners": "An event has at most 12 co-hosts and sponsors."
-      }
+        "too_many_partners": "An event has at most 12 co-hosts and sponsors.",
+        "host_only": "Only the host can change tickets, co-hosts, sponsors or who can see the event.",
+        "official_listing": "Only BIES can add BIES to an event."
+      },
+      "hostOnly": "As a co-host you edit the event's details. Tickets, co-hosts, sponsors and who can see it stay with the host."
     },
     "kinds": {
       "NETWORKING": "Networking",
