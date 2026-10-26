@@ -62,5 +62,7 @@ test('links typed without https get it', () => {
     // Another scheme is kept as typed (the server says if it can't be a link), never https://ftp://….
     assert.equal(asWebLink('ftp://files.example.com'), 'ftp://files.example.com');
     assert.equal(asWebLink(''), '');
+    assert.equal(asWebLink('javascript://example.com/%0Aalert(1)'), '');
+    assert.equal(asWebLink('JavaScript://x'), '');
     assert.equal(shortLink('https://www.example.com/work/'), 'example.com/work');
 });
