@@ -1,12 +1,11 @@
 import { Router } from 'express';
-import { authenticate, optionalAuth } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { requireTerms, screenContent } from '../middleware/contentRules';
 import { validate } from '../middleware/validate';
 import { moneyLimiter } from '../middleware/rateLimit';
 import {
     listEvents,
     getEvent,
-    getEventOG,
     createEvent,
     createEventSchema,
     updateEvent,
@@ -18,6 +17,7 @@ import {
     rsvpEvent,
     cancelRsvp,
     inviteToEvent,
+    removePartner,
 } from '../controllers/events.controller';
 import { importEventFromUrl } from '../controllers/eventImport.controller';
 import {
@@ -35,19 +35,18 @@ import {
 
 const router = Router();
 
-const EVENT_TEXT = ['title', 'description', 'location', 'locationName', 'locationAddress', 'tags', 'customSections'];
+const EVENT_TEXT = ['title', 'description', 'location', 'locationName', 'locationAddress', 'priceLabel', 'tags', 'customSections'];
 
-// Public routes
-router.get('/', optionalAuth, listEvents);
+// Members only, like the rest of the app. Signed out, a shared event's
+// preview comes from /api/preview/events/:id (no guest list or links).
+router.get('/', authenticate, listEvents);
 
 // Protected: my events (must come before /:id to avoid shadowing)
 router.get('/my', authenticate, listMyEvents);
 router.get('/attending', authenticate, listAttendingEvents);
 router.get('/tickets/mine', authenticate, listMyTickets);
 
-// Public single event
-router.get('/:id/og', getEventOG);
-router.get('/:id', optionalAuth, getEvent);
+router.get('/:id', authenticate, getEvent);
 
 // Protected routes
 router.post('/import-url', authenticate, importEventFromUrl);
@@ -58,6 +57,8 @@ router.put('/:id/endorse', authenticate, endorseEvent);
 router.post('/:id/rsvp', authenticate, rsvpEvent);
 router.delete('/:id/rsvp', authenticate, cancelRsvp);
 router.post('/:id/invite', authenticate, inviteToEvent);
+// A co-host or sponsor taking their name off (or whoever can edit it)
+router.delete('/:id/partners/:partnerId', authenticate, removePartner);
 
 // Ticketing (non-custodial Lightning payments straight to the event host)
 // Invoice creation hits the host's LNURL server — strict-limit it to block
