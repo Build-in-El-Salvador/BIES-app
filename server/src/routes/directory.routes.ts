@@ -27,6 +27,12 @@ import {
     declineTransfer,
     cancelTransfer,
 } from '../controllers/listingTransfer.controller';
+import {
+    listRepresented,
+    addTeamMember,
+    addTeamMemberSchema,
+    removeTeamMember,
+} from '../controllers/listingTeam.controller';
 
 const router = Router();
 
@@ -37,6 +43,8 @@ router.get('/', optionalAuth, listListings);
 // What a member recommends (their profile): members only, like the reviews.
 router.get('/recommended-by/:userId', authenticate, listRecommendedBy);
 router.get('/similar', authenticate, listSimilar);
+// The businesses and farms I can act for (host events as).
+router.get('/represented', authenticate, listRepresented);
 router.get('/:id', optionalAuth, getListing);
 
 // Handing a listing to the member who runs it
@@ -45,6 +53,10 @@ router.post('/transfers/:transferId/decline', authenticate, declineTransfer);
 router.post('/transfers/:transferId/cancel', authenticate, cancelTransfer);
 router.post('/:id/claim', authenticate, requireTerms, validate(claimSchema), screenContent(['message']), claimListing);
 router.post('/:id/transfer', authenticate, requireTerms, validate(offerSchema), screenContent(['message']), offerListing);
+
+// Its team: members who represent it beside the member who runs it
+router.post('/:id/team', authenticate, requireTerms, validate(addTeamMemberSchema), addTeamMember);
+router.delete('/:id/team/:userId', authenticate, removeTeamMember);
 
 // Member routes
 router.post('/', authenticate, requireTerms, validate(createDirectoryListingSchema), screenContent(LISTING_TEXT), createListing);

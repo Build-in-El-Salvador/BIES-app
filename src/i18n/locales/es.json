@@ -1954,6 +1954,24 @@
       "differentAdd": "No, es otro lugar: agregarlo",
       "farm": "Finca",
       "business": "Negocio"
+    },
+    "team": {
+      "title": "Equipo",
+      "owner": "Dueño",
+      "manage": "Administrar",
+      "leave": "Salir",
+      "empty": "Agrega a las personas que trabajan aquí para que puedan organizar eventos como {{name}}.",
+      "sheetTitle": "Equipo de {{name}}",
+      "sheetBody": "Las personas del equipo pueden organizar eventos como {{name}}. Solo el dueño edita el perfil.",
+      "asAdmin": "Estás cambiando este equipo como administrador.",
+      "searchLabel": "Agregar un miembro",
+      "searchPlaceholder": "Busca miembros por nombre",
+      "noMatches": "Ningún miembro coincide.",
+      "remove": "Quitar a {{name}} del equipo",
+      "leaveTitle": "¿Salir del equipo de {{name}}?",
+      "leaveBody": "Ya no podrás organizar eventos como {{name}}. El dueño puede volver a agregarte.",
+      "leaveSend": "Salir del equipo",
+      "error": "No funcionó. Inténtalo de nuevo."
     }
   },
   "talent": {

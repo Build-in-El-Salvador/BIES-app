@@ -71,6 +71,7 @@ model User {
   savedListings         SavedListing[]
   listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
   listingTransfersTo    ListingTransfer[]      @relation("ListingTransfersTo")
+  listingTeams          ListingTeamMember[]    @relation("ListingTeams")
   courses               Course[]
   enrollments           Enrollment[]
   coursePurchases       CoursePurchase[]
@@ -995,6 +996,7 @@ model DirectoryListing {
   saves        SavedListing[]
   transfers    ListingTransfer[]
   albums       Album[]
+  team         ListingTeamMember[]
   @@index([type, status])
   @@map("directory_listings")
 }
@@ -1135,6 +1137,24 @@ model ListingTransfer {
   @@index([listingId, status])
   @@index([status])
   @@map("listing_transfers")
+}
+
+// A business's team: members who represent it, beside the member who runs it
+// (its owner, when it's their own business, or its linked member). They host
+// events as the business. Only the member who runs it (or staff) adds them.
+model ListingTeamMember {
+  id        String   @id @default(cuid())
+  listingId String   @map("listing_id")
+  userId    String   @map("user_id")
+  addedById String?  @map("added_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  listing DirectoryListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User             @relation("ListingTeams", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, userId])
+  @@index([userId])
+  @@map("listing_team_members")
 }
 
 // A member's review of a listing: a vouch (+1) or a downvote (-1). A

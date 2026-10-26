@@ -18,6 +18,7 @@ import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
 import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
 import RecommendedBy from '../../components/directory/RecommendedBy';
+import ListingTeam from '../../components/directory/ListingTeam';
 import { OwnershipBanner, OwnershipSheet } from '../../components/directory/ListingOwnership';
 import { openExternal } from '../../utils/openExternal';
 import { isAppleDevice } from '../../utils/mapApps';
@@ -502,6 +503,7 @@ const ListingDetail = () => {
                     />
 
                     <RecommendedBy listing={listing} titleStyle={sectionTitleStyle} />
+                    <ListingTeam listing={listing} user={user} isAdmin={isAdmin} titleStyle={sectionTitleStyle} onChanged={() => fetchListing({ silent: true })} />
 
                     {photos.length > 0 && (
                         <section className="dir-detail-section">

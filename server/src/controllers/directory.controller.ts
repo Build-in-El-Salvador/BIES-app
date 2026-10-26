@@ -389,6 +389,11 @@ export async function getListing(req: Request, res: Response): Promise<void> {
                     orderBy: { createdAt: 'desc' },
                     include: { user: ownerSelect },
                 },
+                team: {
+                    where: { user: ACTIVE },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, userId: true, createdAt: true, user: ownerSelect },
+                },
                 _count: { select: { endorsements: true } },
             },
         });
@@ -432,6 +437,8 @@ export async function getListing(req: Request, res: Response): Promise<void> {
         // members blocked either way.
         const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
+        // Its team, by name: for members too.
+        const team = req.user ? listing.team.filter((m) => !hidden.has(m.userId)) : [];
         const savedByMe = req.user
             ? !!(await prisma.savedListing.findUnique({
                 where: { userId_listingId: { userId: req.user.id, listingId: listing.id } },
@@ -442,7 +449,7 @@ export async function getListing(req: Request, res: Response): Promise<void> {
         const transfers = await transfersFor(listing, req);
         // The linked member's Lightning details as their Settings → Privacy allows.
         const memberUser = nestedProfileForViewer(listing.memberUser, req.user?.id);
-        const shown = { ...listing, memberUser, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
+        const shown = { ...listing, memberUser, endorsements: reviews, team, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({

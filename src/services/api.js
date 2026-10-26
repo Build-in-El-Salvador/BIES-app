@@ -303,6 +303,11 @@ export const directoryApi = {
     acceptTransfer: (transferId) => post(`/directory/transfers/${transferId}/accept`, {}),
     declineTransfer: (transferId) => post(`/directory/transfers/${transferId}/decline`, {}),
     cancelTransfer: (transferId) => post(`/directory/transfers/${transferId}/cancel`, {}),
+
+    // Its team: members who represent it, and host events as it
+    represented: () => get('/directory/represented'),
+    addTeamMember: (id, userId) => post(`/directory/${id}/team`, { userId }),
+    removeTeamMember: (id, userId) => del(`/directory/${id}/team/${userId}`),
 };
 
 // ─── Marketplace (Shopstr / NIP-99) ──────────────────────────────────────────
