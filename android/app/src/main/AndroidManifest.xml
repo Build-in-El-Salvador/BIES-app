@@ -37,6 +37,7 @@
                 <data android:pathPrefix="/trusted/" />
                 <data android:pathPrefix="/talents/" />
                 <data android:pathPrefix="/opportunities/" />
+                <data android:pathPrefix="/events/" />
                 <data android:path="/feed" />
             </intent-filter>
 

@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { eventsApi } from '../services/api';
 import { useApiQuery } from '../hooks/useApi';
 import { getAssetUrl } from '../utils/assets';
+import { publicUrl } from '../utils/publicUrl';
 
 const VISIBILITY_CFG = {
     PUBLIC: { label: 'Public', color: 'var(--badge-success-text)', bg: 'var(--badge-success-bg)', icon: <Globe size={12} /> },
@@ -401,8 +402,8 @@ const MyEvents = () => {
     };
 
     const handleCopyLink = (id) => {
-        const base = window.location.origin;
-        navigator.clipboard.writeText(`${base}/events/${id}`);
+        // The web address, also from the phone app (not capacitor://localhost).
+        navigator.clipboard.writeText(publicUrl(`/events/${id}`));
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
     };

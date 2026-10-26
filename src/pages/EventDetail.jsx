@@ -1,1405 +1,542 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Calendar, MapPin, Clock, Users, Globe, Link as LinkIcon, ShieldCheck, Award, Zap, AlertCircle, Send, Facebook, Twitter, Mail, Check, MessageSquare, Loader2, Tag, ExternalLink, CheckCircle, ChevronLeft, ChevronRight, MoreHorizontal, Copy, UserPlus, X, Search, Flag, CalendarPlus, Navigation, Edit3, Radio, Ticket } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import {
+    CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
+    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User,
+} from 'lucide-react';
+import { eventsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { useFeatureFlags } from '../context/FeatureFlagsContext';
+import { useLightbox } from '../context/LightboxContext';
 import { getAssetUrl } from '../utils/assets';
 import { openExternal } from '../utils/openExternal';
-import { eventsApi, profilesApi } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useWallet } from '../hooks/useWallet';
-import ZapButton from '../components/ZapButton';
-import TicketPurchaseModal from '../components/TicketPurchaseModal';
-import DOMPurify from 'dompurify';
-import TranslatableText from '../components/TranslatableText';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
-import { useLightbox } from '../context/LightboxContext';
-import { nostrService } from '../services/nostrService';
-import { nostrSigner } from '../services/nostrSigner';
-import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { publicUrl } from '../utils/publicUrl';
+import { isNativePlatform } from '../utils/platform';
+import { isPlaceholderName } from '../utils/profileComplete';
+import { bothTicketLinks, fullDay, hostOf, partnerPath, timeRange } from '../utils/eventFormat';
+import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
-import { safeHref } from '../utils/safeUrl';
+import TranslatableText from '../components/TranslatableText';
+import TicketPurchaseModal from '../components/TicketPurchaseModal';
+import ModerationSheet from '../components/moderation/ModerationSheet';
+import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { BiesTag, PriceLine, TicketButton } from '../components/events/EventBits';
+import biesLogo from '../assets/logo-icon.svg';
+import '../components/moderation/Moderation.css';
+
+/**
+ * An event, for members: its cover, when and where, who hosts it (a member
+ * or a business, and co-hosts), its sponsors, what it's about and who's
+ * going. Tickets are the host's page (Luma, pretix…), from a bar that stays
+ * at the bottom; a free event with no ticket link has "I'm going" there.
+ * Signed out, the route shows the shared preview instead (SharePreview).
+ */
+
+const pad = (n) => String(n).padStart(2, '0');
+const icsDate = (d) => { const x = new Date(d); return `${x.getUTCFullYear()}${pad(x.getUTCMonth() + 1)}${pad(x.getUTCDate())}T${pad(x.getUTCHours())}${pad(x.getUTCMinutes())}00Z`; };
+const placeOf = (e) => (e.isOnline ? 'Online' : [e.locationName, e.locationAddress].filter(Boolean).join(', ') || e.location || '');
+const plain = (html) => (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Save it to a calendar: an .ics file on the web, Google Calendar in the phone app. */
+function addToCalendar(event) {
+    const end = event.endDate || new Date(new Date(event.startDate).getTime() + 2 * 3600_000).toISOString();
+    const url = publicUrl(`/events/${event.id}`);
+    if (isNativePlatform()) {
+        const q = new URLSearchParams({
+            action: 'TEMPLATE', text: event.title, dates: `${icsDate(event.startDate)}/${icsDate(end)}`,
+            details: `${plain(event.description).slice(0, 500)}\n\n${url}`, location: placeOf(event),
+        });
+        openExternal(`https://calendar.google.com/calendar/render?${q}`);
+        return;
+    }
+    const esc = (s) => String(s).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
+    const ics = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BIES//Events//EN', 'BEGIN:VEVENT',
+        `UID:${event.id}@buildinelsalvador.com`, `DTSTAMP:${icsDate(new Date())}`,
+        `DTSTART:${icsDate(event.startDate)}`, `DTEND:${icsDate(end)}`,
+        `SUMMARY:${esc(event.title)}`, `DESCRIPTION:${esc(`${plain(event.description).slice(0, 500)}\n\n${url}`)}`,
+        `LOCATION:${esc(placeOf(event))}`, `URL:${url}`, 'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+    a.download = `${event.title.replace(/[^\w-]+/g, '-').slice(0, 60) || 'event'}.ics`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 
 const EventDetail = () => {
     const { id } = useParams();
-    const { t } = useTranslation();
-    const { isAuthenticated, user } = useAuth();
-    const { connected: walletConnected, balance: walletBalance } = useWallet();
+    const { t, i18n } = useTranslation();
+    const lang = i18n.language;
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { user } = useAuth();
+    const { flags } = useFeatureFlags();
     const lightbox = useLightbox();
-    const [event, setEvent] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [rsvpStatus, setRsvpStatus] = useState(null); // null | 'GOING' | 'INTERESTED' | 'NOT_GOING'
-    const [rsvpLoading, setRsvpLoading] = useState(false);
-    const [showRsvpDropdown, setShowRsvpDropdown] = useState(false);
-    const [showActionMenu, setShowActionMenu] = useState(false);
-    const [showShareMenu, setShowShareMenu] = useState(false);
-    const [showInviteModal, setShowInviteModal] = useState(false);
-    const [linkCopied, setLinkCopied] = useState(false);
-    const { openReport, dialogs: moderationDialogs } = useModerationDialogs();
-    const [inviteSearch, setInviteSearch] = useState('');
-    const [inviteResults, setInviteResults] = useState([]);
-    const [inviteSearching, setInviteSearching] = useState(false);
-    const [inviteSending, setInviteSending] = useState(null);
-    const [invitedIds, setInvitedIds] = useState(new Set());
-    const [showCoverRsvp, setShowCoverRsvp] = useState(false);
-    const [relayPosting, setRelayPosting] = useState(false); // null | 'posting' | 'done' | 'error'
-    const [relayPostStatus, setRelayPostStatus] = useState(null);
-    const [myTicket, setMyTicket] = useState(null); // the user's PAID ticket, if any
-    const [showTicketModal, setShowTicketModal] = useState(false);
+    const preview = location.state?.preview?.id === id ? location.state.preview : null;
+    const [event, setEvent] = useState(preview);
+    const [missing, setMissing] = useState(false);
+    const [going, setGoing] = useState(null); // after a tap; null: as loaded
+    const [busy, setBusy] = useState(false);
+    const [copied, setCopied] = useState(false);
+    const [menu, setMenu] = useState(false);
+    const [sheet, setSheet] = useState(null); // 'delete'
+    const [notice, setNotice] = useState('');
+    const [ticket, setTicket] = useState(null);
+    const [buying, setBuying] = useState(false);
+    const menuButton = useRef(null);
+    const { dialogs, openReport } = useModerationDialogs({ onBlocked: () => navigate('/events') });
 
-    const parseEvent = (data) => {
-        if (!data) return data;
-        const parsed = { ...data };
+    const load = useCallback(async () => {
         try {
-            if (typeof parsed.tags === 'string') parsed.tags = JSON.parse(parsed.tags || '[]');
-            if (typeof parsed.customSections === 'string') parsed.customSections = JSON.parse(parsed.customSections || '[]');
-            if (typeof parsed.guestList === 'string') parsed.guestList = JSON.parse(parsed.guestList || '[]');
-        } catch (e) {
-            console.error('Error parsing event JSON fields:', e);
-        }
-        return parsed;
-    };
-
-    const fetchEvent = async () => {
-        setLoading(true);
-        try {
-            const result = await eventsApi.get(id);
-            const parsed = parseEvent(result);
-            setEvent(parsed);
-            setRsvpStatus(parsed?.rsvpStatus || null);
+            const full = await eventsApi.get(id);
+            setEvent(full);
+            setMissing(false);
         } catch (err) {
-            console.error('Error fetching event:', err);
-            setError(err.message || 'Failed to load event');
-        } finally {
-            setLoading(false);
+            if (err?.status === 404 || err?.status === 403) setMissing(true);
         }
-    };
-
-    useEffect(() => {
-        fetchEvent();
     }, [id]);
+    useEffect(() => { load(); }, [load]);
 
-    // For paid events, check whether the user already holds a PAID ticket
+    // Sats tickets only while the wallet is on (the zaps switch).
+    const satsTickets = !!flags?.zaps && event?.priceSats > 0;
     useEffect(() => {
-        if (!isAuthenticated || !event?.id || !(event.priceSats > 0)) return undefined;
-        let cancelled = false;
+        if (!satsTickets || !event?.id) return;
         eventsApi.myEventTickets(event.id)
-            .then(res => {
-                if (cancelled) return;
-                const paid = (res?.data || []).find(t => t.status === 'PAID');
-                if (paid) setMyTicket(paid);
-            })
+            .then((res) => setTicket((res?.data || res || []).find?.((tk) => tk.status === 'PAID') || null))
             .catch(() => {});
-        return () => { cancelled = true; };
-    }, [isAuthenticated, event?.id, event?.priceSats]);
+    }, [satsTickets, event?.id]);
 
-    // Called by TicketPurchaseModal once the ticket is PAID — the server has
-    // already upserted the RSVP to GOING, so refresh silently (no spinner)
-    const handleTicketPurchased = (ticket) => {
-        setMyTicket(ticket);
-        setRsvpStatus('GOING');
-        eventsApi.get(id).then(result => {
-            const parsed = parseEvent(result);
-            setEvent(parsed);
-            setRsvpStatus(parsed?.rsvpStatus || 'GOING');
-        }).catch(() => {});
-    };
+    if (missing) {
+        return (
+            <div className="container ev-missing">
+                <BackButton fallback="/events" label={t('events.detail.back')} />
+                <CalendarDays size={32} aria-hidden="true" />
+                <h1>{t('events.detail.notFound')}</h1>
+                <p>{t('events.detail.notFoundHint')}</p>
+                <Link to="/events" className="ev-missing-link">{t('events.detail.back')}</Link>
+                <style jsx>{`
+                    .ev-missing { padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: var(--color-gray-500); }
+                    .ev-missing h1 { margin: 0; font-family: var(--font-display); color: var(--color-gray-900); }
+                    .ev-missing :global(.ev-missing-link) { color: var(--color-primary); font-weight: 600; }
+                `}</style>
+            </div>
+        );
+    }
+    if (!event) {
+        return <div className="container" style={{ padding: '4rem 1rem', textAlign: 'center' }}><Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} /></div>;
+    }
 
-    const handleRsvp = async (status) => {
-        if (!isAuthenticated) return;
-        setRsvpLoading(true);
+    const host = hostOf(event);
+    const partners = event.partners || [];
+    const cohosts = partners.filter((p) => p.role === 'COHOST');
+    const sponsors = partners.filter((p) => p.role === 'SPONSOR');
+    const isGoing = going ?? event.rsvpStatus === 'GOING';
+    const goingPeople = (event.going || []).filter((p) => p.id !== user?.id);
+    const goingCount = Math.max(0, (event.goingCount || 0) - (event.rsvpStatus === 'GOING' ? 1 : 0)) + (isGoing ? 1 : 0);
+    const kind = event.category ? t(`events.kinds.${event.category}`, { defaultValue: '' }) : '';
+    const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
+    const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
+    const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
+    // With tickets sold elsewhere, members still say they're going here.
+    const rsvpRow = hasTickets && isFull;
+
+    const rsvp = async (next) => {
+        setGoing(next);
+        setBusy(true);
         try {
-            if (status === 'NOT_GOING' || status === null) {
-                await eventsApi.cancelRsvp(id);
-                setRsvpStatus(null);
-            } else {
-                await eventsApi.rsvp(id, status);
-                setRsvpStatus(status);
-            }
-            // Refresh event data to update attendee list
-            const result = await eventsApi.get(id);
-            setEvent(parseEvent(result));
-        } catch (err) {
-            console.error('RSVP error:', err);
-        } finally {
-            setRsvpLoading(false);
-            setShowRsvpDropdown(false);
-        }
-    };
-
-    const getRsvpLabel = (status) => {
-        switch (status) {
-            case 'GOING': return t('eventDetail.attending', 'Attending');
-            case 'INTERESTED': return t('eventDetail.thinkingAboutIt', 'Thinking About It');
-            case 'NOT_GOING': return t('eventDetail.notAttending', 'Not Attending');
-            default: return t('eventDetail.rsvp', 'RSVP');
-        }
-    };
-
-    // ─── Share: Copy Link ────────────────────────────────────────────────
-    const handleCopyLink = async () => {
-        const url = `${window.location.origin}/events/${id}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            setLinkCopied(true);
-            setTimeout(() => setLinkCopied(false), 2000);
+            if (next) await eventsApi.rsvp(event.id, 'GOING');
+            else await eventsApi.cancelRsvp(event.id);
         } catch {
-            // Fallback for older browsers
-            const ta = document.createElement('textarea');
-            ta.value = url;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            setLinkCopied(true);
-            setTimeout(() => setLinkCopied(false), 2000);
-        }
-        setShowShareMenu(false);
-    };
-
-    // ─── Share: Post to BIES Relay (NIP-52) ───────────────────────────────
-    const handlePostToRelay = async () => {
-        if (!event || relayPosting) return;
-        if (!nostrSigner.canSignSilently) {
-            alert('Connect a Nostr signer to post to the relay.');
-            return;
-        }
-        setRelayPosting(true);
-        setRelayPostStatus(null);
-        try {
-            const safeTags = (Array.isArray(event.tags) ? event.tags : []).filter(t => typeof t === 'string');
-            await nostrService.publishCalendarEvent({
-                id: event.id,
-                title: event.title,
-                description: event.description,
-                startDate: event.startDate || event.date,
-                endDate: event.endDate,
-                location: event.locationName || event.location,
-                locationAddress: event.locationAddress,
-                isOnline: event.isOnline,
-                onlineUrl: event.onlineUrl,
-                thumbnail: event.thumbnail,
-                ticketUrl: event.ticketUrl,
-                category: event.category,
-                tags: safeTags,
-            }, 'bies');
-            setRelayPostStatus('done');
-        } catch (err) {
-            console.error('Failed to post event to BIES relay:', err);
-            setRelayPostStatus('error');
+            setGoing(!next);
         } finally {
-            setRelayPosting(false);
-            setTimeout(() => { setRelayPostStatus(null); setShowShareMenu(false); }, 2000);
+            setBusy(false);
         }
     };
-
-    // ─── Add to Calendar (.ics download) ──────────────────────────────────
-    const handleAddToCalendar = () => {
-        if (!event) return;
-        const start = new Date(event.startDate || event.date);
-        const end = event.endDate ? new Date(event.endDate) : new Date(start.getTime() + 2 * 60 * 60 * 1000);
-        const fmt = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-        const esc = (s) => (s || '').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
-        const loc = [event.locationName, event.locationAddress, event.location].filter(Boolean).join(', ');
-        const url = `${window.location.origin}/events/${id}`;
-        const ics = [
-            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BIES//Event//EN',
-            'BEGIN:VEVENT',
-            `DTSTART:${fmt(start)}`, `DTEND:${fmt(end)}`,
-            `SUMMARY:${esc(event.title)}`, `LOCATION:${esc(loc)}`,
-            `URL:${url}`,
-            `DESCRIPTION:${esc(url)}`,
-            'END:VEVENT', 'END:VCALENDAR',
-        ].join('\r\n');
-        const blob = new Blob([ics], { type: 'text/calendar' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${event.title.replace(/[^a-z0-9]/gi, '-').substring(0, 40)}.ics`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        setShowActionMenu(false);
-    };
-
-    // ─── Open in Maps ─────────────────────────────────────────────────────
-    const handleOpenInMaps = () => {
-        const loc = event?.locationMapUrl || event?.locationAddress || event?.location;
-        if (!loc) return;
-        if (event.locationMapUrl) {
-            openExternal(event.locationMapUrl);
-        } else {
-            openExternal(`https://maps.google.com/?q=${encodeURIComponent(loc)}`);
-        }
-        setShowActionMenu(false);
-    };
-
-    // ─── Report event ─────────────────────────────────────────────────────
-    // To BIES's moderators (terms of use §6). Official BIES events don't offer
-    // to block their host, who is BIES staff.
-    const handleReport = () => {
-        setShowActionMenu(false);
-        const hostName = event.host?.profile?.name;
-        openReport(
-            { type: 'event', id: event.id },
-            event.isOfficial || !event.hostId ? {} : { name: hostName, blockTarget: { userId: event.hostId } },
-        );
-    };
-
-    // ─── Invite: Search members ───────────────────────────────────────────
-    const searchMembers = useCallback(async (q) => {
-        if (!q || q.length < 2) { setInviteResults([]); return; }
-        setInviteSearching(true);
+    const share = async () => {
+        const url = publicUrl(`/events/${event.id}`);
         try {
-            const res = await profilesApi.list({ search: q, limit: 10 });
-            const list = res?.data || res || [];
-            // Filter out the event host and current user
-            setInviteResults(list.filter(p => p.userId !== event?.hostId && p.userId !== user?.id));
-        } catch { setInviteResults([]); }
-        finally { setInviteSearching(false); }
-    }, [event?.hostId, user?.id]);
-
-    useEffect(() => {
-        const timer = setTimeout(() => searchMembers(inviteSearch), 300);
-        return () => clearTimeout(timer);
-    }, [inviteSearch, searchMembers]);
-
-    // ─── Invite: Send invitation ──────────────────────────────────────────
-    const handleInvite = async (profile) => {
-        if (!event || inviteSending) return;
-        const targetUserId = profile.userId;
-        setInviteSending(targetUserId);
+            if (navigator.share) { await navigator.share({ title: event.title, url }); return; }
+            await navigator.clipboard.writeText(url);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch { /* cancelled */ }
+    };
+    const closeMenu = () => { setMenu(false); menuButton.current?.focus({ preventScroll: true }); };
+    const takeNameOff = async () => {
+        closeMenu();
         try {
-            // 1. Backend: create notification + INVITED attendee record
-            await eventsApi.invite(id, targetUserId);
-
-            // 2. Send NIP-17 DM with event link (best-effort, don't block on failure)
-            if (nostrSigner.canSignSilently && profile.user?.nostrPubkey) {
-                const eventUrl = `${window.location.origin}/events/${id}`;
-                const dmContent = `You're invited to "${event.title}"!\n\n${eventUrl}`;
-                nostrService.sendNip17DM(profile.user.nostrPubkey, dmContent).catch(() => {});
-            }
-
-            setInvitedIds(prev => new Set([...prev, targetUserId]));
-        } catch (err) {
-            // Show a user-friendly error if already invited (409) vs generic failure
-            const msg = err?.status === 409 ? 'Already invited' : 'Failed to send invite';
-            // On 409 keep the button disabled (user IS already invited); only revert on real failures
-            if (err?.status !== 409) {
-                setInvitedIds(prev => { const n = new Set(prev); n.delete(targetUserId); return n; });
-            }
-            alert(msg);
-        } finally {
-            setInviteSending(null);
+            await Promise.all((event.myPartnerIds || []).map((pid) => eventsApi.removePartner(event.id, pid)));
+            setNotice(t('events.detail.nameOff'));
+            load();
+        } catch { /* stays as it was */ }
+    };
+    const remove = async () => {
+        setBusy(true);
+        try {
+            await eventsApi.delete(event.id);
+            navigate('/events', { replace: true });
+        } catch {
+            setBusy(false);
+            setSheet(null);
         }
     };
-
-    // Close all dropdowns helper
-    const closeAllDropdowns = () => {
-        setShowCoverRsvp(false);
-        setShowShareMenu(false);
-        setShowActionMenu(false);
-    };
-
-    // ─── RSVP icon for cover ──────────────────────────────────────────────
-    const getRsvpIcon = () => {
-        if (rsvpStatus === 'GOING') return <CheckCircle size={18} />;
-        if (rsvpStatus === 'INTERESTED') return <Clock size={18} />;
-        return <Calendar size={18} />;
-    };
-
-    const formatDate = (dateStr) => {
-        if (!dateStr) return '';
-        try {
-            return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-        } catch { return dateStr; }
-    };
-
-    if (loading) {
-        return (
-            <div className="event-detail-page">
-                <div className="container" style={{ textAlign: 'center', padding: '4rem 0' }}>
-                    <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
-                </div>
-            </div>
-        );
-    }
-
-    if (error || !event) {
-        return (
-            <div className="event-detail-page">
-                <div className="container">
-                    <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                        <h2>{t('eventDetail.eventNotFound', 'Event not found')}</h2>
-                        <p style={{ color: '#64748b', margin: '0.5rem 0' }}>{error || t('eventDetail.eventNotFoundDesc', "This event doesn't exist or has been removed.")}</p>
-                        <Link to="/events" className="back-link" style={{ marginTop: '1.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none', fontWeight: 500, color: 'var(--color-primary)' }}>
-                            {t('eventDetail.backToEvents', 'Back to Events')}
-                        </Link>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    const description = event.fullDescription || event.description || '';
+    const hasMenu = isFull && (event.canEdit || event.canDelete || event.myPartnerIds?.length || !event.canEdit);
+    const mapUrl = event.locationMapUrl || (event.locationAddress || event.locationName
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
+        : '');
 
     return (
-        <div className="event-detail-page">
-            <div className="container">
-                <div className="hero-image">
-                    {(event.coverImage || event.thumbnail || event.image) && (
-                        <img
-                            src={getAssetUrl(event.coverImage || event.thumbnail || event.image)}
-                            alt={event.title}
-                            onClick={() => lightbox.open(getAssetUrl(event.coverImage || event.thumbnail || event.image))}
-                            style={{ cursor: 'pointer' }}
-                        />
+        <div className="event-page">
+            {dialogs}
+            <div className="ev-hero-wrap">
+                <div className={`ev-hero${event.thumbnail ? '' : ' empty'}`}>
+                    {event.thumbnail && (
+                        <button type="button" className="ev-hero-photo" onClick={() => lightbox.open(getAssetUrl(event.thumbnail))} aria-label={event.title}>
+                            <img src={getAssetUrl(event.thumbnail)} alt="" />
+                        </button>
                     )}
-                    <BackButton fallback="/events" overlay label={t('eventDetail.backToEvents', 'Back to Events')} />
-                    <span className={`category-badge ${(event.category || '').toLowerCase()}`}>
-                        {event.category?.replace(/_/g, ' ')}
-                    </span>
-
-                    {/* Cover photo action buttons */}
-                    {isAuthenticated && (
-                        <div className="cover-actions">
-                            {/* RSVP icon button */}
-                            <div style={{ position: 'relative' }}>
-                                <button
-                                    className={`cover-btn ${rsvpStatus === 'GOING' ? 'going' : rsvpStatus === 'INTERESTED' ? 'interested' : ''}`}
-                                    onClick={() => { const next = !showCoverRsvp; closeAllDropdowns(); setShowCoverRsvp(next); }}
-                                    disabled={rsvpLoading}
-                                    title={getRsvpLabel(rsvpStatus)}
-                                >
-                                    {getRsvpIcon()}
-                                </button>
-                                {showCoverRsvp && (
-                                    <>
-                                        <div className="click-overlay" onClick={() => setShowCoverRsvp(false)} />
-                                        <div className="cover-dropdown">
-                                            <button className="cover-dropdown-item" onClick={() => { handleRsvp('GOING'); setShowCoverRsvp(false); }}>
-                                                <CheckCircle size={14} /> Attending
-                                            </button>
-                                            <button className="cover-dropdown-item" onClick={() => { handleRsvp('INTERESTED'); setShowCoverRsvp(false); }}>
-                                                <Clock size={14} /> Interested
-                                            </button>
-                                            <button className="cover-dropdown-item" style={{ color: 'var(--color-error)' }} onClick={() => { handleRsvp(null); setShowCoverRsvp(false); }}>
-                                                <X size={14} /> Not Going
-                                            </button>
-                                        </div>
-                                    </>
+                    <BackButton fallback="/events" overlay label={t('events.detail.back')} />
+                    {event.isOfficial && <span className="ev-hero-tag"><BiesTag /></span>}
+                </div>
+                <div className="ev-hero-tools">
+                    <button type="button" className="ev-tool" onClick={share} aria-label={copied ? t('events.detail.copied') : t('events.detail.share')}>
+                        {copied ? <Check size={18} /> : <Share size={18} />}
+                    </button>
+                    {hasMenu && (
+                        <button ref={menuButton} type="button" className="ev-tool" aria-label={t('events.detail.more')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+                            <MoreHorizontal size={20} />
+                        </button>
+                    )}
+                    {hasMenu && menu && (
+                        <>
+                            <div className="ev-menu-backdrop" onClick={() => setMenu(false)} />
+                            <div className="ev-menu" role="menu">
+                                {event.canEdit && (
+                                    <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate(`/events/edit/${event.id}`); }}>
+                                        <Edit3 size={16} /> {t('events.detail.edit')}
+                                    </button>
+                                )}
+                                {event.myPartnerIds?.length > 0 && (
+                                    <button type="button" role="menuitem" onClick={takeNameOff}><UserMinus size={16} /> {t('events.detail.takeNameOff')}</button>
+                                )}
+                                {event.canDelete && (
+                                    <button type="button" role="menuitem" className="danger" onClick={() => { closeMenu(); setSheet('delete'); }}><Trash2 size={16} /> {t('events.detail.delete')}</button>
+                                )}
+                                {!event.canEdit && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); openReport({ type: 'event', id: event.id }, { name: event.title, blockTarget: { userId: event.hostId } }); }}>
+                                        <Flag size={16} /> {t('events.detail.report')}
+                                    </button>
                                 )}
                             </div>
+                        </>
+                    )}
+                </div>
+            </div>
 
-                            {/* Share button */}
-                            <div style={{ position: 'relative' }}>
-                                <button className="cover-btn" onClick={() => { const next = !showShareMenu; closeAllDropdowns(); setShowShareMenu(next); }} title="Share">
-                                    <Send size={18} />
-                                </button>
-                                {showShareMenu && (
-                                    <>
-                                        <div className="click-overlay" onClick={() => setShowShareMenu(false)} />
-                                        <div className="cover-dropdown" style={{ right: 0, left: 'auto', minWidth: '180px' }}>
-                                            <button className="cover-dropdown-item" onClick={handleCopyLink}>
-                                                <Copy size={14} /> {linkCopied ? 'Copied!' : 'Copy Link'}
-                                            </button>
-                                            <button className="cover-dropdown-item" onClick={() => { setShowInviteModal(true); setShowShareMenu(false); }}>
-                                                <UserPlus size={14} /> Invite Members
-                                            </button>
-                                            <button className="cover-dropdown-item" onClick={handlePostToRelay} disabled={relayPosting}>
-                                                {relayPosting ? <Loader2 size={14} className="spin" /> : relayPostStatus === 'done' ? <CheckCircle size={14} style={{ color: 'var(--color-success, #22c55e)' }} /> : relayPostStatus === 'error' ? <AlertCircle size={14} style={{ color: 'var(--color-error)' }} /> : <Radio size={14} />}
-                                                {relayPosting ? 'Posting…' : relayPostStatus === 'done' ? 'Posted!' : relayPostStatus === 'error' ? 'Failed' : 'Post to BIES Relay'}
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+            <div className="ev-body">
+                {notice && <p className="ev-notice" role="status">{notice}</p>}
+                {event.canEdit && (event.visibility === 'DRAFT' || event.visibility === 'PRIVATE') && (
+                    <p className="ev-notice"><Lock size={15} aria-hidden="true" /> {event.visibility === 'DRAFT' ? t('events.detail.draft') : t('events.detail.private')}</p>
+                )}
+                <div>
+                    {kind && <p className="ev-kind">{kind}</p>}
+                    <h1 className="ev-title">{event.title}</h1>
+                </div>
 
-                            {/* Action menu (...) */}
-                            {moderationDialogs}
-                            <div style={{ position: 'relative' }}>
-                                <button className="cover-btn" onClick={() => { const next = !showActionMenu; closeAllDropdowns(); setShowActionMenu(next); }} title="More options">
-                                    <MoreHorizontal size={18} />
-                                </button>
-                                {showActionMenu && (
-                                    <>
-                                        <div className="click-overlay" onClick={() => setShowActionMenu(false)} />
-                                        <div className="cover-dropdown" style={{ right: 0, left: 'auto', minWidth: '200px' }}>
-                                            <button className="cover-dropdown-item" onClick={handleAddToCalendar}>
-                                                <CalendarPlus size={14} /> Add to Calendar
-                                            </button>
-                                            {(event.locationMapUrl || event.locationAddress || event.location) && (
-                                                <button className="cover-dropdown-item" onClick={handleOpenInMaps}>
-                                                    <Navigation size={14} /> Open in Maps
-                                                </button>
-                                            )}
-                                            {user?.id === event.hostId && (
-                                                <button className="cover-dropdown-item" onClick={() => { window.location.href = `/events/edit/${id}`; }}>
-                                                    <Edit3 size={14} /> Edit Event
-                                                </button>
-                                            )}
-                                            {user?.id && user.id !== event.hostId && (
-                                                <button className="cover-dropdown-item" style={{ color: 'var(--color-error)' }} onClick={handleReport}>
-                                                    <Flag size={14} /> {t('moderation.menu.reportEvent')}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                <div className="ev-facts">
+                    <div className="ev-fact">
+                        <span className="ev-fact-icon"><CalendarDays size={19} aria-hidden="true" /></span>
+                        <span className="ev-fact-text">
+                            <b>{fullDay(event.startDate, lang)}</b>
+                            <span>{timeRange(event.startDate, event.endDate, lang)}</span>
+                        </span>
+                        <button type="button" className="ev-fact-link" onClick={() => addToCalendar(event)}>
+                            <CalendarPlus size={15} aria-hidden="true" /> {t('events.detail.addToCalendar')}
+                        </button>
+                    </div>
+                    {event.isOnline ? (
+                        <div className="ev-fact">
+                            <span className="ev-fact-icon"><Video size={19} aria-hidden="true" /></span>
+                            <span className="ev-fact-text"><b>{t('events.detail.online')}</b></span>
+                            {event.onlineUrl && (
+                                <button type="button" className="ev-fact-link" onClick={() => openExternal(event.onlineUrl)}>{t('events.detail.joinLink')} <ExternalLink size={13} aria-hidden="true" /></button>
+                            )}
+                        </div>
+                    ) : (event.locationName || event.locationAddress || event.location) && (
+                        <div className="ev-fact">
+                            <span className="ev-fact-icon"><MapPin size={19} aria-hidden="true" /></span>
+                            <span className="ev-fact-text">
+                                <b>{event.locationName || event.location}</b>
+                                {event.locationAddress && <span>{event.locationAddress}</span>}
+                            </span>
+                            {mapUrl && <button type="button" className="ev-fact-link" onClick={() => openExternal(mapUrl)}>{t('events.detail.map')}</button>}
                         </div>
                     )}
                 </div>
 
-                <div className="detail-grid">
-                    <div className="main-content">
-                        <h1>{event.title}</h1>
-                        {(event.organizer || event.host?.profile?.name || event.host?.profile?.company) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <p className="organizer" style={{ margin: 0 }}>
-                                    {t('eventDetail.hostedBy', 'Hosted by')}{' '}
-                                    {event.host?.id ? (
-                                        <Link to={`/builder/${event.host.id}`} style={{ color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>
-                                            {event.organizer || event.host?.profile?.name || event.host?.profile?.company || 'BIES Community'}
-                                        </Link>
-                                    ) : (
-                                        <span style={{ fontWeight: 600 }}>{event.organizer || 'BIES Community'}</span>
-                                    )}
-                                </p>
-                                {event.host?.nostrPubkey && (
-                                    <ZapButton
-                                        recipients={[{ pubkey: event.host.nostrPubkey, name: event.host?.profile?.name || event.organizer, avatar: getAssetUrl(event.host?.profile?.avatar) || '', lud16: event.host?.profile?.lightningAddress, bolt12Offer: event.host?.profile?.bolt12Offer }]}
-                                        size="sm"
-                                    />
-                                )}
-                            </div>
-                        )}
-
-                        <div className="pd-card" style={{ marginTop: '1.5rem', padding: '1.75rem', background: 'var(--color-surface)', borderRadius: '16px', border: '1px solid var(--color-gray-200)', boxShadow: 'var(--shadow-md)' }}>
-                            <TranslatableText
-                                title={t('eventDetail.aboutEvent', 'About Event')}
-                                titleStyle={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-gray-900)' }}
-                                text={description}
-                                isHtml={true}
-                                className="description rich-text-content"
-                                style={{ color: 'var(--color-gray-700)', fontSize: '0.95rem', lineHeight: 1.75 }}
+                <section className="ev-people" aria-labelledby="ev-hosts">
+                    <h2 id="ev-hosts" className="ev-h">{t('events.detail.hostedBy')}</h2>
+                    <div className="ev-person-list">
+                        <PersonRow
+                            to={host.path}
+                            image={host.isOfficial ? biesLogo : host.image}
+                            round={host.kind === 'member'}
+                            name={isPlaceholderName(host.name) ? t('directory.ownership.aMember') : host.name}
+                            sub={host.isOfficial ? t('events.card.biesEvent') : host.kind === 'listing' ? t('events.detail.business') : t('events.detail.member')}
+                        />
+                        {cohosts.map((p) => (
+                            <PersonRow
+                                key={p.id}
+                                to={partnerPath(p)}
+                                href={p.kind === 'other' ? p.url : ''}
+                                image={p.image}
+                                round={p.kind === 'member'}
+                                name={p.name}
+                                sub={t('events.detail.cohost')}
                             />
-                        </div>
+                        ))}
+                    </div>
+                </section>
 
-                        {Array.isArray(event.tags) && event.tags.length > 0 && (
-                            <div className="tags">
-                                {event.tags.map(tag => (
-                                    <span key={tag} className="tag">
-                                        <Tag size={12} /> {tag}
-                                    </span>
+                {sponsors.length > 0 && (
+                    <section aria-labelledby="ev-sponsors">
+                        <h2 id="ev-sponsors" className="ev-h">{t('events.detail.sponsoredBy')}</h2>
+                        <ul className="ev-sponsors">
+                            {sponsors.map((p) => <li key={p.id}><SponsorTile partner={p} /></li>)}
+                        </ul>
+                    </section>
+                )}
+
+                {event.description && (
+                    <TranslatableText
+                        title={t('events.detail.about')}
+                        titleStyle={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-gray-500)' }}
+                        text={event.description}
+                        isHtml
+                        className="ev-about rich-text-content"
+                    />
+                )}
+
+                {sections.map((s, i) => (
+                    <section key={i} className="ev-section">
+                        {s.title && <h2 className="ev-h">{s.title}</h2>}
+                        {(s.body || s.content) && <TranslatableText text={s.body || s.content} isHtml className="rich-text-content" />}
+                        {[s.imageUrl, ...(s.images || [])].filter(Boolean).length > 0 && (
+                            <div className="ev-photos">
+                                {[s.imageUrl, ...(s.images || [])].filter(Boolean).map((src, j) => (
+                                    <button key={j} type="button" onClick={() => lightbox.open(getAssetUrl(src))}><img src={getAssetUrl(src)} alt="" /></button>
                                 ))}
                             </div>
                         )}
+                    </section>
+                ))}
 
-                        {Array.isArray(event.customSections) && event.customSections
-                            .filter(s => s.placement === 'LEFT' || !s.placement)
-                            .map((section, idx) => (
-                                <EventSection key={idx} section={section} />
-                            ))
-                        }
-
-                    </div>
-
-                    <div className="detail-sidebar">
-                        <div className="info-card">
-                            <h3>{t('eventDetail.eventDetails', 'Event Details')}</h3>
-
-                            <div className="info-row">
-                                <Calendar size={18} />
-                                <div>
-                                    <span className="info-label">{t('eventDetail.date', 'Date')}</span>
-                                    <span className="info-value">{formatDate(event.date || event.startDate)}</span>
-                                </div>
-                            </div>
-
-                            {(event.time || event.startDate) && (
-                                <div className="info-row">
-                                    <Clock size={18} />
-                                    <div>
-                                        <span className="info-label">{t('eventDetail.time', 'Time')}</span>
-                                        <span className="info-value">
-                                            {event.time || new Date(event.startDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="info-row">
-                                <MapPin size={18} />
-                                <div>
-                                    <span className="info-label">{t('eventDetail.locationLabel', 'Location')}</span>
-                                    <span className="info-value">{event.location}</span>
-                                </div>
-                            </div>
-
-                            {(event.attendeeCount > 0 || event._count?.attendees > 0 || (typeof event.attendees === 'number' && event.attendees > 0)) && (
-                                <div className="info-row">
-                                    <Users size={18} />
-                                    <div>
-                                        <span className="info-label">{t('eventDetail.attendees', 'Attendees')}</span>
-                                        <span className="info-value">
-                                            {event.attendeeCount || event._count?.attendees || (typeof event.attendees === 'number' ? event.attendees : 0)}
-                                            {` + ${t('eventDetail.expected', 'expected')}`}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {isAuthenticated && (
-                                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-                                    <button
-                                        className={`rsvp-btn ${rsvpStatus ? 'going' : ''}`}
-                                        onClick={() => setShowRsvpDropdown(!showRsvpDropdown)}
-                                        disabled={rsvpLoading}
-                                    >
-                                        {rsvpStatus === 'GOING' ? <CheckCircle size={16} /> : null}
-                                        {getRsvpLabel(rsvpStatus)}
-                                    </button>
-
-                                    {showRsvpDropdown && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            background: 'var(--color-surface)',
-                                            borderRadius: '10px',
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                            border: '1px solid var(--color-gray-200)',
-                                            zIndex: 20,
-                                            marginTop: '4px',
-                                            overflow: 'hidden'
-                                        }}>
-                                            <button
-                                                className="dropdown-item"
-                                                onClick={() => handleRsvp('GOING')}
-                                                style={{ width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500, borderBottom: '1px solid var(--color-gray-50)' }}
-                                            >
-                                                {t('eventDetail.attending', 'Attending')}
-                                            </button>
-                                            <button
-                                                className="dropdown-item"
-                                                onClick={() => handleRsvp('INTERESTED')}
-                                                style={{ width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500, borderBottom: '1px solid var(--color-gray-50)' }}
-                                            >
-                                                {t('eventDetail.thinkingAboutIt', 'Thinking About It')}
-                                            </button>
-                                            <button
-                                                className="dropdown-item"
-                                                onClick={() => handleRsvp(null)}
-                                                style={{ width: '100%', padding: '0.75rem 1rem', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500, color: '#ef4444' }}
-                                            >
-                                                {t('eventDetail.notAttending', 'Not Attending')}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {event.priceSats > 0 ? (
-                                myTicket ? (
-                                    <div className="my-ticket-card">
-                                        <div className="my-ticket-title">
-                                            <Ticket size={16} style={{ color: '#f7931a' }} /> My Ticket
-                                        </div>
-                                        <div className="my-ticket-qr">
-                                            <QRCodeSVG
-                                                value={myTicket.id}
-                                                size={140}
-                                                level="M"
-                                                marginSize={2}
-                                                bgColor="#ffffff"
-                                                fgColor="#000000"
-                                            />
-                                        </div>
-                                        <div>
-                                            <span className={`my-ticket-status ${myTicket.checkedInAt ? 'checked' : ''}`}>
-                                                {myTicket.checkedInAt ? <><CheckCircle size={12} /> Checked in</> : 'Not checked in yet'}
-                                            </span>
-                                        </div>
-                                        <p className="my-ticket-hint">
-                                            {myTicket.checkedInAt
-                                                ? `Checked in on ${new Date(myTicket.checkedInAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
-                                                : 'Show this QR code at the door for check-in.'}
-                                        </p>
-                                    </div>
-                                ) : isAuthenticated ? (
-                                    <button
-                                        type="button"
-                                        className="ticket-btn"
-                                        onClick={() => setShowTicketModal(true)}
-                                    >
-                                        <span className="ticket-btn-col">
-                                            <span className="ticket-btn-main">
-                                                <Zap size={14} /> Buy Ticket · {event.priceSats.toLocaleString()} sats
-                                            </span>
-                                            {walletConnected && (
-                                                <span className="ticket-btn-sub">
-                                                    {walletBalance != null
-                                                        ? t('eventDetail.paysFromWallet', { defaultValue: '⚡ Pays from your wallet · {{balance}} sats', balance: Math.floor(walletBalance / 1000).toLocaleString() })
-                                                        : t('eventDetail.paysFromWalletNoBalance', '⚡ Pays from your wallet')}
-                                                </span>
-                                            )}
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <div className="ticket-price-row">
-                                        <Ticket size={16} style={{ color: '#f7931a' }} />
-                                        Tickets: {event.priceSats.toLocaleString()} sats — log in to buy
-                                    </div>
-                                )
-                            ) : safeHref(event.externalUrl || event.ticketUrl) ? (
-                                <a
-                                    href={safeHref(event.externalUrl || event.ticketUrl)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="ticket-btn"
-                                >
-                                    Get Tickets <ExternalLink size={14} />
-                                </a>
-                            ) : null}
-                        </div>
-
-                        {/* Attendees Card — below Event Details */}
-                        {event.attendees && Array.isArray(event.attendees) && event.attendees.filter(a => a.status === 'GOING').length > 0 && (
-                            <div className="info-card" style={{ marginTop: '1.25rem' }}>
-                                <h3 style={{ marginBottom: '1rem' }}>
-                                    Attending
-                                    <span style={{ marginLeft: '0.5rem', fontSize: '0.8rem', fontWeight: 500, color: 'var(--color-gray-400)' }}>
-                                        ({event.attendees.filter(a => a.status === 'GOING').length})
-                                    </span>
-                                </h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                                    {event.attendees.filter(a => a.status === 'GOING').slice(0, 8).map((attendee) => (
-                                        <Link
-                                            key={attendee.id}
-                                            to={`/builder/${attendee.user?.id}`}
-                                            className="attendee-row"
-                                        >
-                                            <div className="attendee-avatar">
-                                                {attendee.user?.profile?.avatar ? (
-                                                    <img src={getAssetUrl(attendee.user.profile.avatar)} alt="" />
-                                                ) : (
-                                                    <span>{attendee.user?.profile?.name?.charAt(0) || '?'}</span>
-                                                )}
-                                            </div>
-                                            <div style={{ minWidth: 0 }}>
-                                                <div style={{ fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-gray-900)' }}>
-                                                    {attendee.user?.profile?.name || 'Community Member'}
-                                                </div>
-                                                {attendee.user?.profile?.company && (
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-gray-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {attendee.user.profile.company}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </Link>
-                                    ))}
-                                    {event.attendees.filter(a => a.status === 'GOING').length > 8 && (
-                                        <p style={{ fontSize: '0.8rem', color: 'var(--color-gray-400)', marginTop: '0.25rem', textAlign: 'center' }}>
-                                            +{event.attendees.filter(a => a.status === 'GOING').length - 8} more attending
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
+                {(goingCount > 0 || rsvpRow) && (
+                    <div className={`ev-going${rsvpRow ? ' rsvp' : ''}`}>
+                        {goingPeople.length > 0 && (
+                            <span className="ev-going-pile">
+                                {goingPeople.slice(0, 3).map((p) => (
+                                    <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<User size={14} />} /></span>
+                                ))}
+                            </span>
                         )}
-                        {/* Right-placement custom sections */}
-                        {Array.isArray(event.customSections) && event.customSections
-                            .filter(s => s.placement === 'RIGHT')
-                            .map((section, idx) => (
-                                <EventSection key={`right-${idx}`} section={section} isSidebar />
-                            ))
-                        }
+                        {rsvpRow ? (
+                            <span className="ev-going-text">
+                                <b>{isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk')}</b>
+                                <small>{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : t('events.detail.rsvpHint')}</small>
+                            </span>
+                        ) : (
+                            <span className="ev-going-text">{t('events.detail.going', { count: goingCount })}</span>
+                        )}
+                        {rsvpRow && (
+                            <button type="button" className={`ev-going-btn${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy} onClick={() => rsvp(!isGoing)}>
+                                {isGoing && <Check size={15} aria-hidden="true" />} {isGoing ? t('events.card.going') : t('events.detail.imGoing')}
+                            </button>
+                        )}
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Invite Members Modal */}
-            {showInviteModal && (
-                <>
-                    <div className="modal-overlay" onClick={() => setShowInviteModal(false)} />
-                    <div className="invite-modal">
-                        <div className="invite-modal-header">
-                            <h3>Invite Members</h3>
-                            <button onClick={() => setShowInviteModal(false)} className="invite-close"><X size={20} /></button>
-                        </div>
-                        <div className="invite-search-wrap">
-                            <Search size={16} />
-                            <input
-                                type="text"
-                                placeholder="Search members by name..."
-                                value={inviteSearch}
-                                onChange={(e) => setInviteSearch(e.target.value)}
-                                className="invite-search-input"
-                                autoFocus
-                            />
-                        </div>
-                        <div className="invite-results">
-                            {inviteSearching && (
-                                <div className="invite-empty"><Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /></div>
-                            )}
-                            {!inviteSearching && inviteSearch.length >= 2 && inviteResults.length === 0 && (
-                                <div className="invite-empty">No members found</div>
-                            )}
-                            {!inviteSearching && inviteSearch.length < 2 && (
-                                <div className="invite-empty" style={{ color: 'var(--color-gray-400)' }}>Type at least 2 characters to search</div>
-                            )}
-                            {inviteResults.map((profile) => {
-                                const alreadyInvited = invitedIds.has(profile.userId);
-                                const isSending = inviteSending === profile.userId;
-                                return (
-                                    <div key={profile.userId || profile.id} className="invite-row">
-                                        <div className="invite-avatar">
-                                            {profile.avatar ? (
-                                                <img src={getAssetUrl(profile.avatar)} alt="" />
-                                            ) : (
-                                                <span>{(profile.name || '?').charAt(0)}</span>
-                                            )}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
-                                            {profile.title && <div style={{ fontSize: '0.75rem', color: 'var(--color-gray-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.title}</div>}
-                                        </div>
-                                        <button
-                                            className={`invite-btn ${alreadyInvited ? 'invited' : ''}`}
-                                            onClick={() => !alreadyInvited && handleInvite(profile)}
-                                            disabled={alreadyInvited || isSending}
-                                        >
-                                            {isSending ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                                                : alreadyInvited ? <><Check size={14} /> Invited</>
-                                                : <><UserPlus size={14} /> Invite</>}
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </>
-            )}
+            <div className={`ev-bar${!satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
+                {satsTickets ? (
+                    <>
+                        <PriceLine event={{ ...event, priceLabel: `${Number(event.priceSats).toLocaleString()} sats`, ticketUrl: '', bitcoinUrl: '' }} />
+                        {ticket
+                            ? <span className="ev-have"><Check size={16} /> {t('events.detail.ticketBought')}</span>
+                            : <button type="button" className="ev-buy" onClick={() => setBuying(true)}>{t('events.detail.buySats', { sats: Number(event.priceSats).toLocaleString() })}</button>}
+                    </>
+                ) : (
+                    <>
+                        <PriceLine event={event} />
+                        <TicketButton event={event} size="lg" going={isGoing} onGoing={rsvp} busy={busy} />
+                    </>
+                )}
+            </div>
 
-            {/* In-app Lightning ticket purchase */}
-            {event.priceSats > 0 && (
+            {buying && (
                 <TicketPurchaseModal
-                    open={showTicketModal}
-                    onClose={() => setShowTicketModal(false)}
+                    open
+                    onClose={() => setBuying(false)}
                     event={{ id: event.id, title: event.title, priceSats: event.priceSats }}
-                    onPurchased={handleTicketPurchased}
+                    onPurchased={(tk) => { setTicket(tk); setBuying(false); setGoing(true); }}
                 />
+            )}
+            {sheet === 'delete' && (
+                <ModerationSheet title={t('events.detail.delete')} onClose={() => setSheet(null)}>
+                    <p className="mod-muted">{t('events.detail.deleteConfirm')}</p>
+                    <div className="mod-actions">
+                        <button type="button" className="mod-button secondary" onClick={() => setSheet(null)}>{t('events.detail.cancel')}</button>
+                        <button type="button" className="mod-button danger" onClick={remove} disabled={busy}>
+                            {busy && <Loader2 size={18} className="mod-spin" />} {t('events.detail.deleteYes')}
+                        </button>
+                    </div>
+                </ModerationSheet>
             )}
 
             <style jsx>{`
-                .event-detail-page {
-                    background: var(--color-gray-50);
-                    min-height: 100vh;
-                    padding-bottom: 4rem;
+                .event-page { padding-bottom: 1rem; }
+                .ev-hero-wrap { position: relative; max-width: 760px; margin: 0 auto; }
+                .ev-hero { position: relative; aspect-ratio: 16 / 10; max-height: 52vh; overflow: hidden; background: var(--color-gray-100); }
+                .ev-hero.empty { background: linear-gradient(135deg, rgba(0, 71, 171, 0.18), rgba(255, 91, 0, 0.12)); }
+                .ev-hero-photo { position: absolute; inset: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
+                .ev-hero-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .ev-hero :global(.bies-back) { position: absolute; left: 12px; top: 12px; z-index: 2; }
+                .ev-hero-tag { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
+                .ev-hero-tools { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; }
+                .ev-tool {
+                    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+                    display: flex; align-items: center; justify-content: center;
+                    background: rgba(255, 255, 255, 0.95); color: #0F172A; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
                 }
-                .container {
-                    max-width: 1100px;
-                    margin: 0 auto;
-                    padding: 2rem 1rem 0;
+                .ev-menu-backdrop { position: fixed; inset: 0; z-index: 4; }
+                .ev-menu {
+                    position: absolute; right: 0; top: 46px; z-index: 6; min-width: 220px; padding: 6px;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+                    display: flex; flex-direction: column;
                 }
-
-                .back-link {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    color: var(--color-gray-500);
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                    margin: 1.5rem 0;
-                    transition: color 0.2s;
+                .ev-menu button {
+                    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; background: none; cursor: pointer;
+                    border-radius: var(--radius-md); font-size: 0.9rem; color: var(--color-gray-800); text-align: left;
                 }
-                .back-link:hover { color: var(--color-gray-900); }
-
-                .hero-image {
-                    width: 100%;
-                    height: 400px;
-                    border-radius: 16px;
-                    overflow: hidden;
-                    position: relative;
-                    margin-bottom: 2rem;
-                    background: linear-gradient(135deg, #0052cc 0%, #0a192f 100%);
+                .ev-menu button:hover { background: var(--color-gray-100); }
+                .ev-menu button.danger { color: #DC2626; }
+                .ev-body { max-width: 760px; margin: 0 auto; padding: 1.25rem 1rem 0; display: flex; flex-direction: column; gap: 18px; }
+                .ev-notice { margin: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-orange-tint); color: var(--color-orange-text); font-size: 0.875rem; }
+                .ev-kind { margin: 0 0 4px; font-size: 0.85rem; font-weight: 600; color: var(--color-primary); }
+                .ev-title { margin: 0; font-family: var(--font-display); font-size: 2rem; line-height: 1.05; color: var(--color-gray-900); text-wrap: balance; overflow-wrap: anywhere; }
+                .ev-facts { background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px; padding: 4px 14px; }
+                .ev-fact { display: flex; gap: 12px; align-items: center; padding: 12px 0; }
+                .ev-fact + .ev-fact { border-top: 1px solid var(--color-gray-200); }
+                .ev-fact-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--color-orange-tint); color: var(--color-secondary); display: flex; align-items: center; justify-content: center; flex: none; }
+                .ev-fact-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+                .ev-fact-text b { font-size: 0.95rem; color: var(--color-gray-900); }
+                .ev-fact-text span { font-size: 0.85rem; color: var(--color-gray-500); }
+                .ev-fact-link { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 0.85rem; white-space: nowrap; padding: 6px 0; }
+                .ev-h { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-gray-500); }
+                .ev-person-list { display: flex; flex-direction: column; gap: 8px; }
+                .ev-sponsors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+                .ev-body :global(.ev-about) { margin: 0; }
+                .ev-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
+                .ev-photos button { border: 0; padding: 0; border-radius: 12px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; background: var(--color-gray-100); }
+                .ev-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .ev-going { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; color: var(--color-gray-500); flex-wrap: wrap; }
+                .ev-going-pile { display: flex; }
+                .ev-going-face { width: 28px; height: 28px; border-radius: 50%; overflow: hidden; margin-left: -8px; border: 2px solid var(--color-surface); background: var(--color-gray-100); display: inline-flex; align-items: center; justify-content: center; color: var(--color-gray-400); }
+                .ev-going-face:first-child { margin-left: 0; }
+                .ev-going-face :global(img) { width: 100%; height: 100%; object-fit: cover; }
+                .ev-going-text { flex: 1; min-width: 0; }
+                .ev-going.rsvp { flex-wrap: nowrap; padding: 12px 14px; border: 1px solid var(--color-gray-200); border-radius: 16px; background: var(--color-surface); }
+                .ev-going.rsvp .ev-going-text { display: flex; flex-direction: column; gap: 2px; }
+                .ev-going.rsvp .ev-going-text b { font-size: 0.95rem; font-weight: 700; color: var(--color-gray-900); }
+                .ev-going.rsvp .ev-going-text small { font-size: 0.8rem; line-height: 1.35; color: var(--color-gray-500); }
+                .ev-going-btn { flex-shrink: 0; }
+                .ev-going-btn {
+                    display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-full); cursor: pointer;
+                    border: 1.5px solid var(--color-primary); background: var(--color-surface); color: var(--color-primary); font-weight: 700; font-size: 0.85rem;
                 }
-                .hero-image img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    position: absolute;
-                    inset: 0;
+                .ev-going-btn.on { background: var(--color-primary); color: #FFFFFF; }
+                /* Stays at the foot of the screen while the page scrolls, above the
+                   bottom tabs on a phone (66px and the safe area). */
+                .ev-bar {
+                    position: sticky; bottom: 0; z-index: 30; max-width: 760px; margin: 24px auto 0;
+                    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+                    padding: 12px 16px 14px; box-sizing: border-box;
+                    background: var(--color-surface); border-top: 1px solid var(--color-gray-200); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
                 }
-
-                .category-badge {
-                    position: absolute;
-                    top: 1.5rem;
-                    right: 1.5rem;
-                    padding: 0.35rem 1rem;
-                    border-radius: 9999px;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    backdrop-filter: blur(4px);
-                }
-                .category-badge.official, .category-badge.conference { background: rgba(0, 71, 171, 0.9); color: white; }
-                .category-badge.network, .category-badge.networking { background: rgba(255, 91, 0, 0.9); color: white; }
-                .category-badge.community, .category-badge.meetup { background: rgba(16, 185, 129, 0.9); color: white; }
-                .category-badge.private { background: rgba(0, 0, 0, 0.8); color: white; }
-                .category-badge.education, .category-badge.workshop { background: rgba(124, 58, 237, 0.9); color: white; }
-                .category-badge.hackathon { background: rgba(234, 88, 12, 0.9); color: white; }
-
-                .detail-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 360px;
-                    gap: 2rem;
-                    align-items: start;
-                }
-
-                .main-content h1 {
-                    font-size: 2rem;
-                    font-weight: 800;
-                    margin-bottom: 0.5rem;
-                    color: var(--color-gray-900);
-                }
-
-                .organizer {
-                    color: var(--color-gray-500);
-                    font-size: 0.95rem;
-                    margin-bottom: 2rem;
-                }
-
-                .description p {
-                    color: var(--color-gray-700);
-                    line-height: 1.75;
-                    margin-bottom: 1rem;
-                    font-size: 1rem;
-                }
-
-                .tags {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 0.5rem;
-                    margin-top: 1.5rem;
-                }
-
-                .tag {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.35rem;
-                    padding: 0.3rem 0.75rem;
-                    background: var(--color-gray-200);
-                    color: var(--color-gray-600);
-                    border-radius: 9999px;
-                    font-size: 0.8rem;
-                    font-weight: 500;
-                }
-
-                .info-card {
-                    background: var(--color-surface);
-                    border-radius: var(--radius-xl);
-                    padding: 1.75rem;
-                    box-shadow: var(--shadow-md);
-                    border: 1px solid var(--color-gray-200);
-                }
-
-                .info-card h3 {
-                    font-size: 1.1rem;
-                    font-weight: 700;
-                    margin-bottom: 1.5rem;
-                    color: var(--color-gray-900);
-                }
-
-                .info-row {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 0.75rem;
-                    margin-bottom: 1.25rem;
-                    color: var(--color-secondary);
-                }
-
-                .info-row div {
-                    display: flex;
-                    flex-direction: column;
-                }
-
-                .info-label {
-                    font-size: 0.75rem;
-                    color: var(--color-gray-400);
-                    text-transform: uppercase;
-                    font-weight: 600;
-                    margin-bottom: 0.15rem;
-                }
-
-                .info-value {
-                    font-size: 0.95rem;
-                    color: var(--color-gray-800);
-                    font-weight: 500;
-                }
-
-                .rsvp-btn {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.5rem;
-                    width: 100%;
-                    padding: 0.85rem;
-                    background: var(--color-primary);
-                    color: white;
-                    border: none;
-                    border-radius: 10px;
-                    font-size: 0.9rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    margin-bottom: 0.75rem;
-                }
-                .rsvp-btn:hover:not(:disabled) { opacity: 0.9; }
-                .rsvp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-                .rsvp-btn.going { background: var(--color-success); }
-
-                .ticket-btn {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.5rem;
-                    width: 100%;
-                    padding: 0.85rem;
-                    background: linear-gradient(135deg, var(--color-secondary) 0%, var(--color-secondary-dark) 100%);
-                    color: white;
-                    border-radius: 10px;
-                    font-size: 0.9rem;
-                    font-weight: 600;
-                    transition: all 0.2s;
-                    margin-top: 0.5rem;
-                }
-                .ticket-btn:hover {
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4);
-                }
-                button.ticket-btn {
-                    border: none;
-                    cursor: pointer;
-                    font-family: inherit;
-                }
-
-                .ticket-btn-col {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 0.15rem;
-                    min-width: 0;
-                }
-                .ticket-btn-main {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-                .ticket-btn-sub {
-                    font-size: 0.72rem;
-                    font-weight: 500;
-                    opacity: 0.85;
-                }
-
-                .ticket-price-row {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.5rem;
-                    padding: 0.75rem;
-                    margin-top: 0.5rem;
-                    border: 1px dashed var(--color-gray-300, var(--color-gray-200));
-                    border-radius: 10px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    color: var(--color-gray-600);
-                }
-
-                .my-ticket-card {
-                    margin-top: 0.5rem;
-                    padding: 1rem;
-                    border: 1px solid var(--color-gray-200);
-                    border-radius: 12px;
-                    background: var(--color-gray-50);
-                    text-align: center;
-                }
-                .my-ticket-title {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 0.4rem;
-                    font-weight: 700;
-                    font-size: 0.9rem;
-                    color: var(--color-gray-900);
-                    margin-bottom: 0.75rem;
-                }
-                .my-ticket-qr {
-                    display: inline-flex;
-                    padding: 0.6rem;
-                    background: white;
-                    border-radius: 10px;
-                    border: 1px solid var(--color-gray-200);
-                }
-                .my-ticket-status {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    margin-top: 0.6rem;
-                    padding: 2px 10px;
-                    border-radius: 99px;
-                    font-size: 0.72rem;
-                    font-weight: 700;
-                    background: var(--color-blue-tint);
-                    color: #1d4ed8;
-                }
-                .my-ticket-status.checked {
-                    background: var(--color-green-tint);
-                    color: #15803d;
-                }
-                .my-ticket-hint {
-                    font-size: 0.75rem;
-                    color: var(--color-gray-500);
-                    margin: 0.5rem 0 0;
-                }
-
-                .dropdown-item:hover {
-                    background-color: var(--color-gray-50);
-                }
-
-                .attendee-card:hover {
-                    border-color: var(--color-primary) !important;
-                    transform: translateY(-2px);
-                    box-shadow: var(--shadow-sm);
-                }
-
-                .attendee-row {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.65rem;
-                    text-decoration: none;
-                    color: inherit;
-                    padding: 0.4rem 0.5rem;
-                    border-radius: 8px;
-                    transition: background 0.15s;
-                }
-                .attendee-row:hover { background: var(--color-gray-50); }
-                .attendee-avatar {
-                    width: 34px;
-                    height: 34px;
-                    border-radius: 50%;
-                    overflow: hidden;
-                    background: var(--color-gray-100);
-                    flex-shrink: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: 600;
-                    font-size: 0.8rem;
-                    color: var(--color-gray-500);
-                }
-                .attendee-avatar img { width: 100%; height: 100%; object-fit: cover; }
-
-                /* Cover action buttons */
-                .cover-actions {
-                    position: absolute;
-                    bottom: 24px;
-                    right: 24px;
-                    z-index: 20;
-                    display: flex;
-                    gap: 0.5rem;
-                    align-items: center;
-                }
-                .cover-btn {
-                    border-radius: var(--radius-md);
-                    background: var(--color-surface-raised);
-                    color: var(--color-gray-900);
-                    border: 1px solid var(--color-gray-200);
-                    height: 42px;
-                    width: 42px;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    box-shadow: var(--shadow-sm);
-                    transition: all 0.2s;
-                }
-                .cover-btn:hover { background: var(--color-surface-overlay); }
-                .cover-btn.going { background: var(--color-success); color: white; border-color: var(--color-success); }
-                .cover-btn.interested { background: var(--color-primary); color: white; border-color: var(--color-primary); }
-                .cover-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-                .click-overlay {
-                    position: fixed;
-                    top: 0; left: 0; right: 0; bottom: 0;
-                    z-index: 30;
-                }
-                .cover-dropdown {
-                    position: absolute;
-                    bottom: calc(100% + 6px);
-                    right: 0;
-                    background: var(--color-surface);
-                    border-radius: 10px;
-                    box-shadow: var(--shadow-lg);
-                    border: 1px solid var(--color-gray-200);
-                    z-index: 31;
-                    overflow: hidden;
-                    min-width: 160px;
-                }
-                .cover-dropdown-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    width: 100%;
-                    padding: 0.7rem 1rem;
-                    background: none;
-                    border: none;
-                    border-bottom: 1px solid var(--color-gray-100);
-                    cursor: pointer;
-                    font-size: 0.85rem;
-                    font-weight: 500;
-                    color: var(--color-text, inherit);
-                    text-align: left;
-                }
-                .cover-dropdown-item:last-child { border-bottom: none; }
-                .cover-dropdown-item:hover { background: var(--color-gray-50); }
-
-                /* Invite modal */
-                .modal-overlay {
-                    position: fixed;
-                    inset: 0;
-                    background: rgba(0,0,0,0.5);
-                    z-index: 200;
-                    animation: fadeIn 0.2s ease-out;
-                }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                .invite-modal {
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 90%;
-                    max-width: 440px;
-                    max-height: 70vh;
-                    background: var(--color-surface);
-                    border-radius: 16px;
-                    box-shadow: var(--shadow-lg);
-                    border: 1px solid var(--color-gray-200);
-                    z-index: 201;
-                    display: flex;
-                    flex-direction: column;
-                    overflow: hidden;
-                }
-                .invite-modal-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 1.25rem 1.5rem;
-                    border-bottom: 1px solid var(--color-gray-200);
-                }
-                .invite-modal-header h3 {
-                    font-size: 1.1rem;
-                    font-weight: 700;
-                    margin: 0;
-                }
-                .invite-close {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    color: var(--color-gray-500);
-                    padding: 4px;
-                    border-radius: 6px;
-                }
-                .invite-close:hover { color: var(--color-text); background: var(--color-gray-100); }
-                .invite-search-wrap {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    margin: 1rem 1.5rem;
-                    padding: 0.6rem 0.75rem;
-                    border: 1px solid var(--color-gray-300);
-                    border-radius: 10px;
-                    color: var(--color-gray-400);
-                    background: var(--color-gray-50);
-                }
-                .invite-search-wrap:focus-within { border-color: var(--color-primary); }
-                .invite-search-input {
-                    flex: 1;
-                    border: none;
-                    outline: none;
-                    font-size: 0.9rem;
-                    background: transparent;
-                    color: var(--color-text, inherit);
-                }
-                .invite-results {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 0 1rem 1rem;
-                }
-                .invite-empty {
-                    text-align: center;
-                    padding: 2rem;
-                    color: var(--color-gray-500);
-                    font-size: 0.85rem;
-                }
-                .invite-row {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.75rem;
-                    padding: 0.6rem 0.5rem;
-                    border-radius: 8px;
-                    transition: background 0.15s;
-                }
-                .invite-row:hover { background: var(--color-gray-50); }
-                .invite-avatar {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    overflow: hidden;
-                    background: var(--color-gray-200);
-                    flex-shrink: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: 600;
-                    font-size: 0.85rem;
-                    color: var(--color-gray-500);
-                }
-                .invite-avatar img { width: 100%; height: 100%; object-fit: cover; }
-                .invite-btn {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 0.35rem 0.75rem;
-                    border-radius: 8px;
-                    border: 1px solid var(--color-gray-300);
-                    background: var(--color-surface);
-                    color: var(--color-primary);
-                    font-size: 0.78rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    white-space: nowrap;
-                    transition: all 0.15s;
-                }
-                .invite-btn:hover:not(:disabled) { background: var(--color-blue-tint); border-color: var(--color-primary); }
-                .invite-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-                .invite-btn.invited { background: var(--color-green-tint); color: var(--color-success); border-color: transparent; }
-
-                @keyframes spin { to { transform: rotate(360deg); } }
-
+                .ev-bar.two { flex-direction: column; align-items: stretch; gap: 10px; }
                 @media (max-width: 768px) {
-                    .hero-image { height: 250px; }
-                    .detail-grid {
-                        grid-template-columns: 1fr;
-                    }
-                    .info-card { position: static; }
-                    .main-content h1 { font-size: 1.5rem; }
-                    .cover-actions { bottom: 12px; right: 12px; gap: 0.4rem; }
-                    .cover-btn { height: 36px; width: 36px; }
+                    .ev-bar { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+                }
+                .ev-buy { height: 48px; padding: 0 20px; border: 0; border-radius: var(--radius-full); background: #F7931A; color: #FFFFFF; font-weight: 700; cursor: pointer; }
+                .ev-have { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-success-text); }
+                @media (min-width: 769px) {
+                    .ev-hero-wrap { padding-top: 1.5rem; }
+                    .ev-hero { border-radius: 20px; }
+                    .ev-bar { border: 1px solid var(--color-gray-200); border-radius: 16px 16px 0 0; }
                 }
             `}</style>
         </div>
     );
 };
 
+/** A host or co-host: a member, a business, or someone not on BIES (their link). */
+function PersonRow({ to, href, image, round, name, sub }) {
+    const { t } = useTranslation();
+    const inner = (
+        <>
+            <span className={`pr-photo${round ? '' : ' square'}`}>
+                <Avatar src={image} size={40} fallback={<span className="pr-initial">{(name || '?')[0].toUpperCase()}</span>} />
+            </span>
+            <span className="pr-text"><b>{name || t('directory.ownership.aMember')}</b><span>{sub}</span></span>
+            {(to || href) && (href ? <ExternalLink size={16} className="pr-go" /> : <ChevronRight size={18} className="pr-go" />)}
+            <style jsx>{`
+                .pr-photo { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex: none; background: var(--color-gray-100); display: flex; align-items: center; justify-content: center; }
+                .pr-photo.square { border-radius: 11px; }
+                .pr-photo :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .pr-initial { font-weight: 700; color: var(--color-primary); }
+                .pr-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+                .pr-text b { font-size: 0.95rem; color: var(--color-gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .pr-text span { font-size: 0.8rem; color: var(--color-gray-500); }
+                :global(.pr-go) { color: var(--color-gray-400); flex: none; }
+                :global(.ev-person) {
+                    display: flex; align-items: center; gap: 12px; padding: 10px 12px; text-decoration: none; color: inherit; text-align: left; width: 100%;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 14px; font: inherit; cursor: pointer;
+                }
+            `}</style>
+        </>
+    );
+    if (to) return <Link to={to} className="ev-person">{inner}</Link>;
+    if (href) return <button type="button" className="ev-person" onClick={() => openExternal(href)}>{inner}</button>;
+    return <div className="ev-person">{inner}</div>;
+}
+
+/** A sponsor as a logo tile; it opens their page, or their website. */
+function SponsorTile({ partner }) {
+    const to = partnerPath(partner);
+    const inner = (
+        <>
+            <span className={`st-logo${partner.kind === 'member' ? ' round' : ''}`}>
+                <Avatar src={partner.image} size={44} fallback={<span className="st-initial">{(partner.name || '?').slice(0, 2).toUpperCase()}</span>} />
+            </span>
+            <span className="st-name">{partner.name}</span>
+            <style jsx>{`
+                .st-logo { width: 44px; height: 44px; border-radius: 12px; overflow: hidden; background: var(--color-gray-100); display: flex; align-items: center; justify-content: center; }
+                .st-logo.round { border-radius: 50%; }
+                .st-logo :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .st-initial { font-size: 0.8rem; font-weight: 700; color: var(--color-primary); }
+                .st-name { font-size: 0.8rem; font-weight: 600; line-height: 1.25; color: var(--color-gray-900); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+                :global(.ev-sponsor) {
+                    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 12px 8px; height: 100%;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 14px; text-decoration: none; color: inherit; width: 100%; font: inherit; cursor: pointer;
+                }
+            `}</style>
+        </>
+    );
+    if (to) return <Link to={to} className="ev-sponsor">{inner}</Link>;
+    if (partner.url) return <button type="button" className="ev-sponsor" onClick={() => openExternal(partner.url)}>{inner}</button>;
+    return <div className="ev-sponsor">{inner}</div>;
+}
+
 export default EventDetail;
-
-// ─── Rich Section Renderer ───────────────────────────────────────────────────
-
-const PIE_COLORS = ['#F97316', '#0052cc', '#22c55e', '#8b5cf6', '#ef4444', '#06b6d4', '#eab308', '#ec4899'];
-
-const EventSection = ({ section, isSidebar }) => {
-    // Must be resolved here — EventSection is module-level, so the lightbox
-    // from the EventDetail component scope is not visible in this function
-    const lightbox = useLightbox();
-    const stype = section.type || 'TEXT';
-    return (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-gray-200)', borderRadius: '12px', padding: isSidebar ? '1.25rem' : '1.75rem', marginTop: '1.5rem' }}>
-            {stype === 'TEXT' ? (
-                <TranslatableText
-                    title={section.title}
-                    titleTag="h2"
-                    titleStyle={{ fontSize: isSidebar ? '1rem' : '1.35rem', fontWeight: 700, color: '#111827', margin: '0 0 1rem', letterSpacing: '-0.01em' }}
-                    text={section.body || section.content || ''}
-                    isHtml={true}
-                    className="rich-text-content"
-                    style={{ color: '#4b5563', fontSize: '0.95rem', lineHeight: 1.75 }}
-                />
-            ) : (
-                <>
-                    {section.title && (
-                        <h2 style={{ fontSize: isSidebar ? '1rem' : '1.35rem', fontWeight: 700, color: '#111827', margin: '0 0 1rem', letterSpacing: '-0.01em' }}>{section.title}</h2>
-                    )}
-                </>
-            )}
-            {stype === 'PHOTO' && section.imageUrl && (
-                <img src={section.imageUrl} alt={section.title || ''} onClick={() => lightbox.open(section.imageUrl)} style={{ width: '100%', borderRadius: '10px', objectFit: 'cover', cursor: 'pointer' }} />
-            )}
-            {stype === 'CAROUSEL' && section.images?.length > 0 && (
-                <EventCarousel images={section.images} onImageClick={(img, imgs) => lightbox.open(img, imgs)} />
-            )}
-            {stype === 'GRAPH' && section.dataPoints?.length > 0 && (
-                <div style={{ width: '100%', height: isSidebar ? '240px' : '340px', marginTop: section.title ? '0.5rem' : '0' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        {section.graphType === 'BAR' ? (
-                            <BarChart data={section.dataPoints} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false}>
-                                    {section.xAxisLabel && <Label value={section.xAxisLabel} offset={-10} position="insideBottom" fill="#4b5563" fontSize={12} fontWeight={600} />}
-                                </XAxis>
-                                <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-                                <Bar dataKey="value" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        ) : section.graphType === 'LINE' ? (
-                            <LineChart data={section.dataPoints} margin={{ top: 10, right: 20, left: 10, bottom: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-                                <Line type="monotone" dataKey="value" stroke="var(--color-primary)" strokeWidth={3} dot={{ fill: 'var(--color-primary)', r: 4 }} />
-                            </LineChart>
-                        ) : (
-                            <PieChart>
-                                <Pie data={section.dataPoints} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={isSidebar ? 70 : 110} label>
-                                    {section.dataPoints.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                </Pie>
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-                                <Legend />
-                            </PieChart>
-                        )}
-                    </ResponsiveContainer>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const EventCarousel = ({ images, onImageClick }) => {
-    const [idx, setIdx] = useState(0);
-    if (!images?.length) return null;
-    return (
-        <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', background: '#f3f4f6' }}>
-            <div style={{ display: 'flex', transition: 'transform 0.4s ease', transform: `translateX(-${idx * 100}%)`, height: '320px' }}>
-                {images.map((img, i) => (
-                    <img key={i} src={img} alt="" onClick={() => onImageClick && onImageClick(img, images)} style={{ width: '100%', height: '100%', objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }} />
-                ))}
-            </div>
-            {images.length > 1 && (
-                <>
-                    <button onClick={() => setIdx(p => p === 0 ? images.length - 1 : p - 1)} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.85)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                        <ChevronLeft size={20} color="#374151" />
-                    </button>
-                    <button onClick={() => setIdx(p => p === images.length - 1 ? 0 : p + 1)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.85)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                        <ChevronRight size={20} color="#374151" />
-                    </button>
-                    <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
-                        {images.map((_, i) => (
-                            <div key={i} onClick={() => setIdx(i)} style={{ width: 8, height: 8, borderRadius: '50%', background: i === idx ? 'var(--color-primary)' : 'rgba(255,255,255,0.6)', cursor: 'pointer' }} />
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
-    );
-};

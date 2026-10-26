@@ -49,6 +49,7 @@ import {
 } from '../controllers/admin.controller';
 import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFlags.controller';
 import { listOpenTransfers, staffMoveListing, staffMoveSchema } from '../controllers/listingTransfer.controller';
+import { officialSchema, setListingOfficial } from '../controllers/listingTeam.controller';
 import {
     adminDeleteEndorsement,
     adminListReports,
@@ -106,6 +107,8 @@ router.post('/directory/recompute', recomputeDirectoryScores);
 router.delete('/directory/:id', deleteDirectoryListing);
 router.get('/directory/transfers', listOpenTransfers);
 router.post('/directory/:id/owner', validate(staffMoveSchema), staffMoveListing);
+// BIES's own page: its events are BIES events (admins only)
+router.put('/directory/:id/official', adminOnly, validate(officialSchema), setListingOfficial);
 
 // Reports (terms of use §6: reviewed within 24 hours)
 router.get('/reports', adminListReports);

@@ -55,7 +55,7 @@ const emptyForm = {
 
 /**
  * Directory listing create/edit form (farms + providers), following the
- * CreateEvent.jsx conventions: card sections, input-field styles, upload
+ * the old event form's conventions: card sections, input-field styles, upload
  * via uploadApi.media with the ImageCropModal pattern (photo: wide crop,
  * logo: square/round crop), error banner, submitting states.
  *

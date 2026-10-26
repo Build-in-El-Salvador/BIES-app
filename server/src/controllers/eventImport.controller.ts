@@ -176,6 +176,8 @@ function buildEventData(og: Record<string, string>, jsonLd: any, sourceUrl: stri
             const d = new Date(jsonLd.startDate);
             event.startDate = d.toISOString().split('T')[0];
             event.startTime = d.toTimeString().slice(0, 5);
+            // The moment itself, for the app to show in El Salvador time.
+            if (!Number.isNaN(d.getTime())) event.startAt = d.toISOString();
         } catch { /* ignore */ }
     }
     if (jsonLd?.endDate) {
@@ -183,6 +185,7 @@ function buildEventData(og: Record<string, string>, jsonLd: any, sourceUrl: stri
             const d = new Date(jsonLd.endDate);
             event.endDate = d.toISOString().split('T')[0];
             event.endTime = d.toTimeString().slice(0, 5);
+            if (!Number.isNaN(d.getTime())) event.endAt = d.toISOString();
         } catch { /* ignore */ }
     }
 

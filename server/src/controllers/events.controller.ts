@@ -1,39 +1,22 @@
 /**
  * Events controller — community events (meetups, hackathons, demo days).
+ * Members only: signed-out visitors get a shared event's preview
+ * (preview.controller). Who hosts, co-hosts, sponsors and edits an event:
+ * services/eventPeople.service.ts.
  */
 
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
-import { cache, cacheKey, TTL } from '../services/redis.service';
+import { cache } from '../services/redis.service';
 import { publishAnnouncement, publishCalendarEvent, deleteCalendarEvent, publishRSVPEvent, validateCalendarEventData } from '../services/nostr.service';
 import { notifyEventRsvp, createNotification } from '../services/notification.service';
-import { config } from '../config';
-import { removeTags } from '../middleware/sanitize';
-
-// ─── OG helpers ──────────────────────────────────────────────────────────────
-
-function escapeHtml(str: string): string {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#x27;');
-}
-
-function stripHtml(str: string): string {
-    return removeTags(str).replace(/\s+/g, ' ').trim();
-}
-
-/** First origin from CORS_ORIGIN (may be comma-separated in dev). */
-function getCanonicalBaseUrl(): string {
-    const origin = config.corsOrigin.split(',')[0].trim().replace(/\/$/, '');
-    return origin || 'https://bies.app';
-}
-
-/** Only allow alphanumeric + underscore + hyphen in IDs (CUID-safe). */
-const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
+import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
+import {
+    EVENT_PEOPLE, MAX_PARTNERS, PartnerError, actedForIds, canDeleteEvent, canEditEvent, checkPartners,
+    hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
+} from '../services/eventPeople.service';
+import { listingsActedFor, runsListing } from './listingTeam.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -53,6 +36,7 @@ export const createEventSchema = z.object({
     endDate: z.string().max(40).optional(),
     thumbnail: z.string().max(2000).optional().or(z.literal('')),
     ticketUrl: webLink.optional(),
+    bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
     priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
     ticketCapacity: z.number().int().positive().optional().nullable(),
@@ -78,6 +62,11 @@ export const createEventSchema = z.object({
         dataPoints: z.array(z.object({ label: z.string().max(200), value: z.union([z.string().max(200), z.number()]) })).max(100).optional(),
     })).max(20).optional(),
     nostrPublish: z.enum(['none', 'bies', 'public', 'both']).default('bies'),
+    // Host as a business or farm the member runs or is on the team of.
+    hostListingId: z.string().max(64).nullable().optional(),
+    // What tickets cost, as the host writes it ("Free", "From $25").
+    priceLabel: z.string().trim().max(40).optional(),
+    partners: z.array(partnerSchema).max(MAX_PARTNERS).optional(),
 });
 
 // Every field optional, and a field left out stays out: in zod 4, .partial()
@@ -96,96 +85,131 @@ function visibilityToPublished(visibility: string): boolean {
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
+const ACTIVE = { isBanned: false, deletedAt: null };
+/** In the list: published, and not private or a draft. */
+const LISTED = { isPublished: true, visibility: { notIn: ['PRIVATE', 'DRAFT'] } };
+/** An event with no end counts as on for 6 hours after it starts. */
+const SIX_HOURS = 6 * 3600_000;
+const stillOn = (now: Date) => ({ OR: [{ endDate: { gte: now } }, { endDate: null, startDate: { gte: new Date(now.getTime() - SIX_HOURS) } }] });
+const over = (now: Date) => ({ OR: [{ endDate: { lt: now } }, { endDate: null, startDate: { lt: new Date(now.getTime() - SIX_HOURS) } }] });
+const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' } } } } };
+/** Hosted as BIES's own page, while it's up: a BIES event. */
+const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active', isPublished: true } } };
+
+/** What only the host side changes: tickets and money, who hosts it, who sees it, where people join online. */
+const HOST_ONLY = [
+    'ticketUrl', 'bitcoinUrl', 'priceLabel', 'payoutLightningAddress', 'priceSats', 'ticketCapacity',
+    'visibility', 'guestList', 'hostListingId', 'isOnline', 'onlineUrl',
+] as const;
+const asText = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
+/** Whether a value an edit sends differs from the stored one (JSON lists are stored as text). */
+const differs = (sent: unknown, stored: unknown): boolean => asText(sent) !== asText(stored);
+
+const EVENT_FIELDS = [
+    'title', 'description', 'category', 'visibility',
+    'location', 'locationName', 'locationAddress', 'locationMapUrl',
+    'isOnline', 'onlineUrl', 'startDate', 'endDate',
+    'thumbnail', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'priceSats', 'ticketCapacity', 'payoutLightningAddress',
+    'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
+] as const;
+
+/** The event columns a create or edit sets, in the database's form. */
+function eventData(body: Record<string, any>): Record<string, any> {
+    const data: Record<string, any> = {};
+    for (const field of EVENT_FIELDS) if (body[field] !== undefined) data[field] = body[field];
+    if (data.tags !== undefined) data.tags = JSON.stringify(data.tags);
+    if (data.guestList !== undefined) data.guestList = JSON.stringify(data.guestList);
+    if (data.customSections !== undefined) data.customSections = JSON.stringify(data.customSections);
+    if (data.startDate) data.startDate = new Date(data.startDate);
+    if (data.endDate) data.endDate = new Date(data.endDate);
+    return data;
+}
+
+const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
+
+/** An event as the list shows it (no guest list, payout address or online link). */
+function eventCard(e: any, hidden: Set<string>) {
+    // Hosted as a business that's since been taken down: neither it nor the BIES tag show.
+    const { status: _status, isPublished: _published, ...listing } = isLiveListing(e.hostListing) ? e.hostListing : { status: '', isPublished: false };
+    const hostListing = isLiveListing(e.hostListing) ? listing : null;
+    return {
+        id: e.id, title: e.title, category: e.category, visibility: e.visibility,
+        startDate: e.startDate, endDate: e.endDate,
+        location: e.location, locationName: e.locationName, isOnline: e.isOnline,
+        thumbnail: e.thumbnail, ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
+        isOfficial: !!hostListing?.isOfficial, isEndorsed: e.isEndorsed, hostId: e.hostId,
+        host: e.host, hostListing,
+        partners: partnersFor(e.partners || [], hidden),
+        goingCount: e._count?.attendees ?? 0,
+    };
+}
+
+/** Whether a listed host is gone for this viewer: suspended, deleted, or blocked either way. */
+async function hostGone(hostId: string, hidden: Set<string>): Promise<boolean> {
+    if (hidden.has(hostId)) return true;
+    const host = await prisma.user.findUnique({ where: { id: hostId }, select: { isBanned: true, deletedAt: true } });
+    return !host || host.isBanned || !!host.deletedAt;
+}
+
 /**
  * GET /events
- * List publicly visible events with filters.
+ * Listed events, for members. upcoming=true: not ended yet, soonest first;
+ * past=true: ended, latest first. Filters: category, search, isOfficial,
+ * hostId, hostListingId. No hosts suspended or blocked either way.
  */
 export async function listEvents(req: Request, res: Response): Promise<void> {
     try {
-        const { category, upcoming, search, isOfficial, isEndorsed, hostId, page = '1', limit = '20' } = req.query;
-        const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
-        const take = Math.min(parseInt(limit as string, 10), 50);
+        const me = req.user!;
+        const q = req.query as Record<string, string | undefined>;
+        const take = Math.min(Math.max(parseInt(q.limit || '20', 10) || 20, 1), 50);
+        const page = Math.max(parseInt(q.page || '1', 10) || 1, 1);
+        const now = new Date();
+        const hidden = await hiddenFromIds(me.id, { staff: isStaffUser(me) });
 
-        // Cache key must include every filter that shapes the result set,
-        // otherwise a filtered request poisons the cache for unfiltered ones
-        const cKey = cacheKey.events({
-            category: category as string || '',
-            upcoming: upcoming as string || '',
-            isOfficial: isOfficial as string || '',
-            isEndorsed: isEndorsed as string || '',
-            search: search as string || '',
-            hostId: hostId as string || '',
-            page: page as string,
-            limit: limit as string
-        });
-        const cached = await cache.getJson<any>(cKey);
-        if (cached) { res.json(cached); return; }
-
-        // Only show published events that are not PRIVATE or DRAFT
+        const and: any[] = [];
+        if (q.upcoming === 'true') and.push(stillOn(now));
+        if (q.past === 'true') and.push(over(now));
+        if (q.search) {
+            and.push({ OR: [
+                { title: { contains: q.search } },
+                { description: { contains: q.search } },
+                { location: { contains: q.search } },
+                { hostListing: { name: { contains: q.search } } },
+            ] });
+        }
+        if (hidden.length) and.push({ hostId: { notIn: hidden } });
         const where: any = {
-            isPublished: true,
-            visibility: { notIn: ['PRIVATE', 'DRAFT'] },
+            ...LISTED,
+            host: ACTIVE,
+            ...(q.category ? { category: q.category.toUpperCase() } : {}),
+            ...(q.isOfficial === 'true' ? OFFICIAL_HOST : q.isOfficial === 'false' ? { NOT: OFFICIAL_HOST } : {}),
+            ...(q.hostId ? { hostId: q.hostId } : {}),
+            ...(q.hostListingId ? { hostListingId: q.hostListingId } : {}),
+            ...(and.length ? { AND: and } : {}),
         };
 
-        if (category && typeof category === 'string') {
-            where.category = category.toUpperCase();
-        }
-        if (upcoming === 'true') {
-            where.startDate = { gte: new Date() };
-        }
-        if (isOfficial === 'true') {
-            where.isOfficial = true;
-        } else if (isOfficial === 'false') {
-            where.isOfficial = false;
-        }
-        if (isEndorsed === 'true') {
-            where.isEndorsed = true;
-        }
-        if (hostId && typeof hostId === 'string') {
-            where.hostId = hostId;
-        }
-        if (search && typeof search === 'string') {
-            where.OR = [
-                { title: { contains: search } },
-                { description: { contains: search } },
-                { location: { contains: search } },
-            ];
-        }
-
-        const [events, total] = await Promise.all([
+        const order = q.past === 'true' ? 'desc' : 'asc';
+        const [rows, total] = await Promise.all([
             prisma.event.findMany({
                 where,
-                orderBy: { startDate: 'asc' },
-                skip,
+                orderBy: [{ startDate: order }, { id: 'asc' }],
+                skip: (page - 1) * take,
                 take,
-                include: {
-                    host: {
-                        select: {
-                            id: true, nostrPubkey: true,
-                            profile: { select: { name: true, avatar: true, company: true } },
-                        },
-                    },
-                    _count: { select: { attendees: true } },
-                },
+                include: { ...EVENT_PEOPLE, ...GOING_COUNT },
             }),
             prisma.event.count({ where }),
         ]);
+        const hiddenSet = new Set(hidden);
+        const mine = rows.length
+            ? await prisma.eventAttendee.findMany({ where: { userId: me.id, eventId: { in: rows.map((e) => e.id) } }, select: { eventId: true, status: true } })
+            : [];
+        const rsvp = new Map(mine.map((a) => [a.eventId, a.status]));
 
-        const parsed = events.map((e) => ({
-            ...e,
-            tags: JSON.parse(e.tags || '[]'),
-            guestList: JSON.parse(e.guestList || '[]'),
-            customSections: JSON.parse((e as any).customSections || '[]'),
-            attendeeCount: e._count.attendees,
-        }));
-
-        const result = {
-            data: parsed,
-            pagination: { page: parseInt(page as string, 10), limit: take, total, totalPages: Math.ceil(total / take) },
-        };
-
-        await cache.setJson(cKey, result, TTL.EVENT_LIST);
-        res.json(result);
+        res.json({
+            data: rows.map((e) => ({ ...eventCard(e, hiddenSet), rsvpStatus: rsvp.get(e.id) || null })),
+            pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
+        });
     } catch (error) {
         console.error('List events error:', error);
         res.status(500).json({ error: 'Failed to list events' });
@@ -202,17 +226,28 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
         const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
         const take = Math.min(parseInt(limit as string, 10), 100);
 
+        // Mine: I host it myself, I act for its host business (up or down) or
+        // a co-host one, or I'm a co-host.
+        const me = req.user!.id;
+        const acted = await actedForIds(me);
+        const mineWhere = {
+            OR: [
+                { hostId: me, hostListingId: null },
+                ...(acted.length ? [{ hostListingId: { in: acted } }] : []),
+                // A business I run or am on the team of, while it's down.
+                { hostListing: { is: { OR: [{ memberUserId: me }, { memberUserId: null, isOwnBusiness: true, ownerId: me }, { team: { some: { userId: me } } }] } } },
+                { partners: { some: { role: 'COHOST', OR: [{ userId: me }, ...(acted.length ? [{ listingId: { in: acted } }] : [])] } } },
+            ],
+        };
         const [events, total] = await Promise.all([
             prisma.event.findMany({
-                where: { hostId: req.user!.id },
+                where: mineWhere,
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take,
-                include: {
-                    _count: { select: { attendees: true } },
-                },
+                include: { ...EVENT_PEOPLE, _count: { select: { attendees: true } } },
             }),
-            prisma.event.count({ where: { hostId: req.user!.id } }),
+            prisma.event.count({ where: mineWhere }),
         ]);
 
         // Ticket sales per hosted event (PAID only)
@@ -227,14 +262,21 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
             : [];
         const statsByEvent = new Map(ticketStats.map((s) => [s.eventId, s]));
 
-        const parsed = events.map((e) => ({
-            ...e,
-            tags: JSON.parse(e.tags || '[]'),
-            guestList: JSON.parse(e.guestList || '[]'),
-            customSections: JSON.parse((e as any).customSections || '[]'),
-            attendeeCount: e._count.attendees,
-            ticketsSold: statsByEvent.get(e.id)?._count._all || 0,
-            revenueSats: statsByEvent.get(e.id)?._sum.amountSats || 0,
+        // As the list shows them; sales only for the host side.
+        const parsed = await Promise.all(events.map(async (e) => {
+            const hostSide = await canDeleteEvent(e, req.user, acted);
+            return {
+                ...eventCard(e, new Set()),
+                maxAttendees: e.maxAttendees,
+                ticketCapacity: e.ticketCapacity,
+                endorsementRequested: e.endorsementRequested,
+                attendeeCount: e._count.attendees,
+                canDelete: hostSide,
+                ...(hostSide ? {
+                    ticketsSold: statsByEvent.get(e.id)?._count._all || 0,
+                    revenueSats: statsByEvent.get(e.id)?._sum.amountSats || 0,
+                } : {}),
+            };
         }));
 
         res.json({
@@ -252,43 +294,25 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
  */
 export async function listAttendingEvents(req: Request, res: Response): Promise<void> {
     try {
-        const { page = '1', limit = '50' } = req.query;
-        const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
-        const take = Math.min(parseInt(limit as string, 10), 100);
-
-        const attendeeRecords = await prisma.eventAttendee.findMany({
-            where: { userId: req.user!.id, status: { in: ['GOING', 'INTERESTED', 'INVITED'] } },
-            include: {
-                event: {
-                    include: {
-                        _count: { select: { attendees: true } },
-                        host: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } },
-                    },
-                },
-            },
-            orderBy: { joinedAt: 'desc' },
-            skip,
-            take,
-        });
-
-        const total = await prisma.eventAttendee.count({
-            where: { userId: req.user!.id, status: { in: ['GOING', 'INTERESTED', 'INVITED'] } },
-        });
-
-        const data = attendeeRecords.map((a) => ({
-            ...a.event,
-            tags: JSON.parse(a.event.tags || '[]'),
-            guestList: JSON.parse(a.event.guestList || '[]'),
-            customSections: JSON.parse((a.event as any).customSections || '[]'),
-            attendeeCount: a.event._count.attendees,
-            rsvpStatus: a.status,
-            host: a.event.host,
-        }));
-
-        res.json({
-            data,
-            pagination: { page: parseInt(page as string, 10), limit: take, total, totalPages: Math.ceil(total / take) },
-        });
+        const me = req.user!;
+        const take = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10) || 50, 1), 100);
+        const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
+        const where = { userId: me.id, status: { in: ['GOING', 'INTERESTED', 'INVITED'] } };
+        const [records, total, hidden] = await Promise.all([
+            prisma.eventAttendee.findMany({
+                where,
+                include: { event: { include: { ...EVENT_PEOPLE, ...GOING_COUNT } } },
+                orderBy: { joinedAt: 'desc' },
+                skip: (page - 1) * take,
+                take,
+            }),
+            prisma.eventAttendee.count({ where }),
+            hiddenFromIds(me.id, { staff: isStaffUser(me) }),
+        ]);
+        const hiddenSet = new Set(hidden);
+        // As the list shows them: no guest list, payout address or online link.
+        const data = records.map((a) => ({ ...eventCard(a.event, hiddenSet), attendeeCount: a.event._count.attendees, rsvpStatus: a.status }));
+        res.json({ data, pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) } });
     } catch (error) {
         console.error('List attending events error:', error);
         res.status(500).json({ error: 'Failed to list attending events' });
@@ -297,85 +321,68 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
 
 /**
  * GET /events/:id
- * Get a single event with attendee info.
+ * An event for a member: who hosts it, its co-hosts and sponsors, who's
+ * going. Drafts are for whoever can edit; private events for them and the
+ * guests. The guest list and payout address only for whoever can edit.
  */
 export async function getEvent(req: Request, res: Response): Promise<void> {
     try {
+        const me = req.user!;
         const event = await prisma.event.findUnique({
             where: { id: req.params.id },
             include: {
-                host: {
-                    select: {
-                        id: true, nostrPubkey: true,
-                        profile: { select: { name: true, avatar: true, company: true } },
-                    },
-                },
+                ...EVENT_PEOPLE,
+                ...GOING_COUNT,
                 attendees: {
-                    take: 20,
+                    where: { status: 'GOING', user: ACTIVE },
+                    take: 30,
                     orderBy: { joinedAt: 'asc' },
-                    include: {
-                        user: {
-                            select: {
-                                id: true,
-                                nostrPubkey: true,
-                                profile: {
-                                    select: {
-                                        id: true,
-                                        name: true,
-                                        avatar: true,
-                                        company: true,
-                                    },
-                                },
-                            },
-                        },
-                    },
+                    select: { userId: true, user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
                 },
-                _count: { select: { attendees: true } },
             },
         });
+        if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
 
-        if (!event) {
-            res.status(404).json({ error: 'Event not found' });
-            return;
+        const acted = await actedForIds(me.id);
+        const canEdit = await canEditEvent(event, me, acted);
+        const hostSide = canEdit && await canDeleteEvent(event, me, acted);
+        if (!canEdit) {
+            const hidden = new Set(await hiddenFromIds(me.id, { staff: isStaffUser(me) }));
+            const unseen = event.visibility === 'DRAFT'
+                || (event.visibility === 'PRIVATE' && !(await invitedTo(event, me.id)))
+                || (!isStaffUser(me) && await hostGone(event.hostId, hidden));
+            if (unseen) { res.status(404).json({ error: 'Event not found' }); return; }
         }
+        const hidden = new Set(await hiddenFromIds(me.id, { staff: isStaffUser(me) }));
 
-        const currentUserId = req.user?.id;
-
-        // DRAFT: only host can view
-        if (event.visibility === 'DRAFT' && event.hostId !== currentUserId) {
-            res.status(404).json({ error: 'Event not found' });
-            return;
-        }
-
-        // PRIVATE: only host or guests can view
-        if (event.visibility === 'PRIVATE' && event.hostId !== currentUserId) {
-            const guestList: { name: string; userId?: string }[] = JSON.parse(event.guestList || '[]');
-            const isGuest = currentUserId && guestList.some((g) => g.userId === currentUserId);
-            if (!isGuest) {
-                res.status(404).json({ error: 'Event not found' });
-                return;
-            }
-        }
-
-        // Current user's RSVP status + PAID ticket count
         const [myRsvp, ticketsSold] = await Promise.all([
-            currentUserId
-                ? prisma.eventAttendee.findUnique({
-                    where: { eventId_userId: { eventId: event.id, userId: currentUserId } },
-                    select: { status: true },
-                })
-                : Promise.resolve(null),
+            prisma.eventAttendee.findUnique({ where: { eventId_userId: { eventId: event.id, userId: me.id } }, select: { status: true } }),
             prisma.ticket.count({ where: { eventId: event.id, status: 'PAID' } }),
         ]);
+        // My own place on it, which I can take off: me, or a business I act for.
+        const myPartnerIds = event.partners
+            .filter((p) => p.userId === me.id || (p.listingId && acted.includes(p.listingId)))
+            .map((p) => p.id);
 
         res.json({
-            ...event,
-            tags: JSON.parse(event.tags || '[]'),
-            guestList: JSON.parse(event.guestList || '[]'),
-            customSections: JSON.parse((event as any).customSections || '[]'),
-            attendeeCount: event._count.attendees,
-            ticketsSold,
+            ...eventCard(event, hidden),
+            description: event.description,
+            locationAddress: event.locationAddress,
+            locationMapUrl: event.locationMapUrl,
+            onlineUrl: event.onlineUrl,
+            tags: parseJson(event.tags),
+            customSections: parseJson(event.customSections),
+            maxAttendees: event.maxAttendees,
+            ticketCapacity: event.ticketCapacity,
+            endorsementRequested: event.endorsementRequested,
+            nostrPublish: event.nostrPublish,
+            going: event.attendees.filter((a) => !hidden.has(a.userId)).map((a) => a.user),
             rsvpStatus: myRsvp?.status || null,
+            ticketsSold,
+            canEdit,
+            canDelete: hostSide,
+            myPartnerIds,
+            ...(hostSide ? { guestList: parseJson(event.guestList), payoutLightningAddress: event.payoutLightningAddress } : {}),
         });
     } catch (error) {
         console.error('Get event error:', error);
@@ -383,346 +390,192 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
     }
 }
 
-/**
- * GET /events/:id/og
- * Return an HTML page with Open Graph meta tags for social media link previews.
- * No auth required — crawlers (WhatsApp, Facebook, etc.) cannot send tokens.
- */
-export async function getEventOG(req: Request, res: Response): Promise<void> {
-    const rawId = req.params.id;
-
-    // Reject IDs that contain characters unsafe for HTML interpolation
-    if (!rawId || !SAFE_ID_RE.test(rawId)) {
-        res.status(400).json({ error: 'Invalid event ID' });
-        return;
-    }
-
-    const id = rawId;
-    const baseUrl = getCanonicalBaseUrl();
-    const eventUrl = `${baseUrl}/events/${id}`;
-
-    // Default/fallback OG values
-    let ogTitle = 'BIES | Build in El Salvador';
-    let ogDescription = 'Bitcoin-native investment ecosystem connecting builders and investors in El Salvador';
-    let ogImage = `${baseUrl}/icons/icon-512.png`;
-
-    try {
-        const event = await prisma.event.findUnique({
-            where: { id },
-            select: {
-                title: true,
-                description: true,
-                startDate: true,
-                endDate: true,
-                thumbnail: true,
-                location: true,
-                locationName: true,
-                visibility: true,
-                isPublished: true,
-                host: {
-                    select: { profile: { select: { name: true } } },
-                },
-            },
-        });
-
-        // Only populate OG tags for public/visible events
-        if (event && event.visibility !== 'DRAFT' && event.visibility !== 'PRIVATE') {
-            ogTitle = escapeHtml(event.title.slice(0, 70));
-
-            // Build description: date · location · host
-            const parts: string[] = [];
-            if (event.startDate) {
-                parts.push(event.startDate.toLocaleDateString('en-US', {
-                    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-                }));
-            }
-            if (event.locationName || event.location) {
-                parts.push(escapeHtml((event.locationName || event.location || '').slice(0, 60)));
-            }
-            if (event.host?.profile?.name) {
-                parts.push(`Hosted by ${escapeHtml(event.host.profile.name)}`);
-            }
-            if (parts.length > 0) {
-                ogDescription = parts.join(' \u00b7 ');
-            } else if (event.description) {
-                ogDescription = escapeHtml(stripHtml(event.description).slice(0, 200));
-            }
-
-            if (event.thumbnail) {
-                const thumbUrl = event.thumbnail.startsWith('http')
-                    ? event.thumbnail
-                    : `${baseUrl}${event.thumbnail}`;
-                ogImage = escapeHtml(thumbUrl);
-            }
-        }
-    } catch (error) {
-        console.error('OG meta fetch error:', error);
-        // Fall through with default values
-    }
-
-    // Cache for 10 minutes — OG data changes infrequently and crawlers re-fetch
-    res.set('Cache-Control', 'public, max-age=600');
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta property="og:title" content="${ogTitle}" />
-  <meta property="og:description" content="${ogDescription}" />
-  <meta property="og:image" content="${ogImage}" />
-  <meta property="og:url" content="${eventUrl}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="BIES" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${ogTitle}" />
-  <meta name="twitter:description" content="${ogDescription}" />
-  <meta name="twitter:image" content="${ogImage}" />
-  <meta http-equiv="refresh" content="0;url=/events/${id}" />
-  <title>${ogTitle}</title>
-</head>
-<body>
-  <p>Redirecting to <a href="/events/${id}">${ogTitle}</a>&hellip;</p>
-  <script>window.location.replace("/events/${id}");</script>
-</body>
-</html>`;
-
-    res.type('html').send(html);
-}
 
 /**
  * POST /events
- * Create a new event.
+ * Create an event, hosted by me or as a business or farm I act for (a BIES
+ * event when that's BIES's own page), with its co-hosts and sponsors.
  */
 export async function createEvent(req: Request, res: Response): Promise<void> {
     try {
-        const allowedFields = [
-            'title', 'description', 'category', 'visibility',
-            'location', 'locationName', 'locationAddress', 'locationMapUrl',
-            'isOnline', 'onlineUrl', 'startDate', 'endDate',
-            'thumbnail', 'ticketUrl', 'maxAttendees', 'tags', 'isOfficial',
-            'priceSats', 'ticketCapacity', 'payoutLightningAddress',
-            'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
-        ];
-        const data: any = {};
-        for (const field of allowedFields) {
-            if (req.body[field] !== undefined) {
-                if (field === 'isOfficial' && req.body[field] === true && !req.user!.isAdmin) {
-                    continue;
-                }
-                data[field] = req.body[field];
-            }
-        }
-
-        // Extract nostrPublish before DB write (stored separately)
+        const me = req.user!.id;
+        const body = req.body as z.infer<typeof createEventSchema>;
+        const data = eventData(body);
         const nostrPublish: string = data.nostrPublish || 'none';
-
-        // Derive isPublished from visibility
         const visibility = data.visibility || 'PUBLIC';
         const isPublished = visibilityToPublished(visibility);
 
-        const parsedTags: string[] = data.tags || [];
-        if (data.tags) data.tags = JSON.stringify(data.tags);
-        if (data.guestList) data.guestList = JSON.stringify(data.guestList);
-        if (data.customSections) data.customSections = JSON.stringify(data.customSections);
-        if (data.startDate) data.startDate = new Date(data.startDate);
-        if (data.endDate) data.endDate = new Date(data.endDate);
+        const hostListing = body.hostListingId ? (await listingsActedFor(me)).find((l) => l.id === body.hostListingId) : null;
+        if (body.hostListingId && !hostListing) {
+            res.status(403).json({ error: 'You can only host as a business you run or are on the team of', reason: 'not_your_listing' });
+            return;
+        }
+        const partners = await checkPartners(me, body.partners || [], { hostListingId: hostListing?.id ?? null, isAdmin: !!req.user!.isAdmin });
 
         const event = await prisma.event.create({
-            data: { ...data, hostId: req.user!.id, isPublished },
-            include: {
-                host: {
-                    select: {
-                        id: true,
-                        profile: { select: { name: true, avatar: true } },
-                    },
-                },
-            },
+            data: {
+                ...data,
+                hostId: me,
+                hostListingId: hostListing?.id ?? null,
+                isOfficial: !!hostListing?.isOfficial,
+                isPublished,
+                partners: { create: partners },
+            } as any,
+            include: EVENT_PEOPLE,
         });
-
         await cache.delPattern('events:');
+        const hostName = hostNameOf(event);
+        await notifyNewPartners(me, event, hostName, partners);
 
         // Announce new event on the BIES feed
         if (isPublished) {
-            const hostName = event.host?.profile?.name || 'A BIES member';
-            const dateStr = data.startDate ? new Date(data.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-            publishAnnouncement(req.user!.id, `${hostName} is hosting "${event.title}"${dateStr ? ` on ${dateStr}` : ''}${event.location ? ` in ${event.location}` : ''}. Check it out on BIES!`, [['t', 'new-event']]).catch((err) =>
+            const dateStr = event.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/El_Salvador' });
+            publishAnnouncement(me, `${hostName} is hosting "${event.title}" on ${dateStr}${event.location ? ` in ${event.location}` : ''}. Check it out on BIES!`, [['t', 'new-event']]).catch((err) =>
                 console.error('[Nostr] Event announcement failed:', err)
             );
         }
 
-        // Publish NIP-52 calendar event to Nostr relays (custodial users)
-        let nostrPublished = false;
-        if (nostrPublish !== 'none' && isPublished) {
-            const validationError = validateCalendarEventData({
-                id: event.id,
-                title: event.title,
-                startDate: data.startDate,
-            });
-            if (validationError) {
-                console.warn('[Nostr] NIP-52 validation failed:', validationError);
-            } else {
-                try {
-                    const nostrEventId = await publishCalendarEvent(req.user!.id, {
-                        id: event.id,
-                        title: event.title,
-                        description: event.description,
-                        startDate: data.startDate,
-                        endDate: data.endDate || undefined,
-                        location: event.location || undefined,
-                        locationName: event.locationName || undefined,
-                        locationAddress: event.locationAddress || undefined,
-                        isOnline: event.isOnline,
-                        onlineUrl: event.onlineUrl || undefined,
-                        category: event.category,
-                        tags: parsedTags,
-                        thumbnail: event.thumbnail || undefined,
-                        ticketUrl: event.ticketUrl || undefined,
-                    }, nostrPublish as 'bies' | 'public' | 'both');
-                    if (nostrEventId) {
-                        await prisma.event.update({
-                            where: { id: event.id },
-                            data: { nostrEventId },
-                        });
-                        nostrPublished = true;
-                    }
-                } catch (err) {
-                    console.error('[Nostr] NIP-52 calendar event publish failed:', err);
-                }
-            }
-        }
+        const nostrPublished = isPublished && nostrPublish !== 'none'
+            ? await publishToNostr(me, event, nostrPublish as 'bies' | 'public' | 'both')
+            : false;
 
-        res.status(201).json({
-            ...event,
-            tags: JSON.parse(event.tags || '[]'),
-            guestList: JSON.parse(event.guestList || '[]'),
-            customSections: JSON.parse((event as any).customSections || '[]'),
-            nostrPublished,
-        });
+        res.status(201).json({ ...eventCard(event, new Set()), nostrPublished });
     } catch (error) {
+        if (error instanceof PartnerError) { res.status(400).json({ error: error.message, reason: error.reason }); return; }
         console.error('Create event error:', error);
-        if (error instanceof z.ZodError) {
-            res.status(400).json({ error: 'Validation failed', details: error.issues });
-            return;
-        }
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create event' });
+        res.status(500).json({ error: 'Failed to create event' });
+    }
+}
+
+/**
+ * NIP-52 calendar event (kind 31923, replaceable by its d-tag), signed with
+ * the host's key on BIES (custodial members only); its id is kept.
+ */
+async function publishToNostr(signerId: string, event: any, target: 'bies' | 'public' | 'both'): Promise<boolean> {
+    const validationError = validateCalendarEventData({ id: event.id, title: event.title, startDate: event.startDate });
+    if (validationError) {
+        console.warn('[Nostr] NIP-52 validation failed:', validationError);
+        return false;
+    }
+    try {
+        const nostrEventId = await publishCalendarEvent(signerId, {
+            id: event.id,
+            title: event.title,
+            description: event.description,
+            startDate: event.startDate,
+            endDate: event.endDate || undefined,
+            location: event.location || undefined,
+            locationName: event.locationName || undefined,
+            locationAddress: event.locationAddress || undefined,
+            isOnline: event.isOnline,
+            onlineUrl: event.onlineUrl || undefined,
+            category: event.category,
+            tags: parseJson(event.tags),
+            thumbnail: event.thumbnail || undefined,
+            ticketUrl: event.ticketUrl || undefined,
+        }, target);
+        if (!nostrEventId) return false;
+        await prisma.event.update({ where: { id: event.id }, data: { nostrEventId } });
+        return true;
+    } catch (err) {
+        console.error('[Nostr] NIP-52 calendar event publish failed:', err);
+        return false;
     }
 }
 
 /**
  * PUT /events/:id
- * Update an event (host only).
+ * Edit an event: its host, a co-host, the host business's people, or an
+ * admin. Changing who hosts it is for its host, the host business's people
+ * or an admin, and only to a business they act for.
  */
 export async function updateEvent(req: Request, res: Response): Promise<void> {
     try {
+        const me = req.user!.id;
+        const body = req.body as z.infer<typeof updateEventSchema>;
         const existing = await prisma.event.findUnique({
             where: { id: req.params.id },
-            select: { hostId: true, visibility: true, nostrEventId: true, nostrPublish: true },
+            include: { partners: EVENT_PEOPLE.partners },
         });
-
         if (!existing) { res.status(404).json({ error: 'Event not found' }); return; }
-        if (existing.hostId !== req.user!.id && !req.user!.isAdmin) {
+        const acted = await actedForIds(me);
+        if (!(await canEditEvent(existing, req.user, acted))) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
+        const hostSide = await canDeleteEvent(existing, req.user, acted);
+        // The co-hosts and sponsors this editor sees. The others (suspended,
+        // blocked either way, a listing that's down) stay as they are.
+        const hidden = new Set(await hiddenFromIds(me, { staff: isStaffUser(req.user!) }));
+        const shown = partnersFor(existing.partners, hidden);
 
-        const allowedFields = [
-            'title', 'description', 'category', 'visibility',
-            'location', 'locationName', 'locationAddress', 'locationMapUrl',
-            'isOnline', 'onlineUrl', 'startDate', 'endDate',
-            'thumbnail', 'ticketUrl', 'maxAttendees', 'tags', 'isOfficial',
-            'priceSats', 'ticketCapacity', 'payoutLightningAddress',
-            'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
-        ];
-        const data: any = {};
-        for (const field of allowedFields) {
-            if (req.body[field] !== undefined) {
-                if (field === 'isOfficial' && req.body[field] === true && !req.user!.isAdmin) {
-                    continue;
-                }
-                data[field] = req.body[field];
+        const data = eventData(body);
+        if (!hostSide) {
+            // Co-hosts edit what the event is; its tickets and money, who hosts
+            // it and who sees it stay with the host side. Unchanged copies pass.
+            const changed = HOST_ONLY.find((f) => body[f] !== undefined && differs(body[f], existing[f]))
+                ?? (body.partners !== undefined && !samePartners(body.partners, shown) ? 'partners' : undefined);
+            if (changed) {
+                res.status(403).json({ error: 'Only the host can change tickets, co-hosts, sponsors or who sees the event', reason: 'host_only', field: changed });
+                return;
             }
+            for (const field of HOST_ONLY) delete data[field];
+            delete data.nostrPublish;
         }
-
         const nostrPublish: string = data.nostrPublish || 'none';
+        if (data.visibility !== undefined) data.isPublished = visibilityToPublished(data.visibility);
 
-        // Sync isPublished when visibility changes
-        if (data.visibility !== undefined) {
-            data.isPublished = visibilityToPublished(data.visibility);
+        let hostListingId = existing.hostListingId;
+        if (hostSide && body.hostListingId !== undefined && (body.hostListingId || null) !== existing.hostListingId) {
+            // Off its business: the member who made it, the one who runs the business, or an admin.
+            const from = existing.hostListingId
+                ? await prisma.directoryListing.findUnique({ where: { id: existing.hostListingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true } })
+                : null;
+            if (from && !req.user!.isAdmin && me !== existing.hostId && !runsListing(from, me)) {
+                res.status(403).json({ error: 'Only who made this event, or who runs the business, can move it', reason: 'host_only' });
+                return;
+            }
+            hostListingId = body.hostListingId || null;
+            const listing = hostListingId ? (await listingsActedFor(me)).find((l) => l.id === hostListingId) : null;
+            if (hostListingId && !listing) {
+                res.status(403).json({ error: 'You can only host as a business you run or are on the team of', reason: 'not_your_listing' });
+                return;
+            }
+            data.hostListingId = hostListingId;
+            data.isOfficial = !!listing?.isOfficial;
+            data.hostId = me; // whoever moves it is its host from now on
         }
+        const partners = hostSide && body.partners !== undefined
+            ? await checkPartners(me, body.partners, { hostListingId, eventId: existing.id, isAdmin: !!req.user!.isAdmin, acted })
+            : null;
+        const unseen = existing.partners.filter((p) => !shown.some((v) => v.id === p.id)).map((p) => p.id);
 
-        // Format arrays into JSON strings for SQLite
-        const parsedTags: string[] = data.tags || [];
-        if (data.tags !== undefined) data.tags = JSON.stringify(data.tags);
-        if (data.guestList !== undefined) data.guestList = JSON.stringify(data.guestList);
-        if (data.customSections !== undefined) data.customSections = JSON.stringify(data.customSections);
+        const event = await prisma.$transaction(async (tx) => {
+            if (partners) {
+                await tx.eventPartner.deleteMany({ where: { eventId: existing.id, id: { notIn: unseen } } });
+                if (partners.length) await tx.eventPartner.createMany({ data: partners.map((p) => ({ ...p, eventId: existing.id })) });
+            }
+            return tx.event.update({ where: { id: existing.id }, data, include: EVENT_PEOPLE });
+        });
+        await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
+        if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
 
-        if (data.startDate) data.startDate = new Date(data.startDate);
-        if (data.endDate) data.endDate = new Date(data.endDate);
-
-        const event = await prisma.event.update({ where: { id: req.params.id }, data });
-        await cache.delPattern('events:');
-
-        // If visibility changed to non-public and event was previously on Nostr, delete it
+        // On Nostr, under the host's key: gone when it stops being public,
+        // otherwise replaced (kind 31923 by its d-tag), on the host's own edit.
         let nostrPublished = false;
         const wasPublic = visibilityToPublished(existing.visibility);
-        const isNowPublic = event.isPublished;
-
-        if (wasPublic && !isNowPublic && existing.nostrEventId) {
+        if (wasPublic && !event.isPublished && existing.nostrEventId) {
             const prevTarget = (existing.nostrPublish || 'bies') as 'bies' | 'public' | 'both';
-            deleteCalendarEvent(req.user!.id, existing.nostrEventId, event.id, prevTarget).catch((err) =>
+            deleteCalendarEvent(existing.hostId, existing.nostrEventId, event.id, prevTarget).catch((err) =>
                 console.error('[Nostr] NIP-09 deletion on visibility change failed:', err)
             );
-            await prisma.event.update({
-                where: { id: event.id },
-                data: { nostrEventId: '', nostrPublish: 'none' },
-            });
-        } else if (nostrPublish !== 'none' && isNowPublic) {
-            // Re-publish NIP-52 calendar event (kind 31923 is replaceable via d-tag)
-            const validationError = validateCalendarEventData({
-                id: event.id,
-                title: event.title,
-                startDate: event.startDate,
-            });
-            if (validationError) {
-                console.warn('[Nostr] NIP-52 validation failed on update:', validationError);
-            } else {
-                try {
-                    const nostrEventId = await publishCalendarEvent(req.user!.id, {
-                        id: event.id,
-                        title: event.title,
-                        description: event.description,
-                        startDate: event.startDate,
-                        endDate: event.endDate || undefined,
-                        location: event.location || undefined,
-                        locationName: event.locationName || undefined,
-                        locationAddress: event.locationAddress || undefined,
-                        isOnline: event.isOnline,
-                        onlineUrl: event.onlineUrl || undefined,
-                        category: event.category,
-                        tags: parsedTags.length > 0 ? parsedTags : JSON.parse(event.tags || '[]'),
-                        thumbnail: event.thumbnail || undefined,
-                        ticketUrl: event.ticketUrl || undefined,
-                    }, nostrPublish as 'bies' | 'public' | 'both');
-                    if (nostrEventId) {
-                        await prisma.event.update({
-                            where: { id: event.id },
-                            data: { nostrEventId },
-                        });
-                        nostrPublished = true;
-                    }
-                } catch (err) {
-                    console.error('[Nostr] NIP-52 calendar event update failed:', err);
-                }
-            }
+            await prisma.event.update({ where: { id: event.id }, data: { nostrEventId: '', nostrPublish: 'none' } });
+        } else if (nostrPublish !== 'none' && event.isPublished && me === existing.hostId) {
+            nostrPublished = await publishToNostr(existing.hostId, event, nostrPublish as 'bies' | 'public' | 'both');
         }
 
-        res.json({
-            ...event,
-            tags: JSON.parse(event.tags || '[]'),
-            guestList: JSON.parse(event.guestList || '[]'),
-            customSections: JSON.parse((event as any).customSections || '[]'),
-            nostrPublished,
-        });
+        res.json({ ...eventCard(event, new Set()), nostrPublished });
     } catch (error) {
+        if (error instanceof PartnerError) { res.status(400).json({ error: error.message, reason: error.reason }); return; }
         console.error('Update event error:', error);
         res.status(500).json({ error: 'Failed to update event' });
     }
@@ -736,11 +589,11 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
     try {
         const existing = await prisma.event.findUnique({
             where: { id: req.params.id },
-            select: { hostId: true, nostrEventId: true, nostrPublish: true },
+            select: { id: true, hostId: true, hostListingId: true, nostrEventId: true, nostrPublish: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Event not found' }); return; }
-        if (existing.hostId !== req.user!.id && !req.user!.isAdmin) {
+        if (!(await canDeleteEvent(existing, req.user))) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
 
@@ -757,12 +610,39 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
         }
 
         await prisma.event.delete({ where: { id: req.params.id } });
-        await cache.delPattern('events:');
+        await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
 
         res.json({ message: 'Event deleted' });
     } catch (error) {
         console.error('Delete event error:', error);
         res.status(500).json({ error: 'Failed to delete event' });
+    }
+}
+
+/**
+ * DELETE /events/:id/partners/:partnerId
+ * Take a co-host or sponsor off: whoever can edit the event, the member
+ * named, or anyone acting for the business named.
+ */
+export async function removePartner(req: Request, res: Response): Promise<void> {
+    try {
+        const me = req.user!.id;
+        const partner = await prisma.eventPartner.findFirst({
+            where: { id: req.params.partnerId, eventId: req.params.id },
+            include: { event: { select: { id: true, hostId: true, hostListingId: true } } },
+        });
+        if (!partner) { res.status(404).json({ error: 'Not found' }); return; }
+        const acted = await actedForIds(me);
+        const allowed = partner.userId === me
+            || (!!partner.listingId && acted.includes(partner.listingId))
+            || await canDeleteEvent(partner.event, req.user, acted);
+        if (!allowed) { res.status(403).json({ error: 'Not authorized' }); return; }
+        await prisma.eventPartner.delete({ where: { id: partner.id } });
+        await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${partner.event.id}`)]);
+        res.json({ removed: true });
+    } catch (error) {
+        console.error('Remove event partner error:', error);
+        res.status(500).json({ error: 'Failed to take the name off' });
     }
 }
 
@@ -826,7 +706,11 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             },
         });
 
-        if (!event || !event.isPublished) {
+        if (!event || event.visibility === 'DRAFT') {
+            res.status(404).json({ error: 'Event not found' }); return;
+        }
+        // Private: its guests (and the host and admins) can say they're going.
+        if (event.visibility === 'PRIVATE' && event.hostId !== userId && !req.user!.isAdmin && !(await invitedTo(event, userId))) {
             res.status(404).json({ error: 'Event not found' }); return;
         }
 
@@ -963,15 +847,15 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
 
         const event = await prisma.event.findUnique({
             where: { id: eventId },
-            select: { title: true, isPublished: true, hostId: true },
+            select: { id: true, title: true, isPublished: true, hostId: true, hostListingId: true },
         });
 
         if (!event || !event.isPublished) {
             res.status(404).json({ error: 'Event not found' }); return;
         }
 
-        // Only the event host can send invitations
-        if (event.hostId !== inviterId) {
+        // Only the host side can send invitations
+        if (!(await canDeleteEvent(event, req.user))) {
             res.status(403).json({ error: 'Only the event host can send invitations' }); return;
         }
 

@@ -6,10 +6,10 @@ import {
     Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
-    Building2, MessageCircle, Navigation, Share2, Check, Bookmark, BookmarkCheck,
-    UserCheck, ArrowRightLeft,
+    Building2, MessageCircle, Navigation, Share, Check, Bookmark, BookmarkCheck,
+    UserCheck, ArrowRightLeft, BadgeCheck,
 } from 'lucide-react';
-import { directoryApi } from '../../services/api';
+import { adminApi, directoryApi } from '../../services/api';
 import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../../utils/detailCache';
 import { listingPage } from '../../utils/detailPages';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +19,7 @@ import ZapButton from '../../components/ZapButton';
 import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
 import RecommendedBy from '../../components/directory/RecommendedBy';
 import ListingTeam from '../../components/directory/ListingTeam';
+import ListingEvents from '../../components/directory/ListingEvents';
 import { OwnershipBanner, OwnershipSheet } from '../../components/directory/ListingOwnership';
 import { openExternal } from '../../utils/openExternal';
 import { isAppleDevice } from '../../utils/mapApps';
@@ -190,7 +191,15 @@ const ListingDetail = () => {
     const canClaim = !!user?.id && !isOwner && listing.status === 'active'
         && !transfers.some((tr) => tr.kind === 'claim' && tr.toUserId === user.id);
     const canMove = isStaff && !isOwner;
-    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate;
+    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate || isAdmin;
+    // BIES's own page (admins): events hosted as it are BIES events.
+    const toggleOfficial = async () => {
+        setShowMenu(false);
+        try {
+            await adminApi.setListingOfficial(listing.id, !listing.isOfficial);
+            fetchListing({ silent: true });
+        } catch { /* stays as it was */ }
+    };
     const openOwnership = (mode) => {
         setShowMenu(false);
         menuButtonRef.current?.focus({ preventScroll: true });
@@ -319,7 +328,7 @@ const ListingDetail = () => {
             label: isSaved ? t('directory.actions.saved') : t('directory.actions.save'),
             onClick: toggleSave, pressed: isSaved,
         },
-        { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
+        { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
     ].filter(Boolean);
 
     const { mine: myReview, canReview } = reviewState(listing, user);
@@ -350,79 +359,82 @@ const ListingDetail = () => {
                     <BackButton fallback={backPath} overlay label={t('directory.backToDirectory')} />
                 </div>
                 {/* Outside the photo's clipping, so the menu can open below it */}
-                {(isOwner || hasMenu) && (
+                {hasMenu && (
                     <div className="dir-hero-tools">
-                        {isOwner && (
-                            <Link to={`${backPath}/${listing.id}/edit`} className="dir-edit-btn">
-                                <Edit3 size={15} /> {t('directory.editListing')}
-                            </Link>
-                        )}
-                        {hasMenu && (
-                            <div style={{ position: 'relative' }}>
-                                <button
-                                    ref={menuButtonRef}
-                                    type="button"
-                                    className="dir-more-btn"
-                                    aria-label={t('moderation.menu.more')}
-                                    aria-expanded={showMenu}
-                                    onClick={() => setShowMenu((v) => !v)}
-                                >
-                                    <MoreHorizontal size={20} />
-                                </button>
-                                {showMenu && (
-                                    <>
-                                        <div className="dir-menu-backdrop" onClick={() => setShowMenu(false)} />
-                                        <div className="dir-menu" role="menu">
-                                            {canClaim && (
-                                                <button type="button" role="menuitem" onClick={() => openOwnership('claim')}>
-                                                    <UserCheck size={16} /> {t('directory.ownership.claimMenu', { context: isFarm ? 'farm' : undefined })}
-                                                </button>
-                                            )}
-                                            {isOwner && (
-                                                <button type="button" role="menuitem" onClick={() => openOwnership('offer')}>
-                                                    <ArrowRightLeft size={16} /> {t('directory.ownership.offerMenu')}
-                                                </button>
-                                            )}
-                                            {canMove && (
-                                                <button type="button" role="menuitem" onClick={() => openOwnership('staff')}>
-                                                    <ArrowRightLeft size={16} /> {t('directory.ownership.staffMenu')}
-                                                </button>
-                                            )}
-                                            {canAdminEdit && (
-                                                <button type="button" role="menuitem" onClick={() => navigate(`${backPath}/${listing.id}/edit`)}>
-                                                    <Edit3 size={16} /> {t('directory.adminEditMenu')}
-                                                </button>
-                                            )}
-                                            {canModerate && (<>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => {
-                                                    setShowMenu(false);
-                                                    menuButtonRef.current?.focus({ preventScroll: true });
-                                                    openReport({ type: 'listing', id: listing.id }, { name: listingMemberName, blockTarget: { userId: listingMemberId } });
-                                                }}
-                                            >
-                                                <Flag size={16} /> {t('moderation.menu.reportListing')}
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                ref={menuButtonRef}
+                                type="button"
+                                className="dir-more-btn"
+                                aria-label={t('moderation.menu.more')}
+                                aria-expanded={showMenu}
+                                onClick={() => setShowMenu((v) => !v)}
+                            >
+                                <MoreHorizontal size={20} />
+                            </button>
+                            {showMenu && (
+                                <>
+                                    <div className="dir-menu-backdrop" onClick={() => setShowMenu(false)} />
+                                    <div className="dir-menu" role="menu">
+                                        {isOwner && (
+                                            <button type="button" role="menuitem" onClick={() => { setShowMenu(false); navigate(`${backPath}/${listing.id}/edit`); }}>
+                                                <Edit3 size={16} /> {t('directory.editListing')}
                                             </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className="danger"
-                                                onClick={() => {
-                                                    setShowMenu(false);
-                                                    menuButtonRef.current?.focus({ preventScroll: true });
-                                                    openBlock({ userId: listingMemberId }, { name: listingMemberName });
-                                                }}
-                                            >
-                                                <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                        )}
+                                        {canClaim && (
+                                            <button type="button" role="menuitem" onClick={() => openOwnership('claim')}>
+                                                <UserCheck size={16} /> {t('directory.ownership.claimMenu', { context: isFarm ? 'farm' : undefined })}
                                             </button>
-                                            </>)}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
+                                        )}
+                                        {isOwner && (
+                                            <button type="button" role="menuitem" onClick={() => openOwnership('offer')}>
+                                                <ArrowRightLeft size={16} /> {t('directory.ownership.offerMenu')}
+                                            </button>
+                                        )}
+                                        {canMove && (
+                                            <button type="button" role="menuitem" onClick={() => openOwnership('staff')}>
+                                                <ArrowRightLeft size={16} /> {t('directory.ownership.staffMenu')}
+                                            </button>
+                                        )}
+                                        {isAdmin && (
+                                            <button type="button" role="menuitem" onClick={toggleOfficial}>
+                                                <BadgeCheck size={16} /> {listing.isOfficial ? t('directory.official.unmark') : t('directory.official.mark')}
+                                            </button>
+                                        )}
+                                        {canAdminEdit && (
+                                            <button type="button" role="menuitem" onClick={() => navigate(`${backPath}/${listing.id}/edit`)}>
+                                                <Edit3 size={16} /> {t('directory.adminEditMenu')}
+                                            </button>
+                                        )}
+                                        {canModerate && (<>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                setShowMenu(false);
+                                                menuButtonRef.current?.focus({ preventScroll: true });
+                                                openReport({ type: 'listing', id: listing.id }, { name: listingMemberName, blockTarget: { userId: listingMemberId } });
+                                            }}
+                                        >
+                                            <Flag size={16} /> {t('moderation.menu.reportListing')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="danger"
+                                            onClick={() => {
+                                                setShowMenu(false);
+                                                menuButtonRef.current?.focus({ preventScroll: true });
+                                                openBlock({ userId: listingMemberId }, { name: listingMemberName });
+                                            }}
+                                        >
+                                            <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                        </button>
+                                        </>)}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
@@ -504,6 +516,7 @@ const ListingDetail = () => {
 
                     <RecommendedBy listing={listing} titleStyle={sectionTitleStyle} />
                     <ListingTeam listing={listing} user={user} isAdmin={isAdmin} titleStyle={sectionTitleStyle} onChanged={() => fetchListing({ silent: true })} />
+                    <ListingEvents listing={listing} titleStyle={sectionTitleStyle} />
 
                     {photos.length > 0 && (
                         <section className="dir-detail-section">
@@ -786,8 +799,7 @@ const ListingDetail = () => {
                     gap: 8px;
                 }
                 /* White on any photo, in dark mode too, like the back button */
-                .dir-more-btn,
-                .dir-hero-tools :global(.dir-edit-btn) {
+                .dir-more-btn {
                     height: 40px;
                     display: inline-flex;
                     align-items: center;
@@ -804,26 +816,15 @@ const ListingDetail = () => {
                     width: 40px;
                     padding: 0;
                 }
-                .dir-hero-tools :global(.dir-edit-btn) {
-                    gap: 6px;
-                    padding: 0 14px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    white-space: nowrap;
-                    text-decoration: none;
-                }
-                .dir-more-btn:active,
-                .dir-hero-tools :global(.dir-edit-btn:active) {
+                .dir-more-btn:active {
                     background: #ffffff;
                 }
                 @media (hover: hover) {
-                    .dir-more-btn:hover,
-                    .dir-hero-tools :global(.dir-edit-btn:hover) {
+                    .dir-more-btn:hover {
                         background: #ffffff;
                     }
                 }
-                .dir-more-btn:focus-visible,
-                .dir-hero-tools :global(.dir-edit-btn:focus-visible) {
+                .dir-more-btn:focus-visible {
                     outline: 2px solid var(--color-primary);
                     outline-offset: 2px;
                 }

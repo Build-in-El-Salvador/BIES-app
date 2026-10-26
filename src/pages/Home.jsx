@@ -50,6 +50,18 @@ const TalentIcon = () => (
     </svg>
 );
 
+// A calendar page with an orange binding: what's coming up.
+const EventsIcon = () => (
+    <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
+        <rect x="6" y="10" width="36" height="32" rx="6" fill="currentColor" />
+        <path d="M6 18h36" stroke={ORANGE} strokeWidth="5" />
+        <path d="M15 5.5v8M33 5.5v8" stroke={ORANGE} strokeWidth="3.5" strokeLinecap="round" />
+        <rect x="13" y="25" width="7" height="6" rx="1.5" fill="#fff" />
+        <rect x="24" y="25" width="7" height="6" rx="1.5" fill="#fff" opacity="0.55" />
+        <rect x="13" y="33" width="7" height="5" rx="1.5" fill="#fff" opacity="0.55" />
+    </svg>
+);
+
 const OpportunityIcon = () => (
     <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
         <path d="M24 13a10.5 10.5 0 0 0-6.4 18.8c1.3 1 2.1 2.5 2.1 4.2h8.6c0-1.7.8-3.2 2.1-4.2A10.5 10.5 0 0 0 24 13z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
@@ -70,6 +82,7 @@ const Home = () => {
 
     const cards = [
         { key: 'community', to: '/members', Icon: CommunityIcon, tint: 'rgba(255, 91, 0, 0.10)' },
+        { key: 'events', to: '/events', Icon: EventsIcon, tint: 'rgba(124, 58, 237, 0.10)', flag: 'events' },
         { key: 'farms', to: '/farms', Icon: FarmIcon, tint: 'rgba(22, 163, 74, 0.10)', flag: 'directories' },
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
         { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },

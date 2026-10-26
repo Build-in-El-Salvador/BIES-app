@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { cache } from '../services/redis.service';
 import { recomputeListingScore, TRUSTED_THRESHOLD } from '../services/directoryReputation.service';
 import { publishDirectoryListing } from '../services/nostr.service';
 import { blockedEitherWay, blockedIds, hasBlocked, hiddenFromIds } from '../services/moderation.service';
@@ -576,6 +577,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         const removed = listingPhotos(existing).filter((url) => !listingPhotos(listing).includes(url));
         if (removed.length) await discardUploads(removed, { uploadedBy: [existing.ownerId, req.user!.id] });
 
+        await cache.delPattern('preview:events:'); // events hosted as it show its new name, or none
         // Someone else runs it now: the team was the old runner's.
         const runnerChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
             || (data.isOwnBusiness !== undefined && data.isOwnBusiness !== existing.isOwnBusiness);
@@ -644,6 +646,7 @@ export async function deleteListingAndFiles(id: string, actorId: string): Promis
     });
     if (!listing) return;
     await prisma.directoryListing.delete({ where: { id } });
+    await cache.delPattern('preview:events:');
     await discardUploads(listingPhotos(listing), { uploadedBy: [listing.ownerId, actorId] });
     await discardUploads(listing.albums.flatMap((a) => a.photos.map((p) => p.url)));
 }

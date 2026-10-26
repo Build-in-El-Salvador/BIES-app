@@ -8,18 +8,21 @@ import { isOpen } from './project.controller';
 
 /**
  * Public previews of a shared page, for people who aren't signed in to BIES:
- * the business, farm, opportunity or talent at the link, with enough to want
- * the rest, then "See all details" to sign in (src/pages/SharePreview.jsx).
+ * the business, farm, opportunity, talent or event at the link, with enough to
+ * want the rest, then "See all details" to sign in (src/pages/SharePreview.jsx).
  * GET /preview/:section/:id is that teaser; GET /preview/:section/:id/og is
  * the link card WhatsApp, iMessage and others draw (nginx sends their
  * crawlers there). No contact details, no member names, no amounts and no
  * reviews' words: what's behind sign-in is only named ("How to contact them").
+ * An event is an invitation people share on purpose: its preview names its
+ * hosts, co-hosts and sponsors and links to its tickets, as Luma does; its
+ * address, online link and who's going stay for members.
  */
 
-export const SECTIONS = ['trusted', 'farms', 'opportunities', 'talents'] as const;
+export const SECTIONS = ['trusted', 'farms', 'opportunities', 'talents', 'events'] as const;
 export type Section = typeof SECTIONS[number];
 
-const FLAG = { trusted: 'directories', farms: 'directories', opportunities: 'projects', talents: 'talent' } as const;
+const FLAG = { trusted: 'directories', farms: 'directories', opportunities: 'projects', talents: 'talent', events: 'events' } as const;
 
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const ACTIVE = { isBanned: false, deletedAt: null };
@@ -146,7 +149,68 @@ async function talentTeaser(id: string) {
     };
 }
 
-export type Teaser = NonNullable<Awaited<ReturnType<typeof listingTeaser | typeof opportunityTeaser | typeof talentTeaser>>>;
+/** A member's name as the app shows it, or '' for a placeholder. */
+const shownName = (name: string | null | undefined) => (name && !name.startsWith('nostr:') ? name.trim() : '');
+const LIVE_LISTING = { name: true, status: true, isPublished: true, isOfficial: true } as const;
+const liveListing = (l: { status: string; isPublished: boolean } | null) => !!l && l.status === 'active' && l.isPublished;
+
+async function eventTeaser(id: string) {
+    const event = await prisma.event.findUnique({
+        where: { id },
+        include: {
+            host: { select: { ...ACTIVE_FIELDS, profile: { select: { name: true } } } },
+            hostListing: { select: LIVE_LISTING },
+            partners: {
+                orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+                include: {
+                    user: { select: { ...ACTIVE_FIELDS, profile: { select: { name: true } } } },
+                    listing: { select: LIVE_LISTING },
+                },
+            },
+            _count: { select: { attendees: { where: { status: 'GOING' } } } },
+        },
+    });
+    if (!event || !event.isPublished || event.visibility === 'PRIVATE' || event.visibility === 'DRAFT') return null;
+    if (event.host.isBanned || event.host.deletedAt) return null;
+
+    const partnerName = (p: typeof event.partners[number]) => {
+        if (p.user) return p.user.isBanned || p.user.deletedAt ? '' : shownName(p.user.profile?.name);
+        if (p.listing) return liveListing(p.listing) ? p.listing.name : '';
+        return p.name;
+    };
+    const named = (role: string) => event.partners.filter((p) => p.role === role).map(partnerName).filter(Boolean);
+    const about = summary(event.description);
+    return {
+        section: 'events' as Section,
+        id: event.id,
+        name: event.title,
+        kind: event.category,
+        location: event.isOnline ? 'Online' : event.locationName,
+        isOnline: event.isOnline,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        photo: event.thumbnail || '',
+        about: about.text,
+        isOfficial: liveListing(event.hostListing) && event.hostListing!.isOfficial,
+        priceLabel: event.priceLabel,
+        ticketUrl: /^https:\/\//i.test(event.ticketUrl) ? event.ticketUrl : '',
+        bitcoinUrl: /^https:\/\//i.test(event.bitcoinUrl) ? event.bitcoinUrl : '',
+        // Hosted as a business that's since been taken down: no name at all.
+        host: (event.hostListingId
+            ? (liveListing(event.hostListing) ? event.hostListing!.name : '')
+            : shownName(event.host.profile?.name)) || 'A BIES member',
+        cohosts: named('COHOST'),
+        sponsors: named('SPONSOR'),
+        members: {
+            address: !!(event.locationAddress || event.locationMapUrl),
+            onlineLink: !!event.onlineUrl,
+            going: event._count.attendees,
+            fullText: about.cut,
+        },
+    };
+}
+
+export type Teaser = NonNullable<Awaited<ReturnType<typeof listingTeaser | typeof opportunityTeaser | typeof talentTeaser | typeof eventTeaser>>>;
 
 /** The teaser for a shared page, or null when it isn't there (or its part of BIES is switched off). */
 export async function teaser(section: Section, id: string): Promise<Teaser | null> {
@@ -156,7 +220,8 @@ export async function teaser(section: Section, id: string): Promise<Teaser | nul
     if (cached) return 'missing' in cached ? null : cached;
     const found = section === 'opportunities' ? await opportunityTeaser(id)
         : section === 'talents' ? await talentTeaser(id)
-            : await listingTeaser(id);
+            : section === 'events' ? await eventTeaser(id)
+                : await listingTeaser(id);
     await cache.setJson(key, found ?? { missing: true }, TTL.PROJECT_DETAIL);
     return found;
 }
@@ -192,9 +257,18 @@ const OPPORTUNITY_TYPES: Record<string, string> = {
     investment: 'Project', 'business-for-sale': 'Business for sale', job: 'Job', partnership: 'Partnership', program: 'Grant or program',
 };
 
+/** When an event starts, in El Salvador: "Sat 14 Nov · 7:00 PM". */
+export function eventWhen(date: Date | string): string {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/El_Salvador', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    }).formatToParts(new Date(date)).map((p) => [p.type, p.value]));
+    return `${parts.weekday} ${parts.day} ${parts.month} · ${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
+}
+
 /** The link card's words: what it is and where, then its own words. */
 export function cardText(found: Teaser): { title: string; description: string } {
     const parts: string[] = [];
+    if (found.section === 'events' && 'startDate' in found) parts.push(eventWhen(found.startDate));
     if (found.section === 'opportunities' && 'type' in found) parts.push(OPPORTUNITY_TYPES[found.type] || 'Opportunity');
     if (found.section === 'talents') parts.push('Talent');
     if (found.location) parts.push(found.location);
@@ -207,9 +281,9 @@ export function cardText(found: Teaser): { title: string; description: string } 
 }
 
 /**
- * GET /preview/:section/:id/og — the page link-preview crawlers read, as
- * GET /events/:id/og does for events. Not for search engines (noindex): a
- * shared link previews; it doesn't publish the listing.
+ * GET /preview/:section/:id/og — the page link-preview crawlers read.
+ * Not for search engines (noindex): a shared link previews; it doesn't
+ * publish the listing.
  */
 export async function getPreviewOG(req: Request, res: Response): Promise<void> {
     const section = sectionOf(req.params.section);

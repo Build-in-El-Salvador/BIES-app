@@ -7,10 +7,12 @@
 // Directory and BIES Trusted, BIES Talents, Opportunities, Profile, Settings,
 // notifications, and Report / Feedback for testers and members (Mike,
 // 2026-10-22). Features without a slug (Feed, Members, Profile, Settings)
-// are always on.
+// are always on. Events joined in Oct 2026: tickets open the host's own page
+// (Luma, pretix) in the browser, as App Review asks of tickets to real-world
+// events; paying in sats needs `zaps`, which the app leaves out.
 import { FEATURE_SLUGS } from './featureSlugs.js';
 
-export const APP_FEATURES = ['directories', 'talent', 'projects', 'feedback'];
+export const APP_FEATURES = ['directories', 'talent', 'projects', 'feedback', 'events'];
 
 // Opportunities the app leaves out (the website shows them; the app never asks
 // for them, links to one show "not found", and it can't post one). None since

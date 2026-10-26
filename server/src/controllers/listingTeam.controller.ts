@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { createNotification } from '../services/notification.service';
+import { cache } from '../services/redis.service';
 import { blockedEitherWay } from '../services/moderation.service';
 import { z } from 'zod';
 
@@ -52,7 +53,7 @@ export async function listingsActedFor(userId: string) {
             AND: [{ OR: [{ memberUserId: null, owner: ACTIVE }, { memberUser: ACTIVE }] }],
         },
         orderBy: { name: 'asc' },
-        select: { id: true, name: true, type: true, category: true, logo: true, photo: true, ownerId: true, memberUserId: true, isOwnBusiness: true },
+        select: { id: true, name: true, type: true, category: true, logo: true, photo: true, isOfficial: true, ownerId: true, memberUserId: true, isOwnBusiness: true },
     });
 }
 
@@ -166,5 +167,36 @@ export async function removeTeamMember(req: Request, res: Response): Promise<voi
     } catch (error) {
         console.error('Remove team member error:', error);
         res.status(500).json({ error: 'Failed to change the team' });
+    }
+}
+
+export const officialSchema = z.object({ official: z.boolean() });
+
+/**
+ * PUT /admin/directory/:id/official { official }
+ * Mark a listing as BIES's own page, or not (admins). Events hosted as it
+ * are BIES events, its past ones too.
+ */
+export async function setListingOfficial(req: Request, res: Response): Promise<void> {
+    try {
+        const { official } = req.body as z.infer<typeof officialSchema>;
+        const listing = await prisma.directoryListing.findUnique({ where: { id: req.params.id }, select: { id: true } });
+        if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
+        await prisma.$transaction([
+            prisma.directoryListing.update({ where: { id: listing.id }, data: { isOfficial: official } }),
+            prisma.event.updateMany({ where: { hostListingId: listing.id }, data: { isOfficial: official } }),
+            prisma.auditLog.create({
+                data: {
+                    userId: req.user!.id,
+                    action: official ? 'DIRECTORY_LISTING_MARKED_BIES' : 'DIRECTORY_LISTING_UNMARKED_BIES',
+                    resource: `directory:${listing.id}`,
+                },
+            }),
+        ]);
+        await Promise.all([cache.delPattern('events:'), cache.delPattern('preview:events:')]);
+        res.json({ id: listing.id, isOfficial: official });
+    } catch (error) {
+        console.error('Set listing official error:', error);
+        res.status(500).json({ error: 'Failed to change it' });
     }
 }

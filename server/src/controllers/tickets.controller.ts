@@ -23,6 +23,7 @@ import {
 } from '../services/lnurl.service';
 import * as coinosService from '../services/coinos.service';
 import { invitedTo } from './events.controller';
+import { canDeleteEvent } from '../services/eventPeople.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -384,7 +385,7 @@ export async function getTicket(req: Request, res: Response): Promise<void> {
     try {
         let ticket = await prisma.ticket.findUnique({
             where: { id: req.params.ticketId },
-            include: { event: { select: { hostId: true } } },
+            include: { event: { select: { id: true, hostId: true, hostListingId: true } } },
         });
 
         if (!ticket || ticket.eventId !== req.params.id) {
@@ -392,7 +393,7 @@ export async function getTicket(req: Request, res: Response): Promise<void> {
         }
 
         const isBuyer = ticket.buyerId === req.user!.id;
-        const isHost = ticket.event.hostId === req.user!.id || req.user!.isAdmin;
+        const isHost = await canDeleteEvent(ticket.event, req.user);
         if (!isBuyer && !isHost) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
@@ -668,12 +669,12 @@ export async function listEventTickets(req: Request, res: Response): Promise<voi
 
         const event = await prisma.event.findUnique({
             where: { id: eventId },
-            select: { hostId: true },
+            select: { id: true, hostId: true, hostListingId: true },
         });
         if (!event) {
             res.status(404).json({ error: 'Event not found' }); return;
         }
-        if (event.hostId !== req.user!.id && !req.user!.isAdmin) {
+        if (!(await canDeleteEvent(event, req.user))) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
 
@@ -732,13 +733,13 @@ export async function checkinTicket(req: Request, res: Response): Promise<void> 
     try {
         const ticket = await prisma.ticket.findUnique({
             where: { id: req.params.ticketId },
-            include: { event: { select: { hostId: true } } },
+            include: { event: { select: { id: true, hostId: true, hostListingId: true } } },
         });
 
         if (!ticket || ticket.eventId !== req.params.id) {
             res.status(404).json({ error: 'Ticket not found' }); return;
         }
-        if (ticket.event.hostId !== req.user!.id && !req.user!.isAdmin) {
+        if (!(await canDeleteEvent(ticket.event, req.user))) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
         if (ticket.status !== 'PAID') {

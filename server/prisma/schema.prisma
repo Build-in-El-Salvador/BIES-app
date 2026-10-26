@@ -72,6 +72,7 @@ model User {
   listingTransfersFrom  ListingTransfer[]      @relation("ListingTransfersFrom")
   listingTransfersTo    ListingTransfer[]      @relation("ListingTransfersTo")
   listingTeams          ListingTeamMember[]    @relation("ListingTeams")
+  eventPartners         EventPartner[]         @relation("EventPartners")
   courses               Course[]
   enrollments           Enrollment[]
   coursePurchases       CoursePurchase[]
@@ -473,6 +474,8 @@ model Event {
   payoutLightningAddress String @default("") @map("payout_lightning_address") // per-event override; falls back to host Profile.lightningAddress
   isPublished Boolean  @default(true) @map("is_published")
   isFeatured  Boolean  @default(false) @map("is_featured")
+  // A BIES event: hosted as the listing marked as BIES's own page
+  // (DirectoryListing.isOfficial). Set by the server from the host.
   isOfficial  Boolean  @default(false) @map("is_official")
   isEndorsed  Boolean  @default(false) @map("is_endorsed")
   endorsementRequested Boolean @default(false) @map("endorsement_requested")
@@ -487,11 +490,50 @@ model Event {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  host      User              @relation(fields: [hostId], references: [id], onDelete: Cascade)
-  attendees EventAttendee[]
-  tickets   Ticket[]
+  // Hosted as a business or farm the host acts for (its runner or team);
+  // hostId stays the member who created it.
+  hostListingId String? @map("host_listing_id")
+  // What tickets cost, as the host writes it ("Free", "From $25"): the
+  // app links to the ticket page and doesn't sell them.
+  priceLabel    String  @default("") @map("price_label")
+  // A second ticket link where the host takes bitcoin (a pretix or BTCPay
+  // page): "Pay with Bitcoin" under "Get tickets", until the app takes
+  // payments itself.
+  bitcoinUrl    String  @default("") @map("bitcoin_url")
 
+  host        User              @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  hostListing DirectoryListing? @relation("EventsHosted", fields: [hostListingId], references: [id], onDelete: SetNull)
+  attendees   EventAttendee[]
+  tickets     Ticket[]
+  partners    EventPartner[]
+
+  @@index([hostListingId])
   @@map("events")
+}
+
+// An event's co-hosts and sponsors: a member, a business or farm on BIES,
+// or someone not on BIES (a name, a logo and a link). Co-hosts edit the
+// event with its host; sponsors don't.
+model EventPartner {
+  id        String   @id @default(cuid())
+  eventId   String   @map("event_id")
+  role      String // COHOST | SPONSOR
+  userId    String?  @map("user_id")
+  listingId String?  @map("listing_id")
+  name      String   @default("")
+  logo      String   @default("")
+  url       String   @default("")
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  event   Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user    User?             @relation("EventPartners", fields: [userId], references: [id], onDelete: Cascade)
+  listing DirectoryListing? @relation("EventPartners", fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([userId])
+  @@index([listingId])
+  @@map("event_partners")
 }
 
 model Ticket {
@@ -974,6 +1016,8 @@ model DirectoryListing {
   // The member who added it runs the business, or works there: their own
   // vote doesn't count, and the listing says it was added by the business.
   isOwnBusiness Boolean @default(false) @map("is_own_business")
+  // BIES's own page (admins set it): events hosted as it are BIES events.
+  isOfficial    Boolean @default(false) @map("is_official")
   baseScore       Int      @default(40) @map("base_score")        // unused since the BIES Trust Score (votes only)
   // The BIES Trust Score: vouches minus downvotes from members
   // (directoryReputation.service.ts). isCertified = "BIES Trusted".
@@ -999,6 +1043,8 @@ model DirectoryListing {
   transfers    ListingTransfer[]
   albums       Album[]
   team         ListingTeamMember[]
+  hostedEvents  Event[]        @relation("EventsHosted")
+  eventPartners EventPartner[] @relation("EventPartners")
   @@index([type, status])
   @@map("directory_listings")
 }

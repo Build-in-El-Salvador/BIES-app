@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote } from 'lucide-react';
+import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone } from 'lucide-react';
 import { previewApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
 import { formatDay } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
+import { fullDay, ticketProvider, timeRange } from '../utils/eventFormat';
+import { openExternal } from '../utils/openExternal';
+import { isNativePlatform } from '../utils/platform';
+import { BiesTag, namesText } from '../components/events/EventBits';
 
-const FALLBACK_ICON = { trusted: Building2, farms: Leaf, opportunities: Briefcase, talents: Sparkles };
+const FALLBACK_ICON = { trusted: Building2, farms: Leaf, opportunities: Briefcase, talents: Sparkles, events: CalendarDays };
 
 /**
- * A shared business, farm, opportunity or talent, for someone not signed in
- * (the web app, from a link a member shared): its photo, name, what and
- * where, its own words in short, and what members also see, then "See all
- * details" to sign in, which comes back here as the full page. Nothing that
- * isn't in the preview (server: preview.controller.ts) is fetched.
+ * A shared business, farm, opportunity, talent or event, for someone not
+ * signed in (the web app, from a link a member shared): its photo, name,
+ * what and where, its own words in short, and what members also see, then
+ * "See all details" to sign in, which comes back here as the full page. An
+ * event also has "Get tickets", straight to its ticket page, no sign-up.
+ * Nothing that isn't in the preview (server: preview.controller.ts) is
+ * fetched.
  *
- * @param {'trusted'|'farms'|'opportunities'|'talents'} section
+ * @param {'trusted'|'farms'|'opportunities'|'talents'|'events'} section
  */
 export default function SharePreview({ section }) {
     const { id } = useParams();
@@ -49,6 +55,7 @@ export default function SharePreview({ section }) {
             return [t(`opportunities.types.${found.type}`, { defaultValue: '' }), kind].filter(Boolean).join(' · ');
         }
         if (found.section === 'talents') return t(`talent.categories.${found.category}`, { defaultValue: t('sharePreview.talent') });
+        if (found.section === 'events') return t(`events.kinds.${found.kind}`, { defaultValue: t('sharePreview.event') });
         if (found.section === 'farms') return [t('sharePreview.farm'), ...(found.products || []).slice(0, 3)].join(' · ');
         return found.category ? t(`directory.categories.${found.category}`, { defaultValue: t('sharePreview.business') }) : t('sharePreview.business');
     };
@@ -58,6 +65,9 @@ export default function SharePreview({ section }) {
         const m = found?.members || {};
         return [
             m.fullText && t('sharePreview.members.fullText'),
+            m.address && t('sharePreview.members.address'),
+            m.onlineLink && t('sharePreview.members.onlineLink'),
+            m.going > 0 && t('sharePreview.members.going', { count: m.going }),
             m.contact && t('sharePreview.members.contact'),
             m.links && t('sharePreview.members.links'),
             m.hours && t('sharePreview.members.hours'),
@@ -73,6 +83,12 @@ export default function SharePreview({ section }) {
 
     const Fallback = FALLBACK_ICON[section] || Building2;
     const locked = found ? behindSignIn() : [];
+    const isEvent = found?.section === 'events';
+    const hostsLine = isEvent ? [
+        t('sharePreview.hostedBy', { names: namesText([found.host, ...(found.cohosts || [])], t) }),
+        found.sponsors?.length ? t('sharePreview.sponsoredBy', { names: namesText(found.sponsors, t) }) : '',
+    ].filter(Boolean).join(' ') : '';
+    const native = isNativePlatform();
 
     return (
         <div className="sp">
@@ -99,13 +115,22 @@ export default function SharePreview({ section }) {
                             {found.photo
                                 ? <img src={getAssetUrl(found.photo)} alt="" />
                                 : <Fallback size={44} aria-hidden="true" />}
+                            {isEvent && found.isOfficial && <span className="sp-cover-tag"><BiesTag /></span>}
                         </div>
                         <section className="sp-card">
                             {kicker() && <p className="sp-kicker">{kicker()}</p>}
                             <h1 className="sp-title">{found.name}</h1>
 
                             <ul className="sp-facts">
-                                {found.location && <li><MapPin size={18} aria-hidden="true" /><span>{found.location}</span></li>}
+                                {isEvent && (
+                                    <li><CalendarDays size={18} aria-hidden="true" /><span>{fullDay(found.startDate, i18n.language)}, {timeRange(found.startDate, found.endDate, i18n.language)}</span></li>
+                                )}
+                                {found.location && (
+                                    <li>
+                                        {isEvent && found.isOnline ? <Video size={18} aria-hidden="true" /> : <MapPin size={18} aria-hidden="true" />}
+                                        <span>{isEvent && found.isOnline ? t('events.card.online') : found.location}</span>
+                                    </li>
+                                )}
                                 {found.remote && <li><Globe size={18} aria-hidden="true" /><span>{t('opportunities.remote')}</span></li>}
                                 {(found.vouchCount > 0 || found.isCertified) && (
                                     <li>
@@ -118,6 +143,7 @@ export default function SharePreview({ section }) {
                                 )}
                                 {found.btcAccepted && <li><Bitcoin size={18} aria-hidden="true" /><span>{t('directory.btcAccepted')}</span></li>}
                                 {found.pricing && <li><Banknote size={18} aria-hidden="true" /><span className="sp-price">{found.pricing}</span></li>}
+                                {isEvent && found.priceLabel && <li><Banknote size={18} aria-hidden="true" /><span className="sp-price">{found.priceLabel}</span></li>}
                                 {found.available && <li className="sp-good"><CheckCircle size={18} aria-hidden="true" /><span>{t('talent.available')}</span></li>}
                                 {found.section === 'opportunities' && !found.isOpen && (
                                     <li className="sp-closed"><XCircle size={18} aria-hidden="true" /><span>{t('sharePreview.closed')}</span></li>
@@ -127,7 +153,24 @@ export default function SharePreview({ section }) {
                                 )}
                             </ul>
 
+                            {hostsLine && <p className="sp-hosts">{hostsLine}</p>}
                             {found.about && <p className="sp-about">{found.about}</p>}
+
+                            {isEvent && (found.ticketUrl || found.bitcoinUrl) && (
+                                <>
+                                    {found.ticketUrl && (
+                                        <button type="button" className="sp-tickets" onClick={() => openExternal(found.ticketUrl)}>
+                                            {t('sharePreview.getTickets')}{found.priceLabel ? ` · ${found.priceLabel}` : ''} <ExternalLink size={17} aria-hidden="true" />
+                                        </button>
+                                    )}
+                                    {found.bitcoinUrl && (
+                                        <button type="button" className="sp-tickets sp-btc" onClick={() => openExternal(found.bitcoinUrl)}>
+                                            <Bitcoin size={19} aria-hidden="true" /> {t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
+                                        </button>
+                                    )}
+                                    <p className="sp-note">{t('sharePreview.ticketsOn', { provider: ticketProvider(found.ticketUrl || found.bitcoinUrl) })}</p>
+                                </>
+                            )}
 
                             {locked.length > 0 && (
                                 <div className="sp-locked">
@@ -138,8 +181,19 @@ export default function SharePreview({ section }) {
                                 </div>
                             )}
 
-                            <button type="button" className="sp-cta" onClick={signIn}>{t('sharePreview.seeAll')}</button>
-                            <p className="sp-note">{t('sharePreview.note')}</p>
+                            {isEvent && !native ? (
+                                <>
+                                    <button type="button" className="sp-cta outline" onClick={signIn}>
+                                        <Smartphone size={18} aria-hidden="true" /> {t('sharePreview.learnMore')}
+                                    </button>
+                                    <p className="sp-note">{t('sharePreview.learnMoreNote')}</p>
+                                </>
+                            ) : (
+                                <>
+                                    <button type="button" className="sp-cta" onClick={signIn}>{t('sharePreview.seeAll')}</button>
+                                    <p className="sp-note">{t('sharePreview.note')}</p>
+                                </>
+                            )}
                         </section>
                     </>
                 )}
@@ -169,6 +223,18 @@ export default function SharePreview({ section }) {
                     color: var(--color-gray-400);
                 }
                 .sp-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .sp-cover { position: relative; }
+                .sp-cover-tag { position: absolute; left: 12px; bottom: 12px; }
+                .sp-hosts { margin: 0 0 12px; font-size: 0.92rem; line-height: 1.45; color: var(--color-gray-600); }
+                .sp-tickets {
+                    width: 100%; min-height: 50px; border: none; border-radius: 999px; cursor: pointer;
+                    display: flex; align-items: center; justify-content: center; gap: 8px;
+                    background: var(--color-secondary); color: #fff; font: inherit; font-size: 1.02rem; font-weight: 700;
+                }
+                .sp-tickets + .sp-btc { margin-top: 10px; }
+                .sp-btc { background: #fff; color: #1A1A1A; border: 1.5px solid #F7931A; }
+                .sp-btc :global(svg) { color: #F7931A; }
+                .sp-tickets + .sp-note { margin-bottom: 16px; }
                 .sp-card {
                     background: var(--color-surface); border: 1px solid var(--color-gray-200); border-top: none;
                     border-radius: 0 0 var(--radius-lg) var(--radius-lg); padding: 18px 18px 20px;
@@ -194,6 +260,10 @@ export default function SharePreview({ section }) {
                     background: var(--color-primary-nav, var(--color-primary)); color: #fff; font: inherit; font-size: 1.02rem; font-weight: 700;
                 }
                 :global([data-theme="dark"]) .sp-cta { box-shadow: 0 0 0 1px rgba(100, 149, 237, 0.35); }
+                .sp-cta.outline {
+                    display: flex; align-items: center; justify-content: center; gap: 8px;
+                    background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary);
+                }
                 .sp-note { margin: 10px 0 0; text-align: center; font-size: 0.85rem; color: var(--color-gray-500); }
                 .sp-muted { color: var(--color-gray-500); }
                 .sp-missing .sp-muted { margin: 0 0 20px; }

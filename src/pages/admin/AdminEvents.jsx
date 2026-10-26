@@ -61,7 +61,7 @@ const AdminEvents = () => {
                     <h1>Event Management</h1>
                     <p className="subtitle">Manage platform events</p>
                 </div>
-                <Link to="/dashboard/builder/create-event" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+                <Link to="/events/create" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
                     <Plus size={18} style={{ marginRight: 8 }} /> Create Event
                 </Link>
             </div>
