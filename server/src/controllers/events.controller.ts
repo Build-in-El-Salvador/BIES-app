@@ -37,6 +37,9 @@ export const createEventSchema = z.object({
     endDate: z.string().max(40).optional(),
     thumbnail: z.string().max(2000).optional().or(z.literal('')),
     coverFrame: coverFrameSchema.optional(),
+    // A BIES event's highlight card: another photo (optional) and its position.
+    cardImage: z.string().max(2000).optional().or(z.literal('')),
+    cardFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
@@ -98,11 +101,16 @@ const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' 
 /** Hosted as BIES's own page, while it's up: a BIES event. */
 const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active', isPublished: true } } };
 
-/** What only the host side changes: tickets and money, who hosts it, who sees it, where people join online. */
+/**
+ * What only the host side changes: tickets and money, who hosts it, who sees
+ * it, where people join online, and a BIES event's highlight card (BIES's team).
+ */
 const HOST_ONLY = [
     'ticketUrl', 'bitcoinUrl', 'priceLabel', 'payoutLightningAddress', 'priceSats', 'ticketCapacity',
-    'visibility', 'guestList', 'hostListingId', 'isOnline', 'onlineUrl',
+    'visibility', 'guestList', 'hostListingId', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame',
 ] as const;
+/** A BIES event's highlight card: only events hosted as BIES's own page have one. */
+const CARD_FIELDS = ['cardImage', 'cardFrame'] as const;
 const asText = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 /** Whether a value an edit sends differs from the stored one (JSON lists are stored as text). */
 const differs = (sent: unknown, stored: unknown): boolean => asText(sent) !== asText(stored);
@@ -111,7 +119,7 @@ const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
     'location', 'locationName', 'locationAddress', 'locationMapUrl',
     'isOnline', 'onlineUrl', 'startDate', 'endDate',
-    'thumbnail', 'coverFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'thumbnail', 'coverFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
 ] as const;
@@ -139,7 +147,10 @@ function eventCard(e: any, hidden: Set<string>) {
         id: e.id, title: e.title, category: e.category, visibility: e.visibility,
         startDate: e.startDate, endDate: e.endDate,
         location: e.location, locationName: e.locationName, isOnline: e.isOnline,
-        thumbnail: e.thumbnail, coverFrame: e.coverFrame, ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
+        thumbnail: e.thumbnail, coverFrame: e.coverFrame,
+        // The highlight card, for BIES events (the list shows them as cards).
+        ...(hostListing?.isOfficial ? { cardImage: e.cardImage, cardFrame: e.cardFrame } : {}),
+        ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
         isOfficial: !!hostListing?.isOfficial, isEndorsed: e.isEndorsed, hostId: e.hostId,
         host: e.host, hostListing,
         partners: partnersFor(e.partners || [], hidden),
@@ -413,6 +424,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
             return;
         }
         const partners = await checkPartners(me, body.partners || [], { hostListingId: hostListing?.id ?? null, isAdmin: !!req.user!.isAdmin });
+        if (!hostListing?.isOfficial) for (const field of CARD_FIELDS) delete data[field];
 
         const event = await prisma.event.create({
             data: {
@@ -547,6 +559,12 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             data.isOfficial = !!listing?.isOfficial;
             data.hostId = me; // whoever moves it is its host from now on
         }
+        // The highlight card is BIES's: only while it's hosted as BIES's own page.
+        const host = hostListingId ? await prisma.directoryListing.findUnique({ where: { id: hostListingId }, select: { isOfficial: true } }) : null;
+        if (!host?.isOfficial) for (const field of CARD_FIELDS) delete data[field];
+        // The card shows its own photo, or the cover: another photo there starts centred.
+        const cardPhoto = (e: { cardImage?: string; thumbnail?: string }) => e.cardImage || e.thumbnail || '';
+        if (data.cardFrame === undefined && cardPhoto({ ...existing, ...data }) !== cardPhoto(existing)) data.cardFrame = '';
         const partners = hostSide && body.partners !== undefined
             ? await checkPartners(me, body.partners, { hostListingId, eventId: existing.id, isAdmin: !!req.user!.isAdmin, acted })
             : null;

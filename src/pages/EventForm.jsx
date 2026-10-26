@@ -4,14 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { fromFormFields, toFormFields } from '../utils/eventFormat';
+import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
 import PartnerPicker from '../components/events/PartnerPicker';
 import CoverPhoto from '../components/CoverPhoto';
 import { useCoverFramer } from '../components/CoverFramer';
-import { COVER_ASPECT } from '../utils/coverFrame';
+import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFrame';
 
 /**
  * Adding or editing an event (/events/create, /events/edit/:id). Who hosts
@@ -24,10 +24,10 @@ import { COVER_ASPECT } from '../utils/coverFrame';
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 // What only the host side changes (a co-host edits the rest): the server says the same.
-const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl'];
+const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame'];
 
 const EMPTY = {
-    hostListingId: '', thumbnail: '', coverFrame: '', title: '', category: 'NETWORKING', description: '',
+    hostListingId: '', thumbnail: '', coverFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
     startDate: '', startTime: '19:00', endDate: '', endTime: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
     ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
@@ -49,7 +49,7 @@ const withHttps = (url) => { const u = (url || '').trim(); return u && !/^https?
 export default function EventForm() {
     const { id } = useParams();
     const editing = !!id;
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const { user } = useAuth();
     const [form, setForm] = useState(EMPTY);
@@ -66,6 +66,7 @@ export default function EventForm() {
     const [imported, setImported] = useState(false);
     const [otherVisibility, setOtherVisibility] = useState(''); // an older event's invite-only or limited setting
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
+    const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
 
     const set = (key) => (e) => {
         const value = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
@@ -81,10 +82,12 @@ export default function EventForm() {
         eventsApi.get(id).then((e) => {
             if (!e.canEdit) { setNotYours(true); return; }
             setHostSide(!!e.canDelete);
+            setSavedHost(e.hostListing ? { id: e.hostListing.id, isOfficial: !!e.hostListing.isOfficial } : null);
             const start = toFormFields(e.startDate);
             const end = toFormFields(e.endDate);
             setForm({
-                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '', title: e.title || '',
+                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
+                cardImage: e.cardImage || '', cardFrame: e.cardFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
                 online: !!e.isOnline, locationName: e.locationName || '', locationAddress: e.locationAddress || '',
@@ -103,6 +106,8 @@ export default function EventForm() {
         ? represented
         : [...represented, { id: form.hostListingId, name: t('events.form.hostAs') }];
     const hostListing = hostChoices.find((l) => l.id === form.hostListingId);
+    // Hosted as BIES's own page: a BIES event, with a highlight card its team sets up.
+    const official = !!(hostListing?.isOfficial || (savedHost?.isOfficial && savedHost.id === form.hostListingId));
 
     const importFrom = async () => {
         if (!importUrl.trim()) return;
@@ -141,13 +146,29 @@ export default function EventForm() {
         setError('');
         try {
             const res = await uploadApi.media(file);
-            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame }));
+            // A card showing the cover starts centred on the new one.
+            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, cardFrame: f.cardImage ? f.cardFrame : '' }));
         } catch (err) {
             setError(err?.message || t('events.form.failed'));
         } finally {
             setUploading(false);
         }
     });
+
+    // The highlight card: the cover positioned for the card's shape, or a photo of its own.
+    const card = useCoverFramer(COVER_ASPECT.card, async ({ file, frame }) => {
+        if (!file) { setForm((f) => ({ ...f, cardFrame: frame })); return; }
+        setUploading(true);
+        setError('');
+        try {
+            const res = await uploadApi.media(file);
+            setForm((f) => ({ ...f, cardImage: res.url, cardFrame: frame }));
+        } catch (err) {
+            setError(err?.message || t('events.form.failed'));
+        } finally {
+            setUploading(false);
+        }
+    }, { title: t('events.form.cardTitle'), shade: CARD_SHADE });
 
     const submit = async (e) => {
         e.preventDefault();
@@ -174,6 +195,7 @@ export default function EventForm() {
             locationMapUrl: form.online ? '' : withHttps(form.locationMapUrl),
             thumbnail: form.thumbnail,
             coverFrame: form.thumbnail ? form.coverFrame : '',
+            ...(official ? { cardImage: form.cardImage, cardFrame: form.cardImage || form.thumbnail ? form.cardFrame : '' } : {}),
             ticketUrl: withHttps(form.ticketUrl),
             bitcoinUrl: withHttps(form.bitcoinUrl),
             priceLabel: form.priceLabel.trim(),
@@ -253,7 +275,7 @@ export default function EventForm() {
                                 <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
                             </button>
                             <label className="ef-small-btn">{t('events.form.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
-                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '' }))}>{t('events.form.removeCover')}</button>
+                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }))}>{t('events.form.removeCover')}</button>
                         </div>
                     </>
                 ) : (
@@ -273,6 +295,53 @@ export default function EventForm() {
                 <span className="ef-label">{t('events.form.description')}</span>
                 <RichTextEditor value={form.description} onChange={set('description')} placeholder={t('events.form.descriptionPlaceholder')} />
             </section>
+
+            {official && hostSide && (
+                // A BIES event's card at the top of Events: the cover positioned for
+                // the card's shape, or a photo just for the card. BIES's team only.
+                <section className="ef-group">
+                    <span className="ef-label">{t('events.form.card')}</span>
+                    <p className="ef-hint">{t('events.form.cardHint')}</p>
+                    {form.cardImage || form.thumbnail ? (
+                        <>
+                            <div className="ef-card">
+                                <CoverPhoto
+                                    src={form.cardImage || form.thumbnail}
+                                    frame={form.cardFrame}
+                                    focus={form.cardImage ? undefined : focusOf(parseFrame(form.coverFrame))}
+                                />
+                                <span className="ef-card-shade" style={{ background: CARD_SHADE }} aria-hidden="true" />
+                                <span className="ef-card-words" aria-hidden="true">
+                                    {form.startDate && <small>{whenShort(fromFormFields(form.startDate, form.startTime), i18n.language)}</small>}
+                                    <b>{form.title || t('events.form.titlePlaceholder')}</b>
+                                </span>
+                                {uploading && <span className="ef-cover-busy"><Loader2 size={22} className="ef-spin" /></span>}
+                            </div>
+                            <div className="ef-cover-tools">
+                                <button type="button" className="ef-small-btn quiet" onClick={() => card.adjust(form.cardImage || form.thumbnail, form.cardFrame)} disabled={uploading}>
+                                    <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
+                                </button>
+                                <label className="ef-small-btn">
+                                    {form.cardImage ? t('events.form.cardChange') : t('events.form.cardOwnPhoto')}
+                                    <input type="file" accept="image/*" hidden onChange={card.choose} disabled={uploading} />
+                                </label>
+                                {form.cardImage && (
+                                    <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, cardImage: '', cardFrame: '' }))}>
+                                        {t('events.form.cardUseCover')}
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <label className="ef-cover-empty ef-card-empty">
+                            {uploading ? <Loader2 size={22} className="ef-spin" /> : <ImagePlus size={22} />}
+                            <span>{t('events.form.cardOwnPhoto')}</span>
+                            <input type="file" accept="image/*" hidden onChange={card.choose} disabled={uploading} />
+                        </label>
+                    )}
+                    {card.framer}
+                </section>
+            )}
 
             <section className="ef-group">
                 <h2 className="ef-h">{t('events.form.when')}</h2>
@@ -392,6 +461,12 @@ export default function EventForm() {
                 .ef-small-btn.quiet { background: rgba(255, 255, 255, 0.92); color: var(--color-gray-900); }
                 .ef-small-btn:disabled { opacity: 0.5; cursor: default; }
                 .ef-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .ef-card { position: relative; width: 100%; max-width: 280px; aspect-ratio: 4 / 5; border-radius: 20px; overflow: hidden; background: linear-gradient(135deg, var(--color-primary), #0A192F); }
+                .ef-card-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+                .ef-card-words { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 4px; color: #FFFFFF; }
+                .ef-card-words small { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFD3BA; }
+                .ef-card-words b { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.05; overflow-wrap: anywhere; }
+                .ef-card-empty { max-width: 280px; aspect-ratio: 4 / 5; }
                 .ef-cover-busy { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
                 .ef-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
                 .ef-cover-tools .ef-small-btn.quiet { border: 1px solid var(--color-gray-300); background: var(--color-surface); }

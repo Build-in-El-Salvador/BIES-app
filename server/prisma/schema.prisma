@@ -470,6 +470,10 @@ model Event {
   endDate     DateTime? @map("end_date")
   thumbnail   String   @default("")
   coverFrame  String   @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
+  // A BIES event's highlight card on Events: another photo (optional; the cover
+  // otherwise) and how it shows in the card's shape. Official events only.
+  cardImage   String   @default("") @map("card_image")
+  cardFrame   String   @default("") @map("card_frame")
   ticketUrl   String   @default("") @map("ticket_url")
   maxAttendees Int?    @map("max_attendees")
   priceSats   Int?     @map("price_sats") // null/0 = free (RSVP-only)

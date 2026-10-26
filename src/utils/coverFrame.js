@@ -20,7 +20,12 @@ export const COVER_ASPECT = {
     opportunity: 16 / 9,
     // A member's banner: a strip about as wide as a phone (it stays 150px tall on wider screens).
     banner: 5 / 2,
+    // A BIES event's highlight card on Events, as phones show it (4:3 on wide screens).
+    card: 4 / 5,
 };
+
+/** The highlight card's shade, which its words sit on (Events.jsx; shown when positioning it too). */
+export const CARD_SHADE = 'linear-gradient(180deg, rgba(10, 20, 60, 0) 30%, rgba(10, 20, 60, 0.55) 58%, rgba(8, 15, 45, 0.92) 100%)';
 
 const NUMBER = String.raw`-?\d{1,4}(?:\.\d{1,2})?`;
 const FRAME = new RegExp(`^${NUMBER}(?:,${NUMBER}){3}$`);

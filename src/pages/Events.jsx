@@ -3,11 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, CalendarDays, Loader2 } from 'lucide-react';
 import { eventsApi } from '../services/api';
-import Avatar from '../components/Avatar';
+import CoverPhoto from '../components/CoverPhoto';
 import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
 import { bothTicketLinks, isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
-import { focusOf, parseFrame } from '../utils/coverFrame';
+import { CARD_SHADE, focusOf, parseFrame } from '../utils/coverFrame';
 import biesLogo from '../assets/logo-icon.svg';
 
 /**
@@ -235,13 +235,22 @@ const Events = () => {
     );
 };
 
-/** A BIES event: the photo fills the card, the words sit on its dark foot. */
+/**
+ * A BIES event: the photo fills the card, the words sit on its dark foot. Its
+ * team can give the card its own photo and position it for the card's shape
+ * (cardImage, cardFrame); otherwise the cover, kept on the part chosen for it.
+ */
 function SpotlightCard({ event, lang, going, onGoing }) {
     const { t } = useTranslation();
+    const photo = event.cardImage || event.thumbnail;
     return (
         <article className="ev-spot">
-            <span className="ev-spot-photo"><Avatar src={event.thumbnail} fallback={null} position={focusOf(parseFrame(event.coverFrame))} /></span>
-            <span className="ev-spot-shade" aria-hidden="true" />
+            {photo && (
+                <span className="ev-spot-photo">
+                    <CoverPhoto src={photo} frame={event.cardFrame} focus={event.cardImage ? undefined : focusOf(parseFrame(event.coverFrame))} />
+                </span>
+            )}
+            <span className="ev-spot-shade" style={{ background: CARD_SHADE }} aria-hidden="true" />
             <Link to={`/events/${event.id}`} state={{ preview: event }} className="ev-spot-link" aria-label={event.title} />
             <span className="ev-spot-tag"><BiesTag /></span>
             <div className="ev-spot-body">
@@ -267,8 +276,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                     --ev-price-color: #FFFFFF; --ev-price-sub: rgba(255, 255, 255, 0.75);
                 }
                 .ev-spot-photo { position: absolute; inset: 0; }
-                .ev-spot-photo :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-                .ev-spot-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 20, 60, 0) 30%, rgba(10, 20, 60, 0.55) 58%, rgba(8, 15, 45, 0.92) 100%); }
+                .ev-spot-shade { position: absolute; inset: 0; }
                 .ev-spot :global(.ev-spot-link) { position: absolute; inset: 0; z-index: 1; }
                 .ev-spot-tag { position: absolute; left: 14px; top: 14px; z-index: 1; }
                 .ev-spot-body { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }

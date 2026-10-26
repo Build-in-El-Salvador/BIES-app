@@ -20,8 +20,9 @@ const BACKDROP = {
  * @param {string} src - the photo (absolute, or /uploads/...)
  * @param {string} [frame] - its stored position, "x,y,w,h"
  * @param {string} [alt]
+ * @param {string} [focus] - without a position, the CSS object-position to crop around
  */
-export default function CoverPhoto({ src, frame, alt = '' }) {
+export default function CoverPhoto({ src, frame, alt = '', focus }) {
     const parsed = parseFrame(frame);
     const framed = !!parsed;
     const boxRef = useRef(null);
@@ -56,7 +57,7 @@ export default function CoverPhoto({ src, frame, alt = '' }) {
                 onLoad={(e) => sized(e.currentTarget)}
                 style={place
                     ? { position: 'absolute', left: place.left, top: place.top, width: place.width, height: place.height, maxWidth: 'none', objectFit: 'fill', display: 'block' }
-                    : { ...FILL, width: '100%', height: '100%', objectFit: 'cover', objectPosition: focusOf(parsed) }}
+                    : { ...FILL, width: '100%', height: '100%', objectFit: 'cover', objectPosition: parsed ? focusOf(parsed) : focus || '50% 50%' }}
             />
         </span>
     );
