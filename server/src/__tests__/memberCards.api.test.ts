@@ -89,14 +89,18 @@ describe('member cards', () => {
         expect(res.status).toBe(200);
         const card = res.body.data.find((p: any) => p.userId === m.id);
         expect(card).toBeTruthy();
+        // The network line only when asked for (the Cards layout).
         expect(Object.keys(card).sort()).toEqual(
-            ['avatar', 'bio', 'company', 'id', 'location', 'name', 'skills', 'tags', 'title', 'user', 'userId'].sort());
+            ['avatar', 'bio', 'company', 'id', 'joinedAt', 'location', 'name', 'skills', 'tags', 'title', 'user', 'userId'].sort());
+        const withNetwork = (await get('/api/profiles?limit=50&fields=card&network=1', viewer.token)).body.data.find((p: any) => p.userId === m.id);
+        expect(withNetwork.network).toEqual({ hidden: false, total: 0, youFollow: 0, people: [] });
         expect(card.user).toEqual({ id: m.id, nostrPubkey: m.pubkey });
         expect(card.bio).not.toContain('<');
         expect(card.bio.length).toBeLessThanOrEqual(200);
         expect(card.skills).toEqual(['a', 'b', 'c']);
         expect(card.tags).toEqual(['x', 'y', 'z']);
         expect(JSON.stringify(res.body)).not.toContain('Old Co');
+        expect(Date.parse(card.joinedAt)).not.toBeNaN();
     });
 
     it('leave the full list unchanged when not asked for', async () => {
@@ -119,6 +123,121 @@ describe('member cards', () => {
         }
         expect(seen.length).toBe(total);
         expect(new Set(seen).size).toBe(total);
+    });
+});
+
+describe('the network line on a card', () => {
+    const follow = (from: { id: string }, to: { id: string }) => prisma.follow.create({ data: { followerId: from.id, followingId: to.id } });
+    // A search for the test's own tag: its own cached list, and only its members.
+    const cards = async (tag: string, token: string) => {
+        const res = await get(`/api/profiles?search=${tag}&limit=44&fields=card&network=1`, token);
+        return new Map(res.body.data.map((c: any) => [c.userId, c]));
+    };
+
+    it('names people the viewer follows first, photos first, leaving out blocked, suspended and unnamed members', async () => {
+        const tag = `Net${Date.now()}`;
+        const viewer = await member('Net Viewer');
+        const target = await member(`Target ${tag}`);
+        const ana = await member('Ana Known');
+        const beto = await member('Beto Known', { avatar: '/uploads/public/beto.jpg' });
+        const unnamed = await member('nostr:npub1placeholder');
+        const stranger = await member('Stranger Fan');
+        const blocked = await member('Blocked Fan');
+        const banned = await member('Banned Fan');
+        for (const known of [ana, beto, unnamed, blocked, banned]) await follow(viewer, known);
+        for (const fan of [ana, beto, unnamed, stranger, blocked, banned]) await follow(fan, target);
+        await follow(target, stranger);
+        await prisma.block.create({ data: { blockerId: viewer.id, blockedId: blocked.id } });
+        await prisma.user.update({ where: { id: banned.id }, data: { isBanned: true } });
+
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        // ana, beto, unnamed, stranger (both ways, counted once); not blocked or banned.
+        expect(card.network).toMatchObject({ hidden: false, total: 4, youFollow: 3 });
+        expect(card.network.people.map((p: any) => p.name)).toEqual(['Beto Known', 'Ana Known']);
+        expect(card.network.people[0]).toEqual({ id: beto.id, name: 'Beto Known', avatar: '/uploads/public/beto.jpg' });
+        expect(JSON.stringify(card)).not.toContain('Blocked Fan');
+    });
+
+    it('shows anyone in their network when the viewer follows none of them, never the viewer', async () => {
+        const tag = `Open${Date.now()}`;
+        const viewer = await member('Open Viewer');
+        const target = await member(`Target ${tag}`);
+        const fan = await member('Open Fan');
+        const idol = await member('Open Idol');
+        await follow(fan, target);
+        await follow(target, idol);
+        await follow(viewer, target);
+
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toMatchObject({ hidden: false, total: 3, youFollow: 0 });
+        expect(card.network.people.map((p: any) => p.id).sort()).toEqual([fan.id, idol.id].sort());
+    });
+
+    it('counts a big network in full, though only a few of its people are looked up for faces', async () => {
+        const tag = `Big${Date.now()}`;
+        const viewer = await member('Big Viewer');
+        const target = await member(`Target ${tag}`);
+        const people = [];
+        for (let i = 0; i < 33; i++) {
+            people.push(await prisma.user.create({ data: { nostrPubkey: getPublicKey(generateSecretKey()), profile: { create: { name: `Big Fan ${i}` } } } }));
+        }
+        // 0–29 follow the target, which follows 28–32 (28 and 29 both ways); the viewer follows 0–11.
+        await prisma.follow.createMany({
+            data: [
+                ...people.slice(0, 30).map((p) => ({ followerId: p.id, followingId: target.id })),
+                ...people.slice(28).map((p) => ({ followerId: target.id, followingId: p.id })),
+                ...people.slice(0, 12).map((p) => ({ followerId: viewer.id, followingId: p.id })),
+            ],
+        });
+
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toMatchObject({ hidden: false, total: 33, youFollow: 12 });
+        const known = new Set(people.slice(0, 12).map((p) => p.id));
+        expect(card.network.people).toHaveLength(3);
+        expect(card.network.people.every((p: any) => known.has(p.id))).toBe(true);
+        // Out of the other tests' member lists (their follows go with them).
+        await prisma.user.deleteMany({ where: { id: { in: people.map((p) => p.id) } } });
+    });
+
+    it('keeps a private network to the follower count, with no one named', async () => {
+        const tag = `Private${Date.now()}`;
+        const viewer = await member('Private Viewer');
+        const target = await member(`Target ${tag}`, { privacy: JSON.stringify({ network: 'ONLY_ME' }) });
+        const fan = await member('Secret Fan');
+        await follow(viewer, fan);
+        await follow(fan, target);
+        await follow(viewer, target);
+
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toEqual({ hidden: true, followers: 2 });
+        expect(JSON.stringify(card)).not.toContain('Secret Fan');
+        // Their own card still shows them their network.
+        const own: any = (await cards(tag, target.token)).get(target.id);
+        expect(own.network).toMatchObject({ hidden: false, total: 2 });
+    });
+
+    it("leaves out a member suspended since the list was cached, on others' cards too", async () => {
+        const tag = `Banned${Date.now()}`;
+        const viewer = await member('Banned Viewer');
+        const target = await member(`Target ${tag}`);
+        const later = await member(`Later ${tag}`);
+        await follow(later, target);
+        await follow(viewer, later);
+        expect(((await cards(tag, viewer.token)).get(target.id) as any).network).toMatchObject({ total: 1, youFollow: 1 });
+        // Suspended now; the list (and Later's card in it) is still cached.
+        await prisma.user.update({ where: { id: later.id }, data: { isBanned: true } });
+        const card: any = (await cards(tag, viewer.token)).get(target.id);
+        expect(card.network).toMatchObject({ total: 0, youFollow: 0, people: [] });
+    });
+
+    it('is left out for signed-out visitors', async () => {
+        const tag = `Public${Date.now()}`;
+        const target = await member(`Target ${tag}`);
+        const res = await fetch(`${base}/api/profiles?search=${tag}&limit=43&fields=card&network=1`);
+        const body: any = await res.json();
+        const card = body.data.find((c: any) => c.userId === target.id);
+        expect(card).toBeTruthy();
+        expect(card.network).toBeUndefined();
     });
 });
 

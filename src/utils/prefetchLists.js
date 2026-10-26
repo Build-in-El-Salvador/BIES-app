@@ -1,7 +1,7 @@
 import { directoryApi, profilesApi, projectsApi } from '../services/api';
 import { cachedList, rememberList } from './listCache';
 import {
-    directoryKey, directoryRequest, listOf, membersKey, membersPageSize, morePages, opportunitiesKey, opportunitiesRequest,
+    directoryKey, directoryRequest, listOf, membersKey, membersPageSize, membersWithNetwork, morePages, opportunitiesKey, opportunitiesRequest,
 } from './listRequests';
 import { isTypeShown, typesShown } from '../components/opportunities/opportunityOptions';
 import { isNativePlatform } from './platform';
@@ -32,10 +32,12 @@ async function members() {
     let view = 'icons';
     try { view = localStorage.getItem('bies_members_view') || 'icons'; } catch { /* unavailable */ }
     const pageSize = membersPageSize(view);
-    if (cachedList(membersKey(pageSize))) return;
-    const result = await profilesApi.list({ page: 1, limit: pageSize, fields: 'card' });
+    const network = membersWithNetwork(view);
+    const key = membersKey(pageSize, '', '', network);
+    if (cachedList(key)) return;
+    const result = await profilesApi.list({ page: 1, limit: pageSize, fields: 'card', ...(network ? { network: 1 } : {}) });
     const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
-    rememberList(membersKey(pageSize), {
+    rememberList(key, {
         builders: list, page: 1, hasMore: 1 < (result?.pagination?.totalPages || 1), at: Date.now(),
     });
 }

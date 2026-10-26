@@ -80,4 +80,8 @@ export const opportunitiesKey = (request) => `opportunities:${JSON.stringify(req
 /** Members come a screenful at a time: Icons shows many per screen, cards fewer. */
 export const membersPageSize = (view) => (view === 'icons' ? 48 : 24);
 
-export const membersKey = (pageSize, search = '', sort = '') => `members:${pageSize}:${search}${sort ? `:${sort}` : ''}`;
+// Cards also show who follows each member (the network line), which the
+// server works out only when asked: a list of their own, kept apart.
+export const membersWithNetwork = (view) => view === 'standard';
+export const membersKey = (pageSize, search = '', sort = '', network = false) =>
+    `members:${pageSize}${network ? ':network' : ''}:${search}${sort ? `:${sort}` : ''}`;

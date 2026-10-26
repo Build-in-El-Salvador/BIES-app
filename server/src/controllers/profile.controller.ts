@@ -11,6 +11,7 @@ import { isEnabled } from '../services/featureFlags.service';
 import { openNow } from './project.controller';
 import { removeTags } from '../middleware/sanitize';
 import { alphabetical, inOrder } from '../utils/listOrder';
+import { networkPreviews } from '../services/memberNetwork';
 
 // What a member card shows (Members: icons, list and cards). Everything else
 // comes with the profile page itself (GET /profiles/:id), so a list of 48
@@ -29,6 +30,8 @@ function memberCard(p: any) {
         skills: Array.isArray(p.skills) ? p.skills.slice(0, 3) : [],
         tags: Array.isArray(p.tags) ? p.tags.slice(0, 3) : [],
         user: p.user ? { id: p.user.id, nostrPubkey: p.user.nostrPubkey } : undefined,
+        // When their account was made, as their profile's "Joined" shows it.
+        joinedAt: p.user?.createdAt ?? null,
     };
 }
 
@@ -151,15 +154,28 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         // ?fields=card: only what a member card shows, after the privacy
         // rules (profileForViewer) have been applied to the full profile.
         const asCard = req.query.fields === 'card';
-        const data = result.data
+        const shown = result.data
             .filter((p: any) => !hidden.has(p.userId))
             .filter((p: any) => typeof search !== 'string' || !search || matchesVisibly(p, search, viewerOf(req, p.userId)))
             .filter((p: any) => typeof location !== 'string' || !location
                 || String(profileForViewer(p, viewerOf(req, p.userId)).location || '').toLowerCase().includes(location.toLowerCase()))
-            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)))
-            .map((p: any) => (asCard ? memberCard(p) : p));
+            .map((p: any) => profileForViewer(p, viewerOf(req, p.userId)));
+        const data = asCard ? shown.map(memberCard) : shown;
+        // Cards asked for with ?network=1 (the Cards layout) also carry the
+        // network line, as this viewer may see it (services/memberNetwork.ts):
+        // live, not from the shared cache, and for members only.
+        const withNetwork = async (cards: any[]) => {
+            if (!asCard || req.query.network !== '1' || !req.user) return cards;
+            const full = new Map<string, any>(shown.map((p: any) => [p.userId, p]));
+            const previews = await networkPreviews(req.user.id, cards.map((c) => ({
+                userId: c.userId,
+                networkHidden: !!full.get(c.userId)?.networkHidden,
+                followers: full.get(c.userId)?.user?._count?.followers ?? 0,
+            })), [...hidden]);
+            return cards.map((c) => ({ ...c, network: previews.get(c.userId) }));
+        };
         if (!result.searched) {
-            res.json({ ...result, data });
+            res.json({ ...result, data: await withNetwork(data) });
             return;
         }
         // A search or location filter: every candidate was fetched, so the
@@ -167,7 +183,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
         // counted over hidden fields told them a hidden location matched.
         const { page, limit } = result.pagination;
         res.json({
-            data: data.slice((page - 1) * limit, page * limit),
+            data: await withNetwork(data.slice((page - 1) * limit, page * limit)),
             pagination: { page, limit, total: data.length, totalPages: Math.ceil(data.length / limit) },
         });
     };
@@ -236,7 +252,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                     user: {
                         select: {
                             id: true, nostrPubkey: true, role: true, isAdmin: true,
-                            isVerified: true,
+                            isVerified: true, createdAt: true,
                             _count: { select: { projects: true, followers: true, hostedEvents: true } },
                         },
                     },
