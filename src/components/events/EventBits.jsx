@@ -107,7 +107,8 @@ export function PriceLine({ event, className = '' }) {
     const { t } = useTranslation();
     const label = (event.priceLabel || '').trim() || (isFree(event) ? t('events.card.free') : '');
     const link = event.ticketUrl || event.bitcoinUrl;
-    const where = link ? t('events.card.ticketsOn', { provider: ticketProvider(link) }) : t('events.card.inTheApp');
+    const where = link ? t('events.card.ticketsOn', { provider: ticketProvider(link) })
+        : isFree(event) ? t('events.card.rsvpInApp') : t('events.card.inTheApp');
     return (
         <span className={`ev-price ${className}`}>
             {label && <b>{label}</b>}
@@ -178,8 +179,7 @@ export function TicketButton({ event, going, onGoing, busy = false, size = 'md' 
                 .ev-tix.btc { background: #FFFFFF; color: #1A1A1A; border: 1.5px solid #F7931A; }
                 .ev-tix.btc:hover { background: #FFF6EB; }
                 .ev-tix.btc :global(svg) { color: #F7931A; }
-                .ev-tix.going { background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary); }
-                .ev-tix.going.on { background: var(--color-primary); color: #FFFFFF; }
+                .ev-tix.going.on, .ev-tix.going.on:hover { background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary); }
                 .ev-tix:disabled { opacity: 0.7; cursor: default; }
             `}</style>
         </span>

@@ -139,6 +139,8 @@ const EventDetail = () => {
     const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
     const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
     const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
+    // With tickets sold elsewhere, members still say they're going here.
+    const rsvpRow = hasTickets && isFull;
 
     const rsvp = async (next) => {
         setGoing(next);
@@ -331,8 +333,8 @@ const EventDetail = () => {
                     </section>
                 ))}
 
-                {(goingCount > 0 || (hasTickets && isFull)) && (
-                    <div className="ev-going">
+                {(goingCount > 0 || rsvpRow) && (
+                    <div className={`ev-going${rsvpRow ? ' rsvp' : ''}`}>
                         {goingPeople.length > 0 && (
                             <span className="ev-going-pile">
                                 {goingPeople.slice(0, 3).map((p) => (
@@ -340,10 +342,17 @@ const EventDetail = () => {
                                 ))}
                             </span>
                         )}
-                        <span className="ev-going-text">{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : ''}</span>
-                        {hasTickets && (
+                        {rsvpRow ? (
+                            <span className="ev-going-text">
+                                <b>{isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk')}</b>
+                                <small>{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : t('events.detail.rsvpHint')}</small>
+                            </span>
+                        ) : (
+                            <span className="ev-going-text">{t('events.detail.going', { count: goingCount })}</span>
+                        )}
+                        {rsvpRow && (
                             <button type="button" className={`ev-going-btn${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy} onClick={() => rsvp(!isGoing)}>
-                                {isGoing && <Check size={15} aria-hidden="true" />} {isGoing ? t('events.detail.youreGoing') : t('events.detail.imGoing')}
+                                {isGoing && <Check size={15} aria-hidden="true" />} {isGoing ? t('events.card.going') : t('events.detail.imGoing')}
                             </button>
                         )}
                     </div>
@@ -438,6 +447,11 @@ const EventDetail = () => {
                 .ev-going-face:first-child { margin-left: 0; }
                 .ev-going-face :global(img) { width: 100%; height: 100%; object-fit: cover; }
                 .ev-going-text { flex: 1; min-width: 0; }
+                .ev-going.rsvp { flex-wrap: nowrap; padding: 12px 14px; border: 1px solid var(--color-gray-200); border-radius: 16px; background: var(--color-surface); }
+                .ev-going.rsvp .ev-going-text { display: flex; flex-direction: column; gap: 2px; }
+                .ev-going.rsvp .ev-going-text b { font-size: 0.95rem; font-weight: 700; color: var(--color-gray-900); }
+                .ev-going.rsvp .ev-going-text small { font-size: 0.8rem; line-height: 1.35; color: var(--color-gray-500); }
+                .ev-going-btn { flex-shrink: 0; }
                 .ev-going-btn {
                     display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-full); cursor: pointer;
                     border: 1.5px solid var(--color-primary); background: var(--color-surface); color: var(--color-primary); font-weight: 700; font-size: 0.85rem;
