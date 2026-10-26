@@ -92,7 +92,7 @@ export async function actedForIds(userId: string): Promise<string[]> {
     return (await listingsActedFor(userId)).map((l) => l.id);
 }
 
-type EventRef = { id: string; hostId: string; hostListingId: string | null; hostListing?: { status: string; isPublished: boolean } | null };
+type EventRef = { id: string; hostId: string; hostListingId: string | null };
 type Viewer = { id: string; isAdmin?: boolean } | undefined;
 
 /** A listing that's up: active and published. */
@@ -102,8 +102,8 @@ export const isLiveListing = (l: { status: string; isPublished: boolean } | null
 /**
  * The host side, who decides everything about the event and may delete it:
  * an admin; for an event hosted as a business or farm, whoever acts for it
- * now (a member who left its team doesn't any more), or the member who made
- * it once the business has been taken down; otherwise its host.
+ * now (a member who left its team doesn't any more), and while the business
+ * is down, its runner and team all the same; otherwise its host.
  */
 export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: string[]): Promise<boolean> {
     if (!user) return false;
@@ -111,11 +111,12 @@ export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: stri
     if (!event.hostListingId) return event.hostId === user.id;
     const mine = acted ?? await actedForIds(user.id);
     if (mine.includes(event.hostListingId)) return true;
-    if (event.hostId !== user.id) return false;
-    const listing = event.hostListing !== undefined
-        ? event.hostListing
-        : await prisma.directoryListing.findUnique({ where: { id: event.hostListingId }, select: { status: true, isPublished: true } });
-    return !isLiveListing(listing);
+    const listing = await prisma.directoryListing.findUnique({
+        where: { id: event.hostListingId },
+        select: { status: true, isPublished: true, ownerId: true, memberUserId: true, isOwnBusiness: true, team: { where: { userId: user.id }, select: { userId: true } } },
+    });
+    if (!listing || isLiveListing(listing)) return false;
+    return runsListing(listing, user.id) || listing.team.length > 0;
 }
 
 /** May edit the event: the host side, or a co-host (a member, or a business they act for). */

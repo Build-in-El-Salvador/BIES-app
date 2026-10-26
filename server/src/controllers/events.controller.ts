@@ -16,7 +16,7 @@ import {
     EVENT_PEOPLE, MAX_PARTNERS, PartnerError, actedForIds, canDeleteEvent, canEditEvent, checkPartners,
     hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
 } from '../services/eventPeople.service';
-import { listingsActedFor } from './listingTeam.controller';
+import { listingsActedFor, runsListing } from './listingTeam.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -219,15 +219,16 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
         const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
         const take = Math.min(parseInt(limit as string, 10), 100);
 
-        // Mine: I host it (not as a business I've left), I act for its host
-        // business or a co-host one, or I'm a co-host.
+        // Mine: I host it myself, I act for its host business (up or down) or
+        // a co-host one, or I'm a co-host.
         const me = req.user!.id;
         const acted = await actedForIds(me);
         const mineWhere = {
             OR: [
                 { hostId: me, hostListingId: null },
-                { hostId: me, hostListing: { is: { OR: [{ status: { not: 'active' } }, { isPublished: false }] } } },
                 ...(acted.length ? [{ hostListingId: { in: acted } }] : []),
+                // A business I run or am on the team of, while it's down.
+                { hostListing: { is: { OR: [{ memberUserId: me }, { memberUserId: null, isOwnBusiness: true, ownerId: me }, { team: { some: { userId: me } } }] } } },
                 { partners: { some: { role: 'COHOST', OR: [{ userId: me }, ...(acted.length ? [{ listingId: { in: acted } }] : [])] } } },
             ],
         };
@@ -518,6 +519,14 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
 
         let hostListingId = existing.hostListingId;
         if (hostSide && body.hostListingId !== undefined && (body.hostListingId || null) !== existing.hostListingId) {
+            // Off its business: the member who made it, the one who runs the business, or an admin.
+            const from = existing.hostListingId
+                ? await prisma.directoryListing.findUnique({ where: { id: existing.hostListingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true } })
+                : null;
+            if (from && !req.user!.isAdmin && me !== existing.hostId && !runsListing(from, me)) {
+                res.status(403).json({ error: 'Only who made this event, or who runs the business, can move it', reason: 'host_only' });
+                return;
+            }
             hostListingId = body.hostListingId || null;
             const listing = hostListingId ? (await listingsActedFor(me)).find((l) => l.id === hostListingId) : null;
             if (hostListingId && !listing) {

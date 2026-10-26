@@ -368,13 +368,22 @@ describe('who keeps control of an event', () => {
         expect(await mine(mate)).toBeUndefined();
     });
 
-    it('once its business is taken down, the member who made an event looks after it again', async () => {
+    it("while its business is down, its runner and team still look after its events; who left doesn't", async () => {
         const owner = await member();
+        const mate = await member();
+        const gone = await member();
         const biz = await business(owner, true);
-        const created = await event(owner, { hostListingId: biz });
-        await prisma.directoryListing.update({ where: { id: biz }, data: { status: 'inactive', isPublished: false } });
-        expect((await call('GET', `/api/events/${created.body.id}`, { token: owner.token })).body).toMatchObject({ canEdit: true, canDelete: true });
-        expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { title: 'Moved elsewhere' } })).status).toBe(200);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: gone.id } });
+        const created = await event(gone, { hostListingId: biz });
+        await call('DELETE', `/api/directory/${biz}/team/${gone.id}`, { token: owner.token });
+        await prisma.directoryListing.update({ where: { id: biz }, data: { status: 'rejected', isPublished: false } });
+
+        for (const m of [owner, mate]) {
+            expect((await call('GET', `/api/events/${created.body.id}`, { token: m.token })).body).toMatchObject({ canEdit: true, canDelete: true });
+        }
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: gone.token, body: { ticketUrl: 'https://elsewhere.example/pay' } })).status).toBe(403);
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { title: 'Still ours' } })).status).toBe(200);
     });
 
     it("co-hosts don't change the online link, and BIES named as a sponsor can't become a co-host", async () => {
@@ -407,6 +416,17 @@ describe('who keeps control of an event', () => {
         expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { hostListingId: null } })).status).toBe(200);
         expect((await prisma.event.findUniqueOrThrow({ where: { id: created.body.id } })).hostId).toBe(owner.id);
         expect((await call('PUT', `/api/events/${created.body.id}`, { token: mate.token, body: { title: 'Mine?' } })).status).toBe(403);
+    });
+
+    it("a teammate can't move off the business an event someone else made", async () => {
+        const owner = await member();
+        const mate = await member();
+        const biz = await business(owner, true);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        const created = await event(owner, { hostListingId: biz });
+        const moved = await call('PUT', `/api/events/${created.body.id}`, { token: mate.token, body: { hostListingId: null } });
+        expect(moved.status).toBe(403);
+        expect((await prisma.event.findUniqueOrThrow({ where: { id: created.body.id } })).hostListingId).toBe(biz);
     });
 
     it('an edit reaches the shared preview at once', async () => {
