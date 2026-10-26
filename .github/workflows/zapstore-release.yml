@@ -1,0 +1,692 @@
+# Builds, signs and publishes a stable BIES release to Zapstore when a vX.Y.Z
+# tag is pushed. This is the PRODUCTION channel; android-apk.yml is the tester
+# build and ship.sh is Play. The three use three different signing keys, so an
+# APK from one channel never updates an install from another (docs/ANDROID.md,
+# "Zapstore release").
+#
+# Each secret lives in a job that runs none of the project's code:
+#   gate       nothing.            Decides whether this tag may be released.
+#   build      nothing.            Runs npm and Gradle, which execute dependency
+#                                  code. Produces an UNSIGNED APK.
+#   sign       the APK key.        No checkout, no npm, no Gradle: it downloads
+#                                  the unsigned APK and runs the SDK's apksigner.
+#   preflight  the Nostr signer.   Checks, before anything is public, that the
+#                                  signer may publish this exact APK.
+#   release    contents: write.    Attaches the APK to the GitHub release.
+#   zapstore   the Nostr signer.   Publishes. No keystore.
+# What remains in the build job is the ability to tamper with the unsigned APK
+# before it is signed; that is inherent to building from dependencies, and is
+# what dependency review and the checks in `sign` are for.
+#
+# THE TAG IS THE BOUNDARY, and the checks in `gate` are not. This workflow runs
+# from the tagged commit, so whoever can create a v* tag can also edit this file
+# in the commit it points at and skip every check below. What actually stops
+# them is the tag ruleset (only release managers may create v* tags) and the
+# `v*` deployment-tag rule on both environments, both repository settings
+# listed in docs/ANDROID.md. `gate` catches honest mistakes: the wrong commit, a
+# version that drifted, red CI, a tag signed by the wrong person.
+#
+# Repository settings this workflow reads (Settings > Secrets and variables):
+#   vars.ZAPSTORE_CERT_SHA256    pinned SHA-256 of the release certificate
+#   vars.RELEASE_TAG_SIGNERS     SSH allowed-signers lines for release managers
+#   env android-release:  secrets ANDROID_RELEASE_KEYSTORE_B64,
+#                                 ANDROID_RELEASE_KEYSTORE_PASS (alias bies-zapstore)
+#   env zapstore-release: secret  SIGN_WITH (a bunker:// URL; never an nsec)
+#
+# Pull requests that touch this file, and manual runs, take the same path with
+# no secrets: a throwaway signing key, `zsp check` on the result, and no
+# release, no environment, no publish.
+
+name: Zapstore release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+'] # stable only: v1.2.3-rc.1 does not match
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/zapstore-release.yml
+      - .github/actions/install-zsp/action.yml
+      - zapstore.yaml
+
+# Releases queue behind each other rather than racing on versionCode; only a
+# superseded pull-request run is cancelled. GitHub keeps ONE waiting run per
+# group, so a third tag pushed while two are queued cancels the middle one.
+concurrency:
+  group: zapstore-release-${{ github.event_name == 'pull_request' && github.ref || github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  APP_ID: com.bies.app
+  # Production URLs baked into the native bundle (see docs/ANDROID.md). Public
+  # by nature; without them every API call resolves against https://localhost.
+  VITE_API_URL: https://app.buildinelsalvador.com/api
+  VITE_NOSTR_RELAY: wss://app.buildinelsalvador.com/relay
+
+# Every third-party action below is pinned to a commit. These jobs hold signing
+# material, so a moved tag must not be able to change what runs. Dependabot
+# (.github/dependabot.yml) proposes the bumps.
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read # CI's workflow run for this commit
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      version_code: ${{ steps.meta.outputs.version_code }}
+      publish: ${{ steps.meta.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the tag object, and origin/main for the ancestry check
+          persist-credentials: false
+
+      - name: Check the release
+        id: meta
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          SIGNERS: ${{ vars.RELEASE_TAG_SIGNERS }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          version=$(jq -r '.version' version.json)
+          [[ $version =~ $semver ]] || fail "version.json holds '$version', not major.minor.patch"
+          major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+          # versionCode = major*1_000_000 + minor*1_000 + patch: it rises with
+          # the version, and stays under Android's ceiling of 2_100_000_000.
+          (( major < 2000 && minor < 1000 && patch < 1000 )) \
+            || fail "$version does not fit the versionCode formula (major < 2000, minor and patch < 1000)"
+          code=$(( major * 1000000 + minor * 1000 + patch ))
+          (( code > 0 )) || fail "version 0.0.0 has no versionCode"
+
+          publish=false
+          if [ "$EVENT" = push ]; then
+            [ "$REF_TYPE" = tag ] || fail "a push that is not a tag reached the release path"
+            [ "$TAG" = "v$version" ] || fail "tag $TAG does not match version.json ($version)"
+            for f in package.json server/package.json; do
+              [ "$(jq -r '.version' "$f")" = "$version" ] || fail "$f is not at $version (scripts/version.sh keeps them together)"
+            done
+            # Anchored, like the awk that cuts the release notes from it.
+            awk -v h="## [$version]" 'index($0, h) == 1 { found = 1 } END { exit !found }' CHANGELOG.md \
+              || fail "CHANGELOG.md has no '## [$version]' section at the start of a line"
+
+            # An annotated tag, named like its ref, pointing at the commit this
+            # run was started for. The embedded name matters: a signed tag
+            # object for another version could otherwise be re-pushed under
+            # this name and still verify.
+            [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || fail "$TAG is a lightweight tag; release tags must be annotated and signed"
+            raw=$(git cat-file tag "refs/tags/$TAG")
+            embedded=$(awk 'NF == 0 { exit } /^tag / { print substr($0, 5) }' <<<"$raw")
+            [ "$embedded" = "$TAG" ] || fail "the tag object is named '$embedded', not $TAG"
+            [ "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$SHA" ] || fail "$TAG no longer points at $SHA"
+
+            # Signed by a release manager. Fail closed if the allow-list is empty.
+            [ -n "$SIGNERS" ] || fail "vars.RELEASE_TAG_SIGNERS is empty: refusing to release without a signer allow-list"
+            printf '%s\n' "$SIGNERS" | install -m 600 /dev/stdin "$RUNNER_TEMP/allowed_signers"
+            git -c gpg.ssh.allowedSignersFile="$RUNNER_TEMP/allowed_signers" verify-tag "$(git rev-parse "refs/tags/$TAG")" \
+              || fail "$TAG is not signed by a key in vars.RELEASE_TAG_SIGNERS"
+
+            # Only a commit that main itself points through is released. First
+            # parent, not ancestry: a merged PR's intermediate commits are
+            # ancestors of main too, and nobody reviewed them one by one.
+            firstparent=$(git rev-list --first-parent origin/main)
+            grep -qx -- "$SHA" <<<"$firstparent" \
+              || fail "$SHA is not on main's first-parent history; tag the commit main has, not a PR branch commit"
+
+            # ...and only one whose CI passed. CI starts when main moves, which
+            # is usually seconds before the tag, so wait for it instead of
+            # failing. This asks for the workflow RUN, not check runs by name:
+            # anyone who can push a branch can create a check run named
+            # anything, but not a ci.yml run for a commit on main.
+            deadline=$(( SECONDS + 1200 ))
+            while :; do
+              state=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=push&per_page=20" \
+                --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number) | last | ((.status // "") + ":" + (.conclusion // ""))')
+              case "$state" in
+                completed:success) break ;;
+                completed:*) fail "ci.yml on $SHA ended ${state#completed:}; fix or re-run it, then re-run this job" ;;
+              esac
+              (( SECONDS < deadline )) || fail "ci.yml on $SHA did not finish within 20 minutes (state '${state:-no run}')"
+              echo "waiting for CI on $SHA"
+              sleep 30
+            done
+            publish=true
+          fi
+
+          {
+            echo "version=$version"
+            echo "version_code=$code"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+  # Runs npm, Vite, Capacitor and Gradle: all of them execute dependency code.
+  # So this job has NO secrets and no environment, and produces an unsigned APK.
+  build:
+    name: Build the unsigned APK
+    needs: gate
+    runs-on: ubuntu-24.04 # pinned: a signing pipeline must not change SDK or JDK underneath us
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      unsigned_sha256: ${{ steps.unsigned.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      # No dependency caches in this pipeline: a cache written by another run
+      # must not be able to feed code into a release build.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24' # .nvmrc
+      # Capacitor 8 / AGP 8.13 need JDK 21 (docs/ANDROID.md).
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # No install scripts, and the tools are run from node_modules/.bin, so a
+      # missing binary is an error and not a fall-back to the registry.
+      - run: npm ci --ignore-scripts
+      - name: Native web bundle + cap sync
+        run: |
+          ./node_modules/.bin/vite build --mode native
+          ./node_modules/.bin/cap sync android
+
+      # Same guard as android/ship.sh: a bundle without the production URL
+      # would install fine and fail every request.
+      - name: Check the bundle carries the production API URL
+        run: grep -rqF "$VITE_API_URL" android/app/src/main/assets/public/assets
+
+      # Edited on the runner only; nothing is committed. Play's versionCode
+      # (android/app/build.gradle) is a separate counter on a separate key.
+      - name: Stamp version
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+        run: |
+          f=android/app/build.gradle
+          sed -i -E "s/^([[:space:]]*versionCode )[0-9]+\$/\1${CODE}/" "$f"
+          sed -i -E "s/^([[:space:]]*versionName )\"[^\"]*\"\$/\1\"${VERSION}\"/" "$f"
+          grep -qE "^[[:space:]]*versionCode ${CODE}\$" "$f"
+          grep -qE "^[[:space:]]*versionName \"${VERSION}\"\$" "$f"
+
+      # app/build.gradle only signs when ~/.bies-android/keystore.properties
+      # exists (Play's flow). Here it must not, so this is an UNSIGNED APK.
+      - name: Gradle build (unsigned)
+        working-directory: android
+        run: |
+          [ ! -e "$HOME/.bies-android/keystore.properties" ] || { echo "::error::a keystore.properties is present; Gradle would sign with it"; exit 1; }
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Collect the unsigned APK
+        id: unsigned
+        run: |
+          mapfile -t found < <(find android/app/build/outputs/apk/release -name '*.apk')
+          (( ${#found[@]} == 1 )) && [[ ${found[0]} == *-unsigned.apk ]] \
+            || { echo "::error::expected exactly one unsigned release APK, found: ${found[*]:-none}"; exit 1; }
+          mkdir -p unsigned
+          cp "${found[0]}" unsigned/BIES-unsigned.apk
+          echo "sha256=$(sha256sum unsigned/BIES-unsigned.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: BIES-unsigned
+          path: unsigned/BIES-unsigned.apk
+          if-no-files-found: error
+          retention-days: 5
+
+  # The only job that holds the APK key. It runs no project code: no checkout,
+  # no npm, no Gradle, nothing from node_modules. It downloads the unsigned APK
+  # and signs it with the SDK's own apksigner.
+  sign:
+    name: Sign the APK
+    needs: [gate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The environment, and with it the release keystore, exists only on a real
+    # release. Dry runs get no environment at all.
+    environment: ${{ needs.gate.outputs.publish == 'true' && 'android-release' || '' }}
+    permissions: {}
+    outputs:
+      apk_sha256: ${{ steps.verify.outputs.apk_sha256 }}
+      cert_sha256: ${{ steps.verify.outputs.cert_sha256 }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: BIES-unsigned
+          path: unsigned
+
+      - name: Check the unsigned APK is the one that was built
+        env:
+          WANT: ${{ needs.build.outputs.unsigned_sha256 }}
+        run: |
+          got=$(sha256sum unsigned/BIES-unsigned.apk | cut -d' ' -f1)
+          [ "$got" = "$WANT" ] || { echo "::error::the unsigned APK changed between the build job and this one"; exit 1; }
+
+      # The keystore exists for the length of this one step: decoded from the
+      # environment, handed to apksigner by environment variable (never argv),
+      # and deleted on exit. Dry runs sign the same way, with a key made here
+      # and discarded with the runner, so this path runs on every pull request.
+      # An APK from a dry run is never published.
+      - name: Sign
+        env:
+          PUBLISH: ${{ needs.gate.outputs.publish }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASS }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)
+          zipalign=$(ls "$ANDROID_HOME"/build-tools/*/zipalign | sort -V | tail -n1)
+          "$zipalign" -c 4 unsigned/BIES-unsigned.apk || fail "the unsigned APK is not 4-byte aligned"
+
+          ks="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$ks"' EXIT
+          if [ "$PUBLISH" = true ]; then
+            for v in KEYSTORE_B64 STORE_PASS; do
+              [ -n "${!v}" ] || fail "secret for $v is not set in the android-release environment"
+            done
+            printf '%s' "$KEYSTORE_B64" | base64 -d | install -m 600 /dev/stdin "$ks"
+          else
+            STORE_PASS=$(openssl rand -hex 16)
+            export STORE_PASS
+            keytool -genkeypair -storetype PKCS12 -keystore "$ks" -alias bies-zapstore \
+              -keyalg RSA -keysize 2048 -validity 1 -dname "CN=BIES dry run throwaway" \
+              -storepass:env STORE_PASS -keypass:env STORE_PASS
+            chmod 600 "$ks"
+          fi
+          mkdir -p out
+          # A PKCS12 key password equals the store password, so one variable serves both.
+          "$apksigner" sign --ks "$ks" --ks-key-alias bies-zapstore --ks-pass env:STORE_PASS \
+            --out "out/BIES-$VERSION.apk" unsigned/BIES-unsigned.apk
+
+      # Belt and braces: the step above already removed the keystore on exit.
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: Verify and name the APK
+        id: verify
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+          PUBLISH: ${{ needs.gate.outputs.publish }}
+          PIN: ${{ vars.ZAPSTORE_CERT_SHA256 }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          apk="out/BIES-$VERSION.apk"
+          [ -f "$apk" ] || fail "the signing step produced no $apk"
+
+          # apksigner exits non-zero on an unsigned or tampered APK, which
+          # stops the job before anything is published.
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n1)
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n1)
+          cert=$("$apksigner" verify --print-certs "$apk")
+          # Whatever the label before it ("Signer #1", or a "Signer (minSdk...)"
+          # form on newer build-tools) and whether the digest is plain or
+          # colon-separated hex, reduce it to 64 lowercase hex characters. `||
+          # true`: a grep that finds nothing must reach the annotation below,
+          # not kill the step under pipefail before it can print.
+          sha256=$(grep -m1 -iE 'certificate SHA-256 digest:' <<<"$cert" | sed -E 's/.*digest: *//' | tr -d ': ' | tr 'A-F' 'a-f' || true)
+          if ! [[ $sha256 =~ ^[0-9a-f]{64}$ ]]; then
+            # Certificate details are public, so showing them is safe and makes
+            # a format change visible in the annotation, not just in the log.
+            fail "could not read the signing certificate digest; apksigner printed: $(head -c 800 <<<"$cert" | tr '\n' '|')"
+          fi
+
+          # The APK must be this app at this version, and a release build.
+          badging=$("$aapt2" dump badging "$apk")
+          grep -qF "package: name='$APP_ID' versionCode='$CODE' versionName='$VERSION'" <<<"$badging" \
+            || fail "the APK is not $APP_ID $VERSION ($CODE)"
+          if grep -q 'application-debuggable' <<<"$badging"; then
+            fail "the APK is debuggable"
+          fi
+
+          # The pin is what makes a wrong key (the tester key, a test key) fail
+          # here instead of reaching Zapstore.
+          if [ "$PUBLISH" = true ]; then
+            [[ $PIN =~ ^[0-9a-f]{64}$ ]] || fail "vars.ZAPSTORE_CERT_SHA256 is unset or not 64 lowercase hex characters"
+            [ "$sha256" = "$PIN" ] || fail "signed with $sha256, not the pinned release certificate"
+          fi
+
+          apk_sha256=$(sha256sum "$apk" | cut -d' ' -f1)
+          {
+            echo "apk_sha256=$apk_sha256"
+            echo "cert_sha256=$sha256"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### BIES $VERSION ($CODE)"
+            echo
+            echo "APK SHA-256: \`$apk_sha256\`"
+            echo
+            if [ "$PUBLISH" = true ]; then
+              echo "Signing certificate SHA-256 (matches the pin): \`$sha256\`"
+            else
+              echo "Dry run, signed with a throwaway key: \`$sha256\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: BIES-apk-${{ needs.gate.outputs.publish == 'true' && 'release' || 'dry-run' }}
+          path: out/BIES-${{ needs.gate.outputs.version }}.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  # Before anything is public: may the Zapstore signer publish exactly this APK?
+  # A Zapstore-side problem (signer unreachable or unauthorised, proof expired,
+  # versionCode not higher) is found here, while a fix still costs nothing,
+  # instead of after a GitHub release exists. zsp reads the signed APK
+  # directly; the workflow is at the tag, so a failure found later costs a version.
+  preflight:
+    name: Zapstore preflight
+    needs: [gate, sign]
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: zapstore-release
+    permissions:
+      contents: read
+    outputs:
+      already: ${{ steps.check.outputs.already }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/install-zsp
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: BIES-apk-release
+          path: out
+
+      # zsp reads ./.env, which can redirect publishing (RELAYS, BLOSSOM_URL), so
+      # it runs from a scratch directory holding only the files it needs.
+      # release_filter matches a release TAG; for a local APK zsp matches it
+      # against the version name instead, so it cannot apply in this copy.
+      - name: zsp check
+        id: check
+        env:
+          SIGN_WITH: ${{ secrets.SIGN_WITH }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+          APK_SHA256: ${{ needs.sign.outputs.apk_sha256 }}
+          PIN: ${{ vars.ZAPSTORE_CERT_SHA256 }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          [ -n "$SIGN_WITH" ] || fail "secret SIGN_WITH is not set in the zapstore-release environment"
+          case "$SIGN_WITH" in
+            bunker://*) ;;
+            *) fail "SIGN_WITH must be a bunker:// URL, never a private key" ;;
+          esac
+          if grep -q '^release_source:' zapstore.yaml; then
+            fail "zapstore.yaml must not set release_source: a release takes the APK from the GitHub release"
+          fi
+          d=$(mktemp -d)
+          cp zapstore.yaml CHANGELOG.md "$d/"
+          mkdir -p "$d/public/icons"
+          cp public/icons/icon-512.png "$d/public/icons/"
+          cp "out/BIES-$VERSION.apk" "$d/"
+          sed -i '/^release_filter:/d' "$d/zapstore.yaml"
+          printf '\nrelease_source: ./BIES-%s.apk\n' "$VERSION" >> "$d/zapstore.yaml"
+          cd "$d"
+          check=$(zsp check --json --apk-hash "$APK_SHA256") || {
+            jq . <<<"$check" || printf '%s\n' "$check"; fail "zsp check failed"; }
+          show() { jq '{ok, apk, listed, proof, published_version_code, authorized, next_step, warnings, error}' <<<"$check"; }
+
+          # Always: this is the app, version, file and key we built, and the
+          # signer is allowed to publish it.
+          if ! jq -e --arg id "$APP_ID" --arg v "$VERSION" --argjson c "$CODE" \
+              --arg h "$APK_SHA256" --arg cert "$PIN" '
+                .ok == true
+                and .apk.app_id == $id and .apk.version_name == $v and .apk.version_code == $c
+                and .apk.hash == $h and .apk.certificate_hash == $cert
+                and .listed == true and .proof != null and .authorized == true' <<<"$check" > /dev/null; then
+            echo "::error::not releasing: zsp does not see the expected, authorised APK. zsp reported:"
+            show; exit 1
+          fi
+
+          # Already on the relay (a re-run after a partial failure): nothing to
+          # publish, and the later jobs skip the publish step.
+          if jq -e --argjson c "$CODE" '.published_version_code == $c' <<<"$check" > /dev/null; then
+            echo "version code $CODE is already published; the publish step will be skipped"
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! jq -e --argjson c "$CODE" '
+                .published_version_code < $c
+                and .next_step != null and ((.next_step.requires_human // false) == false)
+                and (.next_step.command | startswith("zsp publish"))' <<<"$check" > /dev/null; then
+            echo "::error::not releasing: zsp says there is nothing it can publish for this APK. zsp reported:"
+            show; exit 1
+          fi
+          echo "already=false" >> "$GITHUB_OUTPUT"
+
+  # Attaching the APK needs write access to releases, so it is its own job: no
+  # job that runs project code or holds a signing key gets contents: write.
+  release:
+    name: GitHub release
+    needs: [gate, sign, preflight]
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: BIES-apk-release
+          path: out
+
+      - name: Check the APK is the one that was signed
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          WANT: ${{ needs.sign.outputs.apk_sha256 }}
+        run: |
+          got=$(sha256sum "out/BIES-$VERSION.apk" | cut -d' ' -f1)
+          [ "$got" = "$WANT" ] || { echo "::error::the APK changed between the sign job and this one"; exit 1; }
+
+      # A signed statement that this workflow, at this commit, produced this
+      # file. The subject is a plain file, not a registry artifact, so no
+      # storage record (which would need artifact-metadata: write) is wanted.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/BIES-${{ needs.gate.outputs.version }}.apk
+          create-storage-record: false
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          CERT_SHA256: ${{ needs.sign.outputs.cert_sha256 }}
+        run: |
+          body="$RUNNER_TEMP/notes.md"
+          {
+            # This version's section of CHANGELOG.md (the gate proved it exists).
+            awk -v h="## [$VERSION]" 'index($0, h) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md
+            echo
+            echo "Signing certificate SHA-256: \`$CERT_SHA256\`"
+            echo
+            echo "Check the build: \`gh attestation verify BIES-$VERSION.apk --repo $REPO --signer-workflow $REPO/.github/workflows/zapstore-release.yml --source-ref refs/tags/$TAG\`"
+          } > "$body"
+          gh release create "$TAG" "out/BIES-$VERSION.apk" --repo "$REPO" \
+            --verify-tag --title "BIES $VERSION" --notes-file "$body"
+
+  zapstore:
+    name: Publish to Zapstore
+    needs: [gate, sign, preflight, release]
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # The Nostr signer lives here and in preflight only. No keystore, no write access.
+    environment: zapstore-release
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/install-zsp
+
+      # Publish the file that is on the GitHub release, not the build artifact:
+      # zapstore.yaml makes the release the source, so that is what listeners
+      # download. It must be the APK that was signed and attested.
+      - name: Fetch and check the released APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          WANT: ${{ needs.sign.outputs.apk_sha256 }}
+        run: |
+          # zsp resolves the source through GitHub's "latest release" (which
+          # skips pre-releases), and that pointer can trail the release by a
+          # few seconds. Wait for it rather than publish nothing.
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            [ "$(gh api "repos/$REPO/releases/latest" --jq .tag_name)" = "$TAG" ] && break
+            sleep 10
+          done
+          [ "$(gh api "repos/$REPO/releases/latest" --jq .tag_name)" = "$TAG" ] \
+            || { echo "::error::$TAG is not GitHub's latest release, so zsp would not publish it"; exit 1; }
+          gh release download "$TAG" --repo "$REPO" --pattern "BIES-$VERSION.apk" --dir out
+          got=$(sha256sum "out/BIES-$VERSION.apk" | cut -d' ' -f1)
+          [ "$got" = "$WANT" ] || { echo "::error::the released APK is not the one the sign job produced"; exit 1; }
+          # This tag, this commit, this workflow: not just any workflow in the repo.
+          gh attestation verify "out/BIES-$VERSION.apk" --repo "$REPO" \
+            --signer-workflow "$REPO/.github/workflows/zapstore-release.yml" \
+            --source-ref "refs/tags/$TAG" --source-digest "$SHA" > /dev/null
+
+      # What zsp resolves from the GitHub release must be the APK just checked.
+      # No signer here, so nothing can be published by this step. It runs from
+      # a scratch directory so a stray ./.env cannot redirect it.
+      - name: Check zsp resolves the release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+          APK_SHA256: ${{ needs.sign.outputs.apk_sha256 }}
+          PIN: ${{ vars.ZAPSTORE_CERT_SHA256 }}
+        run: |
+          d=$(mktemp -d)
+          cp zapstore.yaml CHANGELOG.md "$d/"
+          mkdir -p "$d/public/icons"
+          cp public/icons/icon-512.png "$d/public/icons/"
+          echo "$d" > "$RUNNER_TEMP/zsp-dir"
+          cd "$d"
+          check=$(zsp check --json --apk-hash "$APK_SHA256") || {
+            jq . <<<"$check" || printf '%s\n' "$check"; echo "::error::zsp check failed"; exit 1; }
+          jq -e --arg id "$APP_ID" --arg v "$VERSION" --argjson c "$CODE" --arg h "$APK_SHA256" --arg cert "$PIN" '
+            .ok == true and .apk.app_id == $id and .apk.version_name == $v and .apk.version_code == $c
+            and .apk.hash == $h and .apk.certificate_hash == $cert' <<<"$check" > /dev/null \
+            || { echo "::error::zsp resolved a different APK from the release than the one built. zsp reported:"
+                 jq '{ok, apk, warnings, error}' <<<"$check"; exit 1; }
+
+      # SIGN_WITH is set on this step alone. Skipped when preflight found this
+      # version code already on the relay (a re-run after a partial failure).
+      - name: Publish
+        if: needs.preflight.outputs.already != 'true'
+        env:
+          SIGN_WITH: ${{ secrets.SIGN_WITH }}
+          GITHUB_TOKEN: ${{ github.token }}
+          APK_SHA256: ${{ needs.sign.outputs.apk_sha256 }}
+        run: |
+          cd "$(cat "$RUNNER_TEMP/zsp-dir")"
+          zsp publish -q --apk-hash "$APK_SHA256"
+
+      # No signer needed to read the relay back.
+      - name: Confirm the relay shows the release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+          APK_SHA256: ${{ needs.sign.outputs.apk_sha256 }}
+        run: |
+          cd "$(cat "$RUNNER_TEMP/zsp-dir")"
+          for _ in 1 2 3 4 5 6; do
+            after=$(zsp check --json --apk-hash "$APK_SHA256" || true)
+            [ "$(jq -r '.published_version_code // 0' <<<"$after")" = "$CODE" ] && exit 0
+            sleep 10
+          done
+          echo "::error::the relay does not show version code $CODE after publishing"
+          jq . <<<"$after" || printf '%s\n' "$after"
+          exit 1
+
+  # The release path stops at the check; nothing here can publish.
+  dry-run:
+    name: zsp check (dry run)
+    needs: [gate, sign]
+    if: needs.gate.outputs.publish != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-zsp
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: BIES-apk-dry-run
+          path: out
+
+      # Validates the real zapstore.yaml (zsp rejects unknown fields) against
+      # the APK just built, in a scratch copy where the APK is the source. The
+      # file itself must not name one: on a release the GitHub release is it.
+      - name: zsp check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          CODE: ${{ needs.gate.outputs.version_code }}
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          if grep -q '^release_source:' zapstore.yaml; then
+            fail "zapstore.yaml must not set release_source: a release takes the APK from the GitHub release"
+          fi
+          d=$(mktemp -d)
+          cp zapstore.yaml "$d/"
+          mkdir -p "$d/public/icons"
+          cp public/icons/icon-512.png "$d/public/icons/"
+          # Keep the release file name: `match` in zapstore.yaml filters local
+          # paths too, and a differently named APK would be skipped.
+          cp "out/BIES-$VERSION.apk" "$d/"
+          # release_notes pulls this version's section; a dry run has none yet.
+          { cat CHANGELOG.md; printf '\n## [%s] - dry run\n\n- dry run\n' "$VERSION"; } > "$d/CHANGELOG.md"
+          # release_filter matches a release TAG; for a local APK zsp matches it
+          # against the version name instead, so it cannot apply in this copy.
+          sed -i '/^release_filter:/d' "$d/zapstore.yaml"
+          printf '\nrelease_source: ./BIES-%s.apk\n' "$VERSION" >> "$d/zapstore.yaml"
+          cd "$d"
+          check=$(zsp check --json) || { jq . <<<"$check" || printf '%s\n' "$check"; fail "zsp check failed"; }
+          jq . <<<"$check"
+          jq -e --arg id "$APP_ID" --arg v "$VERSION" --argjson c "$CODE" \
+            '.ok == true and .apk.app_id == $id and .apk.version_name == $v and .apk.version_code == $c' \
+            <<<"$check" > /dev/null || fail "zsp does not see $APP_ID $VERSION ($CODE) in the dry-run APK"

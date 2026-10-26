@@ -1,0 +1,19 @@
+# Keeps the full-SHA action pins in .github/workflows current. The workflows
+# that hold signing material pin every action to a commit; this turns each
+# bump into a reviewed pull request instead of a silent tag move. The cooldown
+# keeps a just-published (possibly compromised) release out of the repo for two
+# weeks.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    # "/" covers .github/workflows; the glob covers local composite actions,
+    # which "/" alone does not scan.
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: ci
