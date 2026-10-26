@@ -1964,6 +1964,24 @@
       "differentAdd": "No, it's a different place: add it",
       "farm": "Farm",
       "business": "Business"
+    },
+    "team": {
+      "title": "Team",
+      "owner": "Owner",
+      "manage": "Manage",
+      "leave": "Leave",
+      "empty": "Add the people who work here, so they can host events as {{name}}.",
+      "sheetTitle": "{{name}}'s team",
+      "sheetBody": "People on the team can host events as {{name}}. Only the owner edits the listing.",
+      "asAdmin": "You're changing this team as an admin.",
+      "searchLabel": "Add a member",
+      "searchPlaceholder": "Search members by name",
+      "noMatches": "No members match.",
+      "remove": "Take {{name}} off the team",
+      "leaveTitle": "Leave {{name}}'s team?",
+      "leaveBody": "You won't be able to host events as {{name}} anymore. The owner can add you again.",
+      "leaveSend": "Leave the team",
+      "error": "That didn't work. Try again."
     }
   },
   "talent": {

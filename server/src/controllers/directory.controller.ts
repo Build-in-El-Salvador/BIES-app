@@ -389,6 +389,11 @@ export async function getListing(req: Request, res: Response): Promise<void> {
                     orderBy: { createdAt: 'desc' },
                     include: { user: ownerSelect },
                 },
+                team: {
+                    where: { user: ACTIVE },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, userId: true, createdAt: true, user: ownerSelect },
+                },
                 _count: { select: { endorsements: true } },
             },
         });
@@ -432,6 +437,8 @@ export async function getListing(req: Request, res: Response): Promise<void> {
         // members blocked either way.
         const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const reviews = req.user ? listing.endorsements.filter((e) => !hidden.has(e.userId)) : [];
+        // Its team, by name: for members too.
+        const team = req.user ? listing.team.filter((m) => !hidden.has(m.userId)) : [];
         const savedByMe = req.user
             ? !!(await prisma.savedListing.findUnique({
                 where: { userId_listingId: { userId: req.user.id, listingId: listing.id } },
@@ -442,7 +449,7 @@ export async function getListing(req: Request, res: Response): Promise<void> {
         const transfers = await transfersFor(listing, req);
         // The linked member's Lightning details as their Settings → Privacy allows.
         const memberUser = nestedProfileForViewer(listing.memberUser, req.user?.id);
-        const shown = { ...listing, memberUser, endorsements: reviews, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
+        const shown = { ...listing, memberUser, endorsements: reviews, team, trustedThreshold: TRUSTED_THRESHOLD, savedByMe, transfers };
 
         // Fire-and-forget view count increment
         prisma.directoryListing.update({
@@ -526,7 +533,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
     try {
         const existing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { ownerId: true, photo: true, logo: true, photos: true },
+            select: { ownerId: true, photo: true, logo: true, photos: true, isOwnBusiness: true, memberUserId: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -536,6 +543,14 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
 
         const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') data.memberUserId = null;
+
+        // A recommendation becomes the business's own page through a claim or
+        // a hand-over (or staff), not by its recommender saying so: running it
+        // means hosting events as it and choosing its team.
+        if (data.isOwnBusiness === true && !existing.isOwnBusiness && !isStaff(req)) {
+            res.status(403).json({ error: 'Only the business itself can make this its own page: it can claim it from the ⋯ menu', reason: 'own_business' });
+            return;
+        }
 
         if (data.memberUserId) {
             const memberUser = await prisma.user.findUnique({
@@ -560,6 +575,11 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         // Photos taken off it go, if the owner or this editor uploaded them.
         const removed = listingPhotos(existing).filter((url) => !listingPhotos(listing).includes(url));
         if (removed.length) await discardUploads(removed, { uploadedBy: [existing.ownerId, req.user!.id] });
+
+        // Someone else runs it now: the team was the old runner's.
+        const runnerChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
+            || (data.isOwnBusiness !== undefined && data.isOwnBusiness !== existing.isOwnBusiness);
+        if (runnerChanged) await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id } });
 
         // Now marked as their own business: their vouch goes.
         if (data.isOwnBusiness === true) {

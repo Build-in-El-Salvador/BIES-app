@@ -74,6 +74,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     // Whose listing it is: a customer recommending it (their review is their
     // vouch) or the business or farm itself.
     const [isOwnBusiness, setIsOwnBusiness] = useState(false);
+    // A recommendation stays one on edit (the business claims it instead).
+    const [wasOwnBusiness, setWasOwnBusiness] = useState(false);
     const [photos, setPhotos] = useState([]); // gallery, up to MAX_PHOTOS
     const [form, setForm] = useState(emptyForm);
     const [languages, setLanguages] = useState([]);
@@ -161,6 +163,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     review: '',
                 });
                 setIsOwnBusiness(!!listing.isOwnBusiness);
+                setWasOwnBusiness(!!listing.isOwnBusiness);
                 setPhotos(Array.isArray(listing.photos) ? listing.photos.filter(Boolean) : []);
                 setLanguages(Array.isArray(listing.languages) ? listing.languages : []);
                 setProducts(Array.isArray(listing.products) ? listing.products.filter((p) => p?.label != null) : []);
@@ -461,6 +464,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     )}
 
                     {/* Whose listing this is */}
+                    {(!editMode || isStaff || wasOwnBusiness) && (
                     <div className="dir-form-card">
                         <h3 className="dir-card-heading">{t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}</h3>
                         <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}>
@@ -477,6 +481,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         </div>
                         {isOwnBusiness && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionOwnerHint')}</p>}
                     </div>
+                    )}
 
                     {/* The basics: what Google "Add a place" and Nextdoor "Recommend" ask first */}
                     <div className="dir-form-card">
