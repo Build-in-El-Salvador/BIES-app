@@ -488,7 +488,18 @@
       "scaling": "Scaling"
     },
     "searchMembers": "Search members",
-    "noMembersSearch": "No members found matching \"{{query}}\""
+    "noMembersSearch": "No members found matching \"{{query}}\"",
+    "card": {
+      "followedBy": "Followed by {{name}}",
+      "followedByMore_one": "Followed by {{name}} and {{count}} other you follow",
+      "followedByMore_other": "Followed by {{name}} and {{count}} others you follow",
+      "followedByCount_one": "Followed by {{count}} person you follow",
+      "followedByCount_other": "Followed by {{count}} people you follow",
+      "network_one": "{{count}} in their network",
+      "network_other": "{{count}} in their network",
+      "networkPrivate_one": "{{count}} follower · network private",
+      "networkPrivate_other": "{{count}} followers · network private"
+    }
   },
   "members": {
     "title": "Members Directory",

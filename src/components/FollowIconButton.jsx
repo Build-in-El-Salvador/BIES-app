@@ -11,8 +11,10 @@ import { profilesApi } from '../services/api';
  * @param {boolean} props.isFollowing - Current follow status
  * @param {function} props.onToggle - Callback when follow status changes (optimistic)
  * @param {'sm' | 'md'} [props.size='sm'] - Button size
+ * @param {'outline' | 'filled'} [props.variant='outline'] - filled: solid
+ *   blue until followed, as "Follow" is on Instagram and Facebook cards
  */
-const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onToggle, size = 'sm' }) => {
+const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onToggle, size = 'sm', variant = 'outline' }) => {
     const [following, setFollowing] = useState(initiallyFollowing);
     const [loading, setLoading] = useState(false);
 
@@ -54,7 +56,7 @@ const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onTog
 
     return (
         <button
-            className={`icon-btn follow-btn ${following ? 'following' : ''}`}
+            className={`icon-btn follow-btn ${variant === 'filled' ? 'filled' : ''} ${following ? 'following' : ''}`}
             onClick={handleToggleFollow}
             disabled={loading}
             title={following ? 'Unfollow' : 'Follow'}
@@ -98,6 +100,15 @@ const FollowIconButton = ({ targetUserId, isFollowing: initiallyFollowing, onTog
                     color: var(--color-primary);
                     border-color: var(--color-primary);
                     background: rgba(0, 82, 204, 0.08);
+                }
+                .icon-btn.filled:not(.following) {
+                    color: white;
+                    border-color: var(--color-primary);
+                    background: var(--color-primary);
+                }
+                .icon-btn.filled:not(.following):hover {
+                    border-color: var(--color-primary-dark);
+                    background: var(--color-primary-dark);
                 }
                 .icon-btn:disabled {
                     opacity: 0.7;

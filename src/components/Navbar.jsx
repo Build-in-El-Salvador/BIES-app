@@ -14,6 +14,7 @@ import { BOUNTIES_ENABLED, COWORK_ENABLED, MARKETPLACE_ENABLED } from '../config
 import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
 import logoIconDark from '../assets/logo-icon-dark.svg';
+import Avatar from './Avatar';
 
 const Navbar = () => {
   const { t } = useTranslation();
@@ -214,11 +215,7 @@ const Navbar = () => {
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               >
                 <div className="avatar">
-                  {user?.profile?.avatar ? (
-                    <img src={user.profile.avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                  ) : (
-                    <User size={18} />
-                  )}
+                  <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
                 </div>
                 <div className="flex flex-col items-start hidden-mobile" style={{ lineHeight: 1.2, color: 'white' }}>
                   <span className="text-sm font-semibold">{user?.profile?.name || user?.name || 'Guest'}</span>
@@ -293,11 +290,7 @@ const Navbar = () => {
               aria-expanded={isMenuOpen}
             >
               <div className="avatar" style={{ width: 32, height: 32 }}>
-                {user?.profile?.avatar ? (
-                  <img src={user.profile.avatar} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <User size={18} />
-                )}
+                <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
               </div>
             </button>
           </div>
@@ -315,50 +308,58 @@ const Navbar = () => {
               <img src={logoIconDark} alt="BIES" style={{ height: '32px' }} />
               <button onClick={() => setIsMenuOpen(false)} aria-label={t('nav.closeMenu')} style={{ display: 'flex', color: 'white', background: 'none', border: 'none', padding: '10px', cursor: 'pointer' }}><X size={24} /></button>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
-              {/* Top Section: every page the bottom bar can hold (MENU_PAGES),
-                  then Admin and About. The pages go by their short names, as
-                  in the bottom bar, so each fits on one line. */}
-              {[
-                ...menuLinks(MENU_PAGES),
-                ...((user?.isAdmin || user?.role === 'MOD') ? [{ to: '/admin', label: t('nav.adminPanel'), isAdmin: true }] : []),
-                { to: '/about', label: t('nav.about') },
-              ].map((link) => {
-                const active = isActive(link.to);
-                const linkStyle = {
-                  display: 'block',
-                  padding: '0.9rem 1.5rem',
-                  color: link.isAdmin ? 'var(--color-secondary)' : active ? 'white' : 'rgba(255,255,255,0.8)',
-                  fontSize: '1rem',
-                  fontWeight: link.isAdmin ? 700 : active ? 700 : 500,
-                  textDecoration: 'none',
-                  borderLeft: active ? '3px solid var(--color-secondary)' : '3px solid transparent',
-                  background: active ? 'rgba(255,255,255,0.1)' : 'none',
-                };
-                return (
-                  <Link key={link.to} to={link.to} style={linkStyle} onClick={() => setIsMenuOpen(false)}>
-                    {link.label}
-                  </Link>
-                );
-              })}
-            </div>
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
-              {/* Bottom Section: Feedback, Settings, Log Out */}
-              {menuLinks(MENU_BOTTOM_PAGES).map(item => (
-                <Link key={item.to} to={item.to} style={{ display: 'block', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
-                  {item.label}
-                </Link>
-              ))}
+            {/* Below the header the menu scrolls as one list, with iOS's bounce at
+                either end (always, as in a native list) and without moving the
+                page behind it. With room to spare, Settings and Log Out stay at
+                the bottom; with more pages than fit, they follow the pages. */}
+            <div className="mobile-drawer-scroll">
+              <div className="mobile-drawer-body">
+                <div style={{ padding: '0.75rem 0', display: 'flex', flexDirection: 'column' }}>
+                  {/* Top Section: every page the bottom bar can hold (MENU_PAGES),
+                      then Admin and About. The pages go by their short names, as
+                      in the bottom bar, so each fits on one line. */}
+                  {[
+                    ...menuLinks(MENU_PAGES),
+                    ...((user?.isAdmin || user?.role === 'MOD') ? [{ to: '/admin', label: t('nav.adminPanel'), isAdmin: true }] : []),
+                    { to: '/about', label: t('nav.about') },
+                  ].map((link) => {
+                    const active = isActive(link.to);
+                    const linkStyle = {
+                      display: 'block',
+                      padding: '0.9rem 1.5rem',
+                      color: link.isAdmin ? 'var(--color-secondary)' : active ? 'white' : 'rgba(255,255,255,0.8)',
+                      fontSize: '1rem',
+                      fontWeight: link.isAdmin ? 700 : active ? 700 : 500,
+                      textDecoration: 'none',
+                      borderLeft: active ? '3px solid var(--color-secondary)' : '3px solid transparent',
+                      background: active ? 'rgba(255,255,255,0.1)' : 'none',
+                    };
+                    return (
+                      <Link key={link.to} to={link.to} style={linkStyle} onClick={() => setIsMenuOpen(false)}>
+                        {link.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.15)', padding: '0.5rem 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
+                  {/* Bottom Section: Feedback, Settings, Log Out */}
+                  {menuLinks(MENU_BOTTOM_PAGES).map(item => (
+                    <Link key={item.to} to={item.to} style={{ display: 'block', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
+                      {item.label}
+                    </Link>
+                  ))}
               
-              {isAuthenticated ? (
-                <button onClick={() => { logout(); clearMode(); setIsMenuOpen(false); navigate('/'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.9rem 1.5rem', color: '#ef4444', fontSize: '1rem', fontWeight: 500, background: 'none', border: 'none', borderLeft: '3px solid transparent', cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' }}>
-                  <LogOut size={16} /> {t('common.logOut')}
-                </button>
-              ) : (
-                <Link to="/login" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
-                  <NostrIcon size={16} /> {t('common.logIn')}
-                </Link>
-              )}
+                  {isAuthenticated ? (
+                    <button onClick={() => { logout(); clearMode(); setIsMenuOpen(false); navigate('/'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.9rem 1.5rem', color: '#ef4444', fontSize: '1rem', fontWeight: 500, background: 'none', border: 'none', borderLeft: '3px solid transparent', cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' }}>
+                      <LogOut size={16} /> {t('common.logOut')}
+                    </button>
+                  ) : (
+                    <Link to="/login" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
+                      <NostrIcon size={16} /> {t('common.logIn')}
+                    </Link>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </>
@@ -558,6 +559,14 @@ const Navbar = () => {
           border-color: rgba(255, 255, 255, 0.4);
         }
 
+        /* Their photo from BIES (an /uploads path) needs the API's address in the phone app: Avatar adds it. */
+        .avatar :global(img) {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          object-fit: cover;
+          display: block;
+        }
         .avatar {
           width: 32px;
           height: 32px;
@@ -684,6 +693,24 @@ const Navbar = () => {
           padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0) 0;
         }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .mobile-drawer-scroll {
+          flex: 1;
+          min-height: 0; /* a flex item: without this it grows to its links and never scrolls */
+          overflow-y: auto;
+          overscroll-behavior-y: contain; /* the bounce stays in the menu, the page behind stays put */
+          -webkit-overflow-scrolling: touch;
+        }
+        .mobile-drawer-body {
+          min-height: 100%;
+          display: flex;
+          flex-direction: column;
+        }
+        /* On touch screens, a pixel taller than the menu, so it always bounces,
+           even when everything fits (no 1px scrollbar with a mouse). */
+        @media (pointer: coarse) {
+          .mobile-drawer-body { min-height: calc(100% + 1px); }
+        }
 
         .mobile-drawer-header {
           display: flex;

@@ -18,7 +18,11 @@ export const createArticleSchema = z.object({
     tags: z.array(z.string()).optional(),
 });
 
-export const updateArticleSchema = createArticleSchema.partial();
+// Every field optional, and a field left out stays out: in zod 4, .partial()
+// still fills in .default() values, which would reset what an edit didn't send.
+export const updateArticleSchema = createArticleSchema.partial().extend({
+    category: createArticleSchema.shape.category.removeDefault().optional(),
+});
 
 export const createVideoSchema = z.object({
     title: z.string().min(1).max(300),

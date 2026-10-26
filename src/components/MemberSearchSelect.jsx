@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, UserPlus, Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
+import Avatar from './Avatar';
 
 /**
  * MemberSearchSelect — search BIES members and build a guestlist.
@@ -74,11 +75,13 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                 <div className="guest-chips">
                     {value.map(g => (
                         <div key={g.userId || g.name} className="chip">
-                            {g.avatar ? (
-                                <img src={g.avatar} alt={g.name} className="chip-avatar" />
-                            ) : (
-                                <span className="chip-initials">{(g.name || '?')[0].toUpperCase()}</span>
-                            )}
+                            <Avatar
+                                src={g.avatar}
+                                alt={g.name}
+                                className="chip-avatar"
+                                size={20}
+                                fallback={<span className="chip-initials">{(g.name || '?')[0].toUpperCase()}</span>}
+                            />
                             <span className="chip-name">{g.name}</span>
                             <button
                                 type="button"
@@ -127,11 +130,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                                 disabled={selected}
                             >
                                 <div className="result-avatar">
-                                    {avatar ? (
-                                        <img src={avatar} alt={name} />
-                                    ) : (
-                                        <span>{(name || '?')[0].toUpperCase()}</span>
-                                    )}
+                                    <Avatar src={avatar} alt={name} size={32} fallback={<span>{(name || '?')[0].toUpperCase()}</span>} />
                                 </div>
                                 <div className="result-info">
                                     <span className="result-name">{name}</span>
@@ -170,7 +169,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     color: #1d4ed8;
                 }
 
-                .chip-avatar {
+                /* Avatar's own <img>: a className passed to it isn't scoped. */
+                .chip :global(.chip-avatar) {
                     width: 20px;
                     height: 20px;
                     border-radius: 50%;
@@ -290,7 +290,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     font-weight: 700;
                     color: var(--color-gray-500);
                 }
-                .result-avatar img { width: 100%; height: 100%; object-fit: cover; }
+                .result-avatar :global(img) { width: 100%; height: 100%; object-fit: cover; }
 
                 .result-info {
                     flex: 1;

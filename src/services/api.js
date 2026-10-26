@@ -239,6 +239,8 @@ export const profilesApi = {
     follow: (id) => post(`/profiles/${id}/follow`),
     unfollow: (id) => del(`/profiles/${id}/follow`),
     getFollowing: (id, params = {}) => get(`/profiles/${id}/following`, params),
+    // Everyone I follow, as ids: { ids } (use myFollowingIds in utils/myFollowing).
+    getMyFollowingIds: () => get('/profiles/me/following-ids'),
     getFollowers: (id, params = {}) => get(`/profiles/${id}/followers`, params),
 };
 

@@ -15,6 +15,8 @@ import NostrFeed from '../components/NostrFeed';
 import ImageCropModal from '../components/ImageCropModal';
 import RichTextEditor from '../components/RichTextEditor';
 import { useSectionDrag, reorderArray } from '../hooks/useSectionDrag';
+import { getAssetUrl } from '../utils/assets';
+import { asWebLink } from '../components/talent/talentOptions';
 
 // Defined outside component to prevent re-mount on every render (which causes input focus loss)
 const SectionHeader = ({ icon, title, children }) => (
@@ -283,13 +285,16 @@ const ProfileEdit = () => {
         e?.preventDefault();
         setSaving(true);
         setError('');
+        // "mywebsite.com" is saved as https://mywebsite.com, as on listings and talents.
+        const website = asWebLink(form.website);
+        if (website !== form.website) setForm(prev => ({ ...prev, website }));
         try {
             // Only send fields the backend accepts
             const payload = {
                 name: form.name || undefined,
                 bio: form.bio,
                 location: form.location,
-                website: form.website || undefined,
+                website, // '' when cleared, so the old one goes too
                 twitter: form.twitter,
                 linkedin: form.linkedin,
                 company: form.company,
@@ -325,7 +330,7 @@ const ProfileEdit = () => {
                     if (form.banner) nostrData.banner = form.banner;
                     // Links as Settings → Privacy allows ("Only me" leaves them out).
                     const privacy = await settingsApi.getPrivacy().catch(() => null);
-                    Object.assign(nostrData, nostrLinkFields(form, privacy));
+                    Object.assign(nostrData, nostrLinkFields({ ...form, website }, privacy));
                     if (publishPublic) {
                         await nostrService.updateProfile(nostrData);
                     } else {
@@ -659,7 +664,7 @@ const ProfileEdit = () => {
                 <div className="pe-card" style={{ padding: 0, overflow: 'hidden' }}>
                     <div className="pe-banner" style={{
                         background: (form.banner || nostrProfile?.banner)
-                            ? `url(${form.banner || nostrProfile?.banner}) center/cover no-repeat`
+                            ? `url(${getAssetUrl(form.banner || nostrProfile?.banner)}) center/cover no-repeat`
                             : 'linear-gradient(135deg, #0052cc, #0a192f)'
                     }}>
                         {(uploadingBanner || bannerImageLoading) && (
@@ -691,7 +696,7 @@ const ProfileEdit = () => {
                         <div className="pe-avatar-wrapper">
                             <div className="pe-avatar">
                                 {(form.avatar || nostrProfile?.picture) ? (
-                                    <img src={form.avatar || nostrProfile?.picture} alt={form.name} />
+                                    <img src={getAssetUrl(form.avatar || nostrProfile?.picture)} alt={form.name} />
                                 ) : (
                                     <div className="pe-avatar-placeholder">
                                         {(form.name || user?.email || '?').charAt(0).toUpperCase()}

@@ -1,0 +1,30 @@
+# Zapstore listing for BIES, read by `zsp` (docs/ANDROID.md, "Zapstore release").
+#
+# The APK is NOT listed here: `repository` is the release source, so zsp takes
+# the signed APK that .github/workflows/zapstore-release.yml attaches to each
+# vX.Y.Z GitHub release. Both filters below are load-bearing. The rolling
+# "latest" pre-release (android-apk.yml) holds a tester APK signed with a
+# different key; without them zsp could publish that under the release identity.
+#
+# Unknown fields are an error in zsp, and `pubkey`, `changelog` and
+# `communities` have no effect, so none of them are set. Add `license` once the
+# repository has one.
+repository: https://github.com/Build-in-El-Salvador/BIES-app
+release_filter: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+match: '^BIES-[0-9]+\.[0-9]+\.[0-9]+\.apk$'
+
+name: BIES
+summary: A Nostr client for productive communities.
+description: |
+  BIES (Build in El Salvador) is a Nostr-native community client for groups
+  that need more than a feed: projects, events, investments, identity, and
+  real payments.
+website: https://app.buildinelsalvador.com
+tags: [nostr, community]
+
+icon: ./public/icons/icon-512.png
+release_notes: ./CHANGELOG.md
+
+# Everything above is explicit, so fetch no external metadata: a release then
+# depends on nothing but this file, the APK and the relay.
+metadata_sources: []

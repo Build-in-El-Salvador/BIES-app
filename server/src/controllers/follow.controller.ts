@@ -240,3 +240,27 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
         res.status(500).json({ error: 'Failed to get following list' });
     }
 }
+
+// More than anyone here follows; it bounds the answer all the same.
+const MAX_FOLLOWING_IDS = 5000;
+
+/**
+ * GET /profiles/me/following-ids
+ * Everyone the signed-in member follows, as ids only, for the Follow buttons
+ * on lists of members. /:id/following gives 50 at a time, so anyone past the
+ * first 50 would show "Follow" again.
+ */
+export async function getMyFollowingIds(req: Request, res: Response): Promise<void> {
+    try {
+        const rows = await prisma.follow.findMany({
+            where: { followerId: req.user!.id },
+            select: { followingId: true },
+            orderBy: { createdAt: 'desc' },
+            take: MAX_FOLLOWING_IDS,
+        });
+        res.json({ ids: rows.map((r) => r.followingId) });
+    } catch (error) {
+        console.error('Get following ids error:', error);
+        res.status(500).json({ error: 'Failed to get following list' });
+    }
+}

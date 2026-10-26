@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    directoryKey, directoryPage, directoryRequest, joinPages, listOf, membersKey, membersPageSize, morePages,
+    directoryKey, directoryPage, directoryRequest, joinPages, listOf, membersKey, membersPageSize, membersWithNetwork, morePages,
     opportunitiesKey, opportunitiesRequest,
 } from '../../src/utils/listRequests.js';
 
@@ -40,6 +40,11 @@ test("members: the page size follows the view, and the key the page's", () => {
     assert.equal(membersPageSize('list'), 24);
     assert.equal(membersKey(48), 'members:48:');
     assert.equal(membersKey(24, 'ana'), 'members:24:ana');
+    // Cards ask for the network line too, so List's cards (same size) never stand in for them.
+    assert.equal(membersWithNetwork('standard'), true);
+    assert.equal(membersWithNetwork('list'), false);
+    assert.equal(membersWithNetwork('icons'), false);
+    assert.notEqual(membersKey(24, '', '', true), membersKey(24));
 });
 
 test('a directory list goes on page by page; its key is its first page', () => {

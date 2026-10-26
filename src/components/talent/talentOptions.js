@@ -49,10 +49,11 @@ export function coverOf(talent) {
     return talent?.photo || workMedia(talent).map(pictureOf).find(Boolean) || '';
 }
 
-/** A link as typed ("example.com"), as a web link. */
+/** A link as typed ("example.com"), as a web link. Another kind (ftp://) stays as typed; one that runs code is dropped. */
 export function asWebLink(text) {
     const link = (text || '').trim();
-    return link && !/^https?:\/\//i.test(link) ? `https://${link}` : link;
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(link)) return link && `https://${link}`;
+    return /^(javascript|data|vbscript|file):/i.test(link) ? '' : link;
 }
 
 /** A web link without its scheme, "www." and closing slash, to show. */

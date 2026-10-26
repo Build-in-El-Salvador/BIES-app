@@ -3,6 +3,7 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MoreHorizontal, Loader2, Copy, Check, UserPlus, UserCheck, Users, Zap, MessageSquare, Calendar, Trophy, Flag, Ban, Pencil } from 'lucide-react';
 import { getAssetUrl } from '../utils/assets';
+import Avatar from '../components/Avatar';
 import { nip19 } from 'nostr-tools';
 import { profilesApi, eventsApi, pointsApi } from '../services/api';
 import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../utils/detailCache';
@@ -216,7 +217,7 @@ const PublicProfile = ({ type }) => {
         return (
             <div className="container py-8">
                 <div className="mod-blocked-card">
-                    {profile.avatar && <img src={profile.avatar} alt="" />}
+                    <Avatar src={profile.avatar} size={64} />
                     <h1 className="mod-title">{t('moderation.blockedProfile.title', { name: profile.name || t('common.unnamed') })}</h1>
                     <p className="mod-muted">{t('moderation.blockedProfile.body')}</p>
                     <button type="button" className="mod-button secondary" onClick={doUnblock} disabled={unblocking}>
