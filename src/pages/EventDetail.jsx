@@ -14,7 +14,7 @@ import { openExternal } from '../utils/openExternal';
 import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
-import { fullDay, hostOf, partnerPath, timeRange } from '../utils/eventFormat';
+import { bothTicketLinks, fullDay, hostOf, partnerPath, timeRange } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
 import TranslatableText from '../components/TranslatableText';
@@ -348,7 +348,7 @@ const EventDetail = () => {
                 )}
             </div>
 
-            <div className="ev-bar">
+            <div className={`ev-bar${!satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
                 {satsTickets ? (
                     <>
                         <PriceLine event={{ ...event, priceLabel: `${Number(event.priceSats).toLocaleString()} sats`, ticketUrl: '', bitcoinUrl: '' }} />
@@ -459,6 +459,7 @@ const EventDetail = () => {
                     padding: 12px 16px 14px; box-sizing: border-box;
                     background: var(--color-surface); border-top: 1px solid var(--color-gray-200); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
                 }
+                .ev-bar.two { flex-direction: column; align-items: stretch; gap: 10px; }
                 @media (max-width: 768px) {
                     .ev-bar { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
                 }

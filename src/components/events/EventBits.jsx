@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ExternalLink, Check, Bitcoin } from 'lucide-react';
 import Avatar from '../Avatar';
 import { openExternal } from '../../utils/openExternal';
-import { hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
+import { bothTicketLinks, hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import biesLogo from '../../assets/logo-icon.svg';
 
@@ -123,7 +123,7 @@ export function PriceLine({ event, className = '' }) {
 
 /**
  * The ticket buttons: "Get tickets" opens the host's ticket page in the
- * browser, and "Pay with Bitcoin" under it their bitcoin page when they
+ * browser, and "Pay with Bitcoin" beside it their bitcoin page when they
  * gave one (until the app takes payments itself). With neither, "I'm going"
  * (onGoing toggles it).
  */
@@ -143,7 +143,7 @@ export function TicketButton({ event, going, onGoing, busy = false, size = 'md' 
     };
     const icon = size === 'lg' ? 16 : 14;
     return (
-        <span className="ev-tix-stack">
+        <span className={`ev-tix-stack${bothTicketLinks(event) ? ' pair' : ''}`}>
             {event.ticketUrl && (
                 <button type="button" className={`ev-tix ${size}`} onClick={open(event.ticketUrl)}>
                     {t('events.card.getTickets')} <ExternalLink size={icon} aria-hidden="true" />
@@ -162,6 +162,10 @@ export function TicketButton({ event, going, onGoing, busy = false, size = 'md' 
             )}
             <style jsx>{`
                 .ev-tix-stack { position: relative; z-index: 2; display: inline-flex; flex-direction: column; align-items: stretch; gap: 8px; flex-shrink: 0; }
+                /* Side by side when both fit (each as wide as the other where it can),
+                   else Pay with Bitcoin drops under Get tickets. */
+                .ev-tix-stack.pair { flex-direction: row; flex-wrap: wrap; width: 100%; }
+                .ev-tix-stack.pair .ev-tix { flex: 1 1 0; min-width: max-content; padding: 0 12px; }
                 .ev-tix {
                     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
                     height: 38px; padding: 0 16px; border-radius: var(--radius-full); border: 0; cursor: pointer;
@@ -169,6 +173,7 @@ export function TicketButton({ event, going, onGoing, busy = false, size = 'md' 
                     font-size: 0.875rem; font-weight: 700; white-space: nowrap;
                 }
                 .ev-tix:hover { background: var(--color-secondary-dark); }
+                .ev-tix :global(svg) { flex-shrink: 0; }
                 .ev-tix.lg { height: 48px; padding: 0 22px; font-size: 0.95rem; }
                 .ev-tix.btc { background: #FFFFFF; color: #1A1A1A; border: 1.5px solid #F7931A; }
                 .ev-tix.btc:hover { background: #FFF6EB; }

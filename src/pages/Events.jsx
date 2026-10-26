@@ -6,7 +6,7 @@ import { eventsApi } from '../services/api';
 import Avatar from '../components/Avatar';
 import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
-import { isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
+import { bothTicketLinks, isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
 import biesLogo from '../assets/logo-icon.svg';
 
 /**
@@ -248,7 +248,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                     <span>{event.isOnline ? t('events.card.online') : (event.locationName || event.location)}</span>
                 </span>
                 <WhoLine event={event} className="ev-spot-who" />
-                <div className="ev-spot-foot">
+                <div className={`ev-spot-foot${bothTicketLinks(event) ? ' two' : ''}`}>
                     <PriceLine event={event} className="ev-spot-price" />
                     <TicketButton event={event} going={going} onGoing={onGoing} />
                 </div>
@@ -274,6 +274,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                 .ev-spot-where { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: rgba(255, 255, 255, 0.85); min-width: 0; }
                 .ev-spot-where span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .ev-spot-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+                .ev-spot-foot.two { flex-direction: column; align-items: stretch; }
                 @media (min-width: 768px) { .ev-spot { width: auto; max-width: none; aspect-ratio: 4 / 3; } }
             `}</style>
         </article>

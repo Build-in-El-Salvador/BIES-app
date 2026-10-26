@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     dayTile, timeOf, whenShort, fullDay, timeRange, dayKey, monthKey, monthHeading,
-    toFormFields, fromFormFields, ticketProvider, hostOf, partnerPath, isFree,
+    toFormFields, fromFormFields, ticketProvider, hostOf, partnerPath, isFree, bothTicketLinks,
 } from './eventFormat.js';
 
 // Sat 14 Nov 2026, 7:00 PM in El Salvador = 01:00 UTC on the 15th.
@@ -69,4 +69,10 @@ test('free: said so, or no ticket link and no price', () => {
     assert.equal(isFree({ priceLabel: '$15', ticketUrl: 'https://lu.ma/x' }), false);
     assert.equal(isFree({ priceLabel: '', ticketUrl: '', bitcoinUrl: 'https://pretix.eu/x' }), false);
     assert.equal(isFree({ priceLabel: '', ticketUrl: 'https://lu.ma/x' }), false);
+});
+
+test('both ticket links: a ticket page and a bitcoin one', () => {
+    assert.equal(bothTicketLinks({ ticketUrl: 'https://lu.ma/x', bitcoinUrl: 'https://pretix.eu/x' }), true);
+    assert.equal(bothTicketLinks({ ticketUrl: 'https://lu.ma/x', bitcoinUrl: '' }), false);
+    assert.equal(bothTicketLinks({ bitcoinUrl: 'https://pretix.eu/x' }), false);
 });
