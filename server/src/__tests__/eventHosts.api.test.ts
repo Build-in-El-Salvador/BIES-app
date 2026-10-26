@@ -386,6 +386,17 @@ describe('who keeps control of an event', () => {
         expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { title: 'Still ours' } })).status).toBe(200);
     });
 
+    it("a business that's down with its runner suspended: its team doesn't get its events back", async () => {
+        const owner = await member();
+        const mate = await member();
+        const biz = await business(owner, true);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        const created = await event(owner, { hostListingId: biz });
+        await prisma.user.update({ where: { id: owner.id }, data: { isBanned: true } });
+        await prisma.directoryListing.update({ where: { id: biz }, data: { status: 'rejected', isPublished: false } });
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: mate.token, body: { payoutLightningAddress: 'mate@ln.example' } })).status).toBe(403);
+    });
+
     it("co-hosts don't change the online link, and BIES named as a sponsor can't become a co-host", async () => {
         const admin = await member({ admin: true });
         const host = await member();

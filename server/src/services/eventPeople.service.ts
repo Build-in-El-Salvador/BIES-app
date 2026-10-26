@@ -113,9 +113,17 @@ export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: stri
     if (mine.includes(event.hostListingId)) return true;
     const listing = await prisma.directoryListing.findUnique({
         where: { id: event.hostListingId },
-        select: { status: true, isPublished: true, ownerId: true, memberUserId: true, isOwnBusiness: true, team: { where: { userId: user.id }, select: { userId: true } } },
+        select: {
+            status: true, isPublished: true, ownerId: true, memberUserId: true, isOwnBusiness: true,
+            owner: { select: { isBanned: true, deletedAt: true } },
+            memberUser: { select: { isBanned: true, deletedAt: true } },
+            team: { where: { userId: user.id }, select: { userId: true } },
+        },
     });
     if (!listing || isLiveListing(listing)) return false;
+    // As when it's up: only while the member who runs it is active.
+    const runner = listing.memberUserId ? listing.memberUser : listing.owner;
+    if (!runner || runner.isBanned || runner.deletedAt) return false;
     return runsListing(listing, user.id) || listing.team.length > 0;
 }
 
