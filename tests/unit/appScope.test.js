@@ -22,7 +22,7 @@ test('the app turns off everything outside its scope', () => {
     }
     assert.equal(scoped.directories, true);
     assert.equal(scoped.talent, true);
-    assert.equal(scoped.events, false);
+    assert.equal(scoped.zaps, false);
     assert.equal(scoped.dashboard, false);
 });
 
@@ -38,4 +38,9 @@ test('Opportunities is in the app, and follows its switch there', () => {
 test('Report / Feedback is in the app, and follows its switch there', () => {
     assert.equal(scopeFlags({ ...DEFAULT_FLAGS, feedback: true }, true).feedback, true);
     assert.equal(scopeFlags({ ...DEFAULT_FLAGS, feedback: false }, true).feedback, false);
+});
+
+test('Events is in the app, and follows its switch there', () => {
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, events: true }, true).events, true);
+    assert.equal(scopeFlags({ ...DEFAULT_FLAGS, events: false }, true).events, false);
 });
