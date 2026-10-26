@@ -17,3 +17,7 @@ updates:
       default-days: 14
     commit-message:
       prefix: ci
+    # One pull request a week for all of them, not one per action.
+    groups:
+      github-actions:
+        patterns: ["*"]
