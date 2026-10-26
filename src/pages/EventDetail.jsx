@@ -395,19 +395,19 @@ const EventDetail = () => {
                 .ev-round {
                     position: absolute; top: 12px; z-index: 2; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
                     display: flex; align-items: center; justify-content: center;
-                    background: rgba(255, 255, 255, 0.95); color: var(--color-gray-900); box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+                    background: rgba(255, 255, 255, 0.95); color: #0F172A; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
                 }
                 .ev-round.share { right: 12px; }
                 .ev-hero-tag { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
-                .ev-hero-tools { position: absolute; right: 12px; bottom: -20px; z-index: 5; display: flex; gap: 8px; align-items: center; }
+                .ev-hero-tools { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; }
                 .ev-hero-tools :global(.ev-edit) {
                     display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: var(--radius-full);
-                    background: var(--color-surface); color: var(--color-gray-900); font-weight: 600; font-size: 0.9rem; text-decoration: none;
-                    box-shadow: var(--shadow-md);
+                    background: rgba(255, 255, 255, 0.95); color: #0F172A; font-weight: 600; font-size: 0.9rem; text-decoration: none;
+                    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
                 }
                 .ev-more {
-                    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; background: var(--color-surface);
-                    display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); color: var(--color-gray-900);
+                    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; background: rgba(255, 255, 255, 0.95);
+                    display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2); color: #0F172A;
                 }
                 .ev-menu-backdrop { position: fixed; inset: 0; z-index: 4; }
                 .ev-menu {
@@ -421,7 +421,7 @@ const EventDetail = () => {
                 }
                 .ev-menu button:hover { background: var(--color-gray-100); }
                 .ev-menu button.danger { color: #DC2626; }
-                .ev-body { max-width: 760px; margin: 0 auto; padding: 1.75rem 1rem 0; display: flex; flex-direction: column; gap: 18px; }
+                .ev-body { max-width: 760px; margin: 0 auto; padding: 1.25rem 1rem 0; display: flex; flex-direction: column; gap: 18px; }
                 .ev-notice { margin: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-orange-tint); color: var(--color-orange-text); font-size: 0.875rem; }
                 .ev-kind { margin: 0 0 4px; font-size: 0.85rem; font-weight: 600; color: var(--color-primary); }
                 .ev-title { margin: 0; font-family: var(--font-display); font-size: 2rem; line-height: 1.05; color: var(--color-gray-900); text-wrap: balance; overflow-wrap: anywhere; }
