@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Globe, Mail, Loader2, Edit3, Briefcase, Tag, Languages, Bitcoin, Flag, Ban, Banknote,
-    MoreHorizontal, MessageCircle, Share2, Check, User, Plus,
+    MoreHorizontal, MessageCircle, Share, Check, User, Plus,
 } from 'lucide-react';
 import { talentApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -131,7 +131,7 @@ const TalentDetail = () => {
         talent.email && { key: 'email', Icon: Mail, label: t('talent.actions.email'), href: `mailto:${talent.email}` },
         talent.website && { key: 'website', Icon: Globe, label: t('talent.actions.website'), onClick: () => openExternal(talent.website) },
         { key: 'profile', Icon: User, label: t('talent.actions.profile'), to: profilePath },
-        { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('talent.actions.copied') : t('talent.actions.share'), onClick: share },
+        { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('talent.actions.copied') : t('talent.actions.share'), onClick: share },
     ].filter(Boolean);
 
     const closeMenu = () => {

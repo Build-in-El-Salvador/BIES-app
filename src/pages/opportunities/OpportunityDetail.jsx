@@ -3,7 +3,7 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Globe, Mail, Loader2, Edit3, Tag, Bitcoin, Flag, Ban, Banknote, MoreHorizontal, MessageCircle,
-    Share2, Check, User, Clock, Bookmark, BookmarkCheck, TrendingUp, Layers, CircleDollarSign, Briefcase,
+    Share, Check, User, Clock, Bookmark, BookmarkCheck, TrendingUp, Layers, CircleDollarSign, Briefcase,
     Users, Award, ShieldAlert, Lock, RotateCcw, Laptop,
 } from 'lucide-react';
 import { projectsApi, watchlistApi } from '../../services/api';
@@ -234,7 +234,7 @@ const OpportunityDetail = () => {
         o.email && { key: 'email', Icon: Mail, label: t('opportunities.actions.email'), href: `mailto:${o.email}?subject=${encodeURIComponent(o.title)}` },
         { key: 'profile', Icon: User, label: t('opportunities.actions.profile'), to: profilePath },
         !isOwn && { key: 'save', Icon: saved ? BookmarkCheck : Bookmark, label: saved ? t('opportunities.actions.saved') : t('opportunities.actions.save'), onClick: toggleSave, pressed: saved },
-        { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('opportunities.actions.copied') : t('opportunities.actions.share'), onClick: share },
+        { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('opportunities.actions.copied') : t('opportunities.actions.share'), onClick: share },
     ].filter(Boolean);
 
     const setClosed = async (closed) => {

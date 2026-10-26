@@ -6,7 +6,7 @@ import {
     Loader2, Leaf, Edit3, AlertCircle,
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
-    Building2, MessageCircle, Navigation, Share2, Check, Bookmark, BookmarkCheck,
+    Building2, MessageCircle, Navigation, Share, Check, Bookmark, BookmarkCheck,
     UserCheck, ArrowRightLeft, BadgeCheck,
 } from 'lucide-react';
 import { adminApi, directoryApi } from '../../services/api';
@@ -328,7 +328,7 @@ const ListingDetail = () => {
             label: isSaved ? t('directory.actions.saved') : t('directory.actions.save'),
             onClick: toggleSave, pressed: isSaved,
         },
-        { key: 'share', Icon: linkCopied ? Check : Share2, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
+        { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('directory.actions.copied') : t('directory.actions.share'), onClick: share },
     ].filter(Boolean);
 
     const { mine: myReview, canReview } = reviewState(listing, user);
