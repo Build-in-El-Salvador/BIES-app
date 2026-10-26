@@ -533,7 +533,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
     try {
         const existing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { ownerId: true, photo: true, logo: true, photos: true },
+            select: { ownerId: true, photo: true, logo: true, photos: true, isOwnBusiness: true, memberUserId: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -543,6 +543,14 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
 
         const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') data.memberUserId = null;
+
+        // A recommendation becomes the business's own page through a claim or
+        // a hand-over (or staff), not by its recommender saying so: running it
+        // means hosting events as it and choosing its team.
+        if (data.isOwnBusiness === true && !existing.isOwnBusiness && !isStaff(req)) {
+            res.status(403).json({ error: 'Only the business itself can make this its own page: it can claim it from the ⋯ menu', reason: 'own_business' });
+            return;
+        }
 
         if (data.memberUserId) {
             const memberUser = await prisma.user.findUnique({
@@ -567,6 +575,11 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         // Photos taken off it go, if the owner or this editor uploaded them.
         const removed = listingPhotos(existing).filter((url) => !listingPhotos(listing).includes(url));
         if (removed.length) await discardUploads(removed, { uploadedBy: [existing.ownerId, req.user!.id] });
+
+        // Someone else runs it now: the team was the old runner's.
+        const runnerChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
+            || (data.isOwnBusiness !== undefined && data.isOwnBusiness !== existing.isOwnBusiness);
+        if (runnerChanged) await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id } });
 
         // Now marked as their own business: their vouch goes.
         if (data.isOwnBusiness === true) {

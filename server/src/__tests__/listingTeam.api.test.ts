@@ -202,4 +202,47 @@ describe("a business's team", () => {
         expect(await represented(hal)).toEqual([expect.objectContaining({ id, role: 'runs' })]);
         expect(await represented(owner)).toEqual([]);
     });
+
+    it('a hand-over leaves the old team behind', async () => {
+        const owner = await member();
+        const ivy = await member();
+        const zed = await member();
+        const id = await business(owner, true);
+        await add(owner, id, ivy.id);
+
+        const offer = await call('POST', `/api/directory/${id}/transfer`, { token: owner.token, body: { toUserId: zed.id } });
+        await call('POST', `/api/directory/transfers/${offer.body.id}/accept`, { token: zed.token });
+        expect(await teamOf(zed, id)).toEqual([]);
+        expect(await represented(ivy)).toEqual([]);
+    });
+
+    it("a recommendation stays one: its recommender can't make it their own page; staff can", async () => {
+        const fan = await member();
+        const admin = await member({ admin: true });
+        const id = await business(fan, false);
+
+        const flip = await call('PUT', `/api/directory/${id}`, { token: fan.token, body: { isOwnBusiness: true } });
+        expect(flip.status).toBe(403);
+        expect(flip.body.reason).toBe('own_business');
+        expect(await represented(fan)).toEqual([]);
+
+        expect((await call('PUT', `/api/directory/${id}`, { token: admin.token, body: { isOwnBusiness: true } })).status).toBe(200);
+        expect(await represented(fan)).toEqual([expect.objectContaining({ id, role: 'runs' })]);
+    });
+
+    it('once staff link a member to it, only they run it, and the old team goes', async () => {
+        const owner = await member();
+        const linked = await member();
+        const kim = await member();
+        const lou = await member();
+        const admin = await member({ admin: true });
+        const id = await business(owner, true);
+        await add(owner, id, kim.id);
+
+        expect((await call('PUT', `/api/directory/${id}`, { token: admin.token, body: { memberUserId: linked.id } })).status).toBe(200);
+        expect(await teamOf(linked, id)).toEqual([]);
+        expect(await represented(owner)).toEqual([]);
+        expect((await add(owner, id, lou.id)).status).toBe(403);
+        expect((await add(linked, id, lou.id)).status).toBe(201);
+    });
 });
