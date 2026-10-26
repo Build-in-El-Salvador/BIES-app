@@ -80,7 +80,14 @@ export const createEventSchema = z.object({
     nostrPublish: z.enum(['none', 'bies', 'public', 'both']).default('bies'),
 });
 
-export const updateEventSchema = createEventSchema.partial();
+// Every field optional, and a field left out stays out: in zod 4, .partial()
+// still fills in .default() values, which would reset what an edit didn't send.
+export const updateEventSchema = createEventSchema.partial().extend({
+    category: createEventSchema.shape.category.removeDefault().optional(),
+    visibility: createEventSchema.shape.visibility.removeDefault().optional(),
+    isOnline: createEventSchema.shape.isOnline.removeDefault().optional(),
+    nostrPublish: createEventSchema.shape.nostrPublish.removeDefault().optional(),
+});
 
 // Derive isPublished from visibility
 function visibilityToPublished(visibility: string): boolean {
@@ -594,7 +601,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Create event error:', error);
         if (error instanceof z.ZodError) {
-            res.status(400).json({ error: 'Validation failed', details: error.errors });
+            res.status(400).json({ error: 'Validation failed', details: error.issues });
             return;
         }
         res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create event' });

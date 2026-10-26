@@ -78,7 +78,15 @@ export const createCourseSchema = z.object({
     nostrPublish: z.enum(['none', 'bies', 'public', 'both']).default('bies'),
 });
 
-export const updateCourseSchema = createCourseSchema.partial();
+// Every field optional, and a field left out stays out: in zod 4, .partial()
+// still fills in .default() values, which would reset what an edit didn't send.
+export const updateCourseSchema = createCourseSchema.partial().extend({
+    category: createCourseSchema.shape.category.removeDefault().optional(),
+    level: createCourseSchema.shape.level.removeDefault().optional(),
+    format: createCourseSchema.shape.format.removeDefault().optional(),
+    priceSats: createCourseSchema.shape.priceSats.removeDefault().optional(),
+    nostrPublish: createCourseSchema.shape.nostrPublish.removeDefault().optional(),
+});
 
 const quizQuestionSchema = z
     .object({
@@ -127,7 +135,7 @@ export const reorderLessonsSchema = z.object({
 
 export const progressSchema = z.object({
     completed: z.literal(true),
-    meta: z.record(z.unknown()).optional(),
+    meta: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const quizSubmitSchema = z.object({

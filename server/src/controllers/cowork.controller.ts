@@ -295,7 +295,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     } catch (error) {
         console.error('Create cowork session error:', error);
         if (error instanceof z.ZodError) {
-            res.status(400).json({ error: 'Validation failed', details: error.errors });
+            res.status(400).json({ error: 'Validation failed', details: error.issues });
             return;
         }
         res.status(500).json({ error: 'Failed to create session' });
