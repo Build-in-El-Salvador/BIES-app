@@ -504,6 +504,20 @@ describe('the events list and page', () => {
             .toMatchObject({ ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: '' });
     });
 
+    it("the events I'm going to show what the list shows, not the guest list, payout address or online link", async () => {
+        const host = await member();
+        const goer = await member();
+        const created = await event(host, {
+            isOnline: true, onlineUrl: 'https://zoom.example/j/9', payoutLightningAddress: 'host@ln.example',
+            visibility: 'INVITE_ONLY', guestList: [{ name: 'Guest', userId: goer.id }],
+        });
+        await call('POST', `/api/events/${created.body.id}/rsvp`, { token: goer.token, body: { status: 'INTERESTED' } });
+        const res = await call('GET', '/api/events/attending', { token: goer.token });
+        expect(res.status).toBe(200);
+        expect(res.body.data.find((e: any) => e.id === created.body.id)).toMatchObject({ rsvpStatus: 'INTERESTED' });
+        expect(JSON.stringify(res.body)).not.toMatch(/zoom\.example|host@ln|guestList/);
+    });
+
     it('a private event: its guests see it and say they\'re going; no one else sees it', async () => {
         const host = await member();
         const guest = await member();
