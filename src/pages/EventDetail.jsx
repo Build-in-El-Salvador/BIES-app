@@ -138,6 +138,7 @@ const EventDetail = () => {
     const kind = event.category ? t(`events.kinds.${event.category}`, { defaultValue: '' }) : '';
     const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
     const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
+    const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
 
     const rsvp = async (next) => {
         setGoing(next);
@@ -328,7 +329,7 @@ const EventDetail = () => {
                     </section>
                 ))}
 
-                {(goingCount > 0 || (event.ticketUrl && isFull)) && (
+                {(goingCount > 0 || (hasTickets && isFull)) && (
                     <div className="ev-going">
                         {goingPeople.length > 0 && (
                             <span className="ev-going-pile">
@@ -338,7 +339,7 @@ const EventDetail = () => {
                             </span>
                         )}
                         <span className="ev-going-text">{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : ''}</span>
-                        {event.ticketUrl && (
+                        {hasTickets && (
                             <button type="button" className={`ev-going-btn${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy} onClick={() => rsvp(!isGoing)}>
                                 {isGoing && <Check size={15} aria-hidden="true" />} {isGoing ? t('events.detail.youreGoing') : t('events.detail.imGoing')}
                             </button>
@@ -350,7 +351,7 @@ const EventDetail = () => {
             <div className="ev-bar">
                 {satsTickets ? (
                     <>
-                        <PriceLine event={{ ...event, priceLabel: `${Number(event.priceSats).toLocaleString()} sats`, ticketUrl: '' }} />
+                        <PriceLine event={{ ...event, priceLabel: `${Number(event.priceSats).toLocaleString()} sats`, ticketUrl: '', bitcoinUrl: '' }} />
                         {ticket
                             ? <span className="ev-have"><Check size={16} /> {t('events.detail.ticketBought')}</span>
                             : <button type="button" className="ev-buy" onClick={() => setBuying(true)}>{t('events.detail.buySats', { sats: Number(event.priceSats).toLocaleString() })}</button>}

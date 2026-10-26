@@ -156,12 +156,19 @@ export default function SharePreview({ section }) {
                             {hostsLine && <p className="sp-hosts">{hostsLine}</p>}
                             {found.about && <p className="sp-about">{found.about}</p>}
 
-                            {isEvent && found.ticketUrl && (
+                            {isEvent && (found.ticketUrl || found.bitcoinUrl) && (
                                 <>
-                                    <button type="button" className="sp-tickets" onClick={() => openExternal(found.ticketUrl)}>
-                                        {t('sharePreview.getTickets')}{found.priceLabel ? ` · ${found.priceLabel}` : ''} <ExternalLink size={17} aria-hidden="true" />
-                                    </button>
-                                    <p className="sp-note">{t('sharePreview.ticketsOn', { provider: ticketProvider(found.ticketUrl) })}</p>
+                                    {found.ticketUrl && (
+                                        <button type="button" className="sp-tickets" onClick={() => openExternal(found.ticketUrl)}>
+                                            {t('sharePreview.getTickets')}{found.priceLabel ? ` · ${found.priceLabel}` : ''} <ExternalLink size={17} aria-hidden="true" />
+                                        </button>
+                                    )}
+                                    {found.bitcoinUrl && (
+                                        <button type="button" className="sp-tickets sp-btc" onClick={() => openExternal(found.bitcoinUrl)}>
+                                            <Bitcoin size={19} aria-hidden="true" /> {t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
+                                        </button>
+                                    )}
+                                    <p className="sp-note">{t('sharePreview.ticketsOn', { provider: ticketProvider(found.ticketUrl || found.bitcoinUrl) })}</p>
                                 </>
                             )}
 
@@ -224,6 +231,9 @@ export default function SharePreview({ section }) {
                     display: flex; align-items: center; justify-content: center; gap: 8px;
                     background: var(--color-secondary); color: #fff; font: inherit; font-size: 1.02rem; font-weight: 700;
                 }
+                .sp-tickets + .sp-btc { margin-top: 10px; }
+                .sp-btc { background: #fff; color: #1A1A1A; border: 1.5px solid #F7931A; }
+                .sp-btc :global(svg) { color: #F7931A; }
                 .sp-tickets + .sp-note { margin-bottom: 16px; }
                 .sp-card {
                     background: var(--color-surface); border: 1px solid var(--color-gray-200); border-top: none;

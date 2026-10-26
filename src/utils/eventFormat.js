@@ -111,4 +111,4 @@ export function partnerPath(p) {
 }
 
 /** Whether an event is free to go to, as its host put it. */
-export const isFree = (event) => /^(free|gratis)$/i.test((event.priceLabel || '').trim()) || (!event.priceLabel && !event.ticketUrl);
+export const isFree = (event) => /^(free|gratis)$/i.test((event.priceLabel || '').trim()) || (!event.priceLabel && !event.ticketUrl && !event.bitcoinUrl);

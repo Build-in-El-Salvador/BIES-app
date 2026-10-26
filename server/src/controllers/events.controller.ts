@@ -36,6 +36,7 @@ export const createEventSchema = z.object({
     endDate: z.string().max(40).optional(),
     thumbnail: z.string().max(2000).optional().or(z.literal('')),
     ticketUrl: webLink.optional(),
+    bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
     priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
     ticketCapacity: z.number().int().positive().optional().nullable(),
@@ -90,7 +91,7 @@ const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
     'location', 'locationName', 'locationAddress', 'locationMapUrl',
     'isOnline', 'onlineUrl', 'startDate', 'endDate',
-    'thumbnail', 'ticketUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'thumbnail', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
 ] as const;
@@ -115,7 +116,7 @@ function eventCard(e: any, hidden: Set<string>) {
         id: e.id, title: e.title, category: e.category, visibility: e.visibility,
         startDate: e.startDate, endDate: e.endDate,
         location: e.location, locationName: e.locationName, isOnline: e.isOnline,
-        thumbnail: e.thumbnail, ticketUrl: e.ticketUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
+        thumbnail: e.thumbnail, ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
         isOfficial: e.isOfficial, isEndorsed: e.isEndorsed, hostId: e.hostId,
         host: e.host, hostListing: e.hostListing,
         partners: partnersFor(e.partners || [], hidden),

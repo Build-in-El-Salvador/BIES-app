@@ -496,6 +496,10 @@ model Event {
   // What tickets cost, as the host writes it ("Free", "From $25"): the
   // app links to the ticket page and doesn't sell them.
   priceLabel    String  @default("") @map("price_label")
+  // A second ticket link where the host takes bitcoin (a pretix or BTCPay
+  // page): "Pay with Bitcoin" under "Get tickets", until the app takes
+  // payments itself.
+  bitcoinUrl    String  @default("") @map("bitcoin_url")
 
   host        User              @relation(fields: [hostId], references: [id], onDelete: Cascade)
   hostListing DirectoryListing? @relation("EventsHosted", fields: [hostListingId], references: [id], onDelete: SetNull)

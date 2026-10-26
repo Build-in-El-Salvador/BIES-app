@@ -194,6 +194,7 @@ async function eventTeaser(id: string) {
         isOfficial: event.isOfficial,
         priceLabel: event.priceLabel,
         ticketUrl: /^https:\/\//i.test(event.ticketUrl) ? event.ticketUrl : '',
+        bitcoinUrl: /^https:\/\//i.test(event.bitcoinUrl) ? event.bitcoinUrl : '',
         host: (liveListing(event.hostListing) ? event.hostListing!.name : shownName(event.host.profile?.name)) || 'A BIES member',
         cohosts: named('COHOST'),
         sponsors: named('SPONSOR'),

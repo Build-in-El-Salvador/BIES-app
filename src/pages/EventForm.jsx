@@ -26,7 +26,7 @@ const EMPTY = {
     hostListingId: '', thumbnail: '', title: '', category: 'NETWORKING', description: '',
     startDate: '', startTime: '19:00', endDate: '', endTime: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
-    ticketUrl: '', priceLabel: '', visibility: 'PUBLIC',
+    ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
 };
 
 /** An event's co-hosts and sponsors as the picker holds them. */
@@ -83,7 +83,7 @@ export default function EventForm() {
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
                 online: !!e.isOnline, locationName: e.locationName || '', locationAddress: e.locationAddress || '',
                 locationMapUrl: e.locationMapUrl || '', onlineUrl: e.onlineUrl || '',
-                ticketUrl: e.ticketUrl || '', priceLabel: e.priceLabel || '',
+                ticketUrl: e.ticketUrl || '', bitcoinUrl: e.bitcoinUrl || '', priceLabel: e.priceLabel || '',
                 visibility: VISIBILITIES.includes(e.visibility) ? e.visibility : 'PUBLIC',
             });
             if (!VISIBILITIES.includes(e.visibility)) setOtherVisibility(e.visibility);
@@ -169,6 +169,7 @@ export default function EventForm() {
             locationMapUrl: form.online ? '' : withHttps(form.locationMapUrl),
             thumbnail: form.thumbnail,
             ticketUrl: withHttps(form.ticketUrl),
+            bitcoinUrl: withHttps(form.bitcoinUrl),
             priceLabel: form.priceLabel.trim(),
             hostListingId: form.hostListingId || null,
             partners: partnersPayload(partners),
@@ -309,6 +310,9 @@ export default function EventForm() {
                 <label className="ef-label" htmlFor="ef-tickets">{t('events.form.ticketLink')}</label>
                 <input id="ef-tickets" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" value={form.ticketUrl} onChange={set('ticketUrl')} />
                 <p className="ef-hint">{t('events.form.ticketLinkHint')}</p>
+                <label className="ef-label" htmlFor="ef-bitcoin">{t('events.form.bitcoinLink')}</label>
+                <input id="ef-bitcoin" className="ef-input" inputMode="url" placeholder="https://pretix.eu/…" value={form.bitcoinUrl} onChange={set('bitcoinUrl')} />
+                <p className="ef-hint">{t('events.form.bitcoinLinkHint')}</p>
                 <label className="ef-label" htmlFor="ef-price">{t('events.form.price')}</label>
                 <input id="ef-price" className="ef-input" maxLength={40} placeholder={t('events.form.pricePlaceholder')} value={form.priceLabel} onChange={set('priceLabel')} />
             </section>

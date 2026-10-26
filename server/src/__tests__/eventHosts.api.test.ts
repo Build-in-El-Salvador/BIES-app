@@ -290,6 +290,23 @@ describe('the events list and page', () => {
         expect((await call('GET', `/api/events/${created.body.id}`, { token: host.token })).body.guestList).toEqual([{ name: 'Guest', userId: guest.id }]);
     });
 
+    it('takes a Bitcoin payment link beside the ticket link (web links only) and shows it on the list, page and preview', async () => {
+        const host = await member();
+        const viewer = await member();
+        expect((await event(host, { bitcoinUrl: 'javascript:alert(1)' })).status).toBe(400);
+        const btc = 'https://pretix.example/bies/btc-night/';
+        const created = await event(host, { title: `Bitcoin Night ${Date.now()}`, ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: btc });
+        expect(created.status).toBe(201);
+        const list = (await call('GET', '/api/events?upcoming=true', { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
+        expect(list).toMatchObject({ ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: btc });
+        expect((await call('GET', `/api/events/${created.body.id}`, { token: viewer.token })).body.bitcoinUrl).toBe(btc);
+        expect((await call('GET', `/api/preview/events/${created.body.id}`)).body.bitcoinUrl).toBe(btc);
+
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: host.token, body: { bitcoinUrl: '' } })).status).toBe(200);
+        expect((await call('GET', `/api/events/${created.body.id}`, { token: viewer.token })).body)
+            .toMatchObject({ ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: '' });
+    });
+
     it('a private event: its guests see it and say they\'re going; no one else sees it', async () => {
         const host = await member();
         const guest = await member();

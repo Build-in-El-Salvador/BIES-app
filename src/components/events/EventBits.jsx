@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Check } from 'lucide-react';
+import { ExternalLink, Check, Bitcoin } from 'lucide-react';
 import Avatar from '../Avatar';
 import { openExternal } from '../../utils/openExternal';
 import { hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
@@ -106,7 +106,8 @@ export function WhoLine({ event, className = '' }) {
 export function PriceLine({ event, className = '' }) {
     const { t } = useTranslation();
     const label = (event.priceLabel || '').trim() || (isFree(event) ? t('events.card.free') : '');
-    const where = event.ticketUrl ? t('events.card.ticketsOn', { provider: ticketProvider(event.ticketUrl) }) : t('events.card.inTheApp');
+    const link = event.ticketUrl || event.bitcoinUrl;
+    const where = link ? t('events.card.ticketsOn', { provider: ticketProvider(link) }) : t('events.card.inTheApp');
     return (
         <span className={`ev-price ${className}`}>
             {label && <b>{label}</b>}
@@ -121,49 +122,61 @@ export function PriceLine({ event, className = '' }) {
 }
 
 /**
- * The ticket button: opens the host's ticket page in the browser. With no
- * ticket link, "I'm going" (onGoing toggles it).
+ * The ticket buttons: "Get tickets" opens the host's ticket page in the
+ * browser, and "Pay with Bitcoin" under it their bitcoin page when they
+ * gave one (until the app takes payments itself). With neither, "I'm going"
+ * (onGoing toggles it).
  */
 export function TicketButton({ event, going, onGoing, busy = false, size = 'md' }) {
     const { t } = useTranslation();
-    const tickets = !!event.ticketUrl;
+    const tickets = !!(event.ticketUrl || event.bitcoinUrl);
     if (!tickets && !onGoing) return null;
-    const onClick = (e) => {
+    const open = (url) => (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (tickets) openExternal(event.ticketUrl);
-        else onGoing(!going);
+        openExternal(url);
     };
+    const toggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onGoing(!going);
+    };
+    const icon = size === 'lg' ? 16 : 14;
     return (
-        <button
-            type="button"
-            className={`ev-tix ${size}${tickets ? '' : ` going${going ? ' on' : ''}`}`}
-            aria-pressed={tickets ? undefined : !!going}
-            disabled={!tickets && busy}
-            onClick={onClick}
-        >
-            {tickets ? (
-                <>{t('events.card.getTickets')} <ExternalLink size={size === 'lg' ? 16 : 14} aria-hidden="true" /></>
-            ) : (
-                <>
+        <span className="ev-tix-stack">
+            {event.ticketUrl && (
+                <button type="button" className={`ev-tix ${size}`} onClick={open(event.ticketUrl)}>
+                    {t('events.card.getTickets')} <ExternalLink size={icon} aria-hidden="true" />
+                </button>
+            )}
+            {event.bitcoinUrl && (
+                <button type="button" className={`ev-tix btc ${size}`} onClick={open(event.bitcoinUrl)}>
+                    <Bitcoin size={icon + 2} aria-hidden="true" /> {t('events.card.payWithBitcoin')}
+                </button>
+            )}
+            {!tickets && (
+                <button type="button" className={`ev-tix going ${size}${going ? ' on' : ''}`} aria-pressed={!!going} disabled={busy} onClick={toggle}>
                     {going && <Check size={size === 'lg' ? 17 : 15} aria-hidden="true" />}
                     {going ? t('events.card.going') : t('events.card.imGoing')}
-                </>
+                </button>
             )}
             <style jsx>{`
+                .ev-tix-stack { position: relative; z-index: 2; display: inline-flex; flex-direction: column; align-items: stretch; gap: 8px; flex-shrink: 0; }
                 .ev-tix {
-                    position: relative; z-index: 2;
                     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
                     height: 38px; padding: 0 16px; border-radius: var(--radius-full); border: 0; cursor: pointer;
                     background: var(--color-secondary); color: #FFFFFF;
-                    font-size: 0.875rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+                    font-size: 0.875rem; font-weight: 700; white-space: nowrap;
                 }
                 .ev-tix:hover { background: var(--color-secondary-dark); }
                 .ev-tix.lg { height: 48px; padding: 0 22px; font-size: 0.95rem; }
+                .ev-tix.btc { background: #FFFFFF; color: #1A1A1A; border: 1.5px solid #F7931A; }
+                .ev-tix.btc:hover { background: #FFF6EB; }
+                .ev-tix.btc :global(svg) { color: #F7931A; }
                 .ev-tix.going { background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary); }
                 .ev-tix.going.on { background: var(--color-primary); color: #FFFFFF; }
                 .ev-tix:disabled { opacity: 0.7; cursor: default; }
             `}</style>
-        </button>
+        </span>
     );
 }
