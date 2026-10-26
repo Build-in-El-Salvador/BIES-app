@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useLocation, Link } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Globe, Mail, Loader2, Edit3, Tag, Bitcoin, Flag, Ban, Banknote, MoreHorizontal, MessageCircle,
@@ -42,6 +42,7 @@ const sectionTitleStyle = {
  */
 const OpportunityDetail = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
     const location = useLocation();
     const { t, i18n } = useTranslation();
     const { user } = useAuth();
@@ -278,51 +279,48 @@ const OpportunityDetail = () => {
                         <TypeBadge opportunity={o} size="md" withKind />
                     </div>
                     <div className="od-hero-tools">
-                        {isOwn && (
-                            <Link to={`/opportunities/${o.id}/edit`} className="od-edit-btn">
-                                <Edit3 size={15} /> {t('opportunities.edit')}
-                            </Link>
-                        )}
-                        {!isOwn && (
+                        <button
+                            ref={menuButtonRef}
+                            type="button"
+                            className="od-more-btn"
+                            aria-label={t('moderation.menu.more')}
+                            aria-expanded={showMenu}
+                            onClick={() => setShowMenu((v) => !v)}
+                        >
+                            <MoreHorizontal size={20} />
+                        </button>
+                        {showMenu && (
                             <>
-                                <button
-                                    ref={menuButtonRef}
-                                    type="button"
-                                    className="od-more-btn"
-                                    aria-label={t('moderation.menu.more')}
-                                    aria-expanded={showMenu}
-                                    onClick={() => setShowMenu((v) => !v)}
-                                >
-                                    <MoreHorizontal size={20} />
-                                </button>
-                                {showMenu && (
-                                    <>
-                                        <div className="od-menu-backdrop" onClick={() => setShowMenu(false)} />
-                                        <div className="od-menu" role="menu">
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                onClick={() => {
-                                                    closeMenu();
-                                                    openReport({ type: 'opportunity', id: o.id }, { name, blockTarget: { userId: o.ownerId } });
-                                                }}
-                                            >
-                                                <Flag size={16} /> {t('moderation.menu.reportOpportunity')}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                role="menuitem"
-                                                className="danger"
-                                                onClick={() => {
-                                                    closeMenu();
-                                                    openBlock({ userId: o.ownerId }, { name });
-                                                }}
-                                            >
-                                                <Ban size={16} /> {t('moderation.menu.blockMember')}
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
+                                <div className="od-menu-backdrop" onClick={() => setShowMenu(false)} />
+                                <div className="od-menu" role="menu">
+                                    {isOwn ? (
+                                        <button type="button" role="menuitem" onClick={() => { setShowMenu(false); navigate(`/opportunities/${o.id}/edit`); }}>
+                                            <Edit3 size={16} /> {t('opportunities.edit')}
+                                        </button>
+                                    ) : (<>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => {
+                                                closeMenu();
+                                                openReport({ type: 'opportunity', id: o.id }, { name, blockTarget: { userId: o.ownerId } });
+                                            }}
+                                        >
+                                            <Flag size={16} /> {t('moderation.menu.reportOpportunity')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="danger"
+                                            onClick={() => {
+                                                closeMenu();
+                                                openBlock({ userId: o.ownerId }, { name });
+                                            }}
+                                        >
+                                            <Ban size={16} /> {t('moderation.menu.blockMember')}
+                                        </button>
+                                    </>)}
+                                </div>
                             </>
                         )}
                     </div>
@@ -492,8 +490,7 @@ const OpportunityDetail = () => {
                     pointer-events: auto;
                 }
                 /* White on any photo, in dark mode too, like the back button */
-                .od-more-btn,
-                .od-hero-tools :global(.od-edit-btn) {
+                .od-more-btn {
                     height: 40px;
                     display: inline-flex;
                     align-items: center;
@@ -510,26 +507,15 @@ const OpportunityDetail = () => {
                     width: 40px;
                     padding: 0;
                 }
-                .od-hero-tools :global(.od-edit-btn) {
-                    gap: 6px;
-                    padding: 0 14px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    white-space: nowrap;
-                    text-decoration: none;
-                }
-                .od-more-btn:active,
-                .od-hero-tools :global(.od-edit-btn:active) {
+                .od-more-btn:active {
                     background: #ffffff;
                 }
                 @media (hover: hover) {
-                    .od-more-btn:hover,
-                    .od-hero-tools :global(.od-edit-btn:hover) {
+                    .od-more-btn:hover {
                         background: #ffffff;
                     }
                 }
-                .od-more-btn:focus-visible,
-                .od-hero-tools :global(.od-edit-btn:focus-visible) {
+                .od-more-btn:focus-visible {
                     outline: 2px solid var(--color-primary);
                     outline-offset: 2px;
                 }

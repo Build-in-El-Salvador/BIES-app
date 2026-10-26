@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     MapPin, Globe, Mail, Loader2, Edit3, Briefcase, Tag, Languages, Bitcoin, Flag, Ban, Banknote,
@@ -33,6 +33,7 @@ const sectionTitleStyle = {
  */
 const TalentDetail = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { t } = useTranslation();
     const { user } = useAuth();
 
@@ -150,27 +151,26 @@ const TalentDetail = () => {
                 </div>
                 {/* Outside the photo's clipping, so the menu can open below it */}
                 <div className="tal-hero-tools">
-                    {isOwn && (
-                        <Link to={`/talents/${talent.id}/edit`} className="tal-edit-btn">
-                            <Edit3 size={15} /> {t('talent.edit')}
-                        </Link>
-                    )}
-                    {!isOwn && (
-                        <div style={{ position: 'relative' }}>
-                            <button
-                                ref={menuButtonRef}
-                                type="button"
-                                className="tal-more-btn"
-                                aria-label={t('moderation.menu.more')}
-                                aria-expanded={showMenu}
-                                onClick={() => setShowMenu((v) => !v)}
-                            >
-                                <MoreHorizontal size={20} />
-                            </button>
-                            {showMenu && (
-                                <>
-                                    <div className="tal-menu-backdrop" onClick={() => setShowMenu(false)} />
-                                    <div className="tal-menu" role="menu">
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            ref={menuButtonRef}
+                            type="button"
+                            className="tal-more-btn"
+                            aria-label={t('moderation.menu.more')}
+                            aria-expanded={showMenu}
+                            onClick={() => setShowMenu((v) => !v)}
+                        >
+                            <MoreHorizontal size={20} />
+                        </button>
+                        {showMenu && (
+                            <>
+                                <div className="tal-menu-backdrop" onClick={() => setShowMenu(false)} />
+                                <div className="tal-menu" role="menu">
+                                    {isOwn ? (
+                                        <button type="button" role="menuitem" onClick={() => { setShowMenu(false); navigate(`/talents/${talent.id}/edit`); }}>
+                                            <Edit3 size={16} /> {t('talent.edit')}
+                                        </button>
+                                    ) : (<>
                                         <button
                                             type="button"
                                             role="menuitem"
@@ -192,11 +192,11 @@ const TalentDetail = () => {
                                         >
                                             <Ban size={16} /> {t('moderation.menu.blockMember')}
                                         </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    )}
+                                    </>)}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -417,8 +417,7 @@ const TalentDetail = () => {
                     gap: 8px;
                 }
                 /* White on any photo, in dark mode too, like the back button */
-                .tal-more-btn,
-                .tal-hero-tools :global(.tal-edit-btn) {
+                .tal-more-btn {
                     height: 40px;
                     display: inline-flex;
                     align-items: center;
@@ -435,26 +434,15 @@ const TalentDetail = () => {
                     width: 40px;
                     padding: 0;
                 }
-                .tal-hero-tools :global(.tal-edit-btn) {
-                    gap: 6px;
-                    padding: 0 14px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    white-space: nowrap;
-                    text-decoration: none;
-                }
-                .tal-more-btn:active,
-                .tal-hero-tools :global(.tal-edit-btn:active) {
+                .tal-more-btn:active {
                     background: #ffffff;
                 }
                 @media (hover: hover) {
-                    .tal-more-btn:hover,
-                    .tal-hero-tools :global(.tal-edit-btn:hover) {
+                    .tal-more-btn:hover {
                         background: #ffffff;
                     }
                 }
-                .tal-more-btn:focus-visible,
-                .tal-hero-tools :global(.tal-edit-btn:focus-visible) {
+                .tal-more-btn:focus-visible {
                     outline: 2px solid var(--color-primary);
                     outline-offset: 2px;
                 }
