@@ -126,42 +126,44 @@ export function PriceLine({ event, className = '' }) {
  */
 export function TicketButton({ event, going, onGoing, busy = false, size = 'md' }) {
     const { t } = useTranslation();
-    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-    if (event.ticketUrl) {
-        return (
-            <button type="button" className={`ev-tix ${size}`} onClick={(e) => { stop(e); openExternal(event.ticketUrl); }}>
-                {t('events.card.getTickets')} <ExternalLink size={size === 'lg' ? 16 : 14} aria-hidden="true" />
-                <style jsx>{buttonCss}</style>
-            </button>
-        );
-    }
-    if (!onGoing) return null;
+    const tickets = !!event.ticketUrl;
+    if (!tickets && !onGoing) return null;
+    const onClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (tickets) openExternal(event.ticketUrl);
+        else onGoing(!going);
+    };
     return (
         <button
             type="button"
-            className={`ev-tix going ${size}${going ? ' on' : ''}`}
-            aria-pressed={!!going}
-            disabled={busy}
-            onClick={(e) => { stop(e); onGoing(!going); }}
+            className={`ev-tix ${size}${tickets ? '' : ` going${going ? ' on' : ''}`}`}
+            aria-pressed={tickets ? undefined : !!going}
+            disabled={!tickets && busy}
+            onClick={onClick}
         >
-            {going && <Check size={size === 'lg' ? 17 : 15} aria-hidden="true" />}
-            {going ? t('events.card.going') : t('events.card.imGoing')}
-            <style jsx>{buttonCss}</style>
+            {tickets ? (
+                <>{t('events.card.getTickets')} <ExternalLink size={size === 'lg' ? 16 : 14} aria-hidden="true" /></>
+            ) : (
+                <>
+                    {going && <Check size={size === 'lg' ? 17 : 15} aria-hidden="true" />}
+                    {going ? t('events.card.going') : t('events.card.imGoing')}
+                </>
+            )}
+            <style jsx>{`
+                .ev-tix {
+                    position: relative; z-index: 2;
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    height: 38px; padding: 0 16px; border-radius: var(--radius-full); border: 0; cursor: pointer;
+                    background: var(--color-secondary); color: #FFFFFF;
+                    font-size: 0.875rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+                }
+                .ev-tix:hover { background: var(--color-secondary-dark); }
+                .ev-tix.lg { height: 48px; padding: 0 22px; font-size: 0.95rem; }
+                .ev-tix.going { background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary); }
+                .ev-tix.going.on { background: var(--color-primary); color: #FFFFFF; }
+                .ev-tix:disabled { opacity: 0.7; cursor: default; }
+            `}</style>
         </button>
     );
 }
-
-const buttonCss = `
-    .ev-tix {
-        position: relative; z-index: 2;
-        display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-        height: 38px; padding: 0 16px; border-radius: var(--radius-full); border: 0; cursor: pointer;
-        background: var(--color-secondary); color: #FFFFFF;
-        font-size: 0.875rem; font-weight: 700; white-space: nowrap; flex-shrink: 0;
-    }
-    .ev-tix:hover { background: var(--color-secondary-dark); }
-    .ev-tix.lg { height: 48px; padding: 0 22px; font-size: 0.95rem; }
-    .ev-tix.going { background: var(--color-surface); color: var(--color-primary); border: 1.5px solid var(--color-primary); }
-    .ev-tix.going.on { background: var(--color-primary); color: #FFFFFF; }
-    .ev-tix:disabled { opacity: 0.7; cursor: default; }
-`;
