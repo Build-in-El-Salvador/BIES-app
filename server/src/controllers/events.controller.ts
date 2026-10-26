@@ -89,8 +89,11 @@ const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' 
 /** Hosted as BIES's own page, while it's up: a BIES event. */
 const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active', isPublished: true } } };
 
-/** What only the host side changes: tickets and money, who hosts it, who sees it. */
-const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'payoutLightningAddress', 'priceSats', 'ticketCapacity', 'visibility', 'guestList', 'hostListingId'] as const;
+/** What only the host side changes: tickets and money, who hosts it, who sees it, where people join online. */
+const HOST_ONLY = [
+    'ticketUrl', 'bitcoinUrl', 'priceLabel', 'payoutLightningAddress', 'priceSats', 'ticketCapacity',
+    'visibility', 'guestList', 'hostListingId', 'isOnline', 'onlineUrl',
+] as const;
 const asText = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
 /** Whether a value an edit sends differs from the stored one (JSON lists are stored as text). */
 const differs = (sent: unknown, stored: unknown): boolean => asText(sent) !== asText(stored);
@@ -216,12 +219,14 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
         const skip = (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10);
         const take = Math.min(parseInt(limit as string, 10), 100);
 
-        // Mine: I host it, I'm a co-host, or I act for its host business or a co-host one.
+        // Mine: I host it (not as a business I've left), I act for its host
+        // business or a co-host one, or I'm a co-host.
         const me = req.user!.id;
         const acted = await actedForIds(me);
         const mineWhere = {
             OR: [
-                { hostId: me },
+                { hostId: me, hostListingId: null },
+                { hostId: me, hostListing: { is: { OR: [{ status: { not: 'active' } }, { isPublished: false }] } } },
                 ...(acted.length ? [{ hostListingId: { in: acted } }] : []),
                 { partners: { some: { role: 'COHOST', OR: [{ userId: me }, ...(acted.length ? [{ listingId: { in: acted } }] : [])] } } },
             ],
@@ -232,10 +237,7 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take,
-                include: {
-                    _count: { select: { attendees: true } },
-                    hostListing: { select: { id: true, name: true } },
-                },
+                include: { ...EVENT_PEOPLE, _count: { select: { attendees: true } } },
             }),
             prisma.event.count({ where: mineWhere }),
         ]);
@@ -252,14 +254,21 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
             : [];
         const statsByEvent = new Map(ticketStats.map((s) => [s.eventId, s]));
 
-        const parsed = events.map((e) => ({
-            ...e,
-            tags: JSON.parse(e.tags || '[]'),
-            guestList: JSON.parse(e.guestList || '[]'),
-            customSections: JSON.parse((e as any).customSections || '[]'),
-            attendeeCount: e._count.attendees,
-            ticketsSold: statsByEvent.get(e.id)?._count._all || 0,
-            revenueSats: statsByEvent.get(e.id)?._sum.amountSats || 0,
+        // As the list shows them; sales only for the host side.
+        const parsed = await Promise.all(events.map(async (e) => {
+            const hostSide = await canDeleteEvent(e, req.user, acted);
+            return {
+                ...eventCard(e, new Set()),
+                maxAttendees: e.maxAttendees,
+                ticketCapacity: e.ticketCapacity,
+                endorsementRequested: e.endorsementRequested,
+                attendeeCount: e._count.attendees,
+                canDelete: hostSide,
+                ...(hostSide ? {
+                    ticketsSold: statsByEvent.get(e.id)?._count._all || 0,
+                    revenueSats: statsByEvent.get(e.id)?._sum.amountSats || 0,
+                } : {}),
+            };
         }));
 
         res.json({
@@ -517,6 +526,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             }
             data.hostListingId = hostListingId;
             data.isOfficial = !!listing?.isOfficial;
+            data.hostId = me; // whoever moves it is its host from now on
         }
         const partners = hostSide && body.partners !== undefined
             ? await checkPartners(me, body.partners, { hostListingId, eventId: existing.id, isAdmin: !!req.user!.isAdmin, acted })
@@ -821,15 +831,15 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
 
         const event = await prisma.event.findUnique({
             where: { id: eventId },
-            select: { title: true, isPublished: true, hostId: true },
+            select: { id: true, title: true, isPublished: true, hostId: true, hostListingId: true },
         });
 
         if (!event || !event.isPublished) {
             res.status(404).json({ error: 'Event not found' }); return;
         }
 
-        // Only the event host can send invitations
-        if (event.hostId !== inviterId) {
+        // Only the host side can send invitations
+        if (!(await canDeleteEvent(event, req.user))) {
             res.status(403).json({ error: 'Only the event host can send invitations' }); return;
         }
 

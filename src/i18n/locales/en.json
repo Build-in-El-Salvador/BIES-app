@@ -806,7 +806,7 @@
         "host_only": "Only the host can change tickets, co-hosts, sponsors or who can see the event.",
         "official_listing": "Only BIES can add BIES to an event."
       },
-      "hostOnly": "As a co-host you edit the event's details. Tickets, co-hosts, sponsors and who can see it stay with the host."
+      "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host."
     },
     "kinds": {
       "NETWORKING": "Networking",

@@ -22,7 +22,7 @@ import PartnerPicker from '../components/events/PartnerPicker';
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 // What only the host side changes (a co-host edits the rest): the server says the same.
-const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility'];
+const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl'];
 
 const EMPTY = {
     hostListingId: '', thumbnail: '', title: '', category: 'NETWORKING', description: '',
@@ -288,13 +288,13 @@ export default function EventForm() {
             <section className="ef-group">
                 <h2 className="ef-h">{t('events.form.where')}</h2>
                 <div className="ef-seg" role="group" aria-label={t('events.form.where')}>
-                    <button type="button" aria-pressed={!form.online} className={!form.online ? 'on' : ''} onClick={() => setForm((f) => ({ ...f, online: false }))}><MapPin size={15} /> {t('events.form.inPerson')}</button>
-                    <button type="button" aria-pressed={form.online} className={form.online ? 'on' : ''} onClick={() => setForm((f) => ({ ...f, online: true }))}><Video size={15} /> {t('events.form.online')}</button>
+                    <button type="button" aria-pressed={!form.online} className={!form.online ? 'on' : ''} disabled={!hostSide} onClick={() => setForm((f) => ({ ...f, online: false }))}><MapPin size={15} /> {t('events.form.inPerson')}</button>
+                    <button type="button" aria-pressed={form.online} className={form.online ? 'on' : ''} disabled={!hostSide} onClick={() => setForm((f) => ({ ...f, online: true }))}><Video size={15} /> {t('events.form.online')}</button>
                 </div>
                 {form.online ? (
                     <>
                         <label className="ef-label" htmlFor="ef-online">{t('events.form.onlineLink')}</label>
-                        <input id="ef-online" className="ef-input" inputMode="url" placeholder="https://zoom.us/j/…" value={form.onlineUrl} onChange={set('onlineUrl')} />
+                        <input id="ef-online" className="ef-input" inputMode="url" placeholder="https://zoom.us/j/…" value={form.onlineUrl} onChange={set('onlineUrl')} readOnly={!hostSide} />
                         <p className="ef-hint">{t('events.form.onlineLinkHint')}</p>
                     </>
                 ) : (
@@ -393,6 +393,7 @@ export default function EventForm() {
                 .ef-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; border-radius: 12px; background: var(--color-gray-100); }
                 .ef-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border: 0; border-radius: 9px; background: none; cursor: pointer; font-weight: 600; color: var(--color-gray-500); }
                 .ef-seg button.on { background: var(--color-surface); color: var(--color-gray-900); box-shadow: var(--shadow-sm); }
+                .ef-seg button:disabled { cursor: default; }
                 .ef-choices { display: flex; flex-direction: column; gap: 6px; }
                 .ef-choice { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-gray-200); border-radius: 12px; cursor: pointer; font-size: 0.9rem; }
                 .ef-choice.on { border-color: var(--color-primary); background: rgba(0, 71, 171, 0.05); }

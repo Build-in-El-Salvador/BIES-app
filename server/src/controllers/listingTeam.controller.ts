@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { createNotification } from '../services/notification.service';
+import { cache } from '../services/redis.service';
 import { blockedEitherWay } from '../services/moderation.service';
 import { z } from 'zod';
 
@@ -192,6 +193,7 @@ export async function setListingOfficial(req: Request, res: Response): Promise<v
                 },
             }),
         ]);
+        await Promise.all([cache.delPattern('events:'), cache.delPattern('preview:events:')]);
         res.json({ id: listing.id, isOfficial: official });
     } catch (error) {
         console.error('Set listing official error:', error);

@@ -806,7 +806,7 @@
         "host_only": "Solo el anfitrión puede cambiar las entradas, los coorganizadores, los patrocinadores o quién puede ver el evento.",
         "official_listing": "Solo BIES puede agregar a BIES a un evento."
       },
-      "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión."
+      "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión."
     },
     "kinds": {
       "NETWORKING": "Networking",

@@ -335,14 +335,78 @@ describe('who keeps control of an event', () => {
         const viewer = await member();
         const bies = await business(core, true, `BIES Hub ${++counter}`);
         await call('PUT', `/api/admin/directory/${bies}/official`, { token: admin.token, body: { official: true } });
-        const created = await event(core, { hostListingId: bies });
+        const title = `Taken down ${Date.now()}`;
+        const created = await event(core, { title, hostListingId: bies });
         expect(created.body.isOfficial).toBe(true);
 
         await prisma.directoryListing.update({ where: { id: bies }, data: { status: 'inactive', isPublished: false } });
-        const card = (await call('GET', `/api/events?upcoming=true&isOfficial=false`, { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
+        const card = (await call('GET', `/api/events?upcoming=true&isOfficial=false&search=${encodeURIComponent(title)}`, { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
         expect(card).toMatchObject({ isOfficial: false, hostListing: null });
         const preview = (await call('GET', `/api/preview/events/${created.body.id}`)).body;
         expect(preview).toMatchObject({ isOfficial: false, host: 'A BIES member' });
+    });
+
+    it("My events: co-hosts don't get the guest list or sales; a member who left the team doesn't get its events", async () => {
+        const owner = await member();
+        const mate = await member();
+        const cohost = await member();
+        const biz = await business(owner, true);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        const created = await event(mate, {
+            hostListingId: biz, payoutLightningAddress: 'host@ln.example',
+            visibility: 'PRIVATE', guestList: [{ name: 'Guest', userId: cohost.id }],
+            partners: [{ role: 'COHOST', userId: cohost.id }],
+        });
+        const mine = async (m: Member) => (await call('GET', '/api/events/my', { token: m.token })).body.data.find((e: any) => e.id === created.body.id);
+
+        const asCohost = await mine(cohost);
+        expect(asCohost).toMatchObject({ canDelete: false });
+        expect(JSON.stringify(asCohost)).not.toMatch(/host@ln|guestList|revenueSats/);
+        expect(await mine(owner)).toMatchObject({ canDelete: true, revenueSats: 0 });
+
+        await call('DELETE', `/api/directory/${biz}/team/${mate.id}`, { token: owner.token });
+        expect(await mine(mate)).toBeUndefined();
+    });
+
+    it('once its business is taken down, the member who made an event looks after it again', async () => {
+        const owner = await member();
+        const biz = await business(owner, true);
+        const created = await event(owner, { hostListingId: biz });
+        await prisma.directoryListing.update({ where: { id: biz }, data: { status: 'inactive', isPublished: false } });
+        expect((await call('GET', `/api/events/${created.body.id}`, { token: owner.token })).body).toMatchObject({ canEdit: true, canDelete: true });
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { title: 'Moved elsewhere' } })).status).toBe(200);
+    });
+
+    it("co-hosts don't change the online link, and BIES named as a sponsor can't become a co-host", async () => {
+        const admin = await member({ admin: true });
+        const host = await member();
+        const cohost = await member();
+        const core = await member();
+        const bies = await business(core, true, `BIES Hub ${++counter}`);
+        await call('PUT', `/api/admin/directory/${bies}/official`, { token: admin.token, body: { official: true } });
+        const created = await event(host, { isOnline: true, onlineUrl: 'https://zoom.example/j/1', partners: [{ role: 'COHOST', userId: cohost.id }] });
+        const id = created.body.id;
+
+        const online = await call('PUT', `/api/events/${id}`, { token: cohost.token, body: { onlineUrl: 'https://elsewhere.example/join' } });
+        expect(online.status).toBe(403);
+
+        // An admin names BIES as a sponsor; the host can keep it, but not make it a co-host.
+        expect((await call('PUT', `/api/events/${id}`, { token: admin.token, body: { partners: [{ role: 'COHOST', userId: cohost.id }, { role: 'SPONSOR', listingId: bies }] } })).status).toBe(200);
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { partners: [{ role: 'COHOST', userId: cohost.id }, { role: 'SPONSOR', listingId: bies }] } })).status).toBe(200);
+        const promoted = await call('PUT', `/api/events/${id}`, { token: host.token, body: { partners: [{ role: 'COHOST', userId: cohost.id }, { role: 'COHOST', listingId: bies }] } });
+        expect(promoted.status).toBe(400);
+        expect(promoted.body.reason).toBe('official_listing');
+    });
+
+    it('whoever moves an event off its business is its host from then on', async () => {
+        const owner = await member();
+        const mate = await member();
+        const biz = await business(owner, true);
+        await call('POST', `/api/directory/${biz}/team`, { token: owner.token, body: { userId: mate.id } });
+        const created = await event(mate, { hostListingId: biz });
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: owner.token, body: { hostListingId: null } })).status).toBe(200);
+        expect((await prisma.event.findUniqueOrThrow({ where: { id: created.body.id } })).hostId).toBe(owner.id);
+        expect((await call('PUT', `/api/events/${created.body.id}`, { token: mate.token, body: { title: 'Mine?' } })).status).toBe(403);
     });
 
     it('an edit reaches the shared preview at once', async () => {
@@ -376,11 +440,12 @@ describe('the events list and page', () => {
     it('keeps the guest list, payout address and online link off the list; the guest list for the host only', async () => {
         const host = await member();
         const guest = await member();
+        const title = `Invite only ${Date.now()}`;
         const created = await event(host, {
-            isOnline: true, onlineUrl: 'https://zoom.example/j/2', payoutLightningAddress: 'host@ln.example',
+            title, isOnline: true, onlineUrl: 'https://zoom.example/j/2', payoutLightningAddress: 'host@ln.example',
             visibility: 'INVITE_ONLY', guestList: [{ name: 'Guest', userId: guest.id }],
         });
-        const list = (await call('GET', '/api/events?upcoming=true', { token: guest.token })).body.data.find((e: any) => e.id === created.body.id);
+        const list = (await call('GET', `/api/events?upcoming=true&search=${encodeURIComponent(title)}`, { token: guest.token })).body.data.find((e: any) => e.id === created.body.id);
         expect(list).toBeTruthy();
         expect(JSON.stringify(list)).not.toMatch(/zoom\.example|host@ln|guestList/);
         const forGuest = (await call('GET', `/api/events/${created.body.id}`, { token: guest.token })).body;
@@ -395,9 +460,10 @@ describe('the events list and page', () => {
         const viewer = await member();
         expect((await event(host, { bitcoinUrl: 'javascript:alert(1)' })).status).toBe(400);
         const btc = 'https://pretix.example/bies/btc-night/';
-        const created = await event(host, { title: `Bitcoin Night ${Date.now()}`, ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: btc });
+        const title = `Bitcoin Night ${Date.now()}`;
+        const created = await event(host, { title, ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: btc });
         expect(created.status).toBe(201);
-        const list = (await call('GET', '/api/events?upcoming=true', { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
+        const list = (await call('GET', `/api/events?upcoming=true&search=${encodeURIComponent(title)}`, { token: viewer.token })).body.data.find((e: any) => e.id === created.body.id);
         expect(list).toMatchObject({ ticketUrl: 'https://lu.ma/btc-night', bitcoinUrl: btc });
         expect((await call('GET', `/api/events/${created.body.id}`, { token: viewer.token })).body.bitcoinUrl).toBe(btc);
         expect((await call('GET', `/api/preview/events/${created.body.id}`)).body.bitcoinUrl).toBe(btc);

@@ -92,7 +92,7 @@ export async function actedForIds(userId: string): Promise<string[]> {
     return (await listingsActedFor(userId)).map((l) => l.id);
 }
 
-type EventRef = { id: string; hostId: string; hostListingId: string | null };
+type EventRef = { id: string; hostId: string; hostListingId: string | null; hostListing?: { status: string; isPublished: boolean } | null };
 type Viewer = { id: string; isAdmin?: boolean } | undefined;
 
 /** A listing that's up: active and published. */
@@ -102,14 +102,20 @@ export const isLiveListing = (l: { status: string; isPublished: boolean } | null
 /**
  * The host side, who decides everything about the event and may delete it:
  * an admin; for an event hosted as a business or farm, whoever acts for it
- * now (a member who left its team doesn't any more); otherwise its host.
+ * now (a member who left its team doesn't any more), or the member who made
+ * it once the business has been taken down; otherwise its host.
  */
 export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: string[]): Promise<boolean> {
     if (!user) return false;
     if (user.isAdmin) return true;
     if (!event.hostListingId) return event.hostId === user.id;
     const mine = acted ?? await actedForIds(user.id);
-    return mine.includes(event.hostListingId);
+    if (mine.includes(event.hostListingId)) return true;
+    if (event.hostId !== user.id) return false;
+    const listing = event.hostListing !== undefined
+        ? event.hostListing
+        : await prisma.directoryListing.findUnique({ where: { id: event.hostListingId }, select: { status: true, isPublished: true } });
+    return !isLiveListing(listing);
 }
 
 /** May edit the event: the host side, or a co-host (a member, or a business they act for). */
@@ -140,10 +146,10 @@ export async function checkPartners(
 ) {
     if (inputs.length > MAX_PARTNERS) throw new PartnerError(`At most ${MAX_PARTNERS} co-hosts and sponsors`, 'too_many_partners');
     const had = opts.eventId
-        ? await prisma.eventPartner.findMany({ where: { eventId: opts.eventId }, select: { logo: true, listingId: true } })
+        ? await prisma.eventPartner.findMany({ where: { eventId: opts.eventId }, select: { logo: true, listingId: true, role: true } })
         : [];
     const keptLogos = new Set(had.map((p) => p.logo).filter(Boolean));
-    const keptListings = new Set(had.map((p) => p.listingId).filter(Boolean));
+    const keptListings = new Set(had.filter((p) => p.listingId).map((p) => `${p.role}|${p.listingId}`));
     const seen = new Set<string>();
     const rows: Array<{ role: string; userId: string | null; listingId: string | null; name: string; logo: string; url: string; position: number }> = [];
     for (const p of inputs) {
@@ -159,7 +165,7 @@ export async function checkPartners(
             const listing = await prisma.directoryListing.findFirst({ where: { id: p.listingId, ...LIVE }, select: { id: true, isOfficial: true } });
             if (!listing) throw new PartnerError('Business not found', 'no_listing');
             // BIES's own page is named on an event by BIES (its people or an admin) only.
-            if (listing.isOfficial && !keptListings.has(listing.id) && !opts.isAdmin
+            if (listing.isOfficial && !keptListings.has(`${p.role}|${listing.id}`) && !opts.isAdmin
                 && !(opts.acted ?? await actedForIds(me)).includes(listing.id)) {
                 throw new PartnerError('Only BIES can add BIES to an event', 'official_listing');
             }

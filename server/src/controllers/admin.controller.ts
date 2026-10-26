@@ -1574,6 +1574,7 @@ export async function reviewDirectoryListing(req: Request, res: Response): Promi
                 location: true, products: true, skills: true,
             },
         });
+        await cache.delPattern('preview:events:'); // its events' shared previews follow
 
         if (action === 'approve') {
             // Mirror to Nostr as a NIP-99 classified listing (kind:30402),
