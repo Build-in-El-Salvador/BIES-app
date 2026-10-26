@@ -2,14 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    Loader2, AlertCircle, Camera, X, Plus, Trash2, Bitcoin, Briefcase, ImagePlus, ArrowUp, Play,
+    Loader2, AlertCircle, Camera, X, Plus, Trash2, Bitcoin, Briefcase, ImagePlus, ArrowUp, Play, Move,
 } from 'lucide-react';
 import { talentApi, uploadApi } from '../../services/api';
 import { mediaService } from '../../services/mediaService';
 import { useAuth } from '../../context/AuthContext';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import TagInput from '../../components/TagInput';
-import ImageCropModal from '../../components/ImageCropModal';
+import CoverPhoto from '../../components/CoverPhoto';
+import { useCoverFramer } from '../../components/CoverFramer';
+import { COVER_ASPECT } from '../../utils/coverFrame';
 import BackButton from '../../components/BackButton';
 import { getAssetUrl } from '../../utils/assets';
 import {
@@ -27,6 +29,7 @@ const emptyForm = {
     email: '',
     website: '',
     photo: '',
+    coverFrame: '',
     available: true,
     remote: false,
     btcAccepted: false,
@@ -77,7 +80,6 @@ const TalentForm = ({ editMode = false }) => {
     const [uploadingVideo, setUploadingVideo] = useState(false);
     // An upload that went wrong, said next to it: { key: a work's key, or 'cover', message }.
     const [mediaError, setMediaError] = useState(null);
-    const [cropImage, setCropImage] = useState(null); // { src }
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const deleteRef = useRef(null);
@@ -108,6 +110,7 @@ const TalentForm = ({ editMode = false }) => {
                         email: talent.email || '',
                         website: talent.website || '',
                         photo: talent.photo || '',
+                        coverFrame: talent.coverFrame || '',
                         available: talent.available !== false,
                         remote: !!talent.remote,
                         btcAccepted: !!talent.btcAccepted,
@@ -149,40 +152,21 @@ const TalentForm = ({ editMode = false }) => {
         setWorkTypes((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]));
     };
 
-    // ─── Cover photo: select → crop → upload ──────────────────────────────────
-    const handleCoverSelect = (e) => {
-        const file = e.target.files?.[0];
-        e.target.value = ''; // allow re-selecting the same file
-        if (!file) return;
-        setCropImage({ src: URL.createObjectURL(file) });
-    };
-
-    const handleCropConfirm = async (croppedFile) => {
-        URL.revokeObjectURL(cropImage.src);
-        setCropImage(null);
+    // ─── Cover photo: positioned (the page shows what's in the outline), then
+    // uploaded whole; the one there can be positioned again.
+    const cover = useCoverFramer(COVER_ASPECT.talent, async ({ file, frame }) => {
+        if (!file) { setForm((prev) => ({ ...prev, coverFrame: frame })); return; }
         setUploading('photo');
         setMediaError(null);
         try {
-            const result = await uploadApi.media(croppedFile);
-            setForm((prev) => ({ ...prev, photo: result.url }));
+            const result = await uploadApi.media(file);
+            setForm((prev) => ({ ...prev, photo: result.url, coverFrame: frame }));
         } catch (err) {
             setMediaError({ key: 'cover', message: uploadProblem(err) });
         } finally {
             setUploading(null);
         }
-    };
-
-    // A photo being cropped when the member leaves the form: its copy is let go.
-    const cropRef = useRef(null);
-    cropRef.current = cropImage;
-    useEffect(() => () => {
-        if (cropRef.current) URL.revokeObjectURL(cropRef.current.src);
-    }, []);
-
-    const handleCropCancel = () => {
-        if (cropImage) URL.revokeObjectURL(cropImage.src);
-        setCropImage(null);
-    };
+    });
 
     // ─── Proof of work ────────────────────────────────────────────────────────
     const updateWork = (key, field, value) => {
@@ -270,6 +254,7 @@ const TalentForm = ({ editMode = false }) => {
         btcAccepted: form.btcAccepted,
         languages,
         photo: form.photo || '',
+        coverFrame: form.photo ? form.coverFrame : '',
         works: works.filter(hasContent).map((w) => ({
             title: w.title.trim(),
             details: w.details.trim(),
@@ -653,23 +638,31 @@ const TalentForm = ({ editMode = false }) => {
                     <div className="tf-card">
                         <h3 className="tf-card-heading">{t('talent.form.coverHeading')}</h3>
                         <p className="tf-hint" style={{ marginTop: 0, marginBottom: '0.9rem' }}>{t('talent.form.coverHint')}</p>
-                        <div className="tf-cover" style={{ backgroundImage: form.photo ? `url(${getAssetUrl(form.photo)})` : 'none' }}>
+                        {/* As the page shows it */}
+                        <div className="tf-cover">
+                            {form.photo && <CoverPhoto src={form.photo} frame={form.coverFrame} />}
                             {uploading === 'photo' && (
                                 <div className="tf-upload-overlay">
                                     <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: 'white' }} />
                                 </div>
                             )}
                             <div className="tf-cover-actions">
+                                {form.photo && !uploading && (
+                                    <button type="button" className="tf-cover-btn" onClick={() => cover.adjust(form.photo, form.coverFrame)}>
+                                        <Move size={15} />
+                                        {t('coverPhoto.position')}
+                                    </button>
+                                )}
                                 <label className="tf-cover-btn" style={{ cursor: uploading ? 'not-allowed' : 'pointer' }}>
                                     <Camera size={15} />
                                     {form.photo ? t('talent.form.changeCover') : t('talent.form.addCover')}
-                                    <input type="file" accept="image/*" onChange={handleCoverSelect} className="tf-file-input" disabled={!!uploading} />
+                                    <input type="file" accept="image/*" onChange={cover.choose} className="tf-file-input" disabled={!!uploading} />
                                 </label>
                                 {form.photo && !uploading && (
                                     <button
                                         type="button"
                                         className="tf-cover-btn danger"
-                                        onClick={() => setForm((p) => ({ ...p, photo: '' }))}
+                                        onClick={() => setForm((p) => ({ ...p, photo: '', coverFrame: '' }))}
                                         aria-label={t('talent.form.removeCover')}
                                     >
                                         <X size={15} />
@@ -735,15 +728,7 @@ const TalentForm = ({ editMode = false }) => {
                 </div>
             </div>
 
-            {cropImage && (
-                <ImageCropModal
-                    imageSrc={cropImage.src}
-                    aspect={16 / 9}
-                    shape="rect"
-                    onCrop={handleCropConfirm}
-                    onCancel={handleCropCancel}
-                />
-            )}
+            {cover.framer}
 
             <style jsx>{`
                 .talent-form-page {
@@ -1045,11 +1030,10 @@ const TalentForm = ({ editMode = false }) => {
 
                 .tf-cover {
                     position: relative;
-                    height: 170px;
+                    aspect-ratio: 16 / 9;
+                    overflow: hidden;
                     border-radius: var(--radius-lg);
                     background-color: var(--color-blue-tint);
-                    background-size: cover;
-                    background-position: center;
                     display: flex;
                     align-items: flex-end;
                     justify-content: flex-end;

@@ -12,6 +12,7 @@ import { openNow } from './project.controller';
 import { removeTags } from '../middleware/sanitize';
 import { alphabetical, inOrder } from '../utils/listOrder';
 import { networkPreviews } from '../services/memberNetwork';
+import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 
 // What a member card shows (Members: icons, list and cards). Everything else
 // comes with the profile page itself (GET /profiles/:id), so a list of 48
@@ -56,6 +57,7 @@ export const updateProfileSchema = z.object({
     bio: longText.optional(),
     avatar: url.optional(),
     banner: url.optional(),
+    coverFrame: coverFrameSchema.optional(),
     location: short.optional(),
     skills: list().optional(),
     website: z.preprocess(withHttps, z.string().max(2000).url()).optional().or(z.literal('')),
@@ -502,7 +504,7 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
     try {
         // Explicitly pick allowed fields to prevent mass assignment
         const allowedFields = [
-            'name', 'bio', 'avatar', 'banner', 'location', 'skills', 'website',
+            'name', 'bio', 'avatar', 'banner', 'coverFrame', 'location', 'skills', 'website',
             'twitter', 'linkedin', 'github', 'company', 'title', 'tags',
             'investmentFocus', 'investmentStage', 'minTicket', 'maxTicket',
             'lookingFor', 'isPublic', 'nostrNpub', 'experience', 'biesProjects',
@@ -541,6 +543,7 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         // Fetch old profile to detect lightning address / bolt12 offer changes,
         // and photos replaced
         const oldProfile = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { lightningAddress: true, bolt12Offer: true, avatar: true, banner: true } });
+        frameNewCover(data, 'banner', oldProfile?.banner);
 
         // Convert arrays/objects to JSON strings for SQLite
         const arrayFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];

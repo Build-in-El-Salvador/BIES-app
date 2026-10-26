@@ -7,6 +7,7 @@ import Avatar from '../components/Avatar';
 import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
 import { bothTicketLinks, isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
+import { focusOf, parseFrame } from '../utils/coverFrame';
 import biesLogo from '../assets/logo-icon.svg';
 
 /**
@@ -239,7 +240,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
     const { t } = useTranslation();
     return (
         <article className="ev-spot">
-            <span className="ev-spot-photo"><Avatar src={event.thumbnail} fallback={null} /></span>
+            <span className="ev-spot-photo"><Avatar src={event.thumbnail} fallback={null} position={focusOf(parseFrame(event.coverFrame))} /></span>
             <span className="ev-spot-shade" aria-hidden="true" />
             <Link to={`/events/${event.id}`} state={{ preview: event }} className="ev-spot-link" aria-label={event.title} />
             <span className="ev-spot-tag"><BiesTag /></span>

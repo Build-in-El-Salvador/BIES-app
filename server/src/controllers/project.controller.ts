@@ -24,6 +24,7 @@ import { nestedProfileForViewer } from '../services/profilePrivacy';
 import { blockedIds, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { discardUploadNames, discardUploads, ownsUploads, uploadNameOf } from '../services/uploads.service';
 import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds } from '../utils/listOrder';
+import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 
 // ─── Lists ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export const MAX_PHOTOS = 6;
 export const MAX_OPEN_PER_MEMBER = 10;
 
 /** What every opportunity has. */
-const COMMON_FIELDS = ['title', 'description', 'category', 'kind', 'location', 'photos', 'whatsapp', 'email', 'websiteUrl', 'closesOn'];
+const COMMON_FIELDS = ['title', 'description', 'category', 'kind', 'location', 'photos', 'coverFrame', 'whatsapp', 'email', 'websiteUrl', 'closesOn'];
 
 /**
  * What each type has as well; anything else sent for it is left out. A
@@ -108,6 +109,8 @@ const opportunityFields = z.object({
     remote: z.boolean(),
     btcAccepted: z.boolean(),
     photos: z.array(z.string().min(1).max(500)).max(MAX_PHOTOS),
+    // How the first photo, the cover, shows on the page.
+    coverFrame: coverFrameSchema,
     whatsapp: z.string().trim().max(30).regex(phoneRegex),
     email: z.string().trim().max(254).email().or(z.literal('')),
     // A link to read more or to apply.
@@ -509,6 +512,8 @@ export async function updateProject(req: Request, res: Response): Promise<void> 
             tooMany(res);
             return;
         }
+
+        frameNewCover(data, 'thumbnail', existing.thumbnail);
 
         const before = parseJson<string[]>(existing.photos, []);
         const after = data.photos !== undefined ? parseJson<string[]>(data.photos, []) : before;

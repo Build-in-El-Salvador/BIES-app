@@ -28,6 +28,7 @@ import { useLightbox } from '../../context/LightboxContext';
 import { getProduceIcon } from './produceIcons';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
+import CoverPhoto from '../../components/CoverPhoto';
 import AlbumsBlock, { useAlbums } from '../../components/albums/AlbumsBlock';
 import '../../components/moderation/Moderation.css';
 
@@ -350,7 +351,10 @@ const ListingDetail = () => {
             <div className="dir-hero-wrap">
                 <div className="dir-hero">
                     {listing.photo || photos[0] ? (
-                        <img src={getAssetUrl(listing.photo || photos[0])} alt={listing.name} className="dir-hero-img" />
+                        // Tap for all of it: the page shows the part its member chose.
+                        <button type="button" className="dir-hero-photo" onClick={() => lightbox.open(getAssetUrl(listing.photo || photos[0]))} aria-label={listing.name}>
+                            <CoverPhoto src={listing.photo || photos[0]} frame={listing.photo ? listing.coverFrame : ''} alt={listing.name} />
+                        </button>
                     ) : (
                         <div className="dir-hero-fallback">
                             {isFarm ? <Leaf size={56} /> : <Building2 size={56} />}
@@ -718,12 +722,7 @@ const ListingDetail = () => {
                     background: var(--color-blue-tint);
                 }
 
-                .dir-hero-img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    display: block;
-                }
+                .dir-hero-photo { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
 
                 .dir-hero-fallback {
                     width: 100%;

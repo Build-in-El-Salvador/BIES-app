@@ -16,6 +16,7 @@ import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
 import { bothTicketLinks, fullDay, hostOf, partnerPath, timeRange } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
+import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
 import TranslatableText from '../components/TranslatableText';
 import TicketPurchaseModal from '../components/TicketPurchaseModal';
@@ -194,7 +195,7 @@ const EventDetail = () => {
                 <div className={`ev-hero${event.thumbnail ? '' : ' empty'}`}>
                     {event.thumbnail && (
                         <button type="button" className="ev-hero-photo" onClick={() => lightbox.open(getAssetUrl(event.thumbnail))} aria-label={event.title}>
-                            <img src={getAssetUrl(event.thumbnail)} alt="" />
+                            <CoverPhoto src={event.thumbnail} frame={event.coverFrame} />
                         </button>
                     )}
                     <BackButton fallback="/events" overlay label={t('events.detail.back')} />
@@ -401,7 +402,6 @@ const EventDetail = () => {
                 .ev-hero { position: relative; aspect-ratio: 16 / 10; max-height: 52vh; overflow: hidden; background: var(--color-gray-100); }
                 .ev-hero.empty { background: linear-gradient(135deg, rgba(0, 71, 171, 0.18), rgba(255, 91, 0, 0.12)); }
                 .ev-hero-photo { position: absolute; inset: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
-                .ev-hero-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
                 .ev-hero :global(.bies-back) { position: absolute; left: 12px; top: 12px; z-index: 2; }
                 .ev-hero-tag { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
                 .ev-hero-tools { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; }

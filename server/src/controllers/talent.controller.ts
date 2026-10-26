@@ -18,6 +18,7 @@ import prisma from '../lib/prisma';
 import { blockedIds, hasBlocked, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import { discardUploads, ownsUploads } from '../services/uploads.service';
 import { alphabetical, inIdOrder, inOrder, newestFirst, pageIds } from '../utils/listOrder';
+import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export const createTalentSchema = z.object({
     btcAccepted: z.boolean().optional(),
     languages: z.array(z.string().min(1).max(30)).max(10).optional(),
     photo: uploadLink.optional().or(z.literal('')),
+    coverFrame: coverFrameSchema.optional(),
     works: z.array(workSchema).max(MAX_WORKS).optional(),
     whatsapp: z.string().max(30).regex(phoneRegex).optional().or(z.literal('')),
     email: z.string().email().max(254).optional().or(z.literal('')),
@@ -80,7 +82,7 @@ export const updateTalentSchema = createTalentSchema.partial();
 
 const FIELDS = [
     'title', 'category', 'about', 'skills', 'workTypes', 'available', 'remote', 'location',
-    'rate', 'btcAccepted', 'languages', 'photo', 'works', 'whatsapp', 'email', 'website',
+    'rate', 'btcAccepted', 'languages', 'photo', 'coverFrame', 'works', 'whatsapp', 'email', 'website',
 ] as const;
 
 const memberSelect = {
@@ -325,9 +327,11 @@ export async function updateTalent(req: Request, res: Response): Promise<void> {
             return;
         }
 
+        const data = talentData(req.body);
+        frameNewCover(data, 'photo', existing.photo);
         const talent = await prisma.talentListing.update({
             where: { id: req.params.id },
-            data: talentData(req.body),
+            data,
             include: { user: memberSelect },
         });
 

@@ -18,8 +18,10 @@ import { thumbnailUrl } from '../utils/thumbnail';
  * @param {number} [size] - the displayed size in px, for the browser's layout
  * @param {string} [className]
  * @param {React.ReactNode} fallback - shown when there's no photo or it fails
+ * @param {string} [position] - CSS object-position: a cover's chosen part
+ *   (utils/coverFrame.js focusOf) where the box crops the photo
  */
-export default function Avatar({ src, alt = '', size, className, fallback = null }) {
+export default function Avatar({ src, alt = '', size, className, fallback = null, position }) {
     const thumb = thumbnailUrl(src);
     // 0: the small copy (when there is one), 1: the photo, 2: the fallback.
     const [stage, setStage] = useState(thumb ? 0 : 1);
@@ -37,6 +39,7 @@ export default function Avatar({ src, alt = '', size, className, fallback = null
             loading="lazy"
             decoding="async"
             onError={() => setStage((s) => s + 1)}
+            {...(position ? { style: { objectPosition: position } } : {})}
         />
     );
 }

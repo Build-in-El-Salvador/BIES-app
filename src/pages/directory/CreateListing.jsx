@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     Loader2, AlertCircle, Camera, X, Plus, Trash2,
-    CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp,
+    CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp, Move,
 } from 'lucide-react';
 import { directoryApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -14,6 +14,9 @@ import { nostrSigner } from '../../services/nostrSigner';
 import TagInput from '../../components/TagInput';
 import MemberSearchSelect from '../../components/MemberSearchSelect';
 import ImageCropModal from '../../components/ImageCropModal';
+import CoverPhoto from '../../components/CoverPhoto';
+import { useCoverFramer } from '../../components/CoverFramer';
+import { COVER_ASPECT } from '../../utils/coverFrame';
 import { getAssetUrl } from '../../utils/assets';
 import { PRODUCE_ICON_KEYS, getProduceIcon } from './produceIcons';
 import BackButton from '../../components/BackButton';
@@ -44,6 +47,7 @@ const emptyForm = {
     instagram: '',
     btcAccepted: false,
     photo: '',
+    coverFrame: '',
     logo: '',
     bestFor: '',
     pricing: '',
@@ -154,6 +158,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     instagram: listing.instagram || '',
                     btcAccepted: !!listing.btcAccepted,
                     photo: listing.photo || '',
+                    coverFrame: listing.coverFrame || '',
                     logo: listing.logo || '',
                     bestFor: listing.bestFor || '',
                     pricing: listing.pricing || '',
@@ -189,7 +194,24 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         setForm((prev) => ({ ...prev, [name]: inputType === 'checkbox' ? checked : value }));
     };
 
-    // ─── Uploads: select → crop → uploadApi.media ─────────────────────────────
+    // ─── Uploads ──────────────────────────────────────────────────────────────
+    // The cover: positioned (the page shows what's in the outline), then uploaded
+    // whole; the one there can be positioned again.
+    const cover = useCoverFramer(COVER_ASPECT.listing, async ({ file, frame }) => {
+        if (!file) { setForm((prev) => ({ ...prev, coverFrame: frame })); return; }
+        setUploading('photo');
+        setSubmitError('');
+        try {
+            const result = await uploadApi.media(file);
+            setForm((prev) => ({ ...prev, photo: result.url, coverFrame: frame }));
+        } catch (err) {
+            setSubmitError(err.message || 'Failed to upload image.');
+        } finally {
+            setUploading(null);
+        }
+    });
+
+    // The logo: select → crop → uploadApi.media
     const handleImageSelect = (e, target) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -261,6 +283,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             name: form.name.trim(),
             about: form.about.trim(),
             photo: form.photo || '',
+            coverFrame: form.photo ? form.coverFrame : '',
             logo: form.logo || '',
             location: form.location.trim(),
             phone: form.phone.trim(),
@@ -669,23 +692,28 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <>
                             {/* Photo + logo — mirrors the detail page layout */}
                             <div className="dir-form-card" style={{ padding: 0, overflow: 'visible' }}>
-                                <div
-                                    className="dir-form-cover"
-                                    style={{ backgroundImage: form.photo ? `url(${getAssetUrl(form.photo)})` : 'none' }}
-                                >
+                                {/* As the page shows it */}
+                                <div className="dir-form-cover">
+                                    {form.photo && <CoverPhoto src={form.photo} frame={form.coverFrame} />}
                                     {uploading === 'photo' && (
                                         <div className="dir-upload-overlay">
                                             <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: 'white' }} />
                                         </div>
                                     )}
                                     <div className="dir-cover-actions">
+                                        {form.photo && !uploading && (
+                                            <button type="button" className="dir-banner-btn" onClick={() => cover.adjust(form.photo, form.coverFrame)}>
+                                                <Move size={15} />
+                                                {t('coverPhoto.position')}
+                                            </button>
+                                        )}
                                         <label className="dir-banner-btn" style={{ cursor: uploading ? 'not-allowed' : 'pointer' }}>
                                             <Camera size={15} />
                                             {t('directory.coverPhoto')}
                                             <input
                                                 type="file"
                                                 accept="image/*"
-                                                onChange={(e) => handleImageSelect(e, 'photo')}
+                                                onChange={cover.choose}
                                                 className="dir-file-input"
                                                 disabled={!!uploading}
                                             />
@@ -694,7 +722,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                             <button
                                                 type="button"
                                                 className="dir-banner-btn danger"
-                                                onClick={() => setForm((p) => ({ ...p, photo: '' }))}
+                                                onClick={() => setForm((p) => ({ ...p, photo: '', coverFrame: '' }))}
                                                 aria-label={t('directory.removeCover')}
                                             >
                                                 <X size={15} />
@@ -924,11 +952,12 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 </div>
             </div>
 
+            {cover.framer}
             {cropImage && (
                 <ImageCropModal
                     imageSrc={cropImage.src}
-                    aspect={cropImage.target === 'logo' ? 1 : 16 / 9}
-                    shape={cropImage.target === 'logo' ? 'round' : 'rect'}
+                    aspect={1}
+                    shape="round"
                     onCrop={handleCropConfirm}
                     onCancel={handleCropCancel}
                 />
@@ -1082,11 +1111,10 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                 .dir-form-cover {
                     position: relative;
-                    height: 180px;
+                    aspect-ratio: 16 / 9;
+                    overflow: hidden;
                     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
                     background-color: var(--color-blue-tint);
-                    background-size: cover;
-                    background-position: center;
                     display: flex;
                     align-items: flex-end;
                     justify-content: flex-end;

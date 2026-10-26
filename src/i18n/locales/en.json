@@ -3544,5 +3544,13 @@
       "name": "Name (A–Z)",
       "followers": "Most followers"
     }
+  },
+  "coverPhoto": {
+    "title": "Position your cover",
+    "hint": "Drag the photo to move it. Zoom out to show all of it.",
+    "zoom": "Zoom",
+    "cancel": "Cancel",
+    "done": "Done",
+    "position": "Position"
   }
 }

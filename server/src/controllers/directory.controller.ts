@@ -11,6 +11,7 @@ import { discardUploads } from '../services/uploads.service';
 import { nestedProfileForViewer } from '../services/profilePrivacy';
 import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds, priceLevel } from '../utils/listOrder';
 import { nameSimilarity, SIMILAR } from '../utils/similarNames';
+import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ export const createDirectoryListingSchema = z.object({
     notADuplicate: z.boolean().optional(),
     about: z.string().max(5000).optional(),
     photo: z.string().max(500).optional().or(z.literal('')),
+    coverFrame: coverFrameSchema.optional(),
     logo: z.string().max(500).optional().or(z.literal('')),
     photos: z.array(z.string().max(500)).max(10).optional(),
     location: z.string().max(200).optional(),
@@ -81,7 +83,7 @@ export const endorseSchema = z.object({
 // memberUserId only by staff: a linked member's key signs the listing's Nostr
 // event, so members can't link someone else (STAFF_FIELDS).
 const ALLOWED_FIELDS = [
-    'type', 'name', 'category', 'hours', 'isOwnBusiness', 'about', 'photo', 'logo', 'photos', 'location',
+    'type', 'name', 'category', 'hours', 'isOwnBusiness', 'about', 'photo', 'coverFrame', 'logo', 'photos', 'location',
     'phone', 'whatsapp', 'email', 'website', 'instagram', 'languages',
     'btcAccepted', 'products', 'practices', 'skills', 'bestFor',
     'pricing', 'comment', 'mapUrl',
@@ -292,7 +294,7 @@ async function similarListings(name: unknown, req: Request) {
     const typed = name.trim().slice(0, 120);
     const listings = await prisma.directoryListing.findMany({
         where: { status: 'active', isPublished: true, AND: [ACTIVE_MEMBER_RUNS_IT] },
-        select: { id: true, name: true, type: true, location: true, photo: true, ownerId: true, memberUserId: true },
+        select: { id: true, name: true, type: true, location: true, photo: true, coverFrame: true, ownerId: true, memberUserId: true },
     });
     const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
     return listings
@@ -301,7 +303,7 @@ async function similarListings(name: unknown, req: Request) {
         .filter(({ score }) => score >= SIMILAR)
         .sort((a, b) => b.score - a.score || a.listing.name.localeCompare(b.listing.name))
         .slice(0, 5)
-        .map(({ listing: { id, name: listingName, type, location, photo } }) => ({ id, name: listingName, type, location, photo }));
+        .map(({ listing: { id, name: listingName, type, location, photo, coverFrame } }) => ({ id, name: listingName, type, location, photo, coverFrame }));
 }
 
 /**
@@ -544,6 +546,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
 
         const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') data.memberUserId = null;
+        frameNewCover(data, 'photo', existing.photo);
 
         // A recommendation becomes the business's own page through a claim or
         // a hand-over (or staff), not by its recommender saying so: running it

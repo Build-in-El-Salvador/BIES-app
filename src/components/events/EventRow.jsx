@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Avatar from '../Avatar';
 import { dayTile, hostOf, isFree, timeOf } from '../../utils/eventFormat';
+import { focusOf, parseFrame } from '../../utils/coverFrame';
 
 /** An event in a list: a square calendar tile (month and day), words, small photo, top-aligned like other lists. */
 export default function EventRow({ event, lang }) {
@@ -23,7 +24,7 @@ export default function EventRow({ event, lang }) {
                 <span className="ev-row-line">{[tile.weekday, timeOf(event.startDate, lang), place].filter(Boolean).join(' · ')}</span>
                 {(price || by) && <span className="ev-row-line">{[price, by && t('events.card.by', { names: by })].filter(Boolean).join(' · ')}</span>}
             </span>
-            {event.thumbnail && <span className="ev-row-photo"><Avatar src={event.thumbnail} size={56} fallback={null} /></span>}
+            {event.thumbnail && <span className="ev-row-photo"><Avatar src={event.thumbnail} size={56} fallback={null} position={focusOf(parseFrame(event.coverFrame))} /></span>}
             <style jsx>{`
                 :global(.ev-row) {
                     display: flex; gap: 12px; align-items: flex-start; min-width: 0;

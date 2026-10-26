@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../components/moderation/objectionable';
-import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckCircle, Save, Search, X, RefreshCw, AtSign, Zap, User, Link as LinkIcon, Trash2, GripVertical, Upload, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, Copy, Check } from 'lucide-react';
+import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckCircle, Save, Move, Search, X, RefreshCw, AtSign, Zap, User, Link as LinkIcon, Trash2, GripVertical, Upload, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, Copy, Check } from 'lucide-react';
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +13,9 @@ import { nostrService } from '../services/nostrService';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
 import ImageCropModal from '../components/ImageCropModal';
+import CoverPhoto from '../components/CoverPhoto';
+import { useCoverFramer } from '../components/CoverFramer';
+import { COVER_ASPECT } from '../utils/coverFrame';
 import RichTextEditor from '../components/RichTextEditor';
 import { useSectionDrag, reorderArray } from '../hooks/useSectionDrag';
 import { getAssetUrl } from '../utils/assets';
@@ -72,6 +75,7 @@ const ProfileEdit = () => {
         title: '',
         avatar: '',
         banner: '',
+        coverFrame: '',
         tags: [],
         showExperience: true,
         experience: [],
@@ -219,6 +223,7 @@ const ProfileEdit = () => {
                     title: profile.title || profile.role || '',
                     avatar: profile.avatar || profile.image || '',
                     banner: profile.banner || '',
+                    coverFrame: profile.coverFrame || '',
                     tags: profile.tags || [],
                     showExperience: profile.showExperience ?? true,
                     experience: (profile.experience || []).map(exp => {
@@ -301,6 +306,7 @@ const ProfileEdit = () => {
                 title: form.title,
                 avatar: form.avatar || undefined,
                 banner: form.banner || undefined,
+                coverFrame: form.banner ? form.coverFrame : '',
                 tags: form.tags,
                 experience: form.experience,
                 biesProjects: form.biesProjects,
@@ -360,13 +366,22 @@ const ProfileEdit = () => {
         e.target.value = ''; // reset so same file can be re-selected
     };
 
-    const handleBannerSelect = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const src = URL.createObjectURL(file);
-        setCropImage({ src, type: 'banner' });
-        e.target.value = '';
-    };
+    // The banner: positioned (the profile shows what's in the outline), then
+    // uploaded whole; the one there can be positioned again.
+    const banner = useCoverFramer(COVER_ASPECT.banner, async ({ file, frame }) => {
+        if (!file) { setForm(prev => ({ ...prev, coverFrame: frame })); return; }
+        setUploadingBanner(true);
+        setError('');
+        try {
+            const result = await mediaService.uploadFile(file);
+            setForm(prev => ({ ...prev, banner: result.url, coverFrame: frame }));
+        } catch (err) {
+            console.error('banner upload error:', err);
+            setError('Failed to upload banner. Please try again.');
+        } finally {
+            setUploadingBanner(false);
+        }
+    });
 
     const handleCropConfirm = async (croppedFile) => {
         const type = cropImage.type;
@@ -663,10 +678,12 @@ const ProfileEdit = () => {
                 {/* Banner + Avatar card */}
                 <div className="pe-card" style={{ padding: 0, overflow: 'hidden' }}>
                     <div className="pe-banner" style={{
-                        background: (form.banner || nostrProfile?.banner)
-                            ? `url(${getAssetUrl(form.banner || nostrProfile?.banner)}) center/cover no-repeat`
+                        background: (!form.banner && nostrProfile?.banner)
+                            ? `url(${getAssetUrl(nostrProfile.banner)}) center/cover no-repeat`
                             : 'linear-gradient(135deg, #0052cc, #0a192f)'
                     }}>
+                        {/* As the profile shows it */}
+                        {form.banner && <CoverPhoto src={form.banner} frame={form.coverFrame} />}
                         {(uploadingBanner || bannerImageLoading) && (
                             <div className="pe-banner-overlay">
                                 <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: 'white' }} />
@@ -675,11 +692,19 @@ const ProfileEdit = () => {
                                 </span>
                             </div>
                         )}
-                        <label className="pe-banner-edit">
-                            {uploadingBanner ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={14} />}
-                            <span className="pe-banner-edit-text">Edit</span>
-                            <input type="file" accept="image/*" onChange={handleBannerSelect} style={{ display: 'none' }} />
-                        </label>
+                        <div className="pe-banner-tools">
+                            <label className="pe-banner-edit">
+                                {uploadingBanner ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={14} />}
+                                <span className="pe-banner-edit-text">Edit</span>
+                                <input type="file" accept="image/*" onChange={banner.choose} style={{ display: 'none' }} disabled={uploadingBanner} />
+                            </label>
+                            {form.banner && !uploadingBanner && (
+                                <button type="button" className="pe-banner-edit" onClick={() => banner.adjust(form.banner, form.coverFrame)}>
+                                    <Move size={14} />
+                                    <span>{t('coverPhoto.position')}</span>
+                                </button>
+                            )}
+                        </div>
                         <div className="pe-banner-save-group">
                             <button onClick={handleSave} type="button" disabled={saving} className="pe-save-btn pe-banner-save-bies">
                                 {saving ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={14} />}
@@ -728,7 +753,7 @@ const ProfileEdit = () => {
                                 Banner URL
                                 <NostrIcon size={12} color="#8b5cf6" />
                             </label>
-                            <input type="url" value={form.banner} onChange={handleChange('banner')} className="pe-input pe-input-sm" placeholder="https://..." />
+                            <input type="url" value={form.banner} onChange={(e) => setForm(prev => ({ ...prev, banner: e.target.value, coverFrame: '' }))} className="pe-input pe-input-sm" placeholder="https://..." />
                         </div>
                     </div>
                 </div>
@@ -1148,11 +1173,12 @@ const ProfileEdit = () => {
 
             </div>
 
+            {banner.framer}
             {cropImage && (
                 <ImageCropModal
                     imageSrc={cropImage.src}
-                    aspect={cropImage.type === 'avatar' ? 1 : 16 / 5}
-                    shape={cropImage.type === 'avatar' ? 'round' : 'rect'}
+                    aspect={1}
+                    shape="round"
                     onCrop={handleCropConfirm}
                     onCancel={handleCropCancel}
                 />
@@ -1354,6 +1380,9 @@ const ProfileEdit = () => {
                     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
                     border: none;
                 }
+                /* Change and Position, side by side at the banner's top left */
+                .pe-banner-tools { position: absolute; top: 0.75rem; left: 0.75rem; z-index: 10; display: flex; gap: 0.35rem; }
+                .pe-banner-tools .pe-banner-edit { position: static; }
                 .pe-banner-save-group {
                     position: absolute;
                     top: 0.75rem;

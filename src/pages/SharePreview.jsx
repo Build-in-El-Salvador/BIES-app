@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone } from 'lucide-react';
 import { previewApi } from '../services/api';
-import { getAssetUrl } from '../utils/assets';
+import CoverPhoto from '../components/CoverPhoto';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
 import { formatDay } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
@@ -113,7 +113,7 @@ export default function SharePreview({ section }) {
                     <>
                         <div className="sp-cover">
                             {found.photo
-                                ? <img src={getAssetUrl(found.photo)} alt="" />
+                                ? <CoverPhoto src={found.photo} frame={found.coverFrame} />
                                 : <Fallback size={44} aria-hidden="true" />}
                             {isEvent && found.isOfficial && <span className="sp-cover-tag"><BiesTag /></span>}
                         </div>
@@ -222,7 +222,6 @@ export default function SharePreview({ section }) {
                     background: var(--color-gray-100); display: flex; align-items: center; justify-content: center;
                     color: var(--color-gray-400);
                 }
-                .sp-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
                 .sp-cover { position: relative; }
                 .sp-cover-tag { position: absolute; left: 12px; bottom: 12px; }
                 .sp-hosts { margin: 0 0 12px; font-size: 0.92rem; line-height: 1.45; color: var(--color-gray-600); }

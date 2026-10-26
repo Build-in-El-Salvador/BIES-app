@@ -17,6 +17,7 @@ import {
     hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
 } from '../services/eventPeople.service';
 import { listingsActedFor, runsListing } from './listingTeam.controller';
+import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export const createEventSchema = z.object({
     startDate: z.string().max(40), // More lenient, parse in controller
     endDate: z.string().max(40).optional(),
     thumbnail: z.string().max(2000).optional().or(z.literal('')),
+    coverFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
@@ -109,7 +111,7 @@ const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
     'location', 'locationName', 'locationAddress', 'locationMapUrl',
     'isOnline', 'onlineUrl', 'startDate', 'endDate',
-    'thumbnail', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'thumbnail', 'coverFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
 ] as const;
@@ -137,7 +139,7 @@ function eventCard(e: any, hidden: Set<string>) {
         id: e.id, title: e.title, category: e.category, visibility: e.visibility,
         startDate: e.startDate, endDate: e.endDate,
         location: e.location, locationName: e.locationName, isOnline: e.isOnline,
-        thumbnail: e.thumbnail, ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
+        thumbnail: e.thumbnail, coverFrame: e.coverFrame, ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
         isOfficial: !!hostListing?.isOfficial, isEndorsed: e.isEndorsed, hostId: e.hostId,
         host: e.host, hostListing,
         partners: partnersFor(e.partners || [], hidden),
@@ -509,6 +511,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         const shown = partnersFor(existing.partners, hidden);
 
         const data = eventData(body);
+        frameNewCover(data, 'thumbnail', existing.thumbnail);
         if (!hostSide) {
             // Co-hosts edit what the event is; its tickets and money, who hosts
             // it and who sees it stay with the host side. Unchanged copies pass.

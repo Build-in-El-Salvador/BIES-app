@@ -16,6 +16,7 @@ import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
 import BackButton from '../BackButton';
+import CoverPhoto from '../CoverPhoto';
 import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
 import TalentSummary from '../talent/TalentSummary';
 import { MAX_TALENTS } from '../talent/talentOptions';
@@ -206,7 +207,6 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
             {/* A strip of the cover; tap it for the whole picture. */}
             <div
                 className={`pv-cover${banner ? ' has-image' : ''}`}
-                style={banner ? { backgroundImage: `url(${getAssetUrl(banner)})` } : undefined}
                 {...(banner ? {
                     role: 'button',
                     tabIndex: 0,
@@ -215,6 +215,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     onKeyDown: (e) => { if (e.key === 'Enter') lightbox?.open(getAssetUrl(banner)); },
                 } : {})}
             >
+                {/* The part its member chose, when it's their BIES banner */}
+                {banner && <CoverPhoto src={banner} frame={profile.banner ? profile.coverFrame : ''} />}
                 {showBack && <BackButton overlay fallback="/members" />}
             </div>
 
@@ -483,8 +485,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     position: relative;
                     height: 150px;
                     background: linear-gradient(120deg, #0047AB, #0a192f);
-                    background-size: cover;
-                    background-position: center;
+                    overflow: hidden;
                 }
                 .pv-cover.has-image { cursor: zoom-in; }
                 .pv-sheet {

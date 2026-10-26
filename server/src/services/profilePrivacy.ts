@@ -56,7 +56,7 @@ const HIDDEN_AS: Record<'location' | 'links' | 'details', Record<string, unknown
 };
 
 // All a signed-out visitor gets, at most.
-const PUBLIC_FIELDS = ['id', 'userId', 'name', 'avatar', 'banner', 'title', 'company', 'bio', 'isPublic', 'createdAt'];
+const PUBLIC_FIELDS = ['id', 'userId', 'name', 'avatar', 'banner', 'coverFrame', 'title', 'company', 'bio', 'isPublic', 'createdAt'];
 
 /** Who is looking at a member's profile: themselves, another member, or anyone. */
 export function viewerFor(viewerId: string | null | undefined, memberId: string | null | undefined): Viewer {

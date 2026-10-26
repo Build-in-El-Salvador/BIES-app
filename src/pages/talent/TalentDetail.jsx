@@ -16,6 +16,8 @@ import ProofOfWork from '../../components/talent/ProofOfWork';
 import { coverOf } from '../../components/talent/talentOptions';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
+import CoverPhoto from '../../components/CoverPhoto';
+import { useLightbox } from '../../context/LightboxContext';
 import '../../components/moderation/Moderation.css';
 
 const sectionTitleStyle = {
@@ -36,6 +38,7 @@ const TalentDetail = () => {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const { user } = useAuth();
+    const lightbox = useLightbox();
 
     const [talent, setTalent] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -146,7 +149,12 @@ const TalentDetail = () => {
             {/* Hero — full-bleed on mobile, 760px rounded column on desktop */}
             <div className="tal-hero-wrap">
                 <div className={`tal-hero${cover ? '' : ' empty'}`}>
-                    {cover && <img src={getAssetUrl(cover)} alt="" className="tal-hero-img" />}
+                    {cover && (
+                        // Tap for all of it: the page shows the part its member chose.
+                        <button type="button" className="tal-hero-photo" onClick={() => lightbox.open(getAssetUrl(cover))} aria-label={talent.title}>
+                            <CoverPhoto src={cover} frame={cover === talent.photo ? talent.coverFrame : ''} />
+                        </button>
+                    )}
                     <BackButton fallback="/talents" overlay label={t('talent.back')} />
                 </div>
                 {/* Outside the photo's clipping, so the menu can open below it */}
@@ -340,12 +348,7 @@ const TalentDetail = () => {
                     aspect-ratio: auto;
                     height: 130px;
                 }
-                .tal-hero-img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    display: block;
-                }
+                .tal-hero-photo { position: absolute; top: 0; right: 0; bottom: 0; left: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
                 .tal-content {
                     max-width: 760px;
                     margin: 0 auto;
