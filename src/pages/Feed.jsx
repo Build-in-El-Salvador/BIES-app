@@ -12,6 +12,7 @@ import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
 import { notificationsApi, profilesApi, uploadApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
+import Avatar from '../components/Avatar';
 import NostrIcon from '../components/NostrIcon';
 import ZapModal from '../components/ZapModal';
 import EmojiPicker from '../components/EmojiPicker';
@@ -238,20 +239,29 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
 
     const currentView = EXPLORE_VIEWS.find(v => v.key === exploreView) || EXPLORE_VIEWS[0];
 
-    // Fetch own pubkey once on mount for reaction persistence and notifications
+    // My key, to show my likes, reposts and own posts: my BIES account's, at
+    // once. The signer only when there's no account key: a signer app (NIP-46)
+    // can take long to answer, or not answer at all, and nothing here may
+    // wait for it. Only for showing things; signing still goes through the signer.
+    const accountPubkey = user?.nostrPubkey || null;
     const myPubkeyRef = useRef(null);
     useEffect(() => {
-        nostrSigner.getPublicKey().then(pk => {
+        let cancelled = false;
+        const takeKey = (pk) => {
+            if (!pk || cancelled || myPubkeyRef.current === pk) return;
             setMyPubkey(pk);
             myPubkeyRef.current = pk;
-            if (pk && !fetchedProfiles.current.has(pk)) {
+            if (!fetchedProfiles.current.has(pk)) {
                 fetchedProfiles.current.add(pk);
                 nostrService.getProfile(pk).then(p => {
                     if (p) setProfiles(prev => ({ ...prev, [pk]: p }));
                 });
             }
-        }).catch(() => {});
-    }, []);
+        };
+        if (accountPubkey) takeKey(accountPubkey);
+        else nostrSigner.getPublicKey().then(takeKey).catch(() => {});
+        return () => { cancelled = true; };
+    }, [accountPubkey]);
 
     // Sort notes based on the current explore view
     const sortNotes = useCallback((notes, stats, viewKey) => {
@@ -310,10 +320,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             { kinds: [7, 6, 1, 5], '#e': ids, limit: 2000 },
             {
                 onevent: (event) => events.push(event),
-                oneose: async () => {
+                oneose: () => {
                     finished = true;
                     query.close();
-                    const me = myPubkeyRef.current || await nostrSigner.getPublicKey().catch(() => null);
+                    // Never waiting on the signer (see myPubkeyRef): the counts show
+                    // at once; my likes and reposts are marked when my key is known.
+                    const me = myPubkeyRef.current;
                     if (round !== countsRound.current) return;
                     const fresh = ids.filter(id => !(countsTouched.current.get(id) >= sentAt));
                     const { stats, liked, reposted, deleted } = tallyCounts(events, batch, me);
@@ -1667,11 +1679,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     <div className="primal-compose">
                         <div className="primal-compose-row">
                             <div className="primal-compose-avatar">
-                                {user?.profile?.avatar ? (
-                                    <img src={user.profile.avatar} alt="" />
-                                ) : (
-                                    <NostrIcon size={18} />
-                                )}
+                                <Avatar src={user?.profile?.avatar} size={40} fallback={<NostrIcon size={18} />} />
                             </div>
                             <textarea
                                 ref={composeInputRef}
@@ -1896,11 +1904,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                             {/* Reply compose */}
                                             <div className="primal-comment-compose">
                                                 <div className="primal-avatar primal-avatar-sm">
-                                                    {user?.profile?.avatar ? (
-                                                        <img src={user.profile.avatar} alt="" />
-                                                    ) : (
-                                                        <NostrIcon size={13} />
-                                                    )}
+                                                    <Avatar src={user?.profile?.avatar} size={28} fallback={<NostrIcon size={13} />} />
                                                 </div>
                                                 <div className="primal-comment-input-row">
                                                     <textarea

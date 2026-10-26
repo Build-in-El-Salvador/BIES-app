@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Search, RefreshCw, X, Award, Trash2, Plus, Minus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { adminApi, pointsApi } from '../../services/api';
+import { getAssetUrl } from '../../utils/assets';
 
 const RARITY_COLORS = { legendary: '#D97706', rare: '#7C3AED', uncommon: '#2563EB', common: '#64748B' };
 const POINT_REASONS = ['POST', 'REPLY', 'REACTION_GIVEN', 'REACTION_RECEIVED', 'QUALITY_BONUS', 'ADMIN_ADJUST'];
@@ -279,7 +280,7 @@ const AdminPoints = () => {
                                     <div key={u.id} className="user-option" onClick={() => selectUser(u)}>
                                         <div className="user-option-info">
                                             {u.profile?.avatar ? (
-                                                <img src={u.profile.avatar} alt="" className="user-option-avatar" />
+                                                <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
                                                     {(u.profile?.name || '?')[0].toUpperCase()}
@@ -304,7 +305,7 @@ const AdminPoints = () => {
                         <div className="selected-user">
                             <div className="user-option-info">
                                 {selectedUser.profile?.avatar ? (
-                                    <img src={selectedUser.profile.avatar} alt="" className="user-option-avatar big" />
+                                    <img src={getAssetUrl(selectedUser.profile.avatar)} alt="" className="user-option-avatar big" />
                                 ) : (
                                     <div className="user-option-avatar big placeholder">
                                         {(selectedUser.profile?.name || '?')[0].toUpperCase()}
@@ -530,7 +531,7 @@ const AdminPoints = () => {
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 {ev.user?.profile?.avatar ? (
-                                                    <img src={ev.user.profile.avatar} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                                                    <img src={getAssetUrl(ev.user.profile.avatar)} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                                                 ) : (
                                                     <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--color-gray-500)', flexShrink: 0 }}>
                                                         {(ev.user?.profile?.name || '?')[0].toUpperCase()}
