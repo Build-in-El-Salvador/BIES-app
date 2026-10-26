@@ -502,6 +502,8 @@ export const eventsApi = {
     rsvp: (id, status = 'GOING') => post(`/events/${id}/rsvp`, { status }),
 
     cancelRsvp: (id) => del(`/events/${id}/rsvp`),
+    // A co-host or sponsor's name off the event (theirs, or by whoever can edit it)
+    removePartner: (id, partnerId) => del(`/events/${id}/partners/${partnerId}`),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
 
@@ -650,6 +652,8 @@ export const adminApi = {
     featureDirectoryListing: (id, featured) => put(`/admin/directory/${id}/feature`, { featured }),
     recomputeDirectoryScores: () => post('/admin/directory/recompute', {}),
     deleteDirectoryListing: (id) => del(`/admin/directory/${id}`),
+    // BIES's own page: events hosted as it are BIES events
+    setListingOfficial: (id, official) => put(`/admin/directory/${id}/official`, { official }),
     listDirectoryTransfers: () => get('/admin/directory/transfers'),
     moveDirectoryListing: (id, userId) => post(`/admin/directory/${id}/owner`, { userId }),
     listCourses: (params = {}) => get('/admin/courses', params),

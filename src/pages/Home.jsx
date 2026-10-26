@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight } from 'lucide-react';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
+import { eventsApi } from '../services/api';
+import { getAssetUrl } from '../utils/assets';
+import { whenShort } from '../utils/eventFormat';
 import heroImage from '../assets/el-salvador-banner.png';
 import logo from '../assets/logo-icon.svg';
 // The brand kit's "Bies Icon dark background": snow letters, orange ring, no disc.
@@ -50,6 +54,18 @@ const TalentIcon = () => (
     </svg>
 );
 
+// A calendar page with an orange binding: what's coming up.
+const EventsIcon = () => (
+    <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
+        <rect x="6" y="10" width="36" height="32" rx="6" fill="currentColor" />
+        <path d="M6 18h36" stroke={ORANGE} strokeWidth="5" />
+        <path d="M15 5.5v8M33 5.5v8" stroke={ORANGE} strokeWidth="3.5" strokeLinecap="round" />
+        <rect x="13" y="25" width="7" height="6" rx="1.5" fill="#fff" />
+        <rect x="24" y="25" width="7" height="6" rx="1.5" fill="#fff" opacity="0.55" />
+        <rect x="13" y="33" width="7" height="5" rx="1.5" fill="#fff" opacity="0.55" />
+    </svg>
+);
+
 const OpportunityIcon = () => (
     <svg viewBox="0 0 48 48" aria-hidden="true" fill="none">
         <path d="M24 13a10.5 10.5 0 0 0-6.4 18.8c1.3 1 2.1 2.5 2.1 4.2h8.6c0-1.7.8-3.2 2.1-4.2A10.5 10.5 0 0 0 24 13z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
@@ -65,17 +81,31 @@ const OpportunityIcon = () => (
  * what it has there: no investments (config/appScope.js).
  */
 const Home = () => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { flags } = useFeatureFlags();
 
     const cards = [
         { key: 'community', to: '/members', Icon: CommunityIcon, tint: 'rgba(255, 91, 0, 0.10)' },
+        { key: 'events', to: '/events', Icon: EventsIcon, tint: 'rgba(124, 58, 237, 0.10)', flag: 'events' },
         { key: 'farms', to: '/farms', Icon: FarmIcon, tint: 'rgba(22, 163, 74, 0.10)', flag: 'directories' },
         { key: 'businesses', to: '/trusted', Icon: BusinessIcon, tint: 'rgba(0, 71, 171, 0.09)', flag: 'directories' },
         { key: 'talent', to: '/talents', Icon: TalentIcon, tint: 'rgba(14, 165, 233, 0.11)', flag: 'talent' },
         // Michael's idea: investments, businesses for sale, jobs, partnerships and programs.
         { key: 'opportunities', to: '/opportunities', Icon: OpportunityIcon, tint: 'rgba(245, 158, 11, 0.14)', flag: 'projects' },
     ].filter((card) => !card.flag || flags?.[card.flag]);
+
+    // The Events card also shows what's next, so Home changes as events come up.
+    const [upcoming, setUpcoming] = useState(null);
+    const eventsOn = !!flags?.events;
+    useEffect(() => {
+        if (!eventsOn) return undefined;
+        let cancelled = false;
+        eventsApi.list({ upcoming: 'true', limit: 50 })
+            .then((res) => { if (!cancelled) setUpcoming(res?.data || []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [eventsOn]);
+    const next = upcoming?.find((e) => new Date(e.startDate) > new Date()) || upcoming?.[0];
 
     return (
         <div className="home-page">
@@ -87,16 +117,34 @@ const Home = () => {
             </section>
 
             <nav className="home-cards" aria-label={t('home.title')}>
-                {cards.map(({ key, to, Icon, tint, desc }) => (
-                    <Link key={key} to={to} className="home-card">
-                        <span className="home-card-icon" style={{ background: tint }}><Icon /></span>
-                        <span className="home-card-text">
-                            <span className="home-card-title">{t(`home.cards.${key}.title`)}</span>
-                            <span className="home-card-desc">{t(desc || `home.cards.${key}.desc`)}</span>
-                        </span>
-                        <span className="home-card-go" aria-hidden="true"><ChevronRight size={20} strokeWidth={2.75} /></span>
-                    </Link>
-                ))}
+                {cards.map(({ key, to, Icon, tint, desc }) => {
+                    const top = (className) => (
+                        <Link key={key} to={to} className={className}>
+                            <span className="home-card-icon" style={{ background: tint }}><Icon /></span>
+                            <span className="home-card-text">
+                                <span className="home-card-title">{t(`home.cards.${key}.title`)}</span>
+                                <span className="home-card-desc">
+                                    {key === 'events' && next ? t('home.cards.events.upcoming', { count: upcoming.length }) : t(desc || `home.cards.${key}.desc`)}
+                                </span>
+                            </span>
+                            <span className="home-card-go" aria-hidden="true"><ChevronRight size={20} strokeWidth={2.75} /></span>
+                        </Link>
+                    );
+                    if (key !== 'events' || !next) return top('home-card');
+                    return (
+                        <div key={key} className="home-card home-card-events">
+                            {top('home-card-top')}
+                            <Link to={`/events/${next.id}`} state={{ preview: next }} className="home-next">
+                                <span className="home-next-photo">{next.thumbnail && <img src={getAssetUrl(next.thumbnail)} alt="" />}</span>
+                                <span className="home-next-text">
+                                    <span className="home-next-kicker">{next.isOfficial ? t('home.cards.events.nextBies') : t('home.cards.events.next')}</span>
+                                    <span className="home-next-title">{next.title}</span>
+                                    <span className="home-next-line">{[whenShort(next.startDate, i18n.language), next.isOnline ? t('events.card.online') : next.locationName].filter(Boolean).join(' · ')}</span>
+                                </span>
+                            </Link>
+                        </div>
+                    );
+                })}
             </nav>
 
             <style jsx>{`
@@ -203,6 +251,18 @@ const Home = () => {
                     color: var(--color-primary);
                 }
                 .home-card-desc { font-size: 0.86rem; line-height: 1.4; color: var(--color-gray-500); }
+                .home-cards :global(.home-card-events) { flex-direction: column; align-items: stretch; gap: 12px; }
+                .home-cards :global(.home-card-top) { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
+                .home-cards :global(.home-next) {
+                    display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 14px;
+                    background: var(--color-gray-50); text-decoration: none; color: inherit;
+                }
+                .home-next-photo { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; flex: none; background: var(--color-gray-100); }
+                .home-next-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .home-next-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+                .home-next-kicker { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-secondary); }
+                .home-next-title { font-family: var(--font-display); font-size: 1.15rem; line-height: 1.1; color: var(--color-gray-900); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+                .home-next-line { font-size: 0.8rem; color: var(--color-gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .home-card-go {
                     width: 34px;
                     height: 34px;

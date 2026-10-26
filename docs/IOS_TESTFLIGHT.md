@@ -250,7 +250,7 @@ Cowork check-in (`src/components/cowork/CheckInModal.jsx`) uses `navigator.geolo
 
 ### 5. Universal links
 
-Shared URLs (`/events/:id`, `/project/:id`) currently open in Safari, not the app. Plan: host an `apple-app-site-association` file on the production domain, add the Associated Domains capability (`applinks:YOUR-PROD-HOST`), and handle `appUrlOpen` from `@capacitor/app` (already a dependency) to route into React Router.
+Done: shared links to farms, businesses, talents, opportunities, events and Feed posts open the app (`public/.well-known/apple-app-site-association`, `applinks:app.buildinelsalvador.com`, `AppLinkListener` routes `appUrlOpen`). Without the app, or signed out, they show a preview (`SharePreview`). Android also needs `/.well-known/assetlinks.json` with the Play signing key.
 
 ### 6. Icon set + launch screen
 

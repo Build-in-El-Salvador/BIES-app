@@ -93,6 +93,7 @@ const Notifications = () => {
         try {
             const data = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
             if (typeof data?.link === 'string' && /^\/(?!\/)/.test(data.link)) return data.link;
+            if (notif.type === 'EVENT_RSVP' && data?.eventId) return `/events/${data.eventId}`;
             if (!notif.type?.startsWith('BOUNTY_')) return null;
             return data?.bountyId ? `/bounties/${data.bountyId}` : null;
         } catch {

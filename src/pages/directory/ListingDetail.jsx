@@ -7,9 +7,9 @@ import {
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
     Building2, MessageCircle, Navigation, Share2, Check, Bookmark, BookmarkCheck,
-    UserCheck, ArrowRightLeft,
+    UserCheck, ArrowRightLeft, BadgeCheck,
 } from 'lucide-react';
-import { directoryApi } from '../../services/api';
+import { adminApi, directoryApi } from '../../services/api';
 import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../../utils/detailCache';
 import { listingPage } from '../../utils/detailPages';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +19,7 @@ import ZapButton from '../../components/ZapButton';
 import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
 import RecommendedBy from '../../components/directory/RecommendedBy';
 import ListingTeam from '../../components/directory/ListingTeam';
+import ListingEvents from '../../components/directory/ListingEvents';
 import { OwnershipBanner, OwnershipSheet } from '../../components/directory/ListingOwnership';
 import { openExternal } from '../../utils/openExternal';
 import { isAppleDevice } from '../../utils/mapApps';
@@ -190,7 +191,15 @@ const ListingDetail = () => {
     const canClaim = !!user?.id && !isOwner && listing.status === 'active'
         && !transfers.some((tr) => tr.kind === 'claim' && tr.toUserId === user.id);
     const canMove = isStaff && !isOwner;
-    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate;
+    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate || isAdmin;
+    // BIES's own page (admins): events hosted as it are BIES events.
+    const toggleOfficial = async () => {
+        setShowMenu(false);
+        try {
+            await adminApi.setListingOfficial(listing.id, !listing.isOfficial);
+            fetchListing({ silent: true });
+        } catch { /* stays as it was */ }
+    };
     const openOwnership = (mode) => {
         setShowMenu(false);
         menuButtonRef.current?.focus({ preventScroll: true });
@@ -388,6 +397,11 @@ const ListingDetail = () => {
                                                     <ArrowRightLeft size={16} /> {t('directory.ownership.staffMenu')}
                                                 </button>
                                             )}
+                                            {isAdmin && (
+                                                <button type="button" role="menuitem" onClick={toggleOfficial}>
+                                                    <BadgeCheck size={16} /> {listing.isOfficial ? t('directory.official.unmark') : t('directory.official.mark')}
+                                                </button>
+                                            )}
                                             {canAdminEdit && (
                                                 <button type="button" role="menuitem" onClick={() => navigate(`${backPath}/${listing.id}/edit`)}>
                                                     <Edit3 size={16} /> {t('directory.adminEditMenu')}
@@ -504,6 +518,7 @@ const ListingDetail = () => {
 
                     <RecommendedBy listing={listing} titleStyle={sectionTitleStyle} />
                     <ListingTeam listing={listing} user={user} isAdmin={isAdmin} titleStyle={sectionTitleStyle} onChanged={() => fetchListing({ silent: true })} />
+                    <ListingEvents listing={listing} titleStyle={sectionTitleStyle} />
 
                     {photos.length > 0 && (
                         <section className="dir-detail-section">
