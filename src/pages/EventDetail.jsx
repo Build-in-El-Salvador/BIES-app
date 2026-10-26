@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    CalendarDays, CalendarPlus, MapPin, Video, Share2, Check, MoreHorizontal, Edit3, Trash2,
+    CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
     Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
@@ -196,39 +196,41 @@ const EventDetail = () => {
                         </button>
                     )}
                     <BackButton fallback="/events" overlay label={t('events.detail.back')} />
-                    <button type="button" className="ev-round share" onClick={share} aria-label={copied ? t('events.detail.copied') : t('events.detail.share')}>
-                        {copied ? <Check size={18} /> : <Share2 size={18} />}
-                    </button>
                     {event.isOfficial && <span className="ev-hero-tag"><BiesTag /></span>}
                 </div>
-                {hasMenu && (
-                    <div className="ev-hero-tools">
-                        {event.canEdit && (
-                            <Link to={`/events/edit/${event.id}`} className="ev-edit"><Edit3 size={15} /> {t('events.detail.edit')}</Link>
-                        )}
-                        <button ref={menuButton} type="button" className="ev-more" aria-label={t('events.detail.more')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+                <div className="ev-hero-tools">
+                    <button type="button" className="ev-tool" onClick={share} aria-label={copied ? t('events.detail.copied') : t('events.detail.share')}>
+                        {copied ? <Check size={18} /> : <Share size={18} />}
+                    </button>
+                    {hasMenu && (
+                        <button ref={menuButton} type="button" className="ev-tool" aria-label={t('events.detail.more')} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
                             <MoreHorizontal size={20} />
                         </button>
-                        {menu && (
-                            <>
-                                <div className="ev-menu-backdrop" onClick={() => setMenu(false)} />
-                                <div className="ev-menu" role="menu">
-                                    {event.myPartnerIds?.length > 0 && (
-                                        <button type="button" role="menuitem" onClick={takeNameOff}><UserMinus size={16} /> {t('events.detail.takeNameOff')}</button>
-                                    )}
-                                    {event.canDelete && (
-                                        <button type="button" role="menuitem" className="danger" onClick={() => { closeMenu(); setSheet('delete'); }}><Trash2 size={16} /> {t('events.detail.delete')}</button>
-                                    )}
-                                    {!event.canEdit && (
-                                        <button type="button" role="menuitem" onClick={() => { closeMenu(); openReport({ type: 'event', id: event.id }, { name: event.title, blockTarget: { userId: event.hostId } }); }}>
-                                            <Flag size={16} /> {t('events.detail.report')}
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
+                    )}
+                    {hasMenu && menu && (
+                        <>
+                            <div className="ev-menu-backdrop" onClick={() => setMenu(false)} />
+                            <div className="ev-menu" role="menu">
+                                {event.canEdit && (
+                                    <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate(`/events/edit/${event.id}`); }}>
+                                        <Edit3 size={16} /> {t('events.detail.edit')}
+                                    </button>
+                                )}
+                                {event.myPartnerIds?.length > 0 && (
+                                    <button type="button" role="menuitem" onClick={takeNameOff}><UserMinus size={16} /> {t('events.detail.takeNameOff')}</button>
+                                )}
+                                {event.canDelete && (
+                                    <button type="button" role="menuitem" className="danger" onClick={() => { closeMenu(); setSheet('delete'); }}><Trash2 size={16} /> {t('events.detail.delete')}</button>
+                                )}
+                                {!event.canEdit && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); openReport({ type: 'event', id: event.id }, { name: event.title, blockTarget: { userId: event.hostId } }); }}>
+                                        <Flag size={16} /> {t('events.detail.report')}
+                                    </button>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
 
             <div className="ev-body">
@@ -392,22 +394,12 @@ const EventDetail = () => {
                 .ev-hero-photo { position: absolute; inset: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
                 .ev-hero-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
                 .ev-hero :global(.bies-back) { position: absolute; left: 12px; top: 12px; z-index: 2; }
-                .ev-round {
-                    position: absolute; top: 12px; z-index: 2; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
-                    display: flex; align-items: center; justify-content: center;
-                    background: rgba(255, 255, 255, 0.95); color: #0F172A; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
-                }
-                .ev-round.share { right: 12px; }
                 .ev-hero-tag { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
                 .ev-hero-tools { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; }
-                .ev-hero-tools :global(.ev-edit) {
-                    display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 16px; border-radius: var(--radius-full);
-                    background: rgba(255, 255, 255, 0.95); color: #0F172A; font-weight: 600; font-size: 0.9rem; text-decoration: none;
-                    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
-                }
-                .ev-more {
-                    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer; background: rgba(255, 255, 255, 0.95);
-                    display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2); color: #0F172A;
+                .ev-tool {
+                    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+                    display: flex; align-items: center; justify-content: center;
+                    background: rgba(255, 255, 255, 0.95); color: #0F172A; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
                 }
                 .ev-menu-backdrop { position: fixed; inset: 0; z-index: 4; }
                 .ev-menu {
