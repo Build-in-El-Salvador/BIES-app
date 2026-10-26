@@ -664,7 +664,7 @@
         "free": "Gratis",
         "online": "En línea"
       },
-      "biesEvents": "Eventos BIES",
+      "biesEvents": "Eventos oficiales de BIES",
       "communityEvents": "Eventos de la comunidad",
       "none": "Aún no hay eventos próximos. ¿Organizas uno? Agrégalo aquí.",
       "noneFiltered": "No hay nada con este filtro.",
@@ -817,7 +817,13 @@
         "host_only": "Solo el anfitrión puede cambiar las entradas, los coorganizadores, los patrocinadores o quién puede ver el evento.",
         "official_listing": "Solo BIES puede agregar a BIES a un evento."
       },
-      "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión."
+      "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
+      "card": "Tarjeta destacada",
+      "cardHint": "Así se ve este evento de BIES en Eventos oficiales de BIES. Ajusta la portada para la tarjeta o usa otra foto.",
+      "cardTitle": "Ajusta la tarjeta destacada",
+      "cardOwnPhoto": "Usar otra foto",
+      "cardChange": "Cambiar foto",
+      "cardUseCover": "Usar la portada"
     },
     "kinds": {
       "NETWORKING": "Networking",

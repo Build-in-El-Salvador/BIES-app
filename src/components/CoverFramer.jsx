@@ -21,8 +21,11 @@ const ABOVE = 40;
  * @param {number} aspect - the outline's width / height
  * @param {(frame: string) => void} onDone - with the position to store
  * @param {() => void} onCancel
+ * @param {string} [title] - instead of "Position your cover"
+ * @param {string} [shade] - a CSS background the page lays over the photo (the
+ *   highlight card's words sit on one), drawn over the outline as there
  */
-export default function CoverFramer({ src, frame, aspect, onDone, onCancel }) {
+export default function CoverFramer({ src, frame, aspect, onDone, onCancel, title, shade }) {
     const { t } = useTranslation();
     const areaRef = useRef(null);
     const [outline, setOutline] = useState(null);
@@ -70,7 +73,7 @@ export default function CoverFramer({ src, frame, aspect, onDone, onCancel }) {
         <div className="cf-overlay" role="dialog" aria-modal="true" aria-labelledby="cf-title">
             <div className="cf-card">
                 <div className="cf-head">
-                    <h2 id="cf-title" className="cf-title">{t('coverPhoto.title')}</h2>
+                    <h2 id="cf-title" className="cf-title">{title || t('coverPhoto.title')}</h2>
                     <button type="button" className="cf-x" onClick={onCancel} aria-label={t('common.close')}><X size={20} /></button>
                 </div>
                 <p className="cf-hint">{t('coverPhoto.hint')}</p>
@@ -96,6 +99,7 @@ export default function CoverFramer({ src, frame, aspect, onDone, onCancel }) {
                                 onMediaLoaded={loaded}
                                 style={{ cropAreaStyle: { border: '2px solid #FFFFFF', color: 'rgba(15, 23, 42, 0.62)' } }}
                             />
+                            {shade && <span className="cf-shade" style={{ left: SIDE, top: ABOVE, width: outline.width, height: outline.height, background: shade }} aria-hidden="true" />}
                         </>
                     )}
                 </div>
@@ -137,6 +141,7 @@ export default function CoverFramer({ src, frame, aspect, onDone, onCancel }) {
                 .cf-hint { margin: 4px 20px 12px; font-size: 0.875rem; color: var(--color-gray-500); }
                 .cf-area { position: relative; width: 100%; height: 280px; background: #0F172A; overflow: hidden; }
                 .cf-backdrop { position: absolute; overflow: hidden; }
+                .cf-shade { position: absolute; pointer-events: none; }
                 .cf-backdrop img {
                     position: absolute; top: -10%; left: -10%; width: 120%; height: 120%; max-width: none;
                     object-fit: cover; filter: blur(20px) brightness(0.85); display: block;
@@ -160,9 +165,9 @@ export default function CoverFramer({ src, frame, aspect, onDone, onCancel }) {
  * onChange: the member positions the new photo before it uploads.
  * `adjust(src, frame)` positions the cover already there. Render `framer`
  * in the form. `onFramed({ file, frame })` gets the photo to upload (null
- * when adjusting) and the position to store.
+ * when adjusting) and the position to store. `options`: CoverFramer's title and shade.
  */
-export function useCoverFramer(aspect, onFramed) {
+export function useCoverFramer(aspect, onFramed, options = {}) {
     const [framing, setFraming] = useState(null); // { src, frame, file? }
     // A picked photo's copy is let go when it's done with, or the form goes.
     const open = useRef(null);
@@ -185,6 +190,8 @@ export function useCoverFramer(aspect, onFramed) {
             src={framing.src}
             frame={framing.frame}
             aspect={aspect}
+            title={options.title}
+            shade={options.shade}
             onCancel={close}
             onDone={(frame) => {
                 const file = framing.file || null;

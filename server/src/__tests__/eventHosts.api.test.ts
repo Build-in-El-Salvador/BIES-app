@@ -577,3 +577,53 @@ describe('a shared event, signed out', () => {
         }
     });
 });
+
+describe("a BIES event's highlight card", () => {
+    const COVER = '/uploads/public/1761400000000-0000000000000000000000000000c0e5.jpg';
+    const CARD = '/uploads/public/1761400000000-0000000000000000000000000000ca5d.jpg';
+    const FRAME = '10,0,50,62.5';
+
+    it("BIES's team gives its card another photo and a position; co-hosts can't change them", async () => {
+        const admin = await member({ admin: true });
+        const core = await member();
+        const cohost = await member();
+        const bies = await business(core, true, `Highlight Card House ${++counter}`);
+        await call('PUT', `/api/admin/directory/${bies}/official`, { token: admin.token, body: { official: true } });
+
+        const created = await event(core, { hostListingId: bies, thumbnail: COVER, cardImage: CARD, cardFrame: FRAME, partners: [{ role: 'COHOST', userId: cohost.id }] });
+        expect(created.status, JSON.stringify(created.body)).toBe(201);
+        expect(created.body).toMatchObject({ isOfficial: true, cardImage: CARD, cardFrame: FRAME });
+        const id = created.body.id;
+        const listed = (await call('GET', '/api/events?isOfficial=true&upcoming=true', { token: cohost.token })).body.data.find((e: any) => e.id === id);
+        expect(listed).toMatchObject({ cardImage: CARD, cardFrame: FRAME });
+
+        // The card is BIES's: a co-host edits the event, not its card.
+        const refused = await call('PUT', `/api/events/${id}`, { token: cohost.token, body: { cardFrame: '0,0,50,62.5' } });
+        expect(refused.status).toBe(403);
+        expect(refused.body).toMatchObject({ reason: 'host_only', field: 'cardFrame' });
+        expect((await call('PUT', `/api/events/${id}`, { token: cohost.token, body: { cardImage: COVER } })).status).toBe(403);
+        // A new cover leaves a card with its own photo as it is.
+        expect((await call('PUT', `/api/events/${id}`, { token: cohost.token, body: { thumbnail: '/uploads/public/1761400000000-00000000000000000000000000000c02.jpg' } })).status).toBe(200);
+        expect((await call('GET', `/api/events/${id}`, { token: core.token })).body).toMatchObject({ cardImage: CARD, cardFrame: FRAME });
+
+        expect((await call('PUT', `/api/events/${id}`, { token: core.token, body: { cardFrame: 'x' } })).status).toBe(400);
+        // Back to the cover: a different photo, so the card starts centred.
+        expect((await call('PUT', `/api/events/${id}`, { token: core.token, body: { cardImage: '' } })).status).toBe(200);
+        expect((await call('GET', `/api/events/${id}`, { token: core.token })).body).toMatchObject({ cardImage: '', cardFrame: '' });
+        // Positioned on the cover, then the cover changes: centred again.
+        await call('PUT', `/api/events/${id}`, { token: core.token, body: { cardFrame: FRAME } });
+        expect((await call('GET', `/api/events/${id}`, { token: core.token })).body.cardFrame).toBe(FRAME);
+        await call('PUT', `/api/events/${id}`, { token: cohost.token, body: { thumbnail: COVER } });
+        expect((await call('GET', `/api/events/${id}`, { token: core.token })).body.cardFrame).toBe('');
+    });
+
+    it('other events have no card, whatever the app sends', async () => {
+        const host = await member();
+        const own = await event(host, { thumbnail: COVER, cardImage: CARD, cardFrame: FRAME });
+        expect(own.status).toBe(201);
+        expect(own.body.cardImage).toBeUndefined();
+        await call('PUT', `/api/events/${own.body.id}`, { token: host.token, body: { cardImage: CARD, cardFrame: FRAME } });
+        const stored = await prisma.event.findUniqueOrThrow({ where: { id: own.body.id }, select: { cardImage: true, cardFrame: true } });
+        expect(stored).toEqual({ cardImage: '', cardFrame: '' });
+    });
+});

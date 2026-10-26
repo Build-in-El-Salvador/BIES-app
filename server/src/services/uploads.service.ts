@@ -88,7 +88,7 @@ const REFERENCES: [model: string, fields: string[]][] = [
     ['directoryListing', ['photo', 'logo', 'photos']],
     ['talentListing', ['photo', 'works']],
     ['albumPhoto', ['url']],
-    ['event', ['thumbnail', 'customSections']],
+    ['event', ['thumbnail', 'cardImage', 'customSections']],
     ['eventPartner', ['logo']],
     ['project', ['thumbnail', 'photos', 'deckKey', 'customSections', 'teamInfo']],
     ['projectUpdate', ['content']],

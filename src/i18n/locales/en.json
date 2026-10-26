@@ -664,7 +664,7 @@
         "free": "Free",
         "online": "Online"
       },
-      "biesEvents": "BIES events",
+      "biesEvents": "Official BIES Events",
       "communityEvents": "Community events",
       "none": "No events coming up yet. Hosting one? Add it here.",
       "noneFiltered": "Nothing here for this filter.",
@@ -817,7 +817,13 @@
         "host_only": "Only the host can change tickets, co-hosts, sponsors or who can see the event.",
         "official_listing": "Only BIES can add BIES to an event."
       },
-      "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host."
+      "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
+      "card": "Highlight card",
+      "cardHint": "How this BIES event shows under Official BIES Events. Position the cover for the card, or use another photo.",
+      "cardTitle": "Position the highlight card",
+      "cardOwnPhoto": "Use another photo",
+      "cardChange": "Change photo",
+      "cardUseCover": "Use the cover"
     },
     "kinds": {
       "NETWORKING": "Networking",
