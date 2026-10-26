@@ -3290,11 +3290,7 @@
       },
       "events": {
         "title": "Eventos",
-        "desc": "Eventos BIES y lo que organizan los miembros.",
-        "upcoming_one": "{{count}} próximo",
-        "upcoming_other": "{{count}} próximos",
-        "next": "Próximo",
-        "nextBies": "Próximo · Evento BIES"
+        "desc": "Eventos BIES y lo que organizan los miembros."
       }
     }
   },

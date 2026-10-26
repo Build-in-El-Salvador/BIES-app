@@ -3289,11 +3289,7 @@
       },
       "events": {
         "title": "Events",
-        "desc": "BIES events and what members are hosting.",
-        "upcoming_one": "{{count}} coming up",
-        "upcoming_other": "{{count}} coming up",
-        "next": "Next",
-        "nextBies": "Next · BIES event"
+        "desc": "BIES events and what members are hosting."
       }
     }
   },
