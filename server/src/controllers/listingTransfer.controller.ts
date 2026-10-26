@@ -64,8 +64,8 @@ async function moveListing(listingId: string, toUserId: string, decidedById: str
             data: { ownerId: toUserId, isOwnBusiness: true, memberUserId: null },
         }),
         prisma.directoryEndorsement.deleteMany({ where: { listingId, userId: toUserId } }),
-        // They run it now, so they aren't on its team.
-        prisma.listingTeamMember.deleteMany({ where: { listingId, userId: toUserId } }),
+        // A new runner starts with no team: the old one's people go with it.
+        prisma.listingTeamMember.deleteMany({ where: { listingId } }),
         prisma.listingTransfer.updateMany({
             where: { listingId, status: 'pending', ...(transferId ? { id: { not: transferId } } : {}) },
             data: { status: 'cancelled', decidedById, decidedAt: now },

@@ -11,8 +11,9 @@ import { z } from 'zod';
  * on the team can leave. Editing the listing stays with the member who runs
  * it.
  *
- * Who runs a listing: its owner when it's their own business (they added
- * it as theirs, or it was handed to them), or the member staff linked to it.
+ * Who runs a listing: the member staff linked to it when there is one;
+ * otherwise its owner when it's their own business (they added it as
+ * theirs, or it was handed to them).
  * A member who only recommended a business (added it as a customer) doesn't
  * run it, and can't put people on its team or host as it.
  */
@@ -28,7 +29,8 @@ type Runnable = { ownerId: string; memberUserId: string | null; isOwnBusiness: b
 
 /** Whether `userId` runs the listing (and so manages its team). */
 export function runsListing(listing: Runnable, userId: string): boolean {
-    return listing.memberUserId === userId || (listing.isOwnBusiness && listing.ownerId === userId);
+    if (listing.memberUserId) return listing.memberUserId === userId;
+    return listing.isOwnBusiness && listing.ownerId === userId;
 }
 
 const ACTIVE = { isBanned: false, deletedAt: null };
@@ -44,7 +46,7 @@ export async function listingsActedFor(userId: string) {
             ...LIVE,
             OR: [
                 { memberUserId: userId },
-                { isOwnBusiness: true, ownerId: userId },
+                { memberUserId: null, isOwnBusiness: true, ownerId: userId },
                 { team: { some: { userId } } },
             ],
             AND: [{ OR: [{ memberUserId: null, owner: ACTIVE }, { memberUser: ACTIVE }] }],

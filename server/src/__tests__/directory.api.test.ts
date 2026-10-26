@@ -175,11 +175,13 @@ describe('adding a business', () => {
         expect(own.body.reason).toBe('own_business');
     });
 
-    it('drops the vouch when the poster later marks it as their own business', async () => {
+    it("its poster can't later make a recommendation their own business; when staff do, the poster's vouch goes", async () => {
         const cora = await member();
+        const staff = await member({ role: 'ADMIN', admin: true });
         const id = await liveListing(cora);
         expect((await row(id)).vouchCount).toBe(1);
-        const edited = await call('PUT', `/api/directory/${id}`, { token: cora.token, body: { isOwnBusiness: true } });
+        expect((await call('PUT', `/api/directory/${id}`, { token: cora.token, body: { isOwnBusiness: true } })).status).toBe(403);
+        const edited = await call('PUT', `/api/directory/${id}`, { token: staff.token, body: { isOwnBusiness: true } });
         expect(edited.status).toBe(200);
         expect(await row(id)).toMatchObject({ vouchCount: 0, reputationScore: 0 });
     });
@@ -657,7 +659,7 @@ describe('handing a listing over', () => {
         const id = await liveListing(poster);
         const claimant = await member();
         const claim = await call('POST', `/api/directory/${id}/claim`, { token: claimant.token, body: {} });
-        const staff = await member({ admin: true });
+        const staff = await member({ role: 'ADMIN', admin: true });
         const closed = await call('POST', `/api/directory/transfers/${claim.body.id}/decline`, { token: staff.token });
         expect(closed.body.status).toBe('declined');
         expect((await row(id)).ownerId).toBe(poster.id);
@@ -732,7 +734,7 @@ describe('handing a listing over', () => {
         await call('POST', `/api/directory/${id}/claim`, { token: claimant.token, body: {} });
 
         expect((await call('POST', `/api/admin/directory/${id}/owner`, { token: claimant.token, body: { userId: claimant.id } })).status).toBe(403);
-        const staff = await member({ admin: true });
+        const staff = await member({ role: 'ADMIN', admin: true });
         const moved = await call('POST', `/api/admin/directory/${id}/owner`, { token: staff.token, body: { userId: runner.id } });
         expect(moved.status).toBe(200);
         expect(await row(id)).toMatchObject({ ownerId: runner.id, isOwnBusiness: true });
