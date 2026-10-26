@@ -19,6 +19,7 @@ import TranslatableText from '../../components/TranslatableText';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
 import Avatar from '../../components/Avatar';
+import CoverPhoto from '../../components/CoverPhoto';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
 import { daysLeft, formatDay, fullDollars, hasField, industryOf, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
@@ -268,7 +269,7 @@ const OpportunityDetail = () => {
                 >
                     {cover && (
                         <button type="button" className="od-hero-btn" onClick={() => lightbox.open(getAssetUrl(cover), photos.map(getAssetUrl))} aria-label={t('opportunities.photos')}>
-                            <img src={getAssetUrl(cover)} alt="" className="od-hero-img" />
+                            <CoverPhoto src={cover} frame={o.coverFrame} />
                         </button>
                     )}
                     <BackButton fallback="/opportunities" overlay label={t('opportunities.back')} />
@@ -520,6 +521,7 @@ const OpportunityDetail = () => {
                     outline-offset: 2px;
                 }
                 .od-hero-btn {
+                    position: relative;
                     display: block;
                     width: 100%;
                     height: 100%;
@@ -527,12 +529,6 @@ const OpportunityDetail = () => {
                     border: none;
                     background: none;
                     cursor: zoom-in;
-                }
-                .od-hero-img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
-                    display: block;
                 }
                 .od-content {
                     max-width: 760px;

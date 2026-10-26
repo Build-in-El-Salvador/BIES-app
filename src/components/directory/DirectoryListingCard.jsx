@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin, Phone, Leaf, Building2, Bitcoin, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Avatar from '../Avatar';
+import { focusOf, parseFrame } from '../../utils/coverFrame';
 import CertifiedBadge from './CertifiedBadge';
 import { prefetchDetail } from '../../utils/detailCache';
 import { listingPage } from '../../utils/detailPages';
@@ -58,6 +59,7 @@ const DirectoryListingCard = ({ listing, type = 'FARM' }) => {
                         src={photo}
                         alt={listing.name}
                         size={80}
+                        position={listing.photo ? focusOf(parseFrame(listing.coverFrame)) : undefined}
                         fallback={
                             <div className="dir-card-photo-fallback">
                                 <FallbackIcon size={28} />

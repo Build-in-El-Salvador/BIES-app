@@ -170,6 +170,7 @@ model Profile {
   bio          String   @default("")
   avatar       String   @default("")
   banner       String   @default("")
+  coverFrame   String   @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
   location     String   @default("")
   skills       String   @default("[]")  // JSON array
   website      String   @default("")
@@ -250,6 +251,7 @@ model Project {
   closesOn     String   @default("") @map("closes_on")
   closedAt     DateTime? @map("closed_at")
   thumbnail    String   @default("")      // the cover (its first photo), for older pages
+  coverFrame   String   @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
   deckKey      String?  @map("deck_key")
   requiresDeckApproval Boolean  @default(true) @map("requires_deck_approval")
   demoUrl      String   @default("") @map("demo_url")
@@ -467,6 +469,7 @@ model Event {
   startDate   DateTime @map("start_date")
   endDate     DateTime? @map("end_date")
   thumbnail   String   @default("")
+  coverFrame  String   @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
   ticketUrl   String   @default("") @map("ticket_url")
   maxAttendees Int?    @map("max_attendees")
   priceSats   Int?     @map("price_sats") // null/0 = free (RSVP-only)
@@ -994,6 +997,7 @@ model DirectoryListing {
   hours     String @default("")            // opening hours, free text
   about     String @default("")
   photo     String @default("")            // hero + card thumbnail
+  coverFrame String @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
   logo      String @default("")            // circular overlay logo
   photos    String @default("[]")
   location  String @default("")
@@ -1071,6 +1075,7 @@ model TalentListing {
   btcAccepted Boolean  @default(false) @map("btc_accepted")
   languages   String   @default("[]")
   photo       String   @default("")                      // cover (the app falls back to the first work's photo)
+  coverFrame  String   @default("") @map("cover_frame") // how the cover shows on its page: "x,y,w,h" in % of the photo (utils/coverFrame.js)
   // Proof of work, JSON: [{ title, details, link, year, photos: [] }]
   works       String   @default("[]")
   whatsapp    String   @default("")

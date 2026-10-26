@@ -3545,5 +3545,13 @@
       "name": "Nombre (A–Z)",
       "followers": "Más seguidores"
     }
+  },
+  "coverPhoto": {
+    "title": "Ajusta tu portada",
+    "hint": "Arrastra la foto para moverla. Aléjala para mostrarla completa.",
+    "zoom": "Zoom",
+    "cancel": "Cancelar",
+    "done": "Listo",
+    "position": "Ajustar"
   }
 }

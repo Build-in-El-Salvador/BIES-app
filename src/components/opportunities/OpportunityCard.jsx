@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MapPin, Clock } from 'lucide-react';
 import Avatar from '../Avatar';
+import { focusOf, parseFrame } from '../../utils/coverFrame';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { daysLeft, isOpen, summaryOf } from './opportunityOptions';
 import TypeBadge, { styleOf } from './TypeBadge';
@@ -44,7 +45,7 @@ const OpportunityCard = ({ opportunity }) => {
         >
             <div className={`opp-card${open ? '' : ' closed'}`}>
                 <div className="opp-card-photo" style={{ background: tint, color }}>
-                    <Avatar src={o.thumbnail} size={80} fallback={<Icon size={28} aria-hidden="true" />} />
+                    <Avatar src={o.thumbnail} size={80} fallback={<Icon size={28} aria-hidden="true" />} position={focusOf(parseFrame(o.coverFrame))} />
                 </div>
 
                 <div className="opp-card-info">

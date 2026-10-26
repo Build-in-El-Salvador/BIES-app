@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video } from 'lucide-react';
+import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { getAssetUrl } from '../utils/assets';
 import { fromFormFields, toFormFields } from '../utils/eventFormat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
 import PartnerPicker from '../components/events/PartnerPicker';
+import CoverPhoto from '../components/CoverPhoto';
+import { useCoverFramer } from '../components/CoverFramer';
+import { COVER_ASPECT } from '../utils/coverFrame';
 
 /**
  * Adding or editing an event (/events/create, /events/edit/:id). Who hosts
@@ -25,7 +27,7 @@ const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl'];
 
 const EMPTY = {
-    hostListingId: '', thumbnail: '', title: '', category: 'NETWORKING', description: '',
+    hostListingId: '', thumbnail: '', coverFrame: '', title: '', category: 'NETWORKING', description: '',
     startDate: '', startTime: '19:00', endDate: '', endTime: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
     ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
@@ -82,7 +84,7 @@ export default function EventForm() {
             const start = toFormFields(e.startDate);
             const end = toFormFields(e.endDate);
             setForm({
-                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', title: e.title || '',
+                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
                 online: !!e.isOnline, locationName: e.locationName || '', locationAddress: e.locationAddress || '',
@@ -121,7 +123,7 @@ export default function EventForm() {
                 ...(data.isOnline !== undefined && { online: !!data.isOnline }),
                 ...(data.onlineUrl && { onlineUrl: data.onlineUrl }),
                 ticketUrl: data.ticketUrl || data.sourceUrl || f.ticketUrl,
-                ...(data.thumbnail && { thumbnail: data.thumbnail }),
+                ...(data.thumbnail && { thumbnail: data.thumbnail, coverFrame: '' }),
             }));
             setImported(true);
             setImportUrl('');
@@ -132,21 +134,20 @@ export default function EventForm() {
         }
     };
 
-    const uploadCover = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    // A new cover is positioned, then uploaded; the one there can be positioned again.
+    const cover = useCoverFramer(COVER_ASPECT.event, async ({ file, frame }) => {
+        if (!file) { setForm((f) => ({ ...f, coverFrame: frame })); return; }
         setUploading(true);
         setError('');
         try {
             const res = await uploadApi.media(file);
-            setForm((f) => ({ ...f, thumbnail: res.url }));
+            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame }));
         } catch (err) {
             setError(err?.message || t('events.form.failed'));
         } finally {
             setUploading(false);
-            e.target.value = '';
         }
-    };
+    });
 
     const submit = async (e) => {
         e.preventDefault();
@@ -172,6 +173,7 @@ export default function EventForm() {
             locationAddress: form.online ? '' : form.locationAddress.trim(),
             locationMapUrl: form.online ? '' : withHttps(form.locationMapUrl),
             thumbnail: form.thumbnail,
+            coverFrame: form.thumbnail ? form.coverFrame : '',
             ticketUrl: withHttps(form.ticketUrl),
             bitcoinUrl: withHttps(form.bitcoinUrl),
             priceLabel: form.priceLabel.trim(),
@@ -240,20 +242,28 @@ export default function EventForm() {
             <section className="ef-group">
                 <span className="ef-label">{t('events.form.cover')}</span>
                 {form.thumbnail ? (
-                    <div className="ef-cover">
-                        <img src={getAssetUrl(form.thumbnail)} alt="" />
-                        <div className="ef-cover-tools">
-                            <label className="ef-small-btn">{t('events.form.changeCover')}<input type="file" accept="image/*" hidden onChange={uploadCover} /></label>
-                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '' }))}>{t('events.form.removeCover')}</button>
+                    <>
+                        {/* As the event's page shows it, its buttons below so they hide none of it */}
+                        <div className="ef-cover">
+                            <CoverPhoto src={form.thumbnail} frame={form.coverFrame} />
+                            {uploading && <span className="ef-cover-busy"><Loader2 size={22} className="ef-spin" /></span>}
                         </div>
-                    </div>
+                        <div className="ef-cover-tools">
+                            <button type="button" className="ef-small-btn quiet" onClick={() => cover.adjust(form.thumbnail, form.coverFrame)} disabled={uploading}>
+                                <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
+                            </button>
+                            <label className="ef-small-btn">{t('events.form.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
+                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '' }))}>{t('events.form.removeCover')}</button>
+                        </div>
+                    </>
                 ) : (
                     <label className="ef-cover-empty">
                         {uploading ? <Loader2 size={22} className="ef-spin" /> : <ImagePlus size={22} />}
                         <span>{uploading ? t('events.form.uploading') : t('events.form.addCover')}</span>
-                        <input type="file" accept="image/*" hidden onChange={uploadCover} />
+                        <input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} />
                     </label>
                 )}
+                {cover.framer}
                 <label className="ef-label" htmlFor="ef-title">{t('events.form.title')}</label>
                 <input id="ef-title" className="ef-input" maxLength={200} placeholder={t('events.form.titlePlaceholder')} value={form.title} onChange={set('title')} />
                 <label className="ef-label" htmlFor="ef-kind">{t('events.form.category')}</label>
@@ -381,11 +391,12 @@ export default function EventForm() {
                 }
                 .ef-small-btn.quiet { background: rgba(255, 255, 255, 0.92); color: var(--color-gray-900); }
                 .ef-small-btn:disabled { opacity: 0.5; cursor: default; }
-                .ef-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 9; background: var(--color-gray-100); }
-                .ef-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-                .ef-cover-tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }
+                .ef-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .ef-cover-busy { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
+                .ef-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+                .ef-cover-tools .ef-small-btn.quiet { border: 1px solid var(--color-gray-300); background: var(--color-surface); }
                 .ef-cover-empty {
-                    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 16 / 9; cursor: pointer;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 16 / 10; cursor: pointer;
                     border: 1.5px dashed var(--color-gray-300); border-radius: 14px; color: var(--color-gray-500); font-size: 0.9rem; font-weight: 600;
                 }
                 .ef-two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }

@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, AlertCircle, X, Trash2, Bitcoin, ImagePlus, Star, FileText, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, X, Trash2, Bitcoin, ImagePlus, Star, FileText, ChevronRight, Move } from 'lucide-react';
 import { projectsApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import BackButton from '../../components/BackButton';
+import CoverPhoto from '../../components/CoverPhoto';
+import { useCoverFramer } from '../../components/CoverFramer';
+import { COVER_ASPECT } from '../../utils/coverFrame';
 import { getAssetUrl } from '../../utils/assets';
 import TypeBadge, { TYPE_STYLE, styleOf } from '../../components/opportunities/TypeBadge';
 import {
@@ -69,6 +72,9 @@ const OpportunityForm = ({ editMode = false }) => {
     const [type, setType] = useState(() => (TYPES.includes(params.get('type')) ? params.get('type') : ''));
     const [form, setForm] = useState(emptyForm);
     const [photos, setPhotos] = useState([]);
+    // How the cover (the first photo) shows on the page, and which photo that was:
+    // another photo first starts centred.
+    const [coverFrame, setCoverFrame] = useState({ url: '', frame: '' });
     const [hasDeck, setHasDeck] = useState(false);
     const [deckFile, setDeckFile] = useState(null);
     // Its closing day as it was: one that has passed can stay, but not be set now.
@@ -127,7 +133,9 @@ const OpportunityForm = ({ editMode = false }) => {
                         websiteUrl: o.websiteUrl || '',
                         requiresDeckApproval: o.requiresDeckApproval !== false,
                     });
-                    setPhotos((Array.isArray(o.photos) && o.photos.length ? o.photos : [o.thumbnail]).filter(Boolean));
+                    const saved = (Array.isArray(o.photos) && o.photos.length ? o.photos : [o.thumbnail]).filter(Boolean);
+                    setPhotos(saved);
+                    setCoverFrame({ url: saved[0] || '', frame: o.coverFrame || '' });
                     setHasDeck(!!o.hasDeck);
                     setSavedClosesOn(o.closesOn || '');
                     // Posted, but its pitch deck didn't upload (handleSubmit).
@@ -196,6 +204,9 @@ const OpportunityForm = ({ editMode = false }) => {
     };
     const removePhoto = (url) => setPhotos((prev) => prev.filter((p) => p !== url));
     const makeCover = (url) => setPhotos((prev) => [url, ...prev.filter((p) => p !== url)]);
+    const cover = photos[0] || '';
+    const frame = coverFrame.url === cover ? coverFrame.frame : '';
+    const framer = useCoverFramer(COVER_ASPECT.opportunity, ({ frame: chosen }) => setCoverFrame({ url: cover, frame: chosen }));
 
     // ─── Submit ───────────────────────────────────────────────────────────────
     const money = (name) => parseDollars(form[name]);
@@ -209,6 +220,7 @@ const OpportunityForm = ({ editMode = false }) => {
             location: form.location.trim(),
             closesOn: form.closesOn,
             photos,
+            coverFrame: frame,
             whatsapp: form.whatsapp.trim(),
             email: form.email.trim(),
             websiteUrl: asWebLink(form.websiteUrl),
@@ -576,6 +588,16 @@ const OpportunityForm = ({ editMode = false }) => {
                     <div className="of-card">
                         <h3 className="of-card-heading">{t('opportunities.photos')}</h3>
                         <p className="of-hint" style={{ marginTop: 0, marginBottom: '0.9rem' }}>{t('opportunities.form.photosHint', { max: MAX_PHOTOS })}</p>
+                        {cover && (
+                            // The cover as the page shows it
+                            <div className="of-cover-preview">
+                                <CoverPhoto src={cover} frame={frame} />
+                                <button type="button" className="of-cover-position" onClick={() => framer.adjust(cover, frame)} disabled={isBusy}>
+                                    <Move size={15} /> {t('coverPhoto.position')}
+                                </button>
+                            </div>
+                        )}
+                        {framer.framer}
                         <div className="of-photo-grid">
                             {photos.map((url, i) => (
                                 <div key={url} className={`of-photo-thumb${i === 0 ? ' cover' : ''}`}>
@@ -973,6 +995,33 @@ const FormStyles = () => (
             opacity: 0;
             pointer-events: none;
         }
+        .opportunity-form-page .of-cover-preview {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+            border-radius: var(--radius-lg);
+            background: var(--color-gray-100);
+        }
+        .opportunity-form-page .of-cover-position {
+            position: absolute;
+            right: 0.75rem;
+            bottom: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            height: 34px;
+            padding: 0 12px;
+            border: none;
+            border-radius: var(--radius-md);
+            background: var(--color-surface);
+            color: var(--color-gray-900);
+            font-weight: 600;
+            font-size: 0.8rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+        }
+        .opportunity-form-page .of-cover-position:disabled { opacity: 0.5; cursor: default; }
         .opportunity-form-page .of-photo-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
