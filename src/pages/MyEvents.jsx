@@ -281,9 +281,12 @@ const ActionMenu = ({ event, onDelete, onVisibilityChange, onCopyLink, onViewTic
                                         <Ticket size={15} /> Tickets
                                     </button>
                                 )}
-                                <button className="ctx-item" onClick={() => { setShowVisibility(true); }}>
-                                    <Globe size={15} /> Change Visibility
-                                </button>
+                                {/* A member's meetup is open to every member. */}
+                                {!event.stage && (
+                                    <button className="ctx-item" onClick={() => { setShowVisibility(true); }}>
+                                        <Globe size={15} /> Change Visibility
+                                    </button>
+                                )}
                                 {(event.visibility === 'PRIVATE' || event.visibility === 'INVITE_ONLY') && (
                                     <button className="ctx-item ctx-copy" onClick={() => { close(); onCopyLink(event.id); }}>
                                         <Copy size={15} /> Copy Event Link

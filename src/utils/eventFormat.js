@@ -80,6 +80,17 @@ export function fromFormFields(date, time) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * An end time on the start's day that's earlier than the start: after
+ * midnight, the next day, when that's up to 12 hours on. Otherwise as it was
+ * (so 13:00 to 12:00 stays wrong and is caught as ending before it starts).
+ */
+export function endAfterMidnight(startIso, endIso) {
+    if (!startIso || !endIso || endIso >= startIso) return endIso;
+    const next = new Date(endIso).getTime() + 86400_000;
+    return next - new Date(startIso).getTime() <= 12 * 3600_000 ? new Date(next).toISOString() : endIso;
+}
+
 const PROVIDERS = [
     [/(^|\.)lu\.ma$|(^|\.)luma\.com$/, 'Luma'],
     [/(^|\.)pretix\.(eu|com)$|^pretix\./, 'pretix'],

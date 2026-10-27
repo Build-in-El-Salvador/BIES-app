@@ -75,17 +75,17 @@ async function call(method: string, url: string, { token, body }: { token?: stri
 
 type Member = { id: string; token: string; name: string };
 let counter = 0;
-async function member(name = ''): Promise<Member> {
+async function member(name = '', admin = false): Promise<Member> {
     const shown = name || `Member ${++counter}`;
     const user = await prisma.user.create({
         data: {
             nostrPubkey: getPublicKey(generateSecretKey()),
-            role: 'MEMBER', termsVersion: '2026-10', termsAcceptedAt: new Date(),
+            role: 'MEMBER', isAdmin: admin, termsVersion: '2026-10', termsAcceptedAt: new Date(),
             profile: { create: { name: shown } },
         },
     });
     const session = await createSession(user.id, 'native');
-    return { id: user.id, name: shown, token: signAccessToken({ id: user.id, role: 'MEMBER', isAdmin: false }, session.sessionId) };
+    return { id: user.id, name: shown, token: signAccessToken({ id: user.id, role: 'MEMBER', isAdmin: admin }, session.sessionId) };
 }
 
 /** A restaurant on BIES, recommended by a member. */
@@ -535,5 +535,128 @@ describe('its proposer calling it off', () => {
         expect(note?.title).toMatch(/^Called off: "Lunch \d+"$/);
         expect(JSON.parse(note!.data).eventId).toBeUndefined();
         expect(await prisma.notification.count({ where: { userId: host.id, title: { startsWith: 'Called off' } } })).toBe(0);
+    });
+});
+
+/** What the propose form sends on an edit that leaves the place alone. */
+async function formEdit(host: Member, id: string, changes: Record<string, unknown> = {}) {
+    const e = (await call('GET', `/api/events/${id}`, { token: host.token })).body;
+    return call('PUT', `/api/events/${id}`, {
+        token: host.token,
+        body: {
+            title: e.title, description: e.description || '', category: 'MEETUP', startDate: e.startDate, endDate: null,
+            isOnline: false, locationMapUrl: e.locationMapUrl || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
+            minAttendees: e.minAttendees, decideBy: e.decideBy, maxAttendees: e.maxAttendees ?? null, priceLabel: '', ...changes,
+        },
+    });
+}
+
+describe('second pass', () => {
+    it('keeps a tag to a place that is not live while the meetup is edited, and tells no one', async () => {
+        const host = await member();
+        const a = await member();
+        const venue = await restaurant(host);
+        const id = (await propose(host, { venueListingId: venue })).body.id;
+        await join(a, id);
+        await prisma.directoryListing.update({ where: { id: venue }, data: { isPublished: false } });
+        const seen = (await call('GET', `/api/events/${id}`, { token: host.token })).body;
+        expect(seen.venueListing).toBeNull();
+        expect(seen.venueListingId).toBe(venue);
+        // Only who can edit sees it.
+        expect((await call('GET', `/api/events/${id}`, { token: a.token })).body.venueListingId).toBeUndefined();
+        expect((await formEdit(host, id, { title: 'Steak lunch, take two' })).status).toBe(200);
+        const row = await prisma.event.findUnique({ where: { id } });
+        expect(row).toMatchObject({ venueListingId: venue, title: 'Steak lunch, take two' });
+        expect(row!.locationAddress).toBe('San Salvador');
+        expect(await told(a.id, id, 'Changed')).toBe(0);
+    });
+
+    it('tagging the business it was at already is not a move', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host, { locationName: 'Cafe Cuscatlan', location: 'Cafe Cuscatlan' })).body.id;
+        await join(a, id);
+        const venue = await restaurant(host, { name: 'Café Cuscatlán' });
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: venue } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.venueListingId).toBe(venue);
+        expect(await told(a.id, id, 'Changed')).toBe(0);
+        // Somewhere else is.
+        const other = await restaurant(host);
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: other } });
+        expect(await told(a.id, id, 'Changed')).toBe(1);
+        // So is another branch with the same name.
+        const branch = await restaurant(host, { name: (await prisma.directoryListing.findUnique({ where: { id: other } }))!.name, location: 'Santa Tecla', notADuplicate: true });
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: branch } });
+        expect(await told(a.id, id, 'Changed')).toBe(2);
+    });
+
+    it('untagging on an edit takes the tag off', async () => {
+        const host = await member();
+        const venue = await restaurant(host);
+        const id = (await propose(host, { venueListingId: venue })).body.id;
+        const name = (await prisma.event.findUnique({ where: { id } }))!.locationName;
+        // What the form sends after X on the tag, the name left as it was.
+        expect((await formEdit(host, id, { location: name, locationName: name, locationAddress: '', venueListingId: null, thumbnail: '' })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.venueListingId).toBeNull();
+    });
+
+    it('a meetup that has happened is deleted without telling anyone it was called off, and cannot be called off', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host, { minAttendees: 2 })).body.id;
+        await join(a, id);
+        await prisma.event.update({ where: { id }, data: { startDate: new Date(Date.now() - 86400_000), decideBy: new Date(Date.now() - 2 * 86400_000) } });
+        const off = await call('POST', `/api/events/${id}/call-off`, { token: host.token });
+        expect(off.status).toBe(400);
+        expect(off.body.reason).toBe('started');
+        expect((await call('DELETE', `/api/events/${id}`, { token: host.token })).status).toBe(200);
+        expect(await told(a.id, id, 'Called off')).toBe(0);
+    });
+
+    it('the proposer cannot drop out by answering the RSVP either', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        for (const status of ['NOT_GOING', 'INTERESTED']) {
+            const res = await call('POST', `/api/events/${id}/rsvp`, { token: host.token, body: { status } });
+            expect(res.status).toBe(400);
+            expect(res.body.reason).toBe('proposer_stays');
+        }
+        expect((await join(host, id)).status).toBe(200);
+    });
+
+    it('when BIES calls it off, the proposer is not told they did', async () => {
+        const host = await member();
+        const admin = await member('Admin', true);
+        const id = (await propose(host)).body.id;
+        expect((await call('POST', `/api/events/${id}/call-off`, { token: admin.token })).status).toBe(200);
+        expect((await lastNote(host.id, 'Called off'))?.body).toBe('It was called off.');
+    });
+
+    it('an edit that leaves the numbers alone is fine just after the deadline', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        await prisma.event.update({ where: { id }, data: { decideBy: new Date(Date.now() - 60_000) } });
+        expect((await formEdit(host, id, { title: 'New name' })).status).toBe(200);
+        // Moving it still checks the deadline.
+        expect((await formEdit(host, id, { startDate: inDays(11) })).body.reason).toBe('decide_by_past');
+    });
+
+    it('stays open to every member, on no business', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { visibility: 'DRAFT' } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))).toMatchObject({ visibility: 'PUBLIC', isPublished: true });
+        expect((await join(await member(), id)).status).toBe(200);
+    });
+
+    it('a repeated filter or a bad end time is a clean answer, not a crash', async () => {
+        const host = await member();
+        const venue = await restaurant(host);
+        expect((await call('GET', `/api/events?atListingId=${venue}&atListingId=${venue}`, { token: host.token })).status).toBe(200);
+        expect((await propose(host, { endDate: 'soon' })).body.reason).toBe('end_invalid');
+        const id = (await propose(host, { endDate: inDays(10, 2) })).body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { endDate: 'later' } })).body.reason).toBe('end_invalid');
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { endDate: '' } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.endDate).toBeNull();
     });
 });

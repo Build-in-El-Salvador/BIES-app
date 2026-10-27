@@ -216,7 +216,9 @@ const EventDetail = () => {
     const inList = [...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))];
     const inLine = inList.length === 1 && isGoing ? t('events.proposals.firstIn')
         : inList.length ? t('events.proposals.whoIn', { names: namesText(inList, t), count: inList.length }) : '';
-    const byProposer = event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy);
+    // Called off by its proposer: once it was on, or before the deadline (the deadline itself is the other way).
+    const byProposer = !!event.confirmedAt || (event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy));
+    const started = new Date(event.startDate).getTime() <= Date.now();
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -253,7 +255,7 @@ const EventDetail = () => {
                                         <Edit3 size={16} /> {t('events.detail.edit')}
                                     </button>
                                 )}
-                                {event.canDelete && (stage === 'proposed' || stage === 'on') && (
+                                {event.canDelete && (stage === 'proposed' || stage === 'on') && !started && (
                                     <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOff'); }}>
                                         <Ban size={16} /> {t('events.proposals.callOff')}
                                     </button>
@@ -406,8 +408,9 @@ const EventDetail = () => {
                         title={t('events.detail.about')}
                         titleStyle={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-gray-500)' }}
                         text={event.description}
-                        isHtml
-                        className="ev-about rich-text-content"
+                        // A member's meetup: plain text, as typed (its line breaks kept).
+                        isHtml={!stage}
+                        className={stage ? 'ev-about ev-about-text' : 'ev-about rich-text-content'}
                     />
                 )}
 
@@ -599,6 +602,7 @@ const EventDetail = () => {
                 .ev-person-list { display: flex; flex-direction: column; gap: 8px; }
                 .ev-sponsors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
                 .ev-body :global(.ev-about) { margin: 0; }
+                .ev-body :global(.ev-about-text) { white-space: pre-line; overflow-wrap: anywhere; color: var(--color-gray-700); line-height: 1.6; }
                 .ev-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 8px; }
                 .ev-photos button { border: 0; padding: 0; border-radius: 12px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; background: var(--color-gray-100); }
                 .ev-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
