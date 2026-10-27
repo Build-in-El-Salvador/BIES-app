@@ -584,6 +584,20 @@ describe('second pass', () => {
         const other = await restaurant(host);
         await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: other } });
         expect(await told(a.id, id, 'Changed')).toBe(1);
+        // So is another branch with the same name.
+        const branch = await restaurant(host, { name: (await prisma.directoryListing.findUnique({ where: { id: other } }))!.name, location: 'Santa Tecla', notADuplicate: true });
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: branch } });
+        expect(await told(a.id, id, 'Changed')).toBe(2);
+    });
+
+    it('untagging on an edit takes the tag off', async () => {
+        const host = await member();
+        const venue = await restaurant(host);
+        const id = (await propose(host, { venueListingId: venue })).body.id;
+        const name = (await prisma.event.findUnique({ where: { id } }))!.locationName;
+        // What the form sends after X on the tag, the name left as it was.
+        expect((await formEdit(host, id, { location: name, locationName: name, locationAddress: '', venueListingId: null, thumbnail: '' })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.venueListingId).toBeNull();
     });
 
     it('a meetup that has happened is deleted without telling anyone it was called off, and cannot be called off', async () => {

@@ -731,9 +731,11 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         if (data.minAttendees !== undefined) await confirmIfReached(event.id).catch(() => false);
         // A meetup's people hear when it moves, or changes place.
         const moved = data.startDate !== undefined && data.startDate.getTime() !== existing.startDate.getTime();
-        // Somewhere else, by name: tagging the business it was at already isn't a move.
+        // Somewhere else: another business, or another name. Tagging the
+        // business it was at already (typed in before) isn't a move.
         const placeName = (name?: string | null) => (name || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-        const elsewhere = placeName(event.locationName) !== placeName(existing.locationName);
+        const retagged = !!existing.venueListingId && !!event.venueListingId && existing.venueListingId !== event.venueListingId;
+        const elsewhere = retagged || placeName(event.locationName) !== placeName(existing.locationName);
         if (stageBefore && stageBefore !== 'calledOff' && (moved || elsewhere)) {
             await tellPeopleIn(event.id, event.hostId, {
                 title: `Changed: "${event.title}"`,

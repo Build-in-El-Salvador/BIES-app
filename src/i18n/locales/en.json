@@ -946,8 +946,7 @@
         "venue_not_found": "That business isn't on BIES any more.",
         "too_many_proposals": "You have {{count}} proposed meetups open. Wait until one is on or called off, or delete one.",
         "start_invalid": "Pick when it starts.",
-        "end_invalid": "Pick when it ends.",
-        "started": "It has started already."
+        "end_invalid": "Pick when it ends."
       },
       "doneTitle": "Your meetup is posted",
       "doneHint": "Members see it in Events under Proposed by members, and can say they're in.",

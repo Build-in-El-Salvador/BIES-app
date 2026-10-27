@@ -359,6 +359,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         } catch (err) {
             setSubmitError(err?.message || t('events.propose.failed'));
             setTagging(false);
+            window.scrollTo(0, 0);
         }
     };
 

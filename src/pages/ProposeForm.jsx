@@ -74,6 +74,7 @@ export default function ProposeForm() {
     };
     const untag = () => {
         setVenue(null);
+        setKept(null); // a place the member is changing
         setForm((f) => ({ ...f, mapUrl: '', thumbnail: '', coverFrame: '' }));
         requestAnimationFrame(() => whereRef.current?.focus());
     };
