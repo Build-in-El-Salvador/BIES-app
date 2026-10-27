@@ -40,6 +40,7 @@ const Investors = lazyPage(() => import('./pages/Investors'));
 const Media = lazyPage(() => import('./pages/Media'));
 const News = lazyPage(() => import('./pages/News'));
 const Events = lazyPage(() => import('./pages/Events'));
+const ProposeForm = lazyPage(() => import('./pages/ProposeForm'));
 const EventDetail = lazyPage(() => import('./pages/EventDetail'));
 const EventForm = lazyPage(() => import('./pages/EventForm'));
 const MyEvents = lazyPage(() => import('./pages/MyEvents'));
@@ -364,6 +365,12 @@ const AppContent = () => {
                     <Route path="/events" element={<FeatureRoute flag="events"><ProtectedRoute><Events /></ProtectedRoute></FeatureRoute>} />
                     <Route path="/events/create" element={
                         <FeatureRoute flag="events"><ProtectedRoute><EventForm key="new" /></ProtectedRoute></FeatureRoute>
+                    } />
+                    <Route path="/events/propose" element={
+                        <FeatureRoute flag="events"><ProtectedRoute><ProposeForm key="new" /></ProtectedRoute></FeatureRoute>
+                    } />
+                    <Route path="/events/propose/:id" element={
+                        <FeatureRoute flag="events"><ProtectedRoute><ProposeForm key="edit" /></ProtectedRoute></FeatureRoute>
                     } />
                     <Route path="/events/my" element={
                         <FeatureRoute flag="events"><ProtectedRoute><MyEvents /></ProtectedRoute></FeatureRoute>

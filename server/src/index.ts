@@ -15,6 +15,7 @@ import { rateLimitKey } from './utils/rateLimitKey';
 import { attachWebSocketServer } from './services/websocket.service';
 import { deleteOldSessions } from './services/session.service';
 import { deleteOldReports } from './services/moderation.service';
+import { startProposalSweep } from './services/eventProposals.service';
 import { startTwitterRefreshLoop } from './services/twitter.service';
 import { initWebPush, cleanupStaleSubscriptions } from './services/webpush.service';
 import { initApns } from './services/apns.service';
@@ -331,6 +332,9 @@ server.listen(config.port, () => {
     pruneReports();
     pruneAuditIps();
     setInterval(() => { pruneSessions(); pruneReports(); pruneAuditIps(); }, 12 * 60 * 60 * 1000).unref();
+
+    // Proposed meetups past their decide-by time without enough people: called off.
+    startProposalSweep();
 
     // Points scorer (relay indexer) + monthly rollover loop — a scorer
     // failure must never take down the API.

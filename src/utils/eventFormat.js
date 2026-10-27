@@ -118,3 +118,17 @@ export const isFree = (event) => /^(free|gratis)$/i.test((event.priceLabel || ''
 
 /** A ticket link and a bitcoin one: the two buttons sit side by side under the price. */
 export const bothTicketLinks = (event) => !!(event.ticketUrl && event.bitcoinUrl);
+
+/** A business or farm's page in the app. */
+export const listingPath = (l) => `${l.type === 'FARM' ? '/farms' : '/trusted'}/${l.id}`;
+
+/** How many more members a proposed meetup needs to go ahead. */
+export const proposalNeeds = (event) => Math.max(0, (event.minAttendees || 0) - (event.goingCount || 0));
+
+/** The day before a date ("YYYY-MM-DD"), for a proposal's default decide-by day. */
+export function dayBefore(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '';
+    const d = new Date(`${date}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+}

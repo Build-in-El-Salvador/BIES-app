@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, CalendarDays, Loader2 } from 'lucide-react';
+import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, CalendarDays, Loader2, Hand } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import CoverPhoto from '../components/CoverPhoto';
 import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
+import ProposalCard from '../components/events/ProposalCard';
 import { bothTicketLinks, isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
 import { CARD_SHADE, focusOf, parseFrame } from '../utils/coverFrame';
 import biesLogo from '../assets/logo-icon.svg';
@@ -13,15 +14,19 @@ import biesLogo from '../assets/logo-icon.svg';
 /**
  * Events: BIES events first, as large photo cards you swipe through, then
  * community events as a list by date (a calendar tile, then a small photo),
- * as Luma lists events. Chips filter both; "Past events" lists what's over.
- * Tickets are the host's own page (Luma, pretix…): the app doesn't sell them.
+ * as Luma lists events, then meetups members proposed, which aren't on yet
+ * (one joins Community events when enough people are in). Chips filter them;
+ * "Past events" lists what's over. Tickets are the host's own page (Luma,
+ * pretix…): the app doesn't sell them.
  */
 
-const FILTERS = ['all', 'bies', 'community', 'free', 'online'];
+const FILTERS = ['all', 'bies', 'community', 'proposed', 'free', 'online'];
+const isProposal = (e) => e.stage === 'proposed';
 const keep = (filter) => (e) => filter === 'all'
     || (filter === 'bies' && e.isOfficial)
-    || (filter === 'community' && !e.isOfficial)
-    || (filter === 'free' && isFree(e))
+    || (filter === 'community' && !e.isOfficial && !isProposal(e))
+    || (filter === 'proposed' && isProposal(e))
+    || (filter === 'free' && isFree(e) && !isProposal(e))
     || (filter === 'online' && e.isOnline);
 
 const Events = () => {
@@ -34,6 +39,8 @@ const Events = () => {
     const [events, setEvents] = useState(null); // null while loading
     const [error, setError] = useState(false);
     const [going, setGoing] = useState({}); // eventId → true/false after a tap
+    const [joined, setJoined] = useState({}); // proposal id → members in after a tap
+    const [addMenu, setAddMenu] = useState(false); // + : add an event, or propose a meetup
 
     const latest = useRef(0); // only the newest answer is shown
     const load = useCallback(async (q) => {
@@ -57,7 +64,9 @@ const Events = () => {
 
     const shown = useMemo(() => (events || []).filter(keep(filter)), [events, filter]);
     const bies = past ? [] : shown.filter((e) => e.isOfficial);
-    const community = past ? shown : shown.filter((e) => !e.isOfficial);
+    const community = past ? shown : shown.filter((e) => !e.isOfficial && !isProposal(e));
+    const proposals = past ? [] : shown.filter(isProposal);
+    const showProposals = !past && (filter === 'all' || filter === 'proposed');
     const byMonth = useMemo(() => {
         const groups = [];
         for (const e of community) {
@@ -79,6 +88,21 @@ const Events = () => {
     };
     const isGoing = (e) => (e.id in going ? going[e.id] : e.rsvpStatus === 'GOING');
 
+    // I'm in on a proposal: when that makes its number it's on, and moves up
+    // into Community events.
+    const join = async (event, next) => {
+        const before = isGoing(event);
+        setGoing((g) => ({ ...g, [event.id]: next }));
+        setJoined((j) => ({ ...j, [event.id]: (event.goingCount || 0) + (next ? 1 : 0) - (before ? 1 : 0) }));
+        try {
+            const res = next ? await eventsApi.rsvp(event.id, 'GOING') : await eventsApi.cancelRsvp(event.id);
+            if (res?.confirmed) load(search.trim());
+        } catch {
+            setGoing((g) => ({ ...g, [event.id]: before }));
+            setJoined((j) => { const { [event.id]: _gone, ...rest } = j; return rest; });
+        }
+    };
+
     return (
         <div className="events-page container">
             <h1 className="page-header events-header">{past ? t('events.page.past') : t('events.page.title')}</h1>
@@ -95,9 +119,20 @@ const Events = () => {
                             onChange={(e) => setSearch(e.target.value)}
                         />
                     </label>
-                    <Link to="/events/create" className="ev-add" aria-label={t('events.page.add')} title={t('events.page.add')}>
-                        <Plus size={22} />
-                    </Link>
+                    <div className="ev-add-wrap">
+                        <button type="button" className="ev-add" aria-label={t('events.page.add')} aria-expanded={addMenu} onClick={() => setAddMenu((v) => !v)}>
+                            <Plus size={22} />
+                        </button>
+                        {addMenu && (
+                            <>
+                                <div className="ev-add-backdrop" onClick={() => setAddMenu(false)} />
+                                <div className="ev-add-menu" role="menu">
+                                    <Link to="/events/create" role="menuitem"><CalendarDays size={18} aria-hidden="true" /> {t('events.proposals.addEvent')}</Link>
+                                    <Link to="/events/propose" role="menuitem"><Hand size={18} aria-hidden="true" /> {t('events.proposals.propose')}</Link>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 <div className="ev-chips" role="group" aria-label={t('events.page.title')}>
@@ -120,7 +155,7 @@ const Events = () => {
                         <p>{t('events.page.loadError')}</p>
                         <button type="button" className="ev-retry" onClick={() => { setEvents(null); load(search.trim()); }}>{t('events.page.retry')}</button>
                     </div>
-                ) : shown.length === 0 ? (
+                ) : shown.length === 0 && filter !== 'proposed' ? (
                     <div className="ev-empty">
                         <CalendarDays size={28} aria-hidden="true" />
                         <p>{past ? t('events.page.noPast') : events.length ? t('events.page.noneFiltered') : t('events.page.none')}</p>
@@ -162,6 +197,37 @@ const Events = () => {
                     </>
                 )}
 
+                {events !== null && !error && showProposals && (
+                    // Not on yet, so under the confirmed ones.
+                    <section aria-labelledby="ev-prop-title">
+                        <h2 id="ev-prop-title" className="ev-sec-h">
+                            <Hand size={20} aria-hidden="true" /> {t('events.proposals.section')} {proposals.length > 0 && <span>{proposals.length}</span>}
+                        </h2>
+                        <p className="ev-sec-hint">{t('events.proposals.sectionHint')}</p>
+                        <ul className="ev-list">
+                            {proposals.map((e) => (
+                                <li key={e.id}>
+                                    <ProposalCard
+                                        event={e.id in joined ? { ...e, goingCount: joined[e.id] } : e}
+                                        lang={lang}
+                                        going={isGoing(e)}
+                                        onGoing={(next) => join(e, next)}
+                                    />
+                                </li>
+                            ))}
+                            <li>
+                                <Link to="/events/propose" className="ev-propose">
+                                    <span className="ev-propose-icon"><Plus size={20} aria-hidden="true" /></span>
+                                    <span className="ev-propose-text">
+                                        <b>{t('events.proposals.propose')}</b>
+                                        <small>{t('events.proposals.proposeHint')}</small>
+                                    </span>
+                                </Link>
+                            </li>
+                        </ul>
+                    </section>
+                )}
+
                 {!past && (
                     <button type="button" className="ev-past" onClick={() => setParams({ past: '1' })}>
                         {t('events.page.past')} <ChevronRight size={16} aria-hidden="true" />
@@ -184,10 +250,32 @@ const Events = () => {
                 .ev-search-bar:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1); }
                 .ev-search-bar :global(.ev-search-icon) { margin-left: 0.75rem; color: var(--color-gray-400); flex-shrink: 0; }
                 .ev-search-input { flex: 1; min-width: 0; border: none; background: none; padding: 0.5rem 0.75rem; outline: none; font-size: 1rem; color: inherit; }
-                .ev-content :global(.ev-add) {
+                .ev-add-wrap { position: relative; flex-shrink: 0; }
+                .ev-add {
                     display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; min-width: 44px;
-                    border-radius: 50%; background: var(--color-primary); color: white; text-decoration: none; flex-shrink: 0;
+                    border-radius: 50%; border: 0; cursor: pointer; background: var(--color-primary); color: white;
                 }
+                .ev-add-backdrop { position: fixed; inset: 0; z-index: 40; }
+                .ev-add-menu {
+                    position: absolute; right: 0; top: 52px; z-index: 41; min-width: 230px; padding: 6px;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+                    display: flex; flex-direction: column;
+                }
+                .ev-add-menu :global(a) {
+                    display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: var(--radius-md);
+                    font-size: 0.95rem; font-weight: 600; color: var(--color-gray-900); text-decoration: none;
+                }
+                .ev-add-menu :global(a:hover) { background: var(--color-gray-100); }
+                .ev-add-menu :global(svg) { color: var(--color-primary); }
+                .ev-sec-hint { margin: -4px 0 10px; font-size: 0.85rem; color: var(--color-gray-500); }
+                .ev-content :global(.ev-propose) {
+                    display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; height: 100%; box-sizing: border-box;
+                    border: 1.5px dashed var(--color-gray-300); text-decoration: none; color: inherit;
+                }
+                .ev-propose-icon { width: 44px; height: 44px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; background: rgba(0, 71, 171, 0.08); color: var(--color-primary); }
+                .ev-propose-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+                .ev-propose-text b { font-family: var(--font-display); font-size: 1.2rem; line-height: 1.1; color: var(--color-gray-900); }
+                .ev-propose-text small { font-size: 0.82rem; color: var(--color-gray-500); }
                 .ev-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
                 .ev-chips::-webkit-scrollbar { display: none; }
                 .ev-chip {

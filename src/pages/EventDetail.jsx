@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User,
+    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,7 @@ import { openExternal } from '../utils/openExternal';
 import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
-import { bothTicketLinks, fullDay, hostOf, partnerPath, timeRange } from '../utils/eventFormat';
+import { bothTicketLinks, fullDay, hostOf, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
@@ -22,7 +22,7 @@ import TranslatableText from '../components/TranslatableText';
 import TicketPurchaseModal from '../components/TicketPurchaseModal';
 import ModerationSheet from '../components/moderation/ModerationSheet';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
-import { BiesTag, PriceLine, TicketButton } from '../components/events/EventBits';
+import { BiesTag, PriceLine, TicketButton, namesText } from '../components/events/EventBits';
 import biesLogo from '../assets/logo-icon.svg';
 import '../components/moderation/Moderation.css';
 
@@ -31,6 +31,9 @@ import '../components/moderation/Moderation.css';
  * or a business, and co-hosts), its sponsors, what it's about and who's
  * going. Tickets are the host's page (Luma, pretix…), from a bar that stays
  * at the bottom; a free event with no ticket link has "I'm going" there.
+ * A meetup a member proposed shows how many are in of how many it needs and
+ * by when, with "I'm in" at the bottom, then "It's on" (or "Called off").
+ * Where it is can be a business or farm on BIES: its card links to its page.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -147,8 +150,9 @@ const EventDetail = () => {
         setGoing(next);
         setBusy(true);
         try {
-            if (next) await eventsApi.rsvp(event.id, 'GOING');
-            else await eventsApi.cancelRsvp(event.id);
+            const res = next ? await eventsApi.rsvp(event.id, 'GOING') : await eventsApi.cancelRsvp(event.id);
+            // That made a proposal's number: it's on.
+            if (res?.confirmed) { await load(); setGoing(null); }
         } catch {
             setGoing(!next);
         } finally {
@@ -184,7 +188,13 @@ const EventDetail = () => {
         }
     };
     const hasMenu = isFull && (event.canEdit || event.canDelete || event.myPartnerIds?.length || !event.canEdit);
-    const mapUrl = event.locationMapUrl || (event.locationAddress || event.locationName
+    // A proposed meetup: where it stands. The tagged business or farm, as it is now.
+    const stage = event.stage || null;
+    const proposed = stage === 'proposed';
+    const needs = proposed ? proposalNeeds({ ...event, goingCount }) : 0;
+    const venue = event.venueListing || null;
+    const inNames = namesText([...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))], t);
+    const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
 
@@ -200,6 +210,7 @@ const EventDetail = () => {
                     )}
                     <BackButton fallback="/events" overlay label={t('events.detail.back')} />
                     {event.isOfficial && <span className="ev-hero-tag"><BiesTag /></span>}
+                    {proposed && <span className="ev-hero-tag"><span className="ev-proposed-tag">{t('events.proposals.tagNeeds', { count: needs })}</span></span>}
                 </div>
                 <div className="ev-hero-tools">
                     <button type="button" className="ev-tool" onClick={share} aria-label={copied ? t('events.detail.copied') : t('events.detail.share')}>
@@ -215,7 +226,7 @@ const EventDetail = () => {
                             <div className="ev-menu-backdrop" onClick={() => setMenu(false)} />
                             <div className="ev-menu" role="menu">
                                 {event.canEdit && (
-                                    <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate(`/events/edit/${event.id}`); }}>
+                                    <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate(stage && event.canDelete ? `/events/propose/${event.id}` : `/events/edit/${event.id}`); }}>
                                         <Edit3 size={16} /> {t('events.detail.edit')}
                                     </button>
                                 )}
@@ -241,10 +252,47 @@ const EventDetail = () => {
                 {event.canEdit && (event.visibility === 'DRAFT' || event.visibility === 'PRIVATE') && (
                     <p className="ev-notice"><Lock size={15} aria-hidden="true" /> {event.visibility === 'DRAFT' ? t('events.detail.draft') : t('events.detail.private')}</p>
                 )}
+                {stage === 'on' && (
+                    <div className="ev-stage on" role="status">
+                        <CheckCircle2 size={22} aria-hidden="true" />
+                        <span><b>{t('events.proposals.itsOn')}</b>{t('events.proposals.itsOnHint')}</span>
+                    </div>
+                )}
+                {stage === 'calledOff' && (
+                    <div className="ev-stage off" role="status">
+                        <XCircle size={22} aria-hidden="true" />
+                        <span><b>{t('events.proposals.calledOff')}</b>{t('events.proposals.calledOffHint', { when: whenShort(event.decideBy, lang) })}</span>
+                    </div>
+                )}
                 <div>
-                    {kind && <p className="ev-kind">{kind}</p>}
+                    {stage ? <p className="ev-kind">{t('events.proposals.kind')}</p> : kind && <p className="ev-kind">{kind}</p>}
                     <h1 className="ev-title">{event.title}</h1>
                 </div>
+
+                {proposed && (
+                    <div className="ev-proposal">
+                        <div className="ev-proposal-top">
+                            <b>{t('events.proposals.progress', { going: goingCount, min: event.minAttendees })}</b>
+                            {needs > 0 && <span>{t('events.proposals.needs', { count: needs })}</span>}
+                        </div>
+                        <div className="ev-proposal-track" aria-hidden="true"><span style={{ width: `${Math.min(100, (goingCount / (event.minAttendees || 1)) * 100)}%` }} /></div>
+                        {(goingPeople.length > 0 || isGoing) && (
+                            <div className="ev-proposal-who">
+                                <span className="ev-going-pile">
+                                    {goingPeople.slice(0, 4).map((p) => (
+                                        <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<User size={14} />} /></span>
+                                    ))}
+                                </span>
+                                {inNames && <span>{t('events.proposals.whoIn', { names: inNames, count: goingCount })}</span>}
+                            </div>
+                        )}
+                        <p className="ev-proposal-deadline">
+                            <Clock size={16} aria-hidden="true" />
+                            <span><b>{t('events.proposals.decideBy', { when: whenShort(event.decideBy, lang) })}</b> {t('events.proposals.decideByHint', { min: event.minAttendees })}</span>
+                        </p>
+                        {event.maxAttendees > 0 && <p className="ev-proposal-max">{t('events.proposals.upTo', { count: event.maxAttendees })}</p>}
+                    </div>
+                )}
 
                 <div className="ev-facts">
                     <div className="ev-fact">
@@ -265,20 +313,35 @@ const EventDetail = () => {
                                 <button type="button" className="ev-fact-link" onClick={() => openExternal(event.onlineUrl)}>{t('events.detail.joinLink')} <ExternalLink size={13} aria-hidden="true" /></button>
                             )}
                         </div>
-                    ) : (event.locationName || event.locationAddress || event.location) && (
+                    ) : (venue || event.locationName || event.locationAddress || event.location) && (
                         <div className="ev-fact">
                             <span className="ev-fact-icon"><MapPin size={19} aria-hidden="true" /></span>
                             <span className="ev-fact-text">
-                                <b>{event.locationName || event.location}</b>
-                                {event.locationAddress && <span>{event.locationAddress}</span>}
+                                <b>{venue?.name || event.locationName || event.location}</b>
+                                {(venue ? venue.location : event.locationAddress) && <span>{venue ? venue.location : event.locationAddress}</span>}
                             </span>
                             {mapUrl && <button type="button" className="ev-fact-link" onClick={() => openExternal(mapUrl)}>{t('events.detail.map')}</button>}
                         </div>
                     )}
                 </div>
 
+                {venue && (
+                    <section aria-labelledby="ev-where">
+                        <h2 id="ev-where" className="ev-h">{t('events.proposals.where')}</h2>
+                        <Link to={listingPath(venue)} className="ev-venue">
+                            <span className="ev-venue-photo"><Avatar src={venue.photo || venue.logo} size={64} fallback={<Store size={22} />} /></span>
+                            <span className="ev-venue-text">
+                                <b>{venue.name}</b>
+                                <span>{[venue.category && t(`directory.categories.${venue.category}`, { defaultValue: '' }), venue.pricing].filter(Boolean).join(' · ')}</span>
+                                {venue.location && <span>{venue.location}</span>}
+                            </span>
+                            <ChevronRight size={18} className="pr-go" />
+                        </Link>
+                    </section>
+                )}
+
                 <section className="ev-people" aria-labelledby="ev-hosts">
-                    <h2 id="ev-hosts" className="ev-h">{t('events.detail.hostedBy')}</h2>
+                    <h2 id="ev-hosts" className="ev-h">{stage ? t('events.proposals.proposedBy') : t('events.detail.hostedBy')}</h2>
                     <div className="ev-person-list">
                         <PersonRow
                             to={host.path}
@@ -334,7 +397,11 @@ const EventDetail = () => {
                     </section>
                 ))}
 
-                {(goingCount > 0 || rsvpRow) && (
+                {stage && (
+                    <p className="ev-not-bies"><Info size={15} aria-hidden="true" /> {t('events.proposals.notBies')}</p>
+                )}
+
+                {!proposed && (goingCount > 0 || rsvpRow) && (
                     <div className={`ev-going${rsvpRow ? ' rsvp' : ''}`}>
                         {goingPeople.length > 0 && (
                             <span className="ev-going-pile">
@@ -360,8 +427,19 @@ const EventDetail = () => {
                 )}
             </div>
 
-            <div className={`ev-bar${!satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
-                {satsTickets ? (
+            {stage !== 'calledOff' && (
+            <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
+                {proposed ? (
+                    <>
+                        <span className="ev-bar-text">
+                            <b>{isGoing ? t('events.proposals.youreIn') : t('events.proposals.areYouIn')}</b>
+                            <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                        </span>
+                        <button type="button" className={`ev-in${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy || !isFull} onClick={() => rsvp(!isGoing)}>
+                            {isGoing && <Check size={16} aria-hidden="true" />} {isGoing ? t('events.proposals.in') : t('events.proposals.imIn')}
+                        </button>
+                    </>
+                ) : satsTickets ? (
                     <>
                         <PriceLine event={{ ...event, priceLabel: `${Number(event.priceSats).toLocaleString()} sats`, ticketUrl: '', bitcoinUrl: '' }} />
                         {ticket
@@ -375,6 +453,7 @@ const EventDetail = () => {
                     </>
                 )}
             </div>
+            )}
 
             {buying && (
                 <TicketPurchaseModal
@@ -404,6 +483,42 @@ const EventDetail = () => {
                 .ev-hero-photo { position: absolute; inset: 0; border: 0; padding: 0; background: none; cursor: zoom-in; }
                 .ev-hero :global(.bies-back) { position: absolute; left: 12px; top: 12px; z-index: 2; }
                 .ev-hero-tag { position: absolute; left: 12px; bottom: 12px; z-index: 2; }
+                .ev-proposed-tag { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: var(--radius-full); background: rgba(255, 255, 255, 0.96); color: var(--color-orange-text); font-size: 0.8rem; font-weight: 700; }
+                .ev-stage { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; font-size: 0.9rem; line-height: 1.4; }
+                .ev-stage :global(svg) { flex: none; margin-top: 1px; }
+                .ev-stage b { display: block; font-size: 1.05rem; }
+                .ev-stage.on { background: var(--color-success-bg, #ECFDF5); border: 1px solid #A7F3D0; color: #065F46; }
+                .ev-stage.off { background: var(--color-gray-100); border: 1px solid var(--color-gray-200); color: var(--color-gray-700); }
+                .ev-proposal { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 16px; background: var(--color-surface); border: 1px solid var(--color-gray-200); }
+                .ev-proposal-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+                .ev-proposal-top b { font-family: var(--font-display); font-size: 1.7rem; line-height: 1; color: var(--color-gray-900); }
+                .ev-proposal-top span { font-size: 0.875rem; font-weight: 700; color: var(--color-orange-text); }
+                .ev-proposal-track { height: 8px; border-radius: 999px; background: var(--color-gray-100); overflow: hidden; }
+                .ev-proposal-track span { display: block; height: 100%; border-radius: 999px; background: var(--color-secondary); }
+                .ev-proposal-who { display: flex; align-items: center; gap: 10px; font-size: 0.875rem; color: var(--color-gray-500); }
+                .ev-proposal-deadline { margin: 0; display: flex; gap: 8px; align-items: flex-start; padding-top: 10px; border-top: 1px solid var(--color-gray-200); font-size: 0.85rem; color: var(--color-gray-500); }
+                .ev-proposal-deadline :global(svg) { flex: none; margin-top: 2px; }
+                .ev-proposal-deadline b { color: var(--color-gray-900); }
+                .ev-proposal-max { margin: 0; font-size: 0.85rem; color: var(--color-gray-500); }
+                .ev-body :global(.ev-venue) {
+                    display: flex; align-items: center; gap: 12px; padding: 12px; text-decoration: none; color: inherit;
+                    background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px;
+                }
+                .ev-venue-photo { width: 64px; height: 64px; border-radius: 14px; overflow: hidden; flex: none; background: var(--color-gray-100); display: flex; align-items: center; justify-content: center; color: var(--color-gray-400); }
+                .ev-venue-photo :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .ev-venue-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+                .ev-venue-text b { font-family: var(--font-display); font-size: 1.2rem; line-height: 1.1; color: var(--color-gray-900); }
+                .ev-venue-text span { font-size: 0.82rem; color: var(--color-gray-500); }
+                .ev-not-bies { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--color-gray-500); }
+                .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
+                .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
+                .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-in {
+                    flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 24px; border-radius: var(--radius-full); cursor: pointer;
+                    border: 1.5px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; font-size: 0.95rem; font-weight: 700;
+                }
+                .ev-in.on { background: var(--color-surface); color: var(--color-primary); }
+                .ev-in:disabled { opacity: 0.7; cursor: default; }
                 .ev-hero-tools { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: flex; gap: 8px; align-items: center; }
                 .ev-tool {
                     width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;

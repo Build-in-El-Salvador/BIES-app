@@ -451,6 +451,9 @@ export default function EventForm() {
                     border: 1px solid var(--color-gray-200); background: var(--color-surface); font: inherit; font-size: 0.95rem; color: inherit;
                 }
                 .ef-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1); }
+                /* iOS draws date and time boxes at their own width, past the card: fit them. */
+                .ef-input[type='date'], .ef-input[type='time'] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; height: 44px; line-height: 42px; text-align: left; }
+                .ef-input::-webkit-date-and-time-value { text-align: left; margin: 0; }
                 .ef-inline { display: flex; align-items: center; gap: 8px; position: relative; }
                 .ef-inline .ef-input { padding-left: 34px; }
                 .ef-input-icon { position: absolute; left: 12px; color: var(--color-gray-400); display: flex; }
