@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dayBefore, defaultDecideBy, fromFormFields, listingPath, proposalNeeds } from '../../src/utils/eventFormat.js';
+import { dayBefore, defaultDecideBy, endAfterMidnight, fromFormFields, listingPath, proposalNeeds } from '../../src/utils/eventFormat.js';
 
 test('a proposal needs what its number lacks, never less than none', () => {
     assert.equal(proposalNeeds({ minAttendees: 3, goingCount: 2 }), 1);
@@ -53,4 +53,14 @@ test('proposed for later today: as late as allowed, an hour before, never before
 test('starting too soon for any deadline: none', () => {
     const now = new Date('2026-10-26T18:30:00Z'); // 12:30 PM
     assert.deepEqual(defaultDecideBy('2026-10-26', '13:00', now), { date: '', time: '' });
+});
+
+test('an end earlier in the day than the start is after midnight, up to 12 hours on', () => {
+    const start = fromFormFields('2026-11-07', '20:00');
+    assert.equal(endAfterMidnight(start, fromFormFields('2026-11-07', '01:00')), fromFormFields('2026-11-08', '01:00'));
+    assert.equal(endAfterMidnight(start, fromFormFields('2026-11-07', '23:00')), fromFormFields('2026-11-07', '23:00'));
+    // 13:00 to 12:00 is a slip, not a 23-hour lunch: left to be caught.
+    const lunch = fromFormFields('2026-11-07', '13:00');
+    assert.equal(endAfterMidnight(lunch, fromFormFields('2026-11-07', '12:00')), fromFormFields('2026-11-07', '12:00'));
+    assert.equal(endAfterMidnight(start, ''), '');
 });

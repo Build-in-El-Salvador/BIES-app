@@ -152,10 +152,16 @@ function eventData(body: Record<string, any>): Record<string, any> {
     if (data.guestList !== undefined) data.guestList = JSON.stringify(data.guestList);
     if (data.customSections !== undefined) data.customSections = JSON.stringify(data.customSections);
     if (data.startDate) data.startDate = new Date(data.startDate);
-    if (data.endDate) data.endDate = new Date(data.endDate);
+    if (data.endDate !== undefined) data.endDate = data.endDate ? new Date(data.endDate) : null;
     if (data.decideBy) data.decideBy = new Date(data.decideBy);
     return data;
 }
+
+const badDate = (d: unknown) => d instanceof Date && Number.isNaN(d.getTime());
+const sameTime = (a?: Date | null, b?: Date | null) => (a ? a.getTime() : null) === (b ? b.getTime() : null);
+
+/** Who called a meetup off, for the people in it. */
+const calledOffBy = (actorId: string, hostId: string) => (actorId === hostId ? 'The member who proposed it called it off.' : 'It was called off.');
 
 /** Why a proposal's numbers or deadline don't work, if they don't. */
 function proposalProblem(min: number, decideBy: Date | null, start: Date, max: number | null | undefined): string | null {
@@ -228,7 +234,8 @@ async function hostGone(hostId: string, hidden: Set<string>): Promise<boolean> {
 export async function listEvents(req: Request, res: Response): Promise<void> {
     try {
         const me = req.user!;
-        const q = req.query as Record<string, string | undefined>;
+        // A repeated parameter comes as a list: only single values count.
+        const q = Object.fromEntries(Object.entries(req.query).filter(([, v]) => typeof v === 'string')) as Record<string, string | undefined>;
         const take = Math.min(Math.max(parseInt(q.limit || '20', 10) || 20, 1), 50);
         const page = Math.max(parseInt(q.page || '1', 10) || 1, 1);
         const now = new Date();
@@ -452,6 +459,8 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
             canEdit,
             canDelete: hostSide,
             myPartnerIds,
+            // The tagged place, also while it isn't live (waiting for review, taken down): an edit keeps it.
+            ...(canEdit ? { venueListingId: event.venueListingId } : {}),
             ...(hostSide ? { guestList: parseJson(event.guestList), payoutLightningAddress: event.payoutLightningAddress } : {}),
         });
     } catch (error) {
@@ -477,6 +486,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
         if (!data.startDate || Number.isNaN(data.startDate.getTime())) {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
+        if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
         if (!proposal && !(data.description || '').trim()) {
             res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;
         }
@@ -617,11 +627,19 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         if (data.startDate !== undefined && (!data.startDate || Number.isNaN(data.startDate.getTime()))) {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
+        if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
         // A proposal's number and deadline change only while it's still a
         // proposal (and never to nothing); a usual event doesn't become one.
         // A member's meetup has no tickets.
         const stageBefore = proposalStage(existing);
-        if (stageBefore) for (const field of MONEY_FIELDS) delete data[field];
+        if (stageBefore) {
+            for (const field of MONEY_FIELDS) delete data[field];
+            // Open to every member, on BIES only, hosted by the member.
+            delete data.visibility;
+            delete data.nostrPublish;
+            delete body.hostListingId;
+            delete body.partners;
+        }
         if (stageBefore === 'proposed') {
             if (body.minAttendees === null || body.decideBy === null) {
                 res.status(400).json({ error: 'Check the numbers and the decide-by time', reason: 'decide_by_missing' }); return;
@@ -630,7 +648,11 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             const decideBy = data.decideBy ?? existing.decideBy;
             const start = data.startDate ?? existing.startDate;
             const max = data.maxAttendees !== undefined ? data.maxAttendees : existing.maxAttendees;
-            const touched = ['minAttendees', 'decideBy', 'startDate', 'maxAttendees'].some((f) => data[f] !== undefined);
+            // Checked when one of them changes (the form sends them all on every edit).
+            const touched = (data.minAttendees !== undefined && data.minAttendees !== existing.minAttendees)
+                || (data.decideBy !== undefined && !sameTime(data.decideBy, existing.decideBy))
+                || (data.startDate !== undefined && !sameTime(data.startDate, existing.startDate))
+                || (data.maxAttendees !== undefined && (data.maxAttendees ?? null) !== existing.maxAttendees);
             const problem = touched ? proposalProblem(min, decideBy, start, max) : null;
             if (problem) { res.status(400).json({ error: 'Check the numbers and the decide-by time', reason: problem }); return; }
         } else {
@@ -706,11 +728,12 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
         if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
         // A lower number may be met already.
-        if (data.minAttendees !== undefined) await confirmIfReached(event.id);
+        if (data.minAttendees !== undefined) await confirmIfReached(event.id).catch(() => false);
         // A meetup's people hear when it moves, or changes place.
         const moved = data.startDate !== undefined && data.startDate.getTime() !== existing.startDate.getTime();
-        const elsewhere = (data.locationName !== undefined && data.locationName !== existing.locationName)
-            || (data.venueListingId !== undefined && data.venueListingId !== existing.venueListingId);
+        // Somewhere else, by name: tagging the business it was at already isn't a move.
+        const placeName = (name?: string | null) => (name || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+        const elsewhere = placeName(event.locationName) !== placeName(existing.locationName);
         if (stageBefore && stageBefore !== 'calledOff' && (moved || elsewhere)) {
             await tellPeopleIn(event.id, event.hostId, {
                 title: `Changed: "${event.title}"`,
@@ -751,7 +774,7 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
             where: { id: req.params.id },
             select: {
                 id: true, title: true, hostId: true, hostListingId: true, nostrEventId: true, nostrPublish: true,
-                minAttendees: true, confirmedAt: true, calledOffAt: true,
+                minAttendees: true, confirmedAt: true, calledOffAt: true, startDate: true,
             },
         });
 
@@ -759,12 +782,12 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
         if (!(await canDeleteEvent(existing, req.user))) {
             res.status(403).json({ error: 'Not authorized' }); return;
         }
-        // A meetup people are in: they're told (with no page to open after).
+        // A meetup people are in, still ahead: they're told (with no page to open after).
         const stage = proposalStage(existing);
-        if (stage === 'proposed' || stage === 'on') {
+        if ((stage === 'proposed' || stage === 'on') && existing.startDate.getTime() > Date.now()) {
             await tellPeopleIn(existing.id, existing.hostId, {
                 title: `Called off: "${existing.title}"`,
-                body: 'The member who proposed it called it off.',
+                body: calledOffBy(req.user!.id, existing.hostId),
                 status: 'CALLED_OFF',
                 link: false,
             }, req.user!.id);
@@ -892,6 +915,10 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         const stage = proposalStage(event);
         if (stage === 'calledOff' || (stage === 'proposed' && event.decideBy && event.decideBy.getTime() < Date.now())) {
             res.status(409).json({ error: 'This meetup was called off', reason: 'called_off' }); return;
+        }
+        // Whoever proposed it counts towards it: they call it off instead.
+        if (stage === 'proposed' && event.hostId === userId && status !== 'GOING') {
+            res.status(400).json({ error: 'You proposed it: call it off instead', reason: 'proposer_stays' }); return;
         }
 
         // Invite only: the host, admins, and members the host invited.
@@ -1042,7 +1069,7 @@ export async function callOffEvent(req: Request, res: Response): Promise<void> {
     try {
         const event = await prisma.event.findUnique({
             where: { id: req.params.id },
-            select: { id: true, title: true, hostId: true, hostListingId: true, minAttendees: true, confirmedAt: true, calledOffAt: true },
+            select: { id: true, title: true, hostId: true, hostListingId: true, minAttendees: true, confirmedAt: true, calledOffAt: true, startDate: true },
         });
         if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
         if (!(await canDeleteEvent(event, req.user))) { res.status(403).json({ error: 'Not authorized' }); return; }
@@ -1050,12 +1077,15 @@ export async function callOffEvent(req: Request, res: Response): Promise<void> {
         if (stage !== 'proposed' && stage !== 'on') {
             res.status(400).json({ error: 'Only a proposed meetup is called off this way', reason: 'not_a_proposal' }); return;
         }
+        if (event.startDate.getTime() <= Date.now()) {
+            res.status(400).json({ error: 'It has started already', reason: 'started' }); return;
+        }
         const won = await prisma.event.updateMany({ where: { id: event.id, calledOffAt: null }, data: { calledOffAt: new Date() } });
         if (won.count === 1) {
             await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${event.id}`)]);
             await tellPeopleIn(event.id, event.hostId, {
                 title: `Called off: "${event.title}"`,
-                body: 'The member who proposed it called it off.',
+                body: calledOffBy(req.user!.id, event.hostId),
                 status: 'CALLED_OFF',
             }, req.user!.id);
         }

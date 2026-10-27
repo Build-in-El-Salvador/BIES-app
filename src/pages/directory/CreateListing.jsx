@@ -99,6 +99,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const [notYours, setNotYours] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [tagging, setTagging] = useState(false);
     // A field the member must fix: shown beside it, and it gets the focus.
     const [fieldError, setFieldError] = useState(null); // { id, message }
     const [uploading, setUploading] = useState(null); // 'photo' | 'logo' | 'gallery' | null
@@ -135,7 +136,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const [showDetails, setShowDetails] = useState(editMode);
 
     const isFarm = type === 'FARM';
-    const isBusy = submitting || uploading !== null;
+    const isBusy = submitting || tagging || uploading !== null;
 
     // ─── Edit mode: load listing (owner/admin enforced by the API) ───────────
     useEffect(() => {
@@ -348,6 +349,19 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
         } catch { /* non-blocking */ }
     };
 
+    /** From a meetup, the place is on BIES already: the meetup is tagged there, and opens again. */
+    const tagMeetupAt = async (listing) => {
+        setSubmitError('');
+        setTagging(true);
+        try {
+            await eventsApi.update(fromEvent.eventId, { venueListingId: listing.id });
+            navigate(`/events/${fromEvent.eventId}`, { replace: true });
+        } catch (err) {
+            setSubmitError(err?.message || t('events.propose.failed'));
+            setTagging(false);
+        }
+    };
+
     const handleSubmit = async (asDifferentPlace = false) => {
         setSubmitError('');
         const problem = !form.name.trim() ? { id: 'dir-name', message: t('directory.nameRequired') }
@@ -540,10 +554,23 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 <div className="dir-matches" role="region" aria-labelledby="dir-matches-title" ref={matchesRef} tabIndex={-1}>
                                     <p className="dir-matches-title" id="dir-matches-title">{t('directory.similar.title')}</p>
                                     <p className="dir-matches-hint">
-                                        {checkFirst ? t('directory.similar.checkFirst') : isOwnBusiness ? t('directory.similar.hintOwn') : t('directory.similar.hint')}
+                                        {fromEvent?.eventId ? t('directory.similar.hintMeetup') : checkFirst ? t('directory.similar.checkFirst') : isOwnBusiness ? t('directory.similar.hintOwn') : t('directory.similar.hint')}
                                     </p>
                                     {matches.map((m) => {
                                         const farm = m.type === 'FARM';
+                                        // From a meetup: that's where it is, so the meetup is tagged there.
+                                        if (fromEvent?.eventId) {
+                                            return (
+                                                <button key={m.id} type="button" className="dir-match" onClick={() => tagMeetupAt(m)} disabled={isBusy}>
+                                                    <span className="dir-match-photo">
+                                                        <Avatar src={m.photo} alt="" size={40} fallback={<span className="dir-match-photo-none" />} />
+                                                    </span>
+                                                    <span className="dir-match-name">{m.name}</span>
+                                                    {m.location && <span className="dir-match-place">{m.location}</span>}
+                                                    <span className="dir-match-cta">{t('directory.similar.useForMeetup')}</span>
+                                                </button>
+                                            );
+                                        }
                                         return (
                                             <Link
                                                 key={m.id}
@@ -1286,6 +1313,11 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     background: var(--color-surface);
                     text-decoration: none;
                     color: inherit;
+                    width: 100%;
+                    border: 0;
+                    font: inherit;
+                    text-align: left;
+                    cursor: pointer;
                 }
                 .dir-matches :global(.dir-match-photo) {
                     grid-column: 1;

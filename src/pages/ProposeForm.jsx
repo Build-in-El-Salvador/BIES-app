@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Check, ImagePlus, Loader2, MapPin, Minus, Move, Pencil, Plus, Store, X } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
-import { defaultDecideBy, fromFormFields, toFormFields } from '../utils/eventFormat';
+import { defaultDecideBy, endAfterMidnight, fromFormFields, toFormFields } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
 import CoverPhoto from '../components/CoverPhoto';
@@ -21,6 +21,7 @@ import { COVER_ASPECT } from '../utils/coverFrame';
 
 const MIN = 2;
 const MAX = 50;
+const HOUR = 3600_000;
 
 const EMPTY = {
     title: '', about: '', startDate: '', startTime: '13:00', endTime: '',
@@ -48,6 +49,9 @@ export default function ProposeForm() {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
     const [done, setDone] = useState(null); // { id, placeName }: proposed, at a place not on BIES
+    // Editing: the place as it was, kept as it is unless the member changes it
+    // (its business may be waiting for review, or down, and not shown).
+    const [kept, setKept] = useState(null);
     // Businesses matching what's typed in Where.
     const [matches, setMatches] = useState([]);
     const [suggesting, setSuggesting] = useState(false);
@@ -90,6 +94,7 @@ export default function ProposeForm() {
                     maxAttendees: e.maxAttendees ? String(e.maxAttendees) : '', priceLabel: e.priceLabel || '',
                 });
                 setVenue(e.venueListing || null);
+                setKept({ venueListingId: e.venueListingId || e.venueListing?.id || null, placeName: e.venueListing?.name || e.locationName || '' });
                 setStage(e.stage || 'proposed');
             }).catch((err) => (err?.status === 403 || err?.status === 404 ? setNotYours(true) : setLoadFailed(true)))
                 .finally(() => setLoading(false));
@@ -145,13 +150,16 @@ export default function ProposeForm() {
     const submit = async (e) => {
         e.preventDefault();
         setError('');
-        const startDate = fromFormFields(form.startDate, form.startTime);
-        const endDate = form.endTime ? fromFormFields(form.startDate, form.endTime) : '';
-        const decideBy = fromFormFields(form.decideDate, form.decideTime);
+        const startDate = form.startTime ? fromFormFields(form.startDate, form.startTime) : null;
+        const endDate = form.endTime && startDate ? endAfterMidnight(startDate, fromFormFields(form.startDate, form.endTime)) : '';
+        const decideBy = form.decideTime ? fromFormFields(form.decideDate, form.decideTime) : null;
         if (!form.title.trim() || !startDate || !typed) { setError(t('events.propose.required')); return; }
         if (endDate && endDate <= startDate) { setError(t('events.propose.endBeforeStart')); return; }
         const open = stage === 'proposed';
+        if (!editing && new Date(startDate).getTime() - Date.now() <= HOUR) { setError(t('events.propose.tooSoon')); return; }
         if (open && !decideBy) { setError(t('events.propose.reasons.decide_by_missing')); return; }
+        // The same place as before: left as it is.
+        const samePlace = !!kept && typed === kept.placeName && (venue?.id || kept.venueListingId) === kept.venueListingId;
         const max = parseInt(form.maxAttendees, 10);
         const payload = {
             title: form.title.trim(),
@@ -162,11 +170,13 @@ export default function ProposeForm() {
             ...(endDate ? { endDate } : editing ? { endDate: null } : {}),
             isOnline: false,
             // A tagged place's full line comes from the business itself.
-            ...(venue ? {} : { location: typed }),
-            locationName: typed,
-            locationAddress: venue?.location || '',
+            ...(samePlace ? {} : {
+                ...(venue ? {} : { location: typed }),
+                locationName: typed,
+                locationAddress: venue?.location || '',
+                venueListingId: venue?.id || null,
+            }),
             locationMapUrl: withHttps(form.mapUrl),
-            venueListingId: venue?.id || null,
             thumbnail: form.thumbnail,
             coverFrame: form.thumbnail ? form.coverFrame : '',
             ...(open ? { minAttendees: form.minAttendees, decideBy } : {}),
@@ -369,7 +379,7 @@ export default function ProposeForm() {
                                 <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
                             </button>
                             <label className="pf-small">{t('events.propose.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
-                            <button type="button" className="pf-small quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '' }))}>{t('events.propose.removeCover')}</button>
+                            <button type="button" className="pf-small quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '' }))} disabled={uploading}>{t('events.propose.removeCover')}</button>
                         </div>
                     </>
                 ) : (

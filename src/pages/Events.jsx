@@ -73,11 +73,13 @@ const Events = () => {
         return () => clearTimeout(timer);
     }, [load, search]);
 
-    const shown = useMemo(() => (events || []).filter(keep(filter)), [events, filter]);
+    // Past events have no Proposed chip: all of them, then.
+    const chip = past && filter === 'proposed' ? 'all' : filter;
+    const shown = useMemo(() => (events || []).filter(keep(chip)), [events, chip]);
     const bies = past ? [] : shown.filter((e) => e.isOfficial);
     const community = past ? shown : shown.filter((e) => !e.isOfficial && !isProposal(e));
     const proposals = past ? [] : shown.filter(isProposal);
-    const showProposals = !past && (filter === 'all' || filter === 'proposed');
+    const showProposals = !past && (chip === 'all' || chip === 'proposed');
     const byMonth = useMemo(() => {
         const groups = [];
         for (const e of community) {
@@ -163,7 +165,7 @@ const Events = () => {
                         </button>
                     )}
                     {FILTERS.filter((f) => !(past && f === 'proposed')).map((f) => (
-                        <button key={f} type="button" className={`ev-chip${filter === f ? ' on' : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                        <button key={f} type="button" className={`ev-chip${chip === f ? ' on' : ''}`} aria-pressed={chip === f} onClick={() => setFilter(f)}>
                             {t(`events.page.filters.${f}`)}
                         </button>
                     ))}
@@ -176,7 +178,7 @@ const Events = () => {
                         <p>{t('events.page.loadError')}</p>
                         <button type="button" className="ev-retry" onClick={() => { setEvents(null); load(search.trim()); }}>{t('events.page.retry')}</button>
                     </div>
-                ) : shown.length === 0 && filter !== 'proposed' ? (
+                ) : shown.length === 0 && chip !== 'proposed' ? (
                     <div className="ev-empty">
                         <CalendarDays size={28} aria-hidden="true" />
                         <p>{past ? t('events.page.noPast') : events.length ? t('events.page.noneFiltered') : t('events.page.none')}</p>
