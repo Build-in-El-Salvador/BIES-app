@@ -7,6 +7,7 @@ import { useBottomNav } from '../context/BottomNavContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { visibleTabs } from '../config/navPages';
 import { prefetchLists } from '../utils/prefetchLists';
+import useKeyboardOpen from '../hooks/useKeyboardOpen';
 
 // How long after sign-in (the first page being up) the bar's lists are fetched.
 const PREFETCH_AFTER_MS = 1500;
@@ -43,6 +44,9 @@ const MobileBottomNav = () => {
   const location = useLocation();
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation();
+
+  // While typing, the keyboard covers where the bar is (index.css hides it).
+  useKeyboardOpen();
 
   const { tabs: tabIds } = useBottomNav();
   const { flags } = useFeatureFlags();
