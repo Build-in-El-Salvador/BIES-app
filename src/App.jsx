@@ -211,6 +211,12 @@ const EventDetailById = () => {
     return <EventDetail key={id} />;
 };
 
+/** A proposed meetup's form, started afresh for each one edited. */
+const ProposeFormById = () => {
+    const { id } = useParams();
+    return <ProposeForm key={id} />;
+};
+
 /**
  * A link from before the directories and the marketplace had their own pages
  * (/discover/farms/…, /discover/certified/…): the same place at its new path.
@@ -370,7 +376,7 @@ const AppContent = () => {
                         <FeatureRoute flag="events"><ProtectedRoute><ProposeForm key="new" /></ProtectedRoute></FeatureRoute>
                     } />
                     <Route path="/events/propose/:id" element={
-                        <FeatureRoute flag="events"><ProtectedRoute><ProposeForm key="edit" /></ProtectedRoute></FeatureRoute>
+                        <FeatureRoute flag="events"><ProtectedRoute><ProposeFormById /></ProtectedRoute></FeatureRoute>
                     } />
                     <Route path="/events/my" element={
                         <FeatureRoute flag="events"><ProtectedRoute><MyEvents /></ProtectedRoute></FeatureRoute>

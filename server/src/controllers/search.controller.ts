@@ -156,6 +156,7 @@ export async function search(req: Request, res: Response): Promise<void> {
             const eventWhere = {
                 isPublished: true,
                 visibility: { in: ['PUBLIC', 'LIMITED_SPACES'] },
+                calledOffAt: null, // a proposed meetup that didn't happen
                 host: { isBanned: false, deletedAt: null },
                 OR: [
                     { title: searchTerm },

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store,
+    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -85,7 +85,7 @@ const EventDetail = () => {
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState(false);
     const [menu, setMenu] = useState(false);
-    const [sheet, setSheet] = useState(null); // 'delete'
+    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff'
     const [notice, setNotice] = useState('');
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
@@ -149,12 +149,17 @@ const EventDetail = () => {
     const rsvp = async (next) => {
         setGoing(next);
         setBusy(true);
+        setNotice('');
         try {
             const res = next ? await eventsApi.rsvp(event.id, 'GOING') : await eventsApi.cancelRsvp(event.id);
             // That made a proposal's number: it's on.
             if (res?.confirmed) { await load(); setGoing(null); }
-        } catch {
+        } catch (err) {
             setGoing(!next);
+            // On a proposal, say why (called off, full…).
+            const reason = err?.data?.reason;
+            if (event.stage) setNotice(t(`events.proposals.errors.${reason}`, { defaultValue: t('events.proposals.errors.generic') }));
+            if (reason === 'called_off') load();
         } finally {
             setBusy(false);
         }
@@ -177,6 +182,18 @@ const EventDetail = () => {
             load();
         } catch { /* stays as it was */ }
     };
+    const callOff = async () => {
+        setBusy(true);
+        try {
+            await eventsApi.callOff(event.id);
+            await load();
+        } catch {
+            setNotice(t('events.proposals.errors.generic'));
+        } finally {
+            setBusy(false);
+            setSheet(null);
+        }
+    };
     const remove = async () => {
         setBusy(true);
         try {
@@ -193,7 +210,13 @@ const EventDetail = () => {
     const proposed = stage === 'proposed';
     const needs = proposed ? proposalNeeds({ ...event, goingCount }) : 0;
     const venue = event.venueListing || null;
-    const inNames = namesText([...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))], t);
+    const mine = !!user && event.hostId === user.id;
+    const closed = proposed && !!event.decideBy && new Date(event.decideBy).getTime() < Date.now();
+    // "You and Edwin Rivas are in": named as many as are shown.
+    const inList = [...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))];
+    const inLine = inList.length === 1 && isGoing ? t('events.proposals.firstIn')
+        : inList.length ? t('events.proposals.whoIn', { names: namesText(inList, t), count: inList.length }) : '';
+    const byProposer = event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy);
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -225,9 +248,14 @@ const EventDetail = () => {
                         <>
                             <div className="ev-menu-backdrop" onClick={() => setMenu(false)} />
                             <div className="ev-menu" role="menu">
-                                {event.canEdit && (
+                                {event.canEdit && stage !== 'calledOff' && (
                                     <button type="button" role="menuitem" onClick={() => { setMenu(false); navigate(stage && event.canDelete ? `/events/propose/${event.id}` : `/events/edit/${event.id}`); }}>
                                         <Edit3 size={16} /> {t('events.detail.edit')}
+                                    </button>
+                                )}
+                                {event.canDelete && (stage === 'proposed' || stage === 'on') && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOff'); }}>
+                                        <Ban size={16} /> {t('events.proposals.callOff')}
                                     </button>
                                 )}
                                 {event.myPartnerIds?.length > 0 && (
@@ -261,7 +289,7 @@ const EventDetail = () => {
                 {stage === 'calledOff' && (
                     <div className="ev-stage off" role="status">
                         <XCircle size={22} aria-hidden="true" />
-                        <span><b>{t('events.proposals.calledOff')}</b>{t('events.proposals.calledOffHint', { when: whenShort(event.decideBy, lang) })}</span>
+                        <span><b>{t('events.proposals.calledOff')}</b>{byProposer ? t('events.proposals.calledOffByHost') : t('events.proposals.calledOffHint', { when: whenShort(event.decideBy, lang) })}</span>
                     </div>
                 )}
                 <div>
@@ -283,7 +311,7 @@ const EventDetail = () => {
                                         <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<User size={14} />} /></span>
                                     ))}
                                 </span>
-                                {inNames && <span>{t('events.proposals.whoIn', { names: inNames, count: goingCount })}</span>}
+                                {inLine && <span>{inLine}</span>}
                             </div>
                         )}
                         <p className="ev-proposal-deadline">
@@ -401,7 +429,7 @@ const EventDetail = () => {
                     <p className="ev-not-bies"><Info size={15} aria-hidden="true" /> {t('events.proposals.notBies')}</p>
                 )}
 
-                {!proposed && (goingCount > 0 || rsvpRow) && (
+                {!proposed && stage !== 'calledOff' && (goingCount > 0 || rsvpRow) && (
                     <div className={`ev-going${rsvpRow ? ' rsvp' : ''}`}>
                         {goingPeople.length > 0 && (
                             <span className="ev-going-pile">
@@ -432,12 +460,19 @@ const EventDetail = () => {
                 {proposed ? (
                     <>
                         <span className="ev-bar-text">
-                            <b>{isGoing ? t('events.proposals.youreIn') : t('events.proposals.areYouIn')}</b>
+                            <b>{mine ? t('events.proposals.youProposed') : isGoing ? t('events.proposals.youreIn') : closed ? t('events.proposals.joinClosed') : t('events.proposals.areYouIn')}</b>
                             <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
                         </span>
-                        <button type="button" className={`ev-in${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy || !isFull} onClick={() => rsvp(!isGoing)}>
-                            {isGoing && <Check size={16} aria-hidden="true" />} {isGoing ? t('events.proposals.in') : t('events.proposals.imIn')}
-                        </button>
+                        {mine ? (
+                            // Whoever proposed it is in already: they bring people.
+                            <button type="button" className="ev-in on" onClick={share}>
+                                <Share size={16} aria-hidden="true" /> {t('events.proposals.invite')}
+                            </button>
+                        ) : (
+                            <button type="button" className={`ev-in${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy || !isFull || (closed && !isGoing)} onClick={() => rsvp(!isGoing)}>
+                                {isGoing && <Check size={16} aria-hidden="true" />} {isGoing ? t('events.proposals.in') : t('events.proposals.imIn')}
+                            </button>
+                        )}
                     </>
                 ) : satsTickets ? (
                     <>
@@ -462,6 +497,17 @@ const EventDetail = () => {
                     event={{ id: event.id, title: event.title, priceSats: event.priceSats }}
                     onPurchased={(tk) => { setTicket(tk); setBuying(false); setGoing(true); }}
                 />
+            )}
+            {sheet === 'callOff' && (
+                <ModerationSheet title={t('events.proposals.callOff')} onClose={() => setSheet(null)}>
+                    <p className="mod-muted">{t('events.proposals.callOffConfirm')}</p>
+                    <div className="mod-actions">
+                        <button type="button" className="mod-button secondary" onClick={() => setSheet(null)}>{t('events.proposals.keep')}</button>
+                        <button type="button" className="mod-button danger" onClick={callOff} disabled={busy}>
+                            {busy && <Loader2 size={18} className="mod-spin" />} {t('events.proposals.callOff')}
+                        </button>
+                    </div>
+                </ModerationSheet>
             )}
             {sheet === 'delete' && (
                 <ModerationSheet title={t('events.detail.delete')} onClose={() => setSheet(null)}>

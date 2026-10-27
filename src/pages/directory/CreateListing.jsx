@@ -380,10 +380,10 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             } else {
                 const result = await directoryApi.create(payload);
                 const listing = result?.data || result;
-                if (fromEvent?.eventId) {
+                if (fromEvent?.eventId) await eventsApi.update(fromEvent.eventId, { venueListingId: listing.id }).catch(() => {});
+                if (fromEvent?.eventId && listing.status === 'active') {
                     // Back to the meetup, which now links to it.
-                    await eventsApi.update(fromEvent.eventId, { venueListingId: listing.id }).catch(() => {});
-                    if (listing.status === 'active') mirrorFromDevice(listing);
+                    mirrorFromDevice(listing);
                     navigate(`/events/${fromEvent.eventId}`, { replace: true });
                 } else if (listing.status === 'active') {
                     // Live at once (unless the server holds members' listings for approval)

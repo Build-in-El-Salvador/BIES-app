@@ -174,6 +174,7 @@ async function eventTeaser(id: string) {
         },
     });
     if (!event || !event.isPublished || event.visibility === 'PRIVATE' || event.visibility === 'DRAFT') return null;
+    if (event.calledOffAt) return null; // a proposed meetup that didn't happen
     if (event.host.isBanned || event.host.deletedAt) return null;
 
     const partnerName = (p: typeof event.partners[number]) => {

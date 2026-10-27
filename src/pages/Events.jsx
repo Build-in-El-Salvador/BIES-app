@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, CalendarDays, Loader2, Hand } from 'lucide-react';
 import { eventsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import CoverPhoto from '../components/CoverPhoto';
 import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
@@ -31,6 +32,7 @@ const keep = (filter) => (e) => filter === 'all'
 
 const Events = () => {
     const { t, i18n } = useTranslation();
+    const { user } = useAuth();
     const lang = i18n.language;
     const [params, setParams] = useSearchParams();
     const past = params.get('past') === '1';
@@ -39,8 +41,17 @@ const Events = () => {
     const [events, setEvents] = useState(null); // null while loading
     const [error, setError] = useState(false);
     const [going, setGoing] = useState({}); // eventId → true/false after a tap
-    const [joined, setJoined] = useState({}); // proposal id → members in after a tap
+    const [busy, setBusy] = useState({}); // proposal id → true while a tap is on its way
+    const [notice, setNotice] = useState(''); // why a tap on a proposal didn't take
     const [addMenu, setAddMenu] = useState(false); // + : add an event, or propose a meetup
+
+    // The + menu closes with Escape too.
+    useEffect(() => {
+        if (!addMenu) return undefined;
+        const onKey = (e) => { if (e.key === 'Escape') setAddMenu(false); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [addMenu]);
 
     const latest = useRef(0); // only the newest answer is shown
     const load = useCallback(async (q) => {
@@ -88,20 +99,30 @@ const Events = () => {
     };
     const isGoing = (e) => (e.id in going ? going[e.id] : e.rsvpStatus === 'GOING');
 
+    // As many as the list said, with my own tap counted.
+    const withMyTap = (e) => ({ ...e, goingCount: (e.goingCount || 0) - (e.rsvpStatus === 'GOING' ? 1 : 0) + (isGoing(e) ? 1 : 0) });
+
     // I'm in on a proposal: when that makes its number it's on, and moves up
     // into Community events.
     const join = async (event, next) => {
+        if (busy[event.id]) return;
         const before = isGoing(event);
+        setNotice('');
         setGoing((g) => ({ ...g, [event.id]: next }));
-        setJoined((j) => ({ ...j, [event.id]: (event.goingCount || 0) + (next ? 1 : 0) - (before ? 1 : 0) }));
+        setBusy((b) => ({ ...b, [event.id]: true }));
         try {
             const res = next ? await eventsApi.rsvp(event.id, 'GOING') : await eventsApi.cancelRsvp(event.id);
             if (res?.confirmed) load(search.trim());
-        } catch {
+        } catch (err) {
             setGoing((g) => ({ ...g, [event.id]: before }));
-            setJoined((j) => { const { [event.id]: _gone, ...rest } = j; return rest; });
+            const reason = err?.data?.reason;
+            setNotice(t(`events.proposals.errors.${reason}`, { defaultValue: t('events.proposals.errors.generic') }));
+            if (reason === 'called_off') load(search.trim());
+        } finally {
+            setBusy((b) => ({ ...b, [event.id]: false }));
         }
     };
+    const closed = (e) => !!e.decideBy && new Date(e.decideBy).getTime() < Date.now();
 
     return (
         <div className="events-page container">
@@ -120,7 +141,7 @@ const Events = () => {
                         />
                     </label>
                     <div className="ev-add-wrap">
-                        <button type="button" className="ev-add" aria-label={t('events.page.add')} aria-expanded={addMenu} onClick={() => setAddMenu((v) => !v)}>
+                        <button type="button" className="ev-add" aria-label={t('events.page.add')} aria-haspopup="menu" aria-expanded={addMenu} onClick={() => setAddMenu((v) => !v)}>
                             <Plus size={22} />
                         </button>
                         {addMenu && (
@@ -141,7 +162,7 @@ const Events = () => {
                             <ChevronLeft size={15} aria-hidden="true" /> {t('events.page.upcoming')}
                         </button>
                     )}
-                    {FILTERS.map((f) => (
+                    {FILTERS.filter((f) => !(past && f === 'proposed')).map((f) => (
                         <button key={f} type="button" className={`ev-chip${filter === f ? ' on' : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
                             {t(`events.page.filters.${f}`)}
                         </button>
@@ -204,14 +225,18 @@ const Events = () => {
                             <Hand size={20} aria-hidden="true" /> {t('events.proposals.section')} {proposals.length > 0 && <span>{proposals.length}</span>}
                         </h2>
                         <p className="ev-sec-hint">{t('events.proposals.sectionHint')}</p>
+                        {notice && <p className="ev-notice" role="alert">{notice}</p>}
                         <ul className="ev-list">
                             {proposals.map((e) => (
                                 <li key={e.id}>
                                     <ProposalCard
-                                        event={e.id in joined ? { ...e, goingCount: joined[e.id] } : e}
+                                        event={withMyTap(e)}
                                         lang={lang}
                                         going={isGoing(e)}
                                         onGoing={(next) => join(e, next)}
+                                        busy={!!busy[e.id]}
+                                        mine={!!user && e.hostId === user.id}
+                                        closed={closed(e)}
                                     />
                                 </li>
                             ))}
@@ -268,6 +293,7 @@ const Events = () => {
                 .ev-add-menu :global(a:hover) { background: var(--color-gray-100); }
                 .ev-add-menu :global(svg) { color: var(--color-primary); }
                 .ev-sec-hint { margin: -4px 0 10px; font-size: 0.85rem; color: var(--color-gray-500); }
+                .ev-notice { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-orange-tint); color: var(--color-orange-text); font-size: 0.875rem; }
                 .ev-content :global(.ev-propose) {
                     display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 16px; height: 100%; box-sizing: border-box;
                     border: 1.5px dashed var(--color-gray-300); text-decoration: none; color: inherit;

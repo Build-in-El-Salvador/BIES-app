@@ -34,6 +34,7 @@ import express from 'express';
 import prisma from '../lib/prisma';
 import eventRoutes from '../routes/events.routes';
 import directoryRoutes from '../routes/directory.routes';
+import previewRoutes from '../routes/preview.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { MAX_OPEN_PROPOSALS, sweepProposals } from '../services/eventProposals.service';
@@ -48,6 +49,7 @@ beforeAll(async () => {
     app.use(express.json());
     app.use('/api/events', eventRoutes);
     app.use('/api/directory', directoryRoutes);
+    app.use('/api/preview', previewRoutes);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -119,6 +121,10 @@ const leave = (who: Member, id: string) => call('DELETE', `/api/events/${id}/rsv
 const told = (userId: string, eventId: string, start: string) => prisma.notification.count({
     where: { userId, title: { startsWith: start }, data: { contains: eventId } },
 });
+/** The last notification a member got that starts so. */
+const lastNote = (userId: string, start: string) => prisma.notification.findFirst({
+    where: { userId, title: { startsWith: start } }, orderBy: { createdAt: 'desc' },
+});
 
 describe('proposing a meetup', () => {
     it('is a public meetup by the member, who is the first one in; no description needed', async () => {
@@ -146,6 +152,10 @@ describe('proposing a meetup', () => {
         expect((await propose(host, { decideBy: null })).body.reason).toBe('decide_by_missing');
         expect((await propose(host, { decideBy: inDays(-1) })).body.reason).toBe('decide_by_past');
         expect((await propose(host, { decideBy: inDays(11) })).body.reason).toBe('decide_by_after_start');
+        // At least an hour before it starts.
+        expect((await propose(host, { decideBy: inDays(10, -0.5) })).body.reason).toBe('decide_by_after_start');
+        expect((await propose(host, { decideBy: inDays(10, -1.5) })).status).toBe(201);
+        expect((await propose(host, { startDate: 'soon' })).body.reason).toBe('start_invalid');
         expect((await propose(host, { minAttendees: 4, maxAttendees: 3 })).body.reason).toBe('max_below_min');
         expect((await propose(host, { minAttendees: 1 })).status).toBe(400);
         expect((await propose(host, { minAttendees: 51 })).status).toBe(400);
@@ -156,7 +166,7 @@ describe('proposing a meetup', () => {
         for (let i = 0; i < MAX_OPEN_PROPOSALS; i++) expect((await propose(host)).status).toBe(201);
         const extra = await propose(host);
         expect(extra.status).toBe(400);
-        expect(extra.body.reason).toBe('too_many_proposals');
+        expect(extra.body).toMatchObject({ reason: 'too_many_proposals', max: MAX_OPEN_PROPOSALS });
         // A usual event isn't held back.
         expect((await call('POST', '/api/events', { token: host.token, body: { title: 'Talk', description: 'About things.', startDate: inDays(5) } })).status).toBe(201);
     });
@@ -169,6 +179,20 @@ describe('proposing a meetup', () => {
         expect(res.status).toBe(201);
         expect(res.body.hostListing).toBeNull();
         expect(res.body.partners).toEqual([]);
+    });
+});
+
+describe('money', () => {
+    it('a member\'s meetup has no tickets: links and prices are dropped, buying is refused', async () => {
+        const host = await member();
+        const res = await propose(host, { ticketUrl: 'https://lu.ma/x', bitcoinUrl: 'https://pay.example/x', priceSats: 5000, payoutLightningAddress: 'me@example.com' });
+        const row = (await prisma.event.findUnique({ where: { id: res.body.id } }))!;
+        expect([row.ticketUrl, row.bitcoinUrl, row.priceSats, row.payoutLightningAddress]).toEqual(['', '', null, '']);
+        await call('PUT', `/api/events/${res.body.id}`, { token: host.token, body: { priceSats: 5000, ticketUrl: 'https://lu.ma/x' } });
+        expect((await prisma.event.findUnique({ where: { id: res.body.id } }))!.priceSats).toBeNull();
+
+        await prisma.event.update({ where: { id: res.body.id }, data: { priceSats: 5000 } });
+        expect((await call('POST', `/api/events/${res.body.id}/tickets`, { token: (await member()).token })).status).toBe(400);
     });
 });
 
@@ -196,6 +220,24 @@ describe('tagging where it is', () => {
         expect(row.locationMapUrl).toBe('https://maps.app.goo.gl/mine');
     });
 
+    it('moving to another business replaces what came from the old one; the member\'s own stays', async () => {
+        const poster = await member();
+        const a = await restaurant(poster, { mapUrl: 'https://maps.app.goo.gl/a', photo: '/uploads/public/1793000000011-0123456789abcdef0123456789abcdef.jpg' });
+        const b = await restaurant(poster, { mapUrl: '', photo: '' });
+        const host = await member();
+        const id = (await propose(host, { venueListingId: a })).body.id;
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { venueListingId: b } });
+        let row = (await prisma.event.findUnique({ where: { id } }))!;
+        expect(row.venueListingId).toBe(b);
+        expect(row.locationMapUrl).toBe(''); // not a's link
+        expect(row.thumbnail).toBe(''); // not a's photo
+
+        const own = (await propose(host, { venueListingId: a, locationMapUrl: 'https://maps.app.goo.gl/mine' })).body.id;
+        await call('PUT', `/api/events/${own}`, { token: host.token, body: { venueListingId: b } });
+        row = (await prisma.event.findUnique({ where: { id: own } }))!;
+        expect(row.locationMapUrl).toBe('https://maps.app.goo.gl/mine');
+    });
+
     it('works on usual events too, and not with a listing that isn\'t up (unless it\'s the member\'s own)', async () => {
         const poster = await member();
         const pending = await restaurant(poster);
@@ -207,6 +249,9 @@ describe('tagging where it is', () => {
         const mine = await propose(poster, { venueListingId: pending });
         expect(mine.status).toBe(201);
         expect(mine.body.venueListing).toBeNull();
+        // Not once it's been turned down.
+        await prisma.directoryListing.update({ where: { id: pending }, data: { status: 'rejected' } });
+        expect((await propose(poster, { venueListingId: pending })).body.reason).toBe('venue_not_found');
 
         const live = await restaurant(poster);
         const usual = await call('POST', '/api/events', { token: someone.token, body: { title: 'Dinner', description: 'Dinner.', startDate: inDays(4), venueListingId: live } });
@@ -253,8 +298,14 @@ describe('going ahead', () => {
         expect((await call('GET', `/api/events/${id}`, { token: a.token })).body.stage).toBe('proposed');
         expect(await told(host.id, id, 'Called off')).toBe(0);
 
+        // The proposer hears who's in, and what it still needs.
+        const heard = await lastNote(host.id, `${a.name} is in`);
+        expect(heard?.body).toBe('2 of 3 in · needs 1 more');
+
         const second = await join(b, id);
         expect(second.body.confirmed).toBe(true);
+        expect(await told(host.id, id, `${b.name} is in`)).toBe(0); // "It's on" says it
+        expect((await lastNote(a.id, "It's on"))?.body).toMatch(/^3 people are in: \w{3}, \w{3} \d+, \d+:\d{2} [AP]M at Somewhere nice\.$/);
         const seen = await call('GET', `/api/events/${id}`, { token: b.token });
         expect(seen.body).toMatchObject({ stage: 'on', goingCount: 3 });
         expect(seen.body.confirmedAt).toBeTruthy();
@@ -295,7 +346,18 @@ describe('going ahead', () => {
         const host = await member();
         const id = (await propose(host, { minAttendees: 2, maxAttendees: 2 })).body.id;
         expect((await join(await member(), id)).status).toBe(200);
-        expect((await join(await member(), id)).status).toBe(409);
+        const full = await join(await member(), id);
+        expect(full.status).toBe(409);
+        expect(full.body.reason).toBe('full');
+    });
+
+    it('its proposer can\'t drop out while it\'s proposed (they call it off instead)', async () => {
+        const host = await member();
+        const id = (await propose(host, { minAttendees: 2 })).body.id;
+        const out = await leave(host, id);
+        expect(out.status).toBe(400);
+        expect(out.body.reason).toBe('proposer_stays');
+        expect((await call('GET', `/api/events/${id}`, { token: host.token })).body.goingCount).toBe(1);
     });
 });
 
@@ -309,6 +371,36 @@ describe('editing a proposal', () => {
         expect(res.status).toBe(200);
         expect((await call('GET', `/api/events/${id}`, { token: host.token })).body.stage).toBe('on');
         expect(await told(a.id, id, "It's on")).toBe(1);
+    });
+
+    it('never to no number or no deadline', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { decideBy: null } })).body.reason).toBe('decide_by_missing');
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { minAttendees: null } })).body.reason).toBe('decide_by_missing');
+        const row = (await prisma.event.findUnique({ where: { id } }))!;
+        expect(row.minAttendees).toBe(3);
+        expect(row.decideBy).toBeTruthy();
+    });
+
+    it('moving the start before the deadline is refused; an end can be cleared', async () => {
+        const host = await member();
+        const id = (await propose(host, { endDate: inDays(10, 2) })).body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(8) } })).body.reason).toBe('decide_by_after_start');
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { endDate: null } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.endDate).toBeNull();
+    });
+
+    it('when it moves or changes place, everyone in hears (not whoever changed it)', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host)).body.id;
+        await join(a, id);
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { title: 'Lunch, renamed' } });
+        expect(await told(a.id, id, 'Changed')).toBe(0); // the title alone: nobody needs telling
+        await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(11), locationName: 'Another place' } });
+        expect((await lastNote(a.id, 'Changed'))?.body).toMatch(/^Now .+ at Another place\.$/);
+        expect(await told(host.id, id, 'Changed')).toBe(0);
     });
 
     it('checks a new deadline, and leaves the number alone once it\'s on', async () => {
@@ -363,6 +455,30 @@ describe('called off', () => {
         expect(await told(host.id, id, 'Called off')).toBe(1);
     });
 
+    it('the sweep makes it go ahead if enough people are in after all', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host, { minAttendees: 2 })).body.id;
+        // In without the check after it (as if it had failed).
+        await prisma.eventAttendee.create({ data: { eventId: id, userId: a.id, status: 'GOING' } });
+        await prisma.event.update({ where: { id }, data: { decideBy: new Date(Date.now() - 60_000) } });
+        await sweepProposals();
+        const row = (await prisma.event.findUnique({ where: { id } }))!;
+        expect(row.confirmedAt).toBeTruthy();
+        expect(row.calledOffAt).toBeNull();
+        expect(await told(a.id, id, "It's on")).toBe(1);
+        expect(await told(a.id, id, 'Called off')).toBe(0);
+    });
+
+    it('a called-off meetup has no public preview', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        expect((await call('GET', `/api/preview/events/${id}`)).status).toBe(200);
+        await prisma.event.update({ where: { id }, data: { decideBy: new Date(Date.now() - 60_000) } });
+        await sweepProposals();
+        expect((await call('GET', `/api/preview/events/${id}`)).status).toBe(404);
+    });
+
     it('one that went ahead is never called off', async () => {
         const host = await member();
         const id = (await propose(host, { minAttendees: 2 })).body.id;
@@ -379,5 +495,45 @@ describe('called off', () => {
         await prisma.event.update({ where: { id: ids[0] }, data: { decideBy: new Date(Date.now() - 60_000) } });
         await sweepProposals();
         expect((await propose(host)).status).toBe(201);
+    });
+});
+
+describe('its proposer calling it off', () => {
+    it('everyone in is told; it stays, marked called off, and leaves the lists', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host)).body.id;
+        await join(a, id);
+        expect((await call('POST', `/api/events/${id}/call-off`, { token: a.token })).status).toBe(403);
+        const off = await call('POST', `/api/events/${id}/call-off`, { token: host.token });
+        expect(off.status).toBe(200);
+        expect((await call('GET', `/api/events/${id}`, { token: a.token })).body.stage).toBe('calledOff');
+        expect((await lastNote(a.id, 'Called off'))?.body).toBe('The member who proposed it called it off.');
+        expect(await told(host.id, id, 'Called off')).toBe(0);
+        expect((await join(await member(), id)).body.reason).toBe('called_off');
+        const list = await call('GET', '/api/events?upcoming=true&limit=50', { token: a.token });
+        expect(list.body.data.some((e: { id: string }) => e.id === id)).toBe(false);
+    });
+
+    it('works once it\'s on too, but not on a usual event', async () => {
+        const host = await member();
+        const id = (await propose(host, { minAttendees: 2 })).body.id;
+        await join(await member(), id);
+        expect((await call('POST', `/api/events/${id}/call-off`, { token: host.token })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.calledOffAt).toBeTruthy();
+        const usual = await call('POST', '/api/events', { token: host.token, body: { title: 'Talk', description: 'Talk.', startDate: inDays(5) } });
+        expect((await call('POST', `/api/events/${usual.body.id}/call-off`, { token: host.token })).body.reason).toBe('not_a_proposal');
+    });
+
+    it('deleting it tells everyone in, with no page to open', async () => {
+        const host = await member();
+        const a = await member();
+        const id = (await propose(host)).body.id;
+        await join(a, id);
+        expect((await call('DELETE', `/api/events/${id}`, { token: host.token })).status).toBe(200);
+        const note = await lastNote(a.id, 'Called off');
+        expect(note?.title).toMatch(/^Called off: "Lunch \d+"$/);
+        expect(JSON.parse(note!.data).eventId).toBeUndefined();
+        expect(await prisma.notification.count({ where: { userId: host.id, title: { startsWith: 'Called off' } } })).toBe(0);
     });
 });

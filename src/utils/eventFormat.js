@@ -132,3 +132,26 @@ export function dayBefore(date) {
     d.setUTCDate(d.getUTCDate() - 1);
     return d.toISOString().slice(0, 10);
 }
+
+/**
+ * A proposal's default decide-by time (El Salvador): noon the day before it
+ * starts; when that's past or too close, two hours before it starts. Always
+ * at least an hour from now and an hour before the start (as the server
+ * asks), on a quarter hour where one fits. Empty when it starts too soon.
+ */
+export function defaultDecideBy(date, time, now = new Date()) {
+    const start = fromFormFields(date, time || '12:00');
+    if (!start) return { date: '', time: '' };
+    const HOUR = 3600_000;
+    const QUARTER = 900_000;
+    const soonest = now.getTime() + HOUR;
+    const latest = new Date(start).getTime() - HOUR;
+    if (latest < soonest) return { date: '', time: '' };
+    const noon = new Date(fromFormFields(dayBefore(date), '12:00')).getTime();
+    const twoBefore = latest - HOUR;
+    let pick = [noon, twoBefore].find((t) => t >= soonest && t <= latest) ?? latest;
+    const rounded = Math.floor(pick / QUARTER) * QUARTER;
+    if (rounded >= soonest) pick = rounded;
+    else if (Math.ceil(pick / QUARTER) * QUARTER <= latest) pick = Math.ceil(pick / QUARTER) * QUARTER;
+    return toFormFields(new Date(pick).toISOString());
+}

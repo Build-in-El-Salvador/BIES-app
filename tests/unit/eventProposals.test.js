@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dayBefore, fromFormFields, listingPath, proposalNeeds } from '../../src/utils/eventFormat.js';
+import { dayBefore, defaultDecideBy, fromFormFields, listingPath, proposalNeeds } from '../../src/utils/eventFormat.js';
 
 test('a proposal needs what its number lacks, never less than none', () => {
     assert.equal(proposalNeeds({ minAttendees: 3, goingCount: 2 }), 1);
@@ -31,4 +31,26 @@ test('noon on the day before is El Salvador noon', () => {
 test('a tagged business or farm opens its own page', () => {
     assert.equal(listingPath({ id: 'abc', type: 'PROVIDER' }), '/trusted/abc');
     assert.equal(listingPath({ id: 'xyz', type: 'FARM' }), '/farms/xyz');
+});
+
+test('decide-by defaults to noon the day before, when that still works', () => {
+    const now = new Date('2026-10-26T15:00:00Z'); // Mon 9:00 AM in El Salvador
+    assert.deepEqual(defaultDecideBy('2026-11-07', '13:00', now), { date: '2026-11-06', time: '12:00' });
+});
+
+test('proposed for tomorrow morning in the afternoon: two hours before it starts', () => {
+    const now = new Date('2026-10-26T21:00:00Z'); // Mon 3:00 PM
+    assert.deepEqual(defaultDecideBy('2026-10-27', '09:00', now), { date: '2026-10-27', time: '07:00' });
+});
+
+test('proposed for later today: as late as allowed, an hour before, never before an hour from now', () => {
+    const now = new Date('2026-10-26T15:50:00Z'); // Mon 9:50 AM
+    assert.deepEqual(defaultDecideBy('2026-10-26', '13:00', now), { date: '2026-10-26', time: '11:00' });
+    const later = new Date('2026-10-26T16:55:00Z'); // 10:55 AM: two before (11:00) is too soon
+    assert.deepEqual(defaultDecideBy('2026-10-26', '13:00', later), { date: '2026-10-26', time: '12:00' });
+});
+
+test('starting too soon for any deadline: none', () => {
+    const now = new Date('2026-10-26T18:30:00Z'); // 12:30 PM
+    assert.deepEqual(defaultDecideBy('2026-10-26', '13:00', now), { date: '', time: '' });
 });

@@ -25,12 +25,21 @@ export type ProposalStage = 'proposed' | 'on' | 'calledOff';
 
 type ProposalFields = { minAttendees: number | null; confirmedAt: Date | null; calledOffAt: Date | null };
 
-/** Where a proposal stands; null for a usual event. */
+/** Where a proposal stands; null for a usual event. Its proposer can call it off even once it's on. */
 export function proposalStage(e: ProposalFields): ProposalStage | null {
     if (!e.minAttendees) return null;
-    if (e.confirmedAt) return 'on';
     if (e.calledOffAt) return 'calledOff';
+    if (e.confirmedAt) return 'on';
     return 'proposed';
+}
+
+/** A meetup's when and where in a notification: "Sat 7 Nov, 1:00 PM at Corte Argentino Parrilla". */
+export function whenAndWhere(e: { startDate: Date; locationName?: string | null; location?: string | null }): string {
+    const when = e.startDate.toLocaleString('en-US', {
+        weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/El_Salvador',
+    });
+    const where = (e.locationName || e.location || '').trim();
+    return where ? `${when} at ${where}` : when;
 }
 
 /** A venue as an event shows it. */
@@ -47,7 +56,8 @@ export async function venueFor(listingId: string, userId: string) {
     const listing = await prisma.directoryListing.findUnique({ where: { id: listingId }, select: { ...VENUE_SELECT, ownerId: true } });
     if (!listing) return null;
     const live = listing.status === 'active' && listing.isPublished;
-    return live || listing.ownerId === userId ? listing : null;
+    const ownWaiting = listing.ownerId === userId && listing.status === 'pending-review';
+    return live || ownWaiting ? listing : null;
 }
 
 /** How many proposals a member has open: not on yet, not called off. */
@@ -55,10 +65,23 @@ export function openProposals(hostId: string): Promise<number> {
     return prisma.event.count({ where: { hostId, minAttendees: { not: null }, confirmedAt: null, calledOffAt: null } });
 }
 
-/** Everyone going, and the member who proposed it. */
-async function peopleIn(eventId: string, hostId: string): Promise<string[]> {
+/** Everyone going, and the member who proposed it (but not whoever's doing this). */
+export async function peopleIn(eventId: string, hostId: string, except?: string): Promise<string[]> {
     const going = await prisma.eventAttendee.findMany({ where: { eventId, status: 'GOING' }, select: { userId: true } });
-    return [...new Set([hostId, ...going.map((a) => a.userId)])];
+    return [...new Set([hostId, ...going.map((a) => a.userId)])].filter((id) => id !== except);
+}
+
+/** Tell everyone in about a meetup; failures are logged, never thrown. */
+export async function tellPeopleIn(eventId: string, hostId: string, note: { title: string; body: string; status: string; link?: boolean }, except?: string) {
+    const people = await peopleIn(eventId, hostId, except);
+    await Promise.all(people.map((userId) => createNotification({
+        userId,
+        type: 'EVENT_RSVP',
+        title: note.title,
+        body: note.body,
+        // A deleted meetup has no page to open.
+        data: note.link === false ? { status: note.status } : { eventId, status: note.status },
+    }).catch(() => {})));
 }
 
 /**
@@ -69,7 +92,10 @@ async function peopleIn(eventId: string, hostId: string): Promise<string[]> {
 export async function confirmIfReached(eventId: string): Promise<boolean> {
     const event = await prisma.event.findUnique({
         where: { id: eventId },
-        select: { id: true, title: true, hostId: true, minAttendees: true, confirmedAt: true, calledOffAt: true },
+        select: {
+            id: true, title: true, hostId: true, minAttendees: true, confirmedAt: true, calledOffAt: true,
+            startDate: true, locationName: true, location: true,
+        },
     });
     if (!event || proposalStage(event) !== 'proposed') return false;
     const going = await prisma.eventAttendee.count({ where: { eventId, status: 'GOING' } });
@@ -80,18 +106,19 @@ export async function confirmIfReached(eventId: string): Promise<boolean> {
     });
     if (won.count !== 1) return false;
     await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${eventId}`)]);
-    const people = await peopleIn(eventId, event.hostId);
-    await Promise.all(people.map((userId) => createNotification({
-        userId,
-        type: 'EVENT_RSVP',
+    await tellPeopleIn(eventId, event.hostId, {
         title: `It's on: "${event.title}"`,
-        body: `${going} people are in. See you there!`,
-        data: { eventId, status: 'CONFIRMED' },
-    }).catch(() => {})));
+        body: `${going} people are in: ${whenAndWhere(event)}.`,
+        status: 'CONFIRMED',
+    });
     return true;
 }
 
-/** Proposals past their decide-by time without enough people: called off, and everyone in is told. */
+/**
+ * Proposals past their decide-by time: on, if enough people are in after all
+ * (someone joined but the check after it failed), else called off, and
+ * everyone in is told.
+ */
 export async function sweepProposals(now = new Date()): Promise<number> {
     const due = await prisma.event.findMany({
         where: { minAttendees: { not: null }, confirmedAt: null, calledOffAt: null, decideBy: { lt: now } },
@@ -100,20 +127,19 @@ export async function sweepProposals(now = new Date()): Promise<number> {
     });
     let calledOff = 0;
     for (const event of due) {
+        if (await confirmIfReached(event.id)) continue;
         const won = await prisma.event.updateMany({
             where: { id: event.id, confirmedAt: null, calledOffAt: null },
             data: { calledOffAt: now },
         });
         if (won.count !== 1) continue;
         calledOff += 1;
-        const people = await peopleIn(event.id, event.hostId);
-        await Promise.all(people.map((userId) => createNotification({
-            userId,
-            type: 'EVENT_RSVP',
+        await cache.del(`preview:events:${event.id}`);
+        await tellPeopleIn(event.id, event.hostId, {
             title: `Called off: "${event.title}"`,
-            body: 'Not enough people were in by the deadline.',
-            data: { eventId: event.id, status: 'CALLED_OFF' },
-        }).catch(() => {})));
+            body: 'Not enough people joined in time.',
+            status: 'CALLED_OFF',
+        });
     }
     if (calledOff) await cache.delPattern('events:');
     return calledOff;

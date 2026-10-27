@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Check, ImagePlus, Loader2, MapPin, Minus, Move, Pencil, Plus, Store, X } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
-import { dayBefore, fromFormFields, toFormFields } from '../utils/eventFormat';
+import { defaultDecideBy, fromFormFields, toFormFields } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
 import CoverPhoto from '../components/CoverPhoto';
@@ -43,6 +43,7 @@ export default function ProposeForm() {
     const [decideTouched, setDecideTouched] = useState(editing);
     const [loading, setLoading] = useState(editing || !!venueParam);
     const [notYours, setNotYours] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState('');
@@ -90,7 +91,8 @@ export default function ProposeForm() {
                 });
                 setVenue(e.venueListing || null);
                 setStage(e.stage || 'proposed');
-            }).catch(() => setNotYours(true)).finally(() => setLoading(false));
+            }).catch((err) => (err?.status === 403 || err?.status === 404 ? setNotYours(true) : setLoadFailed(true)))
+                .finally(() => setLoading(false));
             return;
         }
         if (venueParam) {
@@ -117,11 +119,13 @@ export default function ProposeForm() {
         return () => { cancelled = true; clearTimeout(timer); };
     }, [typed, venue, suggesting]);
 
-    // Decide by the day before, at noon, until the member picks another time.
+    // Decide by noon the day before (or, starting sooner, a couple of hours
+    // before), until the member picks another time.
     useEffect(() => {
         if (decideTouched || !form.startDate) return;
-        setForm((f) => ({ ...f, decideDate: dayBefore(f.startDate), decideTime: '12:00' }));
-    }, [form.startDate, decideTouched]);
+        const decide = defaultDecideBy(form.startDate, form.startTime);
+        setForm((f) => ({ ...f, decideDate: decide.date, decideTime: decide.time || '12:00' }));
+    }, [form.startDate, form.startTime, decideTouched]);
 
     // A cover for a place that isn't on BIES: positioned, then uploaded.
     const cover = useCoverFramer(COVER_ASPECT.event, async ({ file, frame }) => {
@@ -145,6 +149,7 @@ export default function ProposeForm() {
         const endDate = form.endTime ? fromFormFields(form.startDate, form.endTime) : '';
         const decideBy = fromFormFields(form.decideDate, form.decideTime);
         if (!form.title.trim() || !startDate || !typed) { setError(t('events.propose.required')); return; }
+        if (endDate && endDate <= startDate) { setError(t('events.propose.endBeforeStart')); return; }
         const open = stage === 'proposed';
         if (open && !decideBy) { setError(t('events.propose.reasons.decide_by_missing')); return; }
         const max = parseInt(form.maxAttendees, 10);
@@ -153,9 +158,11 @@ export default function ProposeForm() {
             description: form.about.trim(),
             category: 'MEETUP',
             startDate,
-            ...(endDate && endDate > startDate ? { endDate } : {}),
+            // No end time: none (an edit clears the one there was).
+            ...(endDate ? { endDate } : editing ? { endDate: null } : {}),
             isOnline: false,
-            location: venue ? [venue.name, venue.location].filter(Boolean).join(', ') : typed,
+            // A tagged place's full line comes from the business itself.
+            ...(venue ? {} : { location: typed }),
             locationName: typed,
             locationAddress: venue?.location || '',
             locationMapUrl: withHttps(form.mapUrl),
@@ -179,12 +186,20 @@ export default function ProposeForm() {
             navigate(`/events/${saved.id}`, { replace: true });
         } catch (err) {
             const reason = err?.data?.reason;
-            setError((reason && t(`events.propose.reasons.${reason}`, { defaultValue: '' })) || err?.message || t('events.propose.failed'));
+            setError((reason && t(`events.propose.reasons.${reason}`, { count: err?.data?.max, defaultValue: '' })) || err?.message || t('events.propose.failed'));
             setSaving(false);
         }
     };
 
     if (loading) return <div className="container" style={{ padding: '4rem 1rem', textAlign: 'center' }}><Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} /></div>;
+    if (loadFailed) {
+        return (
+            <div className="container" style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-gray-500)' }}>
+                <BackButton fallback={`/events/${id}`} />
+                <p>{t('events.propose.loadFailed')}</p>
+            </div>
+        );
+    }
     if (notYours) {
         return (
             <div className="container" style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--color-gray-500)' }}>
@@ -295,6 +310,10 @@ export default function ProposeForm() {
                                 className="pf-input"
                                 maxLength={200}
                                 autoComplete="off"
+                                role="combobox"
+                                aria-autocomplete="list"
+                                aria-expanded={showMatches}
+                                aria-controls="pf-matches"
                                 placeholder={t('events.propose.wherePlaceholder')}
                                 aria-label={t('events.propose.where')}
                                 value={form.placeName}
@@ -302,24 +321,26 @@ export default function ProposeForm() {
                             />
                         </div>
                         {showMatches && (
-                            <div className="pf-matches" role="listbox" aria-label={t('events.propose.inBusinesses')}>
-                                {matches.length > 0 && <p className="pf-matches-h">{t('events.propose.inBusinesses')}</p>}
-                                {matches.map((l) => (
-                                    <button key={l.id} type="button" role="option" aria-selected="false" className="pf-match" onClick={() => tag(l)}>
-                                        <span className="pf-match-photo"><Avatar src={l.logo || l.photo} size={40} fallback={<Store size={18} />} /></span>
+                            <div className="pf-matches">
+                                {matches.length > 0 && <p className="pf-matches-h" aria-hidden="true">{t('events.propose.inBusinesses')}</p>}
+                                <div id="pf-matches" role="listbox" aria-label={t('events.propose.inBusinesses')}>
+                                    {matches.map((l) => (
+                                        <button key={l.id} type="button" role="option" aria-selected="false" className="pf-match" onClick={() => tag(l)}>
+                                            <span className="pf-match-photo"><Avatar src={l.logo || l.photo} size={40} fallback={<Store size={18} />} /></span>
+                                            <span className="pf-match-text">
+                                                <b>{l.name}</b>
+                                                <span>{[l.category && t(`directory.categories.${l.category}`, { defaultValue: '' }), l.location].filter(Boolean).join(' · ')}</span>
+                                            </span>
+                                        </button>
+                                    ))}
+                                    <button type="button" role="option" aria-selected="false" className="pf-match typed" onClick={() => setSuggesting(false)}>
+                                        <span className="pf-match-photo plain"><Pencil size={17} aria-hidden="true" /></span>
                                         <span className="pf-match-text">
-                                            <b>{l.name}</b>
-                                            <span>{[l.category && t(`directory.categories.${l.category}`, { defaultValue: '' }), l.location].filter(Boolean).join(' · ')}</span>
+                                            <b>{t('events.propose.useTyped', { name: typed })}</b>
+                                            <span>{t('events.propose.useTypedHint')}</span>
                                         </span>
                                     </button>
-                                ))}
-                                <button type="button" role="option" aria-selected="false" className="pf-match typed" onClick={() => setSuggesting(false)}>
-                                    <span className="pf-match-photo plain"><Pencil size={17} aria-hidden="true" /></span>
-                                    <span className="pf-match-text">
-                                        <b>{t('events.propose.useTyped', { name: typed })}</b>
-                                        <span>{t('events.propose.useTypedHint')}</span>
-                                    </span>
-                                </button>
+                                </div>
                             </div>
                         )}
                         <p className="pf-hint">{t('events.propose.tagHint')}</p>
@@ -380,7 +401,7 @@ export default function ProposeForm() {
                         </div>
                         <label className="pf-label" htmlFor="pf-decide">{t('events.propose.decideBy')}</label>
                         <div className="pf-pair">
-                            <input id="pf-decide" type="date" className="pf-input" value={form.decideDate} max={form.startDate || undefined}
+                            <input id="pf-decide" type="date" className="pf-input" value={form.decideDate} min={toFormFields(new Date()).date} max={form.startDate || undefined}
                                 onChange={(e) => { setDecideTouched(true); set('decideDate')(e); }} />
                             <input type="time" className="pf-input" aria-label={t('events.propose.decideBy')} value={form.decideTime}
                                 onChange={(e) => { setDecideTouched(true); set('decideTime')(e); }} />

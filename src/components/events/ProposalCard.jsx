@@ -7,9 +7,11 @@ import { focusOf, parseFrame } from '../../utils/coverFrame';
 
 /**
  * A meetup a member proposed, in the Events list: when and where, how many
- * are in of how many it needs, and "I'm in". The whole card opens it.
+ * are in of how many it needs, and "I'm in" ("Your meetup" for whoever
+ * proposed it, who's in already; nothing to tap once it's too late). The
+ * whole card opens it.
  */
-export default function ProposalCard({ event, lang, going, onGoing, busy = false }) {
+export default function ProposalCard({ event, lang, going, onGoing, busy = false, mine = false, closed = false }) {
     const { t } = useTranslation();
     const tile = dayTile(event.startDate, lang);
     const host = hostOf(event);
@@ -45,9 +47,15 @@ export default function ProposalCard({ event, lang, going, onGoing, busy = false
                         {needs > 0 && <> · {t('events.proposals.needs', { count: needs })}</>}
                     </span>
                 </span>
-                <button type="button" className={`pc-in${going ? ' on' : ''}`} aria-pressed={!!going} disabled={busy} onClick={toggle}>
-                    {going && <Check size={15} aria-hidden="true" />} {going ? t('events.proposals.in') : t('events.proposals.imIn')}
-                </button>
+                {mine ? (
+                    <span className="pc-mine">{t('events.proposals.yours')}</span>
+                ) : closed && !going ? (
+                    <span className="pc-mine">{t('events.proposals.joinClosed')}</span>
+                ) : (
+                    <button type="button" className={`pc-in${going ? ' on' : ''}`} aria-pressed={!!going} disabled={busy || closed} onClick={toggle}>
+                        {going && <Check size={15} aria-hidden="true" />} {going ? t('events.proposals.in') : t('events.proposals.imIn')}
+                    </button>
+                )}
             </div>
             <style jsx>{`
                 .pc {
@@ -83,6 +91,7 @@ export default function ProposalCard({ event, lang, going, onGoing, busy = false
                     background: var(--color-primary); color: #FFFFFF; font-size: 0.875rem; font-weight: 700;
                 }
                 .pc-in.on { background: var(--color-surface); color: var(--color-primary); }
+                .pc-mine { flex: none; font-size: 0.82rem; font-weight: 700; color: var(--color-gray-500); padding: 0 4px; }
                 .pc-in:disabled { opacity: 0.7; cursor: default; }
             `}</style>
         </article>
