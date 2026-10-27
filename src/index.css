@@ -747,6 +747,11 @@ textarea {
     pointer-events: none;
   }
 }
+
+/* The on-screen keyboard is up (useKeyboardOpen): the bottom bar and its
+   strip step aside, as in other apps, instead of riding up on the keyboard. */
+html.keyboard-open .mobile-bottom-nav { display: none !important; }
+html.keyboard-open body::after { display: none !important; }
 /* Dark mode: Nostr Feed */
 [data-theme="dark"] .nostr-feed > .flex.items-center {
   border-color: var(--color-border, #2d3748);
