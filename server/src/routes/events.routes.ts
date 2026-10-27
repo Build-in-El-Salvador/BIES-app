@@ -18,6 +18,7 @@ import {
     cancelRsvp,
     inviteToEvent,
     removePartner,
+    callOffEvent,
 } from '../controllers/events.controller';
 import { importEventFromUrl } from '../controllers/eventImport.controller';
 import {
@@ -56,6 +57,8 @@ router.delete('/:id', authenticate, deleteEvent);
 router.put('/:id/endorse', authenticate, endorseEvent);
 router.post('/:id/rsvp', authenticate, rsvpEvent);
 router.delete('/:id/rsvp', authenticate, cancelRsvp);
+// A proposed meetup's proposer calling it off (everyone in is told)
+router.post('/:id/call-off', authenticate, callOffEvent);
 router.post('/:id/invite', authenticate, inviteToEvent);
 // A co-host or sponsor taking their name off (or whoever can edit it)
 router.delete('/:id/partners/:partnerId', authenticate, removePartner);

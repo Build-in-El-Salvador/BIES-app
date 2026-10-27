@@ -270,7 +270,7 @@ const ActionMenu = ({ event, onDelete, onVisibilityChange, onCopyLink, onViewTic
                     <div className="ctx-menu" style={{ position: 'fixed', top: pos.top, left: pos.left, transform: 'translateX(-100%)', zIndex: 9999 }}>
                         {!showVisibility ? (
                             <>
-                                <button className="ctx-item" onClick={() => { close(); navigate(`/events/edit/${event.id}`); }}>
+                                <button className="ctx-item" onClick={() => { close(); navigate(event.stage && event.canDelete ? `/events/propose/${event.id}` : `/events/edit/${event.id}`); }}>
                                     <Edit size={15} /> Edit Event
                                 </button>
                                 <button className="ctx-item" onClick={() => { close(); navigate(`/events/${event.id}`); }}>

@@ -508,13 +508,26 @@ model Event {
   // payments itself.
   bitcoinUrl    String  @default("") @map("bitcoin_url")
 
+  // A meetup a member proposes: it goes ahead once minAttendees members are
+  // going (counting the proposer) by decideBy, else it's called off
+  // (services/eventProposals.service.ts). Null minAttendees: a usual event.
+  minAttendees  Int?      @map("min_attendees")
+  decideBy      DateTime? @map("decide_by")
+  confirmedAt   DateTime? @map("confirmed_at")
+  calledOffAt   DateTime? @map("called_off_at")
+  // Where it is, when that's a business or farm on BIES: its name, address
+  // and map link fill the event's. Not a host or partner: no say needed.
+  venueListingId String?  @map("venue_listing_id")
+
   host        User              @relation(fields: [hostId], references: [id], onDelete: Cascade)
   hostListing DirectoryListing? @relation("EventsHosted", fields: [hostListingId], references: [id], onDelete: SetNull)
+  venueListing DirectoryListing? @relation("EventsAt", fields: [venueListingId], references: [id], onDelete: SetNull)
   attendees   EventAttendee[]
   tickets     Ticket[]
   partners    EventPartner[]
 
   @@index([hostListingId])
+  @@index([venueListingId])
   @@map("events")
 }
 
@@ -1052,6 +1065,7 @@ model DirectoryListing {
   albums       Album[]
   team         ListingTeamMember[]
   hostedEvents  Event[]        @relation("EventsHosted")
+  eventsAt      Event[]        @relation("EventsAt")
   eventPartners EventPartner[] @relation("EventPartners")
   @@index([type, status])
   @@map("directory_listings")

@@ -259,7 +259,7 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
             select: {
                 id: true, title: true, hostId: true, isPublished: true, visibility: true, guestList: true,
                 startDate: true, endDate: true,
-                priceSats: true, ticketCapacity: true, payoutLightningAddress: true,
+                priceSats: true, ticketCapacity: true, payoutLightningAddress: true, minAttendees: true,
                 host: { select: { profile: { select: { lightningAddress: true } } } },
             },
         });
@@ -271,7 +271,8 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
         if (event.visibility === 'INVITE_ONLY' && event.hostId !== buyerId && !req.user!.isAdmin && !(await invitedTo(event, buyerId))) {
             res.status(403).json({ error: 'This event is invite only' }); return;
         }
-        if (!event.priceSats || event.priceSats <= 0) {
+        // A member's proposed meetup: everyone pays their own, never through BIES.
+        if (!event.priceSats || event.priceSats <= 0 || event.minAttendees != null) {
             res.status(400).json({ error: 'This event does not sell tickets' }); return;
         }
 

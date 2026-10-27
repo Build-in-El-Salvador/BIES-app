@@ -18,6 +18,9 @@ import {
 } from '../services/eventPeople.service';
 import { listingsActedFor, runsListing } from './listingTeam.controller';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import {
+    MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
+} from '../services/eventProposals.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -27,14 +30,15 @@ const webLink = z.string().trim().max(2000)
 
 export const createEventSchema = z.object({
     title: z.string().min(1).max(200),
-    description: z.string().min(1).max(20_000),
+    // Required, except on a proposed meetup (createEvent checks).
+    description: z.string().max(20_000),
     category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'OTHER']).default('NETWORKING'),
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
     location: z.string().max(200).optional(),
     isOnline: z.boolean().default(false),
     onlineUrl: webLink.optional(),
     startDate: z.string().max(40), // More lenient, parse in controller
-    endDate: z.string().max(40).optional(),
+    endDate: z.string().max(40).nullable().optional(), // null on an edit: no end time
     thumbnail: z.string().max(2000).optional().or(z.literal('')),
     coverFrame: coverFrameSchema.optional(),
     // A BIES event's highlight card: another photo (optional) and its position.
@@ -72,6 +76,12 @@ export const createEventSchema = z.object({
     // What tickets cost, as the host writes it ("Free", "From $25").
     priceLabel: z.string().trim().max(40).optional(),
     partners: z.array(partnerSchema).max(MAX_PARTNERS).optional(),
+    // A proposed meetup: it goes ahead once this many members are going
+    // (counting the proposer) by decideBy (services/eventProposals.service.ts).
+    minAttendees: z.number().int().min(MIN_PROPOSAL).max(MAX_PROPOSAL).nullable().optional(),
+    decideBy: z.string().max(40).nullable().optional(),
+    // Where it is, when that's a business or farm on BIES (its name, address and map link).
+    venueListingId: z.string().max(64).nullable().optional(),
 });
 
 // Every field optional, and a field left out stays out: in zod 4, .partial()
@@ -100,6 +110,8 @@ const over = (now: Date) => ({ OR: [{ endDate: { lt: now } }, { endDate: null, s
 const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' } } } } };
 /** Hosted as BIES's own page, while it's up: a BIES event. */
 const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active', isPublished: true } } };
+/** Who's behind an event, and the business or farm where it is. */
+const EVENT_INCLUDE = { ...EVENT_PEOPLE, venueListing: { select: VENUE_SELECT } };
 
 /**
  * What only the host side changes: tickets and money, who hosts it, who sees
@@ -108,12 +120,19 @@ const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active',
 const HOST_ONLY = [
     'ticketUrl', 'bitcoinUrl', 'priceLabel', 'payoutLightningAddress', 'priceSats', 'ticketCapacity',
     'visibility', 'guestList', 'hostListingId', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame',
+    'minAttendees', 'decideBy',
 ] as const;
 /** A BIES event's highlight card: only events hosted as BIES's own page have one. */
 const CARD_FIELDS = ['cardImage', 'cardFrame'] as const;
 const asText = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v));
-/** Whether a value an edit sends differs from the stored one (JSON lists are stored as text). */
-const differs = (sent: unknown, stored: unknown): boolean => asText(sent) !== asText(stored);
+/** Whether a value an edit sends differs from the stored one (JSON lists are stored as text, times as dates). */
+const differs = (sent: unknown, stored: unknown): boolean => (stored instanceof Date
+    ? new Date(String(sent)).getTime() !== stored.getTime()
+    : asText(sent) !== asText(stored));
+/** Tickets and money: a member's proposed meetup has none (everyone pays their own). */
+const MONEY_FIELDS = ['ticketUrl', 'bitcoinUrl', 'priceSats', 'ticketCapacity', 'payoutLightningAddress'] as const;
+/** At least this long between the decide-by time and the start. */
+const DECIDE_BEFORE_START = 3600_000;
 
 const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
@@ -122,6 +141,7 @@ const EVENT_FIELDS = [
     'thumbnail', 'coverFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
+    'minAttendees', 'decideBy',
 ] as const;
 
 /** The event columns a create or edit sets, in the database's form. */
@@ -133,7 +153,35 @@ function eventData(body: Record<string, any>): Record<string, any> {
     if (data.customSections !== undefined) data.customSections = JSON.stringify(data.customSections);
     if (data.startDate) data.startDate = new Date(data.startDate);
     if (data.endDate) data.endDate = new Date(data.endDate);
+    if (data.decideBy) data.decideBy = new Date(data.decideBy);
     return data;
+}
+
+/** Why a proposal's numbers or deadline don't work, if they don't. */
+function proposalProblem(min: number, decideBy: Date | null, start: Date, max: number | null | undefined): string | null {
+    if (!decideBy || Number.isNaN(decideBy.getTime())) return 'decide_by_missing';
+    if (decideBy.getTime() <= Date.now()) return 'decide_by_past';
+    if (decideBy.getTime() > start.getTime() - DECIDE_BEFORE_START) return 'decide_by_after_start';
+    if (max != null && max < min) return 'max_below_min';
+    return null;
+}
+
+/** The event columns a tagged business or farm fills: where it is, and its photo when the event has none. */
+type Venue = { id: string; name: string; location: string; mapUrl: string; photo: string; coverFrame: string };
+/**
+ * The event columns a tagged business or farm fills: where it is, its map
+ * link and its photo when the event has none of its own. Moving from one
+ * tagged place to another, what came from the old one is replaced.
+ */
+function venueData(venue: Venue, data: Record<string, any>, current?: { thumbnail?: string; locationMapUrl?: string }, old?: Venue | null) {
+    data.venueListingId = venue.id;
+    data.locationName = venue.name;
+    data.locationAddress = venue.location || '';
+    data.location = [venue.name, venue.location].filter(Boolean).join(', ');
+    const fromOld = (field: 'locationMapUrl' | 'thumbnail', oldValue?: string) => !!oldValue && (data[field] ?? current?.[field]) === oldValue;
+    const mapUrl = /^https?:\/\//i.test(venue.mapUrl || '') ? venue.mapUrl : '';
+    if (!(data.locationMapUrl ?? current?.locationMapUrl) || fromOld('locationMapUrl', old?.mapUrl)) data.locationMapUrl = mapUrl;
+    if (!(data.thumbnail ?? current?.thumbnail) || fromOld('thumbnail', old?.photo)) { data.thumbnail = venue.photo || ''; data.coverFrame = venue.photo ? (venue.coverFrame || '') : ''; }
 }
 
 const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
@@ -155,6 +203,12 @@ function eventCard(e: any, hidden: Set<string>) {
         host: e.host, hostListing,
         partners: partnersFor(e.partners || [], hidden),
         goingCount: e._count?.attendees ?? 0,
+        maxAttendees: e.maxAttendees,
+        // A proposed meetup: where it stands, and what it needs.
+        stage: proposalStage(e), minAttendees: e.minAttendees, decideBy: e.decideBy, confirmedAt: e.confirmedAt, calledOffAt: e.calledOffAt,
+        venueListing: isLiveListing(e.venueListing)
+            ? (({ status: _s, isPublished: _p, ...v }) => v)(e.venueListing)
+            : null,
     };
 }
 
@@ -192,8 +246,11 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
             ] });
         }
         if (hidden.length) and.push({ hostId: { notIn: hidden } });
+        // A business or farm's page: what it hosts, and what's on there.
+        if (q.atListingId) and.push({ OR: [{ hostListingId: q.atListingId }, { venueListingId: q.atListingId }] });
         const where: any = {
             ...LISTED,
+            calledOffAt: null, // a proposed meetup that didn't happen
             host: ACTIVE,
             ...(q.category ? { category: q.category.toUpperCase() } : {}),
             ...(q.isOfficial === 'true' ? OFFICIAL_HOST : q.isOfficial === 'false' ? { NOT: OFFICIAL_HOST } : {}),
@@ -209,7 +266,7 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
                 orderBy: [{ startDate: order }, { id: 'asc' }],
                 skip: (page - 1) * take,
                 take,
-                include: { ...EVENT_PEOPLE, ...GOING_COUNT },
+                include: { ...EVENT_INCLUDE, ...GOING_COUNT },
             }),
             prisma.event.count({ where }),
         ]);
@@ -258,7 +315,7 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take,
-                include: { ...EVENT_PEOPLE, _count: { select: { attendees: true } } },
+                include: { ...EVENT_INCLUDE, _count: { select: { attendees: true } } },
             }),
             prisma.event.count({ where: mineWhere }),
         ]);
@@ -314,7 +371,7 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
         const [records, total, hidden] = await Promise.all([
             prisma.eventAttendee.findMany({
                 where,
-                include: { event: { include: { ...EVENT_PEOPLE, ...GOING_COUNT } } },
+                include: { event: { include: { ...EVENT_INCLUDE, ...GOING_COUNT } } },
                 orderBy: { joinedAt: 'desc' },
                 skip: (page - 1) * take,
                 take,
@@ -344,7 +401,7 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
         const event = await prisma.event.findUnique({
             where: { id: req.params.id },
             include: {
-                ...EVENT_PEOPLE,
+                ...EVENT_INCLUDE,
                 ...GOING_COUNT,
                 attendees: {
                     where: { status: 'GOING', user: ACTIVE },
@@ -414,6 +471,35 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
         const me = req.user!.id;
         const body = req.body as z.infer<typeof createEventSchema>;
         const data = eventData(body);
+        // A proposed meetup: a member's, open to every member, on BIES only
+        // until it's on (no feed post or Nostr calendar event for an idea).
+        const proposal = body.minAttendees != null;
+        if (!data.startDate || Number.isNaN(data.startDate.getTime())) {
+            res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
+        }
+        if (!proposal && !(data.description || '').trim()) {
+            res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;
+        }
+        if (proposal) {
+            const problem = proposalProblem(body.minAttendees!, data.decideBy || null, data.startDate, data.maxAttendees);
+            if (problem) { res.status(400).json({ error: 'Check the numbers and the decide-by time', reason: problem }); return; }
+            if (await openProposals(me) >= MAX_OPEN_PROPOSALS) {
+                res.status(400).json({ error: `You can have ${MAX_OPEN_PROPOSALS} proposed meetups open at once`, reason: 'too_many_proposals', max: MAX_OPEN_PROPOSALS }); return;
+            }
+            for (const field of MONEY_FIELDS) delete data[field];
+            data.visibility = 'PUBLIC';
+            data.nostrPublish = 'none';
+            delete body.hostListingId;
+            delete body.partners;
+        } else {
+            delete data.minAttendees;
+            delete data.decideBy;
+        }
+        if (body.venueListingId) {
+            const venue = await venueFor(body.venueListingId, me);
+            if (!venue) { res.status(400).json({ error: 'That business or farm isn\'t on BIES', reason: 'venue_not_found' }); return; }
+            venueData(venue, data);
+        }
         const nostrPublish: string = data.nostrPublish || 'none';
         const visibility = data.visibility || 'PUBLIC';
         const isPublished = visibilityToPublished(visibility);
@@ -434,15 +520,17 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
                 isOfficial: !!hostListing?.isOfficial,
                 isPublished,
                 partners: { create: partners },
+                // Whoever proposes a meetup is the first one in.
+                ...(proposal ? { attendees: { create: { userId: me, status: 'GOING' } } } : {}),
             } as any,
-            include: EVENT_PEOPLE,
+            include: EVENT_INCLUDE,
         });
         await cache.delPattern('events:');
         const hostName = hostNameOf(event);
         await notifyNewPartners(me, event, hostName, partners);
 
         // Announce new event on the BIES feed
-        if (isPublished) {
+        if (isPublished && !proposal) {
             const dateStr = event.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/El_Salvador' });
             publishAnnouncement(me, `${hostName} is hosting "${event.title}" on ${dateStr}${event.location ? ` in ${event.location}` : ''}. Check it out on BIES!`, [['t', 'new-event']]).catch((err) =>
                 console.error('[Nostr] Event announcement failed:', err)
@@ -453,7 +541,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
             ? await publishToNostr(me, event, nostrPublish as 'bies' | 'public' | 'both')
             : false;
 
-        res.status(201).json({ ...eventCard(event, new Set()), nostrPublished });
+        res.status(201).json({ ...eventCard({ ...event, _count: { attendees: proposal ? 1 : 0 } }, new Set()), nostrPublished });
     } catch (error) {
         if (error instanceof PartnerError) { res.status(400).json({ error: error.message, reason: error.reason }); return; }
         console.error('Create event error:', error);
@@ -523,6 +611,44 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         const shown = partnersFor(existing.partners, hidden);
 
         const data = eventData(body);
+        if (body.description !== undefined && !body.description.trim() && !existing.minAttendees) {
+            res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;
+        }
+        if (data.startDate !== undefined && (!data.startDate || Number.isNaN(data.startDate.getTime()))) {
+            res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
+        }
+        // A proposal's number and deadline change only while it's still a
+        // proposal (and never to nothing); a usual event doesn't become one.
+        // A member's meetup has no tickets.
+        const stageBefore = proposalStage(existing);
+        if (stageBefore) for (const field of MONEY_FIELDS) delete data[field];
+        if (stageBefore === 'proposed') {
+            if (body.minAttendees === null || body.decideBy === null) {
+                res.status(400).json({ error: 'Check the numbers and the decide-by time', reason: 'decide_by_missing' }); return;
+            }
+            const min = data.minAttendees ?? existing.minAttendees!;
+            const decideBy = data.decideBy ?? existing.decideBy;
+            const start = data.startDate ?? existing.startDate;
+            const max = data.maxAttendees !== undefined ? data.maxAttendees : existing.maxAttendees;
+            const touched = ['minAttendees', 'decideBy', 'startDate', 'maxAttendees'].some((f) => data[f] !== undefined);
+            const problem = touched ? proposalProblem(min, decideBy, start, max) : null;
+            if (problem) { res.status(400).json({ error: 'Check the numbers and the decide-by time', reason: problem }); return; }
+        } else {
+            delete data.minAttendees;
+            delete data.decideBy;
+        }
+        if (body.venueListingId !== undefined && (body.venueListingId || null) !== existing.venueListingId) {
+            if (body.venueListingId) {
+                const venue = await venueFor(body.venueListingId, me);
+                if (!venue) { res.status(400).json({ error: 'That business or farm isn\'t on BIES', reason: 'venue_not_found' }); return; }
+                const old = existing.venueListingId
+                    ? await prisma.directoryListing.findUnique({ where: { id: existing.venueListingId }, select: VENUE_SELECT })
+                    : null;
+                venueData(venue, data, existing, old);
+            } else {
+                data.venueListingId = null;
+            }
+        }
         frameNewCover(data, 'thumbnail', existing.thumbnail);
         if (!hostSide) {
             // Co-hosts edit what the event is; its tickets and money, who hosts
@@ -575,10 +701,23 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 await tx.eventPartner.deleteMany({ where: { eventId: existing.id, id: { notIn: unseen } } });
                 if (partners.length) await tx.eventPartner.createMany({ data: partners.map((p) => ({ ...p, eventId: existing.id })) });
             }
-            return tx.event.update({ where: { id: existing.id }, data, include: EVENT_PEOPLE });
+            return tx.event.update({ where: { id: existing.id }, data, include: EVENT_INCLUDE });
         });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
         if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
+        // A lower number may be met already.
+        if (data.minAttendees !== undefined) await confirmIfReached(event.id);
+        // A meetup's people hear when it moves, or changes place.
+        const moved = data.startDate !== undefined && data.startDate.getTime() !== existing.startDate.getTime();
+        const elsewhere = (data.locationName !== undefined && data.locationName !== existing.locationName)
+            || (data.venueListingId !== undefined && data.venueListingId !== existing.venueListingId);
+        if (stageBefore && stageBefore !== 'calledOff' && (moved || elsewhere)) {
+            await tellPeopleIn(event.id, event.hostId, {
+                title: `Changed: "${event.title}"`,
+                body: `Now ${whenAndWhere(event)}.`,
+                status: 'CHANGED',
+            }, me);
+        }
 
         // On Nostr, under the host's key: gone when it stops being public,
         // otherwise replaced (kind 31923 by its d-tag), on the host's own edit.
@@ -610,12 +749,25 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
     try {
         const existing = await prisma.event.findUnique({
             where: { id: req.params.id },
-            select: { id: true, hostId: true, hostListingId: true, nostrEventId: true, nostrPublish: true },
+            select: {
+                id: true, title: true, hostId: true, hostListingId: true, nostrEventId: true, nostrPublish: true,
+                minAttendees: true, confirmedAt: true, calledOffAt: true,
+            },
         });
 
         if (!existing) { res.status(404).json({ error: 'Event not found' }); return; }
         if (!(await canDeleteEvent(existing, req.user))) {
             res.status(403).json({ error: 'Not authorized' }); return;
+        }
+        // A meetup people are in: they're told (with no page to open after).
+        const stage = proposalStage(existing);
+        if (stage === 'proposed' || stage === 'on') {
+            await tellPeopleIn(existing.id, existing.hostId, {
+                title: `Called off: "${existing.title}"`,
+                body: 'The member who proposed it called it off.',
+                status: 'CALLED_OFF',
+                link: false,
+            }, req.user!.id);
         }
 
         // Delete NIP-52 calendar event from Nostr relays before removing from DB
@@ -723,6 +875,7 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             select: {
                 id: true, title: true, hostId: true, maxAttendees: true, isPublished: true,
                 visibility: true, nostrPublish: true, guestList: true,
+                minAttendees: true, decideBy: true, confirmedAt: true, calledOffAt: true,
                 host: { select: { nostrPubkey: true } },
             },
         });
@@ -733,6 +886,12 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         // Private: its guests (and the host and admins) can say they're going.
         if (event.visibility === 'PRIVATE' && event.hostId !== userId && !req.user!.isAdmin && !(await invitedTo(event, userId))) {
             res.status(404).json({ error: 'Event not found' }); return;
+        }
+
+        // A proposed meetup that's been called off, or is past its deadline.
+        const stage = proposalStage(event);
+        if (stage === 'calledOff' || (stage === 'proposed' && event.decideBy && event.decideBy.getTime() < Date.now())) {
+            res.status(409).json({ error: 'This meetup was called off', reason: 'called_off' }); return;
         }
 
         // Invite only: the host, admins, and members the host invited.
@@ -750,7 +909,7 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
                     where: { eventId_userId: { eventId: req.params.id, userId } },
                 });
                 if (!existing) {
-                    res.status(409).json({ error: 'Event is at full capacity' }); return;
+                    res.status(409).json({ error: 'Event is at full capacity', reason: 'full' }); return;
                 }
             }
         }
@@ -774,14 +933,26 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             });
             const userName = rsvpUser?.profile?.name || 'A BIES member';
 
-            if (status === 'GOING') {
+            if (status === 'GOING' && stage !== 'proposed') {
                 publishAnnouncement(userId, `${userName} is going to "${event.title}"!`, [['t', 'rsvp']]).catch((err) =>
                     console.error('[Nostr] RSVP announcement failed:', err)
                 );
             }
 
-            // Notify event host (don't notify yourself)
-            if (event.hostId !== userId) {
+            // Notify event host (don't notify yourself). On a proposal: how it stands.
+            if (event.hostId !== userId && stage === 'proposed' && status === 'GOING') {
+                const going = await prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING' } });
+                const needs = Math.max(0, (event.minAttendees || 0) - going);
+                if (needs > 0) {
+                    createNotification({
+                        userId: event.hostId,
+                        type: 'EVENT_RSVP',
+                        title: `${userName} is in for "${event.title}"`,
+                        body: `${going} of ${event.minAttendees} in · needs ${needs} more`,
+                        data: { eventId: event.id, attendeeId: userId, status: 'GOING' },
+                    }).catch(() => {});
+                }
+            } else if (event.hostId !== userId) {
                 notifyEventRsvp({
                     hostId: event.hostId,
                     attendeeName: userName,
@@ -818,7 +989,11 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             );
         }
 
-        res.json(attendee);
+        // That may have made a proposal's number: then it's on.
+        // (If that check fails, the sweep makes it before the deadline passes.)
+        const confirmed = status === 'GOING' && stage === 'proposed' ? await confirmIfReached(event.id).catch(() => false) : false;
+
+        res.json({ ...attendee, confirmed });
     } catch (error) {
         console.error('RSVP error:', error);
         res.status(500).json({ error: 'Failed to RSVP' });
@@ -833,7 +1008,14 @@ export async function cancelRsvp(req: Request, res: Response): Promise<void> {
     try {
         // On an invite-only event the invitation stays: back to INVITED, so
         // the member can still say they're going later.
-        const event = await prisma.event.findUnique({ where: { id: req.params.id }, select: { visibility: true } });
+        const event = await prisma.event.findUnique({
+            where: { id: req.params.id },
+            select: { visibility: true, hostId: true, minAttendees: true, confirmedAt: true, calledOffAt: true },
+        });
+        // Whoever proposes a meetup counts towards it: they call it off instead.
+        if (event && event.hostId === req.user!.id && proposalStage(event) === 'proposed') {
+            res.status(400).json({ error: 'You proposed it: call it off instead', reason: 'proposer_stays' }); return;
+        }
         if (event?.visibility === 'INVITE_ONLY') {
             await prisma.eventAttendee.updateMany({
                 where: { eventId: req.params.id, userId: req.user!.id },
@@ -848,6 +1030,39 @@ export async function cancelRsvp(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Cancel RSVP error:', error);
         res.status(500).json({ error: 'Failed to cancel RSVP' });
+    }
+}
+
+/**
+ * POST /events/:id/call-off
+ * Its proposer (the host side) calls off a proposed meetup, or one that's on:
+ * it stays, marked called off, and everyone in is told.
+ */
+export async function callOffEvent(req: Request, res: Response): Promise<void> {
+    try {
+        const event = await prisma.event.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, title: true, hostId: true, hostListingId: true, minAttendees: true, confirmedAt: true, calledOffAt: true },
+        });
+        if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
+        if (!(await canDeleteEvent(event, req.user))) { res.status(403).json({ error: 'Not authorized' }); return; }
+        const stage = proposalStage(event);
+        if (stage !== 'proposed' && stage !== 'on') {
+            res.status(400).json({ error: 'Only a proposed meetup is called off this way', reason: 'not_a_proposal' }); return;
+        }
+        const won = await prisma.event.updateMany({ where: { id: event.id, calledOffAt: null }, data: { calledOffAt: new Date() } });
+        if (won.count === 1) {
+            await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${event.id}`)]);
+            await tellPeopleIn(event.id, event.hostId, {
+                title: `Called off: "${event.title}"`,
+                body: 'The member who proposed it called it off.',
+                status: 'CALLED_OFF',
+            }, req.user!.id);
+        }
+        res.json({ stage: 'calledOff' });
+    } catch (error) {
+        console.error('Call off event error:', error);
+        res.status(500).json({ error: 'Failed to call it off' });
     }
 }
 

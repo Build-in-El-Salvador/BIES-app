@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     Loader2, AlertCircle, Camera, X, Plus, Trash2,
     CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp, Move,
 } from 'lucide-react';
-import { directoryApi, uploadApi } from '../../services/api';
+import { directoryApi, eventsApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
 import { nostrService } from '../../services/nostrService';
@@ -72,6 +72,10 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const navigate = useNavigate();
     const { id } = useParams();
     const [searchParams] = useSearchParams();
+    // Added from a meetup proposed at a place not on BIES: its name, map link
+    // and photo to start with, and the meetup is tagged as being here after.
+    const routeState = useLocation().state;
+    const fromEvent = editMode ? null : routeState?.fromEvent || null;
 
     const initialType = typeProp || (searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM');
     const [type, setType] = useState(initialType);
@@ -81,7 +85,9 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     // A recommendation stays one on edit (the business claims it instead).
     const [wasOwnBusiness, setWasOwnBusiness] = useState(false);
     const [photos, setPhotos] = useState([]); // gallery, up to MAX_PHOTOS
-    const [form, setForm] = useState(emptyForm);
+    const [form, setForm] = useState(() => (fromEvent
+        ? { ...emptyForm, name: fromEvent.name || '', mapUrl: fromEvent.mapUrl || '', photo: fromEvent.photo || '', coverFrame: fromEvent.coverFrame || '' }
+        : emptyForm));
     const [languages, setLanguages] = useState([]);
     const [products, setProducts] = useState([]); // FARM: [{ label, icon }]
     const [practices, setPractices] = useState([]); // FARM
@@ -374,7 +380,12 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             } else {
                 const result = await directoryApi.create(payload);
                 const listing = result?.data || result;
-                if (listing.status === 'active') {
+                if (fromEvent?.eventId) await eventsApi.update(fromEvent.eventId, { venueListingId: listing.id }).catch(() => {});
+                if (fromEvent?.eventId && listing.status === 'active') {
+                    // Back to the meetup, which now links to it.
+                    mirrorFromDevice(listing);
+                    navigate(`/events/${fromEvent.eventId}`, { replace: true });
+                } else if (listing.status === 'active') {
                     // Live at once (unless the server holds members' listings for approval)
                     mirrorFromDevice(listing);
                     navigate(detailPath(listing), { replace: true });

@@ -506,6 +506,8 @@ export const eventsApi = {
     cancelRsvp: (id) => del(`/events/${id}/rsvp`),
     // A co-host or sponsor's name off the event (theirs, or by whoever can edit it)
     removePartner: (id, partnerId) => del(`/events/${id}/partners/${partnerId}`),
+    // A proposed meetup's proposer calling it off (everyone in is told)
+    callOff: (id) => post(`/events/${id}/call-off`, {}),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
 
