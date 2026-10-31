@@ -24,6 +24,7 @@ import {
 import * as coinosService from '../services/coinos.service';
 import { invitedTo } from './events.controller';
 import { canDeleteEvent } from '../services/eventPeople.service';
+import { isRepeat, nextOccurrence } from '../utils/eventRepeat';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -258,7 +259,7 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
             where: { id: eventId },
             select: {
                 id: true, title: true, hostId: true, isPublished: true, visibility: true, guestList: true,
-                startDate: true, endDate: true,
+                startDate: true, endDate: true, repeat: true, repeatUntil: true,
                 priceSats: true, ticketCapacity: true, payoutLightningAddress: true, minAttendees: true,
                 host: { select: { profile: { select: { lightningAddress: true } } } },
             },
@@ -278,7 +279,8 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
 
         const now = new Date();
         const eventEnd = event.endDate || event.startDate;
-        if (eventEnd < now) {
+        // A repeating event is over once its last date is (its dates are its first).
+        if (isRepeat(event.repeat) ? !nextOccurrence(event, now) : eventEnd < now) {
             res.status(400).json({ error: 'This event has already ended' }); return;
         }
 

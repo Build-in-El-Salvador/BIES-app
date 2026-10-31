@@ -734,7 +734,11 @@
       "priceTickets": "Entradas",
       "buySats": "Comprar entrada · {{sats}} sats",
       "ticketBought": "Tienes una entrada",
-      "more": "Más"
+      "more": "Más",
+      "rsvpAskOn": "¿Vas el {{date}}?",
+      "youreGoingOn": "Vas el {{date}}",
+      "goingOn_one": "{{count}} miembro va el {{date}}",
+      "goingOn_other": "{{count}} miembros van el {{date}}"
     },
     "form": {
       "newTitle": "Nuevo evento",
@@ -815,7 +819,13 @@
         "no_listing": "Uno de los negocios que agregaste ya no está en BIES.",
         "too_many_partners": "Un evento tiene como máximo 12 coorganizadores y patrocinadores.",
         "host_only": "Solo el anfitrión puede cambiar las entradas, los coorganizadores, los patrocinadores o quién puede ver el evento.",
-        "official_listing": "Solo BIES puede agregar a BIES a un evento."
+        "official_listing": "Solo BIES puede agregar a BIES a un evento.",
+        "repeat_until_before_start": "El último día en que se repite es antes de su primera fecha.",
+        "repeat_until_invalid": "Elige el último día en que se repite.",
+        "repeat_not_last_week": "\"El último\" solo funciona desde una fecha en la última semana del mes.",
+        "repeat_fifth_week": "No todos los meses tienen un quinto: elige \"el último\".",
+        "repeat_too_long": "Cada fecha tiene que terminar antes de que empiece la siguiente.",
+        "repeat_on_proposal": "Una reunión propuesta no se repite."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
       "card": "Tarjeta destacada",
@@ -823,7 +833,11 @@
       "cardTitle": "Ajusta la tarjeta destacada",
       "cardOwnPhoto": "Usar otra foto",
       "cardChange": "Cambiar foto",
-      "cardUseCover": "Usar la portada"
+      "cardUseCover": "Usar la portada",
+      "repeats": "Se repite",
+      "until": "Hasta (opcional)",
+      "untilHint": "Después de cada fecha pasa sola a la siguiente.",
+      "timeHintRepeat": "Hora de El Salvador. Empieza es su primera fecha; se repite desde ahí."
     },
     "kinds": {
       "NETWORKING": "Networking",
@@ -833,6 +847,28 @@
       "MEETUP": "Encuentro",
       "DEMO_DAY": "Demo day",
       "OTHER": "Otro"
+    },
+    "repeat": {
+      "none": "No se repite",
+      "choices": {
+        "WEEKLY": "Cada semana el {{day}}",
+        "BIWEEKLY": "Cada dos semanas el {{day}}",
+        "MONTHLY_NTH": "Cada mes el {{nth}} {{day}}",
+        "MONTHLY_LAST": "Cada mes el último {{day}}"
+      },
+      "short": {
+        "WEEKLY": "Cada {{day}}",
+        "BIWEEKLY": "Cada dos semanas el {{day}}",
+        "MONTHLY_NTH": "{{nth}} {{day}} de cada mes",
+        "MONTHLY_LAST": "Último {{day}} de cada mes"
+      },
+      "nth": {
+        "1": "primer",
+        "2": "segundo",
+        "3": "tercer",
+        "4": "cuarto"
+      },
+      "next": "Próximo"
     }
   },
   "news": {

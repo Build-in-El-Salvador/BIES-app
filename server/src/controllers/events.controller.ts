@@ -6,6 +6,7 @@
  */
 
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { z } from 'zod';
 import { cache } from '../services/redis.service';
@@ -21,6 +22,9 @@ import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 import {
     MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
 } from '../services/eventProposals.service';
+import {
+    LONGEST_GAP, SIX_HOURS, endOfDay, hasEnded, isRepeat, nextOccurrence, occurrences, repeatLabel, repeatProblem, shownOccurrence,
+} from '../utils/eventRepeat';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -82,6 +86,11 @@ export const createEventSchema = z.object({
     decideBy: z.string().max(40).nullable().optional(),
     // Where it is, when that's a business or farm on BIES (its name, address and map link).
     venueListingId: z.string().max(64).nullable().optional(),
+    // An event that repeats ('' for a one-off; never a proposed meetup), and
+    // the last day it may be on ("2026-12-19"; null: for good). Whether it
+    // fits the first date is checked with it (utils/eventRepeat.ts).
+    repeat: z.enum(['', 'WEEKLY', 'BIWEEKLY', 'MONTHLY_NTH', 'MONTHLY_LAST']).optional(),
+    repeatUntil: z.string().max(40).nullable().optional(),
 });
 
 // Every field optional, and a field left out stays out: in zod 4, .partial()
@@ -103,8 +112,7 @@ function visibilityToPublished(visibility: string): boolean {
 const ACTIVE = { isBanned: false, deletedAt: null };
 /** In the list: published, and not private or a draft. */
 const LISTED = { isPublished: true, visibility: { notIn: ['PRIVATE', 'DRAFT'] } };
-/** An event with no end counts as on for 6 hours after it starts. */
-const SIX_HOURS = 6 * 3600_000;
+/** An event with no end counts as on for 6 hours after it starts (SIX_HOURS, utils/eventRepeat.ts). */
 const stillOn = (now: Date) => ({ OR: [{ endDate: { gte: now } }, { endDate: null, startDate: { gte: new Date(now.getTime() - SIX_HOURS) } }] });
 const over = (now: Date) => ({ OR: [{ endDate: { lt: now } }, { endDate: null, startDate: { lt: new Date(now.getTime() - SIX_HOURS) } }] });
 const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' } } } } };
@@ -141,7 +149,7 @@ const EVENT_FIELDS = [
     'thumbnail', 'coverFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
-    'minAttendees', 'decideBy',
+    'minAttendees', 'decideBy', 'repeat', 'repeatUntil',
 ] as const;
 
 /** The event columns a create or edit sets, in the database's form. */
@@ -154,6 +162,8 @@ function eventData(body: Record<string, any>): Record<string, any> {
     if (data.startDate) data.startDate = new Date(data.startDate);
     if (data.endDate !== undefined) data.endDate = data.endDate ? new Date(data.endDate) : null;
     if (data.decideBy) data.decideBy = new Date(data.decideBy);
+    // The last day it repeats on counts to its end, in El Salvador.
+    if (data.repeatUntil !== undefined) data.repeatUntil = data.repeatUntil ? (endOfDay(data.repeatUntil) ?? new Date(NaN)) : null;
     return data;
 }
 
@@ -192,14 +202,22 @@ function venueData(venue: Venue, data: Record<string, any>, current?: { thumbnai
 
 const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
 
-/** An event as the list shows it (no guest list, payout address or online link). */
-function eventCard(e: any, hidden: Set<string>) {
+/**
+ * An event as the list shows it (no guest list, payout address or online
+ * link). A repeating one shows its next date (its last, once it's all over),
+ * or `at`, the start of another of its dates; its first is firstStartDate.
+ */
+function eventCard(e: any, hidden: Set<string>, now = new Date(), at: Date | null = null) {
     // Hosted as a business that's since been taken down: neither it nor the BIES tag show.
     const { status: _status, isPublished: _published, ...listing } = isLiveListing(e.hostListing) ? e.hostListing : { status: '', isPublished: false };
     const hostListing = isLiveListing(e.hostListing) ? listing : null;
+    const when = at
+        ? { startDate: at, endDate: e.endDate ? new Date(at.getTime() + e.endDate.getTime() - e.startDate.getTime()) : null }
+        : shownOccurrence(e, now);
     return {
         id: e.id, title: e.title, category: e.category, visibility: e.visibility,
-        startDate: e.startDate, endDate: e.endDate,
+        startDate: when.startDate, endDate: when.endDate,
+        repeat: e.repeat || '', repeatUntil: e.repeatUntil ?? null, firstStartDate: e.startDate, firstEndDate: e.endDate ?? null,
         location: e.location, locationName: e.locationName, isOnline: e.isOnline,
         thumbnail: e.thumbnail, coverFrame: e.coverFrame,
         // The highlight card, for BIES events (the list shows them as cards).
@@ -218,6 +236,65 @@ function eventCard(e: any, hidden: Set<string>) {
     };
 }
 
+// ─── Repeating events ────────────────────────────────────────────────────────
+
+/** An event that repeats: members answer for one of its dates at a time. */
+const repeats = (e: { repeat?: string | null }) => isRepeat(e.repeat);
+type Dated = { id: string; startDate: Date; endDate: Date | null; repeat: string; repeatUntil: Date | null };
+/** The start of the date an event shows: a repeating one's next (or last), a one-off's own. */
+const shownStart = (e: Dated, now: Date) => shownOccurrence(e, now).startDate;
+/** At most this many repeating events in one list (they're merged in code). */
+const MAX_SERIES = 500;
+
+/**
+ * Who's going to each repeating event's shown date: answers for its other
+ * dates don't count. One-off events keep the count they came with.
+ */
+async function countShownDates<T extends Dated>(rows: T[], now: Date): Promise<T[]> {
+    const dates = rows.filter(repeats).map((e) => ({ eventId: e.id, occurrenceStart: shownStart(e, now) }));
+    if (!dates.length) return rows;
+    const counts = await prisma.eventAttendee.groupBy({ by: ['eventId'], where: { status: 'GOING', OR: dates }, _count: { _all: true } });
+    const going = new Map(counts.map((c) => [c.eventId, c._count._all]));
+    return rows.map((e) => (repeats(e) ? { ...e, _count: { attendees: going.get(e.id) ?? 0 } } : e));
+}
+
+/**
+ * A member's answer for the date an event shows: on a repeating event, an
+ * answer for another of its dates is no answer (an invitation is for all of
+ * them).
+ */
+function answerFor(e: Dated, row: { status: string; occurrenceStart: Date | null } | null | undefined, now: Date): string | null {
+    if (!row) return null;
+    if (!repeats(e) || row.status === 'INVITED') return row.status;
+    return row.occurrenceStart?.getTime() === shownStart(e, now).getTime() ? row.status : null;
+}
+
+/**
+ * When an edit moves a repeating event's dates, or makes it repeat or stop,
+ * the answers for its next date move with it, as answers do when a one-off
+ * event moves. Answers for dates that are over stay with them; when it stops
+ * repeating, those go (a one-off counts every answer it has).
+ */
+async function moveAnswers(tx: Prisma.TransactionClient, before: Dated, after: Dated, now: Date): Promise<void> {
+    const wasNext = repeats(before) ? nextOccurrence(before, now)?.startDate ?? null : null;
+    const willNext = repeats(after) ? nextOccurrence(after, now)?.startDate ?? null : null;
+    const eventId = before.id;
+    if (!repeats(before) && repeats(after)) {
+        // A one-off still on: its answers are for the next date; one that's over, for its own.
+        const on = !hasEnded({ startDate: before.startDate, endDate: before.endDate }, now);
+        const target = on && willNext ? willNext : before.startDate;
+        await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: null, status: { not: 'INVITED' } }, data: { occurrenceStart: target } });
+    } else if (repeats(before) && repeats(after)) {
+        if (wasNext && willNext && wasNext.getTime() !== willNext.getTime()) {
+            await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: wasNext }, data: { occurrenceStart: willNext } });
+        }
+    } else if (repeats(before)) {
+        if (wasNext) await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: wasNext }, data: { occurrenceStart: null } });
+        await tx.eventAttendee.deleteMany({ where: { eventId, occurrenceStart: { not: null }, status: { not: 'INVITED' } } });
+        await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: { not: null } }, data: { occurrenceStart: null } });
+    }
+}
+
 /** Whether a listed host is gone for this viewer: suspended, deleted, or blocked either way. */
 async function hostGone(hostId: string, hidden: Set<string>): Promise<boolean> {
     if (hidden.has(hostId)) return true;
@@ -229,7 +306,9 @@ async function hostGone(hostId: string, hidden: Set<string>): Promise<boolean> {
  * GET /events
  * Listed events, for members. upcoming=true: not ended yet, soonest first;
  * past=true: ended, latest first. Filters: category, search, isOfficial,
- * hostId, hostListingId. No hosts suspended or blocked either way.
+ * hostId, hostListingId. No hosts suspended or blocked either way. A
+ * repeating event is one item at its next date (in past=true once it's all
+ * over, at its last).
  */
 export async function listEvents(req: Request, res: Response): Promise<void> {
     try {
@@ -242,8 +321,16 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
         const hidden = await hiddenFromIds(me.id, { staff: isStaffUser(me) });
 
         const and: any[] = [];
-        if (q.upcoming === 'true') and.push(stillOn(now));
-        if (q.past === 'true') and.push(over(now));
+        // When: one-off events by their own dates. Repeating ones are picked
+        // by their next date, in code; this only leaves out what can't be on
+        // (or over): each date is less than LONGEST_GAP after the one before.
+        const upcoming = q.upcoming === 'true';
+        const past = q.past === 'true';
+        const timed = [...(upcoming ? [stillOn(now)] : []), ...(past ? [over(now)] : [])];
+        const seriesTimed = [
+            ...(upcoming ? [{ OR: [{ repeatUntil: null }, { repeatUntil: { gte: new Date(now.getTime() - LONGEST_GAP) } }] }] : []),
+            ...(past ? [{ repeatUntil: { not: null, lt: new Date(now.getTime() + LONGEST_GAP) } }] : []),
+        ];
         if (q.search) {
             and.push({ OR: [
                 { title: { contains: q.search } },
@@ -263,28 +350,39 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
             ...(q.isOfficial === 'true' ? OFFICIAL_HOST : q.isOfficial === 'false' ? { NOT: OFFICIAL_HOST } : {}),
             ...(q.hostId ? { hostId: q.hostId } : {}),
             ...(q.hostListingId ? { hostListingId: q.hostListingId } : {}),
-            ...(and.length ? { AND: and } : {}),
         };
+        const oneOffWhere = { ...where, repeat: '', ...(and.length || timed.length ? { AND: [...and, ...timed] } : {}) };
+        const seriesWhere = { ...where, repeat: { not: '' }, ...(and.length || seriesTimed.length ? { AND: [...and, ...seriesTimed] } : {}) };
 
-        const order = q.past === 'true' ? 'desc' : 'asc';
-        const [rows, total] = await Promise.all([
-            prisma.event.findMany({
-                where,
-                orderBy: [{ startDate: order }, { id: 'asc' }],
-                skip: (page - 1) * take,
-                take,
-                include: { ...EVENT_INCLUDE, ...GOING_COUNT },
-            }),
-            prisma.event.count({ where }),
+        const order = past ? 'desc' : 'asc';
+        const include = { ...EVENT_INCLUDE, ...GOING_COUNT };
+        // Repeating events, at the date each shows, in the list's order.
+        const direction = order === 'asc' ? 1 : -1;
+        const byDate = (a: Dated, b: Dated) => direction * (shownStart(a, now).getTime() - shownStart(b, now).getTime())
+            || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+        const series = (await prisma.event.findMany({ where: seriesWhere, include, orderBy: { id: 'asc' }, take: MAX_SERIES }))
+            .filter((e) => (!upcoming || !!nextOccurrence(e, now)) && (!past || !nextOccurrence(e, now)))
+            .sort(byDate);
+        // They're merged in among the one-off events: of those, the page needs
+        // at most the `series.length` before its first item and its own `take`
+        // (with none repeating, this is the page as the database gives it).
+        const start = (page - 1) * take;
+        const skip = Math.max(0, start - series.length);
+        const [oneOffs, oneOffTotal] = await Promise.all([
+            prisma.event.findMany({ where: oneOffWhere, orderBy: [{ startDate: order }, { id: 'asc' }], skip, take: take + series.length, include }),
+            prisma.event.count({ where: oneOffWhere }),
         ]);
+        const merged = [...oneOffs, ...series].sort(byDate);
+        const rows = await countShownDates(merged.slice(start - skip, start - skip + take), now);
+        const total = oneOffTotal + series.length;
         const hiddenSet = new Set(hidden);
         const mine = rows.length
-            ? await prisma.eventAttendee.findMany({ where: { userId: me.id, eventId: { in: rows.map((e) => e.id) } }, select: { eventId: true, status: true } })
+            ? await prisma.eventAttendee.findMany({ where: { userId: me.id, eventId: { in: rows.map((e) => e.id) } }, select: { eventId: true, status: true, occurrenceStart: true } })
             : [];
-        const rsvp = new Map(mine.map((a) => [a.eventId, a.status]));
+        const rsvp = new Map(mine.map((a) => [a.eventId, a]));
 
         res.json({
-            data: rows.map((e) => ({ ...eventCard(e, hiddenSet), rsvpStatus: rsvp.get(e.id) || null })),
+            data: rows.map((e) => ({ ...eventCard(e, hiddenSet, now), rsvpStatus: answerFor(e, rsvp.get(e.id), now) })),
             pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
         });
     } catch (error) {
@@ -316,7 +414,8 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 { partners: { some: { role: 'COHOST', OR: [{ userId: me }, ...(acted.length ? [{ listingId: { in: acted } }] : [])] } } },
             ],
         };
-        const [events, total] = await Promise.all([
+        const now = new Date();
+        const [found, total] = await Promise.all([
             prisma.event.findMany({
                 where: mineWhere,
                 orderBy: { createdAt: 'desc' },
@@ -326,6 +425,8 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
             }),
             prisma.event.count({ where: mineWhere }),
         ]);
+        // A repeating event's people: those going to the date it shows.
+        const events = await countShownDates(found, now);
 
         // Ticket sales per hosted event (PAID only)
         const eventIds = events.map((e) => e.id);
@@ -343,7 +444,7 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
         const parsed = await Promise.all(events.map(async (e) => {
             const hostSide = await canDeleteEvent(e, req.user, acted);
             return {
-                ...eventCard(e, new Set()),
+                ...eventCard(e, new Set(), now),
                 maxAttendees: e.maxAttendees,
                 ticketCapacity: e.ticketCapacity,
                 endorsementRequested: e.endorsementRequested,
@@ -387,8 +488,15 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
             hiddenFromIds(me.id, { staff: isStaffUser(me) }),
         ]);
         const hiddenSet = new Set(hidden);
+        const now = new Date();
+        const events = new Map((await countShownDates(records.map((a) => a.event), now)).map((e) => [e.id, e]));
         // As the list shows them: no guest list, payout address or online link.
-        const data = records.map((a) => ({ ...eventCard(a.event, hiddenSet), attendeeCount: a.event._count.attendees, rsvpStatus: a.status }));
+        // An answer for a repeating event's date that's over shows that date.
+        const data = records.map((a) => {
+            const e = events.get(a.eventId) ?? a.event;
+            const at = repeats(e) && a.occurrenceStart && a.occurrenceStart.getTime() !== shownStart(e, now).getTime() ? a.occurrenceStart : null;
+            return { ...eventCard(e, hiddenSet, now, at), attendeeCount: e._count.attendees, rsvpStatus: a.status };
+        });
         res.json({ data, pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) } });
     } catch (error) {
         console.error('List attending events error:', error);
@@ -401,22 +509,16 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
  * An event for a member: who hosts it, its co-hosts and sponsors, who's
  * going. Drafts are for whoever can edit; private events for them and the
  * guests. The guest list and payout address only for whoever can edit.
+ * A repeating event: at its next date, with the four from it (upcomingDates);
+ * who's going and my answer are for that date.
  */
 export async function getEvent(req: Request, res: Response): Promise<void> {
     try {
         const me = req.user!;
+        const now = new Date();
         const event = await prisma.event.findUnique({
             where: { id: req.params.id },
-            include: {
-                ...EVENT_INCLUDE,
-                ...GOING_COUNT,
-                attendees: {
-                    where: { status: 'GOING', user: ACTIVE },
-                    take: 30,
-                    orderBy: { joinedAt: 'asc' },
-                    select: { userId: true, user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
-                },
-            },
+            include: { ...EVENT_INCLUDE, ...GOING_COUNT },
         });
         if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
 
@@ -432,9 +534,17 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
         }
         const hidden = new Set(await hiddenFromIds(me.id, { staff: isStaffUser(me) }));
 
-        const [myRsvp, ticketsSold] = await Promise.all([
-            prisma.eventAttendee.findUnique({ where: { eventId_userId: { eventId: event.id, userId: me.id } }, select: { status: true } }),
+        const forDate = repeats(event) ? { occurrenceStart: shownStart(event, now) } : {};
+        const [myRsvp, ticketsSold, attendees, goingCount] = await Promise.all([
+            prisma.eventAttendee.findUnique({ where: { eventId_userId: { eventId: event.id, userId: me.id } }, select: { status: true, occurrenceStart: true } }),
             prisma.ticket.count({ where: { eventId: event.id, status: 'PAID' } }),
+            prisma.eventAttendee.findMany({
+                where: { eventId: event.id, status: 'GOING', user: ACTIVE, ...forDate },
+                take: 30,
+                orderBy: { joinedAt: 'asc' },
+                select: { userId: true, user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
+            }),
+            repeats(event) ? prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING', ...forDate } }) : event._count.attendees,
         ]);
         // My own place on it, which I can take off: me, or a business I act for.
         const myPartnerIds = event.partners
@@ -442,7 +552,8 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
             .map((p) => p.id);
 
         res.json({
-            ...eventCard(event, hidden),
+            ...eventCard({ ...event, _count: { attendees: goingCount } }, hidden, now),
+            ...(repeats(event) ? { upcomingDates: occurrences(event, now, 4).map((o) => o.startDate) } : {}),
             description: event.description,
             locationAddress: event.locationAddress,
             locationMapUrl: event.locationMapUrl,
@@ -453,8 +564,8 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
             ticketCapacity: event.ticketCapacity,
             endorsementRequested: event.endorsementRequested,
             nostrPublish: event.nostrPublish,
-            going: event.attendees.filter((a) => !hidden.has(a.userId)).map((a) => a.user),
-            rsvpStatus: myRsvp?.status || null,
+            going: attendees.filter((a) => !hidden.has(a.userId)).map((a) => a.user),
+            rsvpStatus: answerFor(event, myRsvp, now),
             ticketsSold,
             canEdit,
             canDelete: hostSide,
@@ -487,6 +598,12 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
         if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
+        // A repeating event: not a proposal (that's one date people say yes to).
+        if (badDate(data.repeatUntil)) { res.status(400).json({ error: 'Pick the last day it repeats', reason: 'repeat_until_invalid' }); return; }
+        if (data.repeat && proposal) { res.status(400).json({ error: 'A proposed meetup doesn\'t repeat', reason: 'repeat_on_proposal' }); return; }
+        if (!data.repeat) delete data.repeatUntil;
+        const repeatIssue = repeatProblem({ startDate: data.startDate, endDate: data.endDate, repeat: data.repeat, repeatUntil: data.repeatUntil });
+        if (repeatIssue) { res.status(400).json({ error: 'Check when it repeats', reason: repeatIssue }); return; }
         if (!proposal && !(data.description || '').trim()) {
             res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;
         }
@@ -539,10 +656,12 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
         const hostName = hostNameOf(event);
         await notifyNewPartners(me, event, hostName, partners);
 
-        // Announce new event on the BIES feed
+        // Announce new event on the BIES feed ("every other Saturday, from Nov 7" when it repeats)
         if (isPublished && !proposal) {
             const dateStr = event.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/El_Salvador' });
-            publishAnnouncement(me, `${hostName} is hosting "${event.title}" on ${dateStr}${event.location ? ` in ${event.location}` : ''}. Check it out on BIES!`, [['t', 'new-event']]).catch((err) =>
+            const label = repeatLabel(event.repeat, event.startDate);
+            const when = label ? `${label[0].toLowerCase()}${label.slice(1)}, from ${dateStr}` : `on ${dateStr}`;
+            publishAnnouncement(me, `${hostName} is hosting "${event.title}" ${when}${event.location ? ` in ${event.location}` : ''}. Check it out on BIES!`, [['t', 'new-event']]).catch((err) =>
                 console.error('[Nostr] Event announcement failed:', err)
             );
         }
@@ -561,7 +680,8 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
 
 /**
  * NIP-52 calendar event (kind 31923, replaceable by its d-tag), signed with
- * the host's key on BIES (custodial members only); its id is kept.
+ * the host's key on BIES (custodial members only); its id is kept. A
+ * repeating event goes out as its first date: NIP-52 has no repeat rule.
  */
 async function publishToNostr(signerId: string, event: any, target: 'bies' | 'public' | 'both'): Promise<boolean> {
     const validationError = validateCalendarEventData({ id: event.id, title: event.title, startDate: event.startDate });
@@ -628,6 +748,24 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
         if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
+        // Repeating: the rule, first date and last day as the edit leaves
+        // them, checked when one of them is sent. Never on a proposal.
+        if (badDate(data.repeatUntil)) { res.status(400).json({ error: 'Pick the last day it repeats', reason: 'repeat_until_invalid' }); return; }
+        const repeat = data.repeat ?? existing.repeat;
+        if (repeat && existing.minAttendees != null) {
+            res.status(400).json({ error: 'A proposed meetup doesn\'t repeat', reason: 'repeat_on_proposal' }); return;
+        }
+        if (!repeat) {
+            if (data.repeatUntil !== undefined || existing.repeatUntil) data.repeatUntil = null;
+        } else if (['repeat', 'startDate', 'endDate', 'repeatUntil'].some((f) => data[f] !== undefined)) {
+            const repeatIssue = repeatProblem({
+                startDate: data.startDate ?? existing.startDate,
+                endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+                repeat,
+                repeatUntil: data.repeatUntil !== undefined ? data.repeatUntil : existing.repeatUntil,
+            });
+            if (repeatIssue) { res.status(400).json({ error: 'Check when it repeats', reason: repeatIssue }); return; }
+        }
         // A proposal's number and deadline change only while it's still a
         // proposal (and never to nothing); a usual event doesn't become one.
         // A member's meetup has no tickets.
@@ -723,7 +861,9 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 await tx.eventPartner.deleteMany({ where: { eventId: existing.id, id: { notIn: unseen } } });
                 if (partners.length) await tx.eventPartner.createMany({ data: partners.map((p) => ({ ...p, eventId: existing.id })) });
             }
-            return tx.event.update({ where: { id: existing.id }, data, include: EVENT_INCLUDE });
+            const updated = await tx.event.update({ where: { id: existing.id }, data, include: EVENT_INCLUDE });
+            if (repeats(existing) || repeats(updated)) await moveAnswers(tx, existing, updated, new Date());
+            return updated;
         });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
         if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
@@ -870,10 +1010,6 @@ export async function endorseEvent(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * POST /events/:id/rsvp
- * RSVP to an event.
- */
-/**
  * Whether a member is invited to an event: the host invited them (an
  * attendee row, whatever its status now), or picked them in the event's guest
  * list. Invite-only events let only them, the host and admins RSVP or buy.
@@ -885,6 +1021,12 @@ export async function invitedTo(event: { id: string; guestList?: string | null }
     return !!(await prisma.eventAttendee.findFirst({ where: { eventId: event.id, userId }, select: { id: true } }));
 }
 
+/**
+ * POST /events/:id/rsvp
+ * RSVP to an event. On a repeating event the answer is for its next date
+ * (its last, once it's all over); answering again later is for the date
+ * that's next then.
+ */
 export async function rsvpEvent(req: Request, res: Response): Promise<void> {
     try {
         const userId = req.user!.id;
@@ -901,6 +1043,7 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
                 id: true, title: true, hostId: true, maxAttendees: true, isPublished: true,
                 visibility: true, nostrPublish: true, guestList: true,
                 minAttendees: true, decideBy: true, confirmedAt: true, calledOffAt: true,
+                startDate: true, endDate: true, repeat: true, repeatUntil: true,
                 host: { select: { nostrPubkey: true } },
             },
         });
@@ -928,16 +1071,22 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             res.status(403).json({ error: 'This event is invite only' }); return;
         }
 
+        // A repeating event: the date this answer is for. A member's answer
+        // for another of its dates is no answer for this one.
+        const date = repeats(event) ? shownStart(event, new Date()) : null;
+        const forDate = date ? { occurrenceStart: date } : {};
+        const forThisDate = (row: { occurrenceStart: Date | null } | null) => !!row && (!date || row.occurrenceStart?.getTime() === date.getTime());
+
         if (status === 'GOING' && event.maxAttendees) {
             // Only GOING attendees consume capacity (not INTERESTED/INVITED/NOT_GOING)
             const goingCount = await prisma.eventAttendee.count({
-                where: { eventId: req.params.id, status: 'GOING' },
+                where: { eventId: req.params.id, status: 'GOING', ...forDate },
             });
             if (goingCount >= event.maxAttendees) {
                 const existing = await prisma.eventAttendee.findUnique({
                     where: { eventId_userId: { eventId: req.params.id, userId } },
                 });
-                if (!existing) {
+                if (!forThisDate(existing)) {
                     res.status(409).json({ error: 'Event is at full capacity', reason: 'full' }); return;
                 }
             }
@@ -950,19 +1099,20 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
 
         const attendee = await prisma.eventAttendee.upsert({
             where: { eventId_userId: { eventId: req.params.id, userId } },
-            update: { status },
-            create: { eventId: req.params.id, userId, status },
+            update: { status, ...forDate },
+            create: { eventId: req.params.id, userId, status, ...forDate },
         });
 
         // Announce RSVP on the BIES feed (only for new RSVPs with GOING status)
-        if (!existingRsvp && (status === 'GOING' || status === 'INTERESTED')) {
+        if (!forThisDate(existingRsvp) && (status === 'GOING' || status === 'INTERESTED')) {
             const rsvpUser = await prisma.user.findUnique({
                 where: { id: userId },
                 select: { profile: { select: { name: true } } },
             });
             const userName = rsvpUser?.profile?.name || 'A BIES member';
 
-            if (status === 'GOING' && stage !== 'proposed') {
+            // On the feed once per member: a repeating event's later dates don't post again.
+            if (status === 'GOING' && stage !== 'proposed' && !existingRsvp) {
                 publishAnnouncement(userId, `${userName} is going to "${event.title}"!`, [['t', 'rsvp']]).catch((err) =>
                     console.error('[Nostr] RSVP announcement failed:', err)
                 );

@@ -5,7 +5,7 @@ import { Search, Plus, ChevronRight, ChevronLeft, MapPin, Video, Users, Calendar
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import CoverPhoto from '../components/CoverPhoto';
-import { BiesTag, PriceLine, TicketButton, WhoLine } from '../components/events/EventBits';
+import { BiesTag, PriceLine, RepeatLine, TicketButton, WhoLine } from '../components/events/EventBits';
 import EventRow from '../components/events/EventRow';
 import ProposalCard from '../components/events/ProposalCard';
 import { bothTicketLinks, isFree, monthHeading, monthKey, whenShort } from '../utils/eventFormat';
@@ -371,6 +371,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
             <span className="ev-spot-tag"><BiesTag /></span>
             <div className="ev-spot-body">
                 <span className="ev-spot-when">{whenShort(event.startDate, lang)}</span>
+                <RepeatLine event={event} />
                 <h3 className="ev-spot-title">{event.title}</h3>
                 <span className="ev-spot-where">
                     {event.isOnline ? <Video size={14} aria-hidden="true" /> : <MapPin size={14} aria-hidden="true" />}
@@ -388,7 +389,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                     border-radius: 20px; overflow: hidden; scroll-snap-align: start;
                     background: linear-gradient(135deg, var(--color-primary), #0A192F); color: #FFFFFF;
                     display: flex; flex-direction: column; justify-content: flex-end;
-                    --ev-face-ring: rgba(8, 15, 45, 0.9); --ev-who-color: rgba(255, 255, 255, 0.85);
+                    --ev-face-ring: rgba(8, 15, 45, 0.9); --ev-who-color: rgba(255, 255, 255, 0.85); --ev-repeat-color: #FFD3BA;
                     --ev-price-color: #FFFFFF; --ev-price-sub: rgba(255, 255, 255, 0.75);
                 }
                 .ev-spot-photo { position: absolute; inset: 0; }
@@ -398,6 +399,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                 .ev-spot-body { position: relative; padding: 16px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
                 .ev-spot-body :global(button) { pointer-events: auto; }
                 .ev-spot-when { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFD3BA; }
+                .ev-spot-body :global(.ev-repeat) { margin-top: -4px; }
                 .ev-spot-title { margin: 0; font-family: var(--font-display); font-size: 1.9rem; line-height: 1.05; color: #FFFFFF; text-wrap: balance; overflow-wrap: anywhere; }
                 .ev-spot-where { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: rgba(255, 255, 255, 0.85); min-width: 0; }
                 .ev-spot-where span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

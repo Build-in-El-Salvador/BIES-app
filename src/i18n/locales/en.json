@@ -735,7 +735,11 @@
       "priceTickets": "Tickets",
       "buySats": "Buy ticket · {{sats}} sats",
       "ticketBought": "You have a ticket",
-      "more": "More"
+      "more": "More",
+      "rsvpAskOn": "Going on {{date}}?",
+      "youreGoingOn": "You're going on {{date}}",
+      "goingOn_one": "{{count}} member is going on {{date}}",
+      "goingOn_other": "{{count}} members are going on {{date}}"
     },
     "form": {
       "newTitle": "New event",
@@ -816,7 +820,13 @@
         "no_listing": "One of the businesses you added isn't on BIES anymore.",
         "too_many_partners": "An event has at most 12 co-hosts and sponsors.",
         "host_only": "Only the host can change tickets, co-hosts, sponsors or who can see the event.",
-        "official_listing": "Only BIES can add BIES to an event."
+        "official_listing": "Only BIES can add BIES to an event.",
+        "repeat_until_before_start": "The last day it repeats is before its first date.",
+        "repeat_until_invalid": "Pick the last day it repeats.",
+        "repeat_not_last_week": "\"The last\" works only from a date in the last week of its month.",
+        "repeat_fifth_week": "Not every month has a fifth one: pick \"the last\" instead.",
+        "repeat_too_long": "Each date has to end before the next one starts.",
+        "repeat_on_proposal": "A proposed meetup doesn't repeat."
       },
       "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
       "card": "Highlight card",
@@ -824,7 +834,11 @@
       "cardTitle": "Position the highlight card",
       "cardOwnPhoto": "Use another photo",
       "cardChange": "Change photo",
-      "cardUseCover": "Use the cover"
+      "cardUseCover": "Use the cover",
+      "repeats": "Repeats",
+      "until": "Until (optional)",
+      "untilHint": "After each date it moves on to the next one by itself.",
+      "timeHintRepeat": "El Salvador time. Starts is its first date; it repeats from there."
     },
     "kinds": {
       "NETWORKING": "Networking",
@@ -954,6 +968,28 @@
       "addPlaceHint": "Add it so members can find it. Your meetup will link to its page.",
       "addPlace": "Add it to Businesses",
       "notNow": "No thanks"
+    },
+    "repeat": {
+      "none": "Doesn't repeat",
+      "choices": {
+        "WEEKLY": "Every week on {{day}}",
+        "BIWEEKLY": "Every other {{day}}",
+        "MONTHLY_NTH": "Every month on the {{nth}} {{day}}",
+        "MONTHLY_LAST": "Every month on the last {{day}}"
+      },
+      "short": {
+        "WEEKLY": "Every {{day}}",
+        "BIWEEKLY": "Every other {{day}}",
+        "MONTHLY_NTH": "{{nth}} {{day}} of every month",
+        "MONTHLY_LAST": "Last {{day}} of every month"
+      },
+      "nth": {
+        "1": "first",
+        "2": "second",
+        "3": "third",
+        "4": "fourth"
+      },
+      "next": "Next"
     }
   },
   "projectDetails": {

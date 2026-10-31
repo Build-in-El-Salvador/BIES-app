@@ -5,6 +5,7 @@ import { cache, TTL } from '../services/redis.service';
 import { isEnabled } from '../services/featureFlags.service';
 import { removeTags } from '../middleware/sanitize';
 import { isOpen } from './project.controller';
+import { isRepeat, repeatLabel, shownOccurrence } from '../utils/eventRepeat';
 
 /**
  * Public previews of a shared page, for people who aren't signed in to BIES:
@@ -184,6 +185,11 @@ async function eventTeaser(id: string) {
     };
     const named = (role: string) => event.partners.filter((p) => p.role === role).map(partnerName).filter(Boolean);
     const about = summary(event.description);
+    // A repeating event: its next date (its last, once it's all over), and who's going to that one.
+    const when = shownOccurrence(event, new Date());
+    const going = isRepeat(event.repeat)
+        ? await prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING', occurrenceStart: when.startDate } })
+        : event._count.attendees;
     return {
         section: 'events' as Section,
         id: event.id,
@@ -191,8 +197,9 @@ async function eventTeaser(id: string) {
         kind: event.category,
         location: event.isOnline ? 'Online' : event.locationName,
         isOnline: event.isOnline,
-        startDate: event.startDate,
-        endDate: event.endDate,
+        startDate: when.startDate,
+        endDate: when.endDate,
+        repeat: isRepeat(event.repeat) ? event.repeat : '',
         photo: event.thumbnail || '',
         coverFrame: event.coverFrame,
         about: about.text,
@@ -209,7 +216,7 @@ async function eventTeaser(id: string) {
         members: {
             address: !!(event.locationAddress || event.locationMapUrl),
             onlineLink: !!event.onlineUrl,
-            going: event._count.attendees,
+            going,
             fullText: about.cut,
         },
     };
@@ -274,6 +281,8 @@ export function eventWhen(date: Date | string): string {
 export function cardText(found: Teaser): { title: string; description: string } {
     const parts: string[] = [];
     if (found.section === 'events' && 'startDate' in found) parts.push(eventWhen(found.startDate));
+    // "Sat 7 Nov · 9:00 AM · Every other Saturday"
+    if (found.section === 'events' && 'repeat' in found && found.repeat) parts.push(repeatLabel(found.repeat, new Date(found.startDate)));
     if (found.section === 'opportunities' && 'type' in found) parts.push(OPPORTUNITY_TYPES[found.type] || 'Opportunity');
     if (found.section === 'talents') parts.push('Talent');
     if (found.location) parts.push(found.location);

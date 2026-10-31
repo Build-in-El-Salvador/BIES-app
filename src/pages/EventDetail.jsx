@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban,
+    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban, Repeat,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
 import { bothTicketLinks, fullDay, hostOf, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
+import { dateChip, repeatLabel } from '../utils/eventRepeat';
 import Avatar from '../components/Avatar';
 import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
@@ -34,6 +35,8 @@ import '../components/moderation/Moderation.css';
  * A meetup a member proposed shows how many are in of how many it needs and
  * by when, with "I'm in" at the bottom, then "It's on" (or "Called off").
  * Where it is can be a business or farm on BIES: its card links to its page.
+ * A repeating event shows how it repeats, its next date and the three after
+ * it; "I'm going" is for its next date, and starts again after it.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -219,6 +222,10 @@ const EventDetail = () => {
     // Called off by its proposer: once it was on, or before the deadline (the deadline itself is the other way).
     const byProposer = !!event.confirmedAt || (event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy));
     const started = new Date(event.startDate).getTime() <= Date.now();
+    // Repeating: shown at its next date, which "going" is for.
+    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
+    const nextDay = repeatText ? dateChip(event.startDate, lang) : '';
+    const dates = repeatText ? (event.upcomingDates?.length ? event.upcomingDates : [event.startDate]) : [];
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -325,15 +332,25 @@ const EventDetail = () => {
                 )}
 
                 <div className="ev-facts">
-                    <div className="ev-fact">
-                        <span className="ev-fact-icon"><CalendarDays size={19} aria-hidden="true" /></span>
+                    <div className={`ev-fact${repeatText ? ' repeats' : ''}`}>
+                        <span className="ev-fact-icon">{repeatText ? <Repeat size={19} aria-hidden="true" /> : <CalendarDays size={19} aria-hidden="true" />}</span>
                         <span className="ev-fact-text">
-                            <b>{fullDay(event.startDate, lang)}</b>
+                            <b>{repeatText || fullDay(event.startDate, lang)}</b>
                             <span>{timeRange(event.startDate, event.endDate, lang)}</span>
                         </span>
                         <button type="button" className="ev-fact-link" onClick={() => addToCalendar(event)}>
                             <CalendarPlus size={15} aria-hidden="true" /> {t('events.detail.addToCalendar')}
                         </button>
+                        {dates.length > 0 && (
+                            // Its next date, then the ones after it.
+                            <ul className="ev-dates">
+                                {dates.map((d, i) => (
+                                    <li key={d} className={i === 0 ? 'next' : ''}>
+                                        {i === 0 ? `${t('events.repeat.next')} · ${dateChip(d, lang)}` : dateChip(d, lang, { weekday: false })}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </div>
                     {event.isOnline ? (
                         <div className="ev-fact">
@@ -443,11 +460,13 @@ const EventDetail = () => {
                         )}
                         {rsvpRow ? (
                             <span className="ev-going-text">
-                                <b>{isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk')}</b>
+                                <b>{nextDay
+                                    ? (isGoing ? t('events.detail.youreGoingOn', { date: nextDay }) : t('events.detail.rsvpAskOn', { date: nextDay }))
+                                    : (isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk'))}</b>
                                 <small>{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : t('events.detail.rsvpHint')}</small>
                             </span>
                         ) : (
-                            <span className="ev-going-text">{t('events.detail.going', { count: goingCount })}</span>
+                            <span className="ev-going-text">{nextDay ? t('events.detail.goingOn', { count: goingCount, date: nextDay }) : t('events.detail.going', { count: goingCount })}</span>
                         )}
                         {rsvpRow && (
                             <button type="button" className={`ev-going-btn${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy} onClick={() => rsvp(!isGoing)}>
@@ -486,7 +505,11 @@ const EventDetail = () => {
                     </>
                 ) : (
                     <>
-                        <PriceLine event={event} />
+                        {/* A repeating free event: which date "I'm going" is for. */}
+                        <PriceLine
+                            event={event}
+                            note={nextDay && !hasTickets ? (isGoing ? t('events.detail.youreGoingOn', { date: nextDay }) : t('events.detail.rsvpAskOn', { date: nextDay })) : ''}
+                        />
                         <TicketButton event={event} size="lg" going={isGoing} onGoing={rsvp} busy={busy} />
                     </>
                 )}
@@ -598,6 +621,15 @@ const EventDetail = () => {
                 .ev-fact-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-fact-text span { font-size: 0.85rem; color: var(--color-gray-500); }
                 .ev-fact-link { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 0.85rem; white-space: nowrap; padding: 6px 0; }
+                /* A repeating event's dates, under its time, lined up with the words. */
+                .ev-fact.repeats { flex-wrap: wrap; row-gap: 10px; }
+                .ev-dates { flex-basis: 100%; list-style: none; margin: 0; padding: 0 0 0 52px; display: flex; flex-wrap: wrap; gap: 6px; }
+                .ev-dates li {
+                    display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--radius-full);
+                    border: 1px solid var(--color-gray-200); background: var(--color-surface); color: var(--color-gray-700);
+                    font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+                }
+                .ev-dates li.next { border-color: var(--color-primary); background: var(--color-blue-tint); color: var(--color-primary); }
                 .ev-h { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-gray-500); }
                 .ev-person-list { display: flex; flex-direction: column; gap: 8px; }
                 .ev-sponsors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
