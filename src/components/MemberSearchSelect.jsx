@@ -223,7 +223,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     align-items: center;
                 }
 
-                .search-icon {
+                /* The icon is lucide's own element, out of reach of a plain scoped class. */
+                .search-wrap :global(.search-icon) {
                     position: absolute;
                     left: 10px;
                     color: var(--color-gray-400);
