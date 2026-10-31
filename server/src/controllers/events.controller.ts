@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { cache } from '../services/redis.service';
 import { publishAnnouncement, publishCalendarEvent, deleteCalendarEvent, publishRSVPEvent, validateCalendarEventData } from '../services/nostr.service';
 import { notifyEventRsvp, createNotification } from '../services/notification.service';
-import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
+import { blockedEitherWay, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import {
     EVENT_PEOPLE, MAX_PARTNERS, PartnerError, actedForIds, canDeleteEvent, canEditEvent, checkPartners,
     hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
@@ -22,6 +22,9 @@ import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 import {
     MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
 } from '../services/eventProposals.service';
+import {
+    INVITE_EVENT_SELECT, InviteError, MAX_INVITES, inviteMore, invitedMembers, myInvite, planInviteList, sendInvites, withdrawInvites,
+} from '../services/eventInvites.service';
 import {
     LONGEST_GAP, SIX_HOURS, endOfDay, hasEnded, isRepeat, nextOccurrence, occurrences, repeatLabel, repeatProblem, shownOccurrence,
 } from '../utils/eventRepeat';
@@ -91,6 +94,15 @@ export const createEventSchema = z.object({
     // fits the first date is checked with it (utils/eventRepeat.ts).
     repeat: z.enum(['', 'WEEKLY', 'BIWEEKLY', 'MONTHLY_NTH', 'MONTHLY_LAST']).optional(),
     repeatUntil: z.string().max(40).nullable().optional(),
+    // A proposed meetup's invited members (services/eventInvites.service.ts):
+    // on a new one, who to invite; on an edit, everyone who should be (an
+    // invite left off is taken back, unless they've answered).
+    inviteeIds: z.array(z.string().min(1).max(64)).max(MAX_INVITES).optional(),
+});
+
+/** POST /events/:id/invites: members to invite to a proposed meetup. */
+export const inviteMembersSchema = z.object({
+    userIds: z.array(z.string().min(1).max(64)).min(1).max(MAX_INVITES),
 });
 
 // Every field optional, and a field left out stays out: in zod 4, .partial()
@@ -169,6 +181,12 @@ function eventData(body: Record<string, any>): Record<string, any> {
 
 const badDate = (d: unknown) => d instanceof Date && Number.isNaN(d.getTime());
 const sameTime = (a?: Date | null, b?: Date | null) => (a ? a.getTime() : null) === (b ? b.getTime() : null);
+
+/** Invites refused: too late (409), or not a proposal or too many (400). */
+function refuseInvites(res: Response, err: InviteError): void {
+    const late = err.reason === 'called_off' || err.reason === 'started';
+    res.status(late ? 409 : 400).json({ error: err.message, reason: err.reason, ...err.extra });
+}
 
 /** Who called a meetup off, for the people in it. */
 const calledOffBy = (actorId: string, hostId: string) => (actorId === hostId ? 'The member who proposed it called it off.' : 'It was called off.');
@@ -382,7 +400,12 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
         const rsvp = new Map(mine.map((a) => [a.eventId, a]));
 
         res.json({
-            data: rows.map((e) => ({ ...eventCard(e, hiddenSet, now), rsvpStatus: answerFor(e, rsvp.get(e.id), now) })),
+            // My own answer (for the date shown), and who invited me to a proposed meetup I haven't answered.
+            data: rows.map((e) => {
+                const mineHere = rsvp.get(e.id);
+                const invite = myInvite(e, mineHere?.status);
+                return { ...eventCard(e, hiddenSet, now), rsvpStatus: answerFor(e, mineHere, now), ...(invite ? { myInvite: invite } : {}) };
+            }),
             pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) },
         });
     } catch (error) {
@@ -421,7 +444,8 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 orderBy: { createdAt: 'desc' },
                 skip,
                 take,
-                include: { ...EVENT_INCLUDE, _count: { select: { attendees: true } } },
+                // Who's going (not who's invited, interested or not going).
+                include: { ...EVENT_INCLUDE, ...GOING_COUNT },
             }),
             prisma.event.count({ where: mineWhere }),
         ]);
@@ -535,7 +559,7 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
         const hidden = new Set(await hiddenFromIds(me.id, { staff: isStaffUser(me) }));
 
         const forDate = repeats(event) ? { occurrenceStart: shownStart(event, now) } : {};
-        const [myRsvp, ticketsSold, attendees, goingCount] = await Promise.all([
+        const [myRsvp, ticketsSold, attendees, goingCount, invited] = await Promise.all([
             prisma.eventAttendee.findUnique({ where: { eventId_userId: { eventId: event.id, userId: me.id } }, select: { status: true, occurrenceStart: true } }),
             prisma.ticket.count({ where: { eventId: event.id, status: 'PAID' } }),
             prisma.eventAttendee.findMany({
@@ -545,7 +569,10 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
                 select: { userId: true, user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
             }),
             repeats(event) ? prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING', ...forDate } }) : event._count.attendees,
+            // Who a proposed meetup's proposer invited: theirs (and admins') only.
+            hostSide && event.minAttendees ? invitedMembers(event.id, hidden) : null,
         ]);
+        const invite = myInvite(event, myRsvp?.status);
         // My own place on it, which I can take off: me, or a business I act for.
         const myPartnerIds = event.partners
             .filter((p) => p.userId === me.id || (p.listingId && acted.includes(p.listingId)))
@@ -566,6 +593,8 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
             nostrPublish: event.nostrPublish,
             going: attendees.filter((a) => !hidden.has(a.userId)).map((a) => a.user),
             rsvpStatus: answerFor(event, myRsvp, now),
+            ...(invite ? { myInvite: invite } : {}),
+            ...(invited ? { invited } : {}),
             ticketsSold,
             canEdit,
             canDelete: hostSide,
@@ -670,7 +699,16 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
             ? await publishToNostr(me, event, nostrPublish as 'bies' | 'public' | 'both')
             : false;
 
-        res.status(201).json({ ...eventCard({ ...event, _count: { attendees: proposal ? 1 : 0 } }, new Set()), nostrPublished });
+        // The members its proposer invited as they posted it (a usual event's
+        // guests are its guest list). It's posted either way.
+        let invited = 0;
+        if (proposal && body.inviteeIds?.length) {
+            invited = await inviteMore(event, me, body.inviteeIds)
+                .then((r) => r.invited.length)
+                .catch((err) => { console.error('[Events] Invites on a new meetup failed:', err); return 0; });
+        }
+
+        res.status(201).json({ ...eventCard({ ...event, _count: { attendees: proposal ? 1 : 0 } }, new Set()), nostrPublished, ...(proposal ? { invited } : {}) });
     } catch (error) {
         if (error instanceof PartnerError) { res.status(400).json({ error: error.message, reason: error.reason }); return; }
         console.error('Create event error:', error);
@@ -855,6 +893,19 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             ? await checkPartners(me, body.partners, { hostListingId, eventId: existing.id, isAdmin: !!req.user!.isAdmin, acted })
             : null;
         const unseen = existing.partners.filter((p) => !shown.some((v) => v.id === p.id)).map((p) => p.id);
+        // A proposed meetup's invite list, from its proposer (or an admin):
+        // checked before anything saves, sent once it has.
+        let invitePlan: { add: string[]; remove: string[] } | null = null;
+        if (body.inviteeIds !== undefined && hostSide && stageBefore) {
+            try {
+                invitePlan = await planInviteList({
+                    ...existing, startDate: data.startDate ?? existing.startDate, decideBy: data.decideBy ?? existing.decideBy,
+                }, me, body.inviteeIds);
+            } catch (err) {
+                if (err instanceof InviteError) { refuseInvites(res, err); return; }
+                throw err;
+            }
+        }
 
         const event = await prisma.$transaction(async (tx) => {
             if (partners) {
@@ -883,6 +934,10 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 status: 'CHANGED',
             }, me);
         }
+        // Then the invites (as it is now): taken back quietly, new ones told.
+        const invites = invitePlan
+            ? { withdrawn: await withdrawInvites(event.id, invitePlan.remove), invited: (await sendInvites(event, invitePlan.add)).length }
+            : null;
 
         // On Nostr, under the host's key: gone when it stops being public,
         // otherwise replaced (kind 31923 by its d-tag), on the host's own edit.
@@ -898,7 +953,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             nostrPublished = await publishToNostr(existing.hostId, event, nostrPublish as 'bies' | 'public' | 'both');
         }
 
-        res.json({ ...eventCard(event, new Set()), nostrPublished });
+        res.json({ ...eventCard(event, new Set()), nostrPublished, ...(invites || {}) });
     } catch (error) {
         if (error instanceof PartnerError) { res.status(400).json({ error: error.message, reason: error.reason }); return; }
         console.error('Update event error:', error);
@@ -1086,7 +1141,8 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
                 const existing = await prisma.eventAttendee.findUnique({
                     where: { eventId_userId: { eventId: req.params.id, userId } },
                 });
-                if (!forThisDate(existing)) {
+                // Full: only who's going already (to this date) gets through; being invited isn't a place.
+                if (!(existing?.status === 'GOING' && forThisDate(existing))) {
                     res.status(409).json({ error: 'Event is at full capacity', reason: 'full' }); return;
                 }
             }
@@ -1103,8 +1159,12 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             create: { eventId: req.params.id, userId, status, ...forDate },
         });
 
-        // Announce RSVP on the BIES feed (only for new RSVPs with GOING status)
-        if (!forThisDate(existingRsvp) && (status === 'GOING' || status === 'INTERESTED')) {
+        // Announce RSVP on the BIES feed (only for new RSVPs with GOING status).
+        // New: no answer for this date yet, or a member invited to a proposed
+        // meetup answering.
+        const invitedToMeetup = !!stage && existingRsvp?.status === 'INVITED';
+        const firstAnswer = !forThisDate(existingRsvp) || invitedToMeetup;
+        if (firstAnswer && (status === 'GOING' || status === 'INTERESTED')) {
             const rsvpUser = await prisma.user.findUnique({
                 where: { id: userId },
                 select: { profile: { select: { name: true } } },
@@ -1112,7 +1172,7 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
             const userName = rsvpUser?.profile?.name || 'A BIES member';
 
             // On the feed once per member: a repeating event's later dates don't post again.
-            if (status === 'GOING' && stage !== 'proposed' && !existingRsvp) {
+            if (status === 'GOING' && stage !== 'proposed' && (!existingRsvp || invitedToMeetup)) {
                 publishAnnouncement(userId, `${userName} is going to "${event.title}"!`, [['t', 'rsvp']]).catch((err) =>
                     console.error('[Nostr] RSVP announcement failed:', err)
                 );
@@ -1250,8 +1310,10 @@ export async function callOffEvent(req: Request, res: Response): Promise<void> {
 
 /**
  * POST /events/:id/invite
- * Invite a member to an event. Creates an INVITED attendee record
- * and sends them a notification.
+ * Invite a member to an event (the host side): an INVITED attendee record,
+ * and a notification for them. Not a member who's suspended, deleted, or in
+ * a block either way with whoever invites. On a proposed meetup, as
+ * POST /events/:id/invites (its limit, in its proposer's name).
  */
 export async function inviteToEvent(req: Request, res: Response): Promise<void> {
     try {
@@ -1259,13 +1321,13 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
         const eventId = req.params.id;
         const { userId: targetUserId } = req.body;
 
-        if (!targetUserId) {
+        if (!targetUserId || typeof targetUserId !== 'string') {
             res.status(400).json({ error: 'userId is required' }); return;
         }
 
         const event = await prisma.event.findUnique({
             where: { id: eventId },
-            select: { id: true, title: true, isPublished: true, hostId: true, hostListingId: true },
+            select: { ...INVITE_EVENT_SELECT, isPublished: true },
         });
 
         if (!event || !event.isPublished) {
@@ -1282,12 +1344,12 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
             res.status(400).json({ error: 'You cannot invite yourself' }); return;
         }
 
-        // Check target user exists
-        const targetUser = await prisma.user.findUnique({
-            where: { id: targetUserId },
+        // Someone on BIES, in no block with the inviter (not said which).
+        const targetUser = await prisma.user.findFirst({
+            where: { id: targetUserId, isBanned: false, deletedAt: null },
             select: { id: true },
         });
-        if (!targetUser) {
+        if (!targetUser || await blockedEitherWay(inviterId, targetUserId)) {
             res.status(404).json({ error: 'User not found' }); return;
         }
 
@@ -1298,6 +1360,13 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
 
         if (existing) {
             res.status(409).json({ error: 'User already has an RSVP for this event' }); return;
+        }
+
+        if (event.minAttendees) {
+            const { invited } = await inviteMore(event, inviterId, [targetUserId]);
+            if (!invited.length) { res.status(409).json({ error: 'User already has an RSVP for this event' }); return; }
+            res.status(201).json({ message: 'Invitation sent' });
+            return;
         }
 
         // Create INVITED attendee record
@@ -1322,7 +1391,32 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
 
         res.status(201).json({ message: 'Invitation sent' });
     } catch (error) {
+        if (error instanceof InviteError) { refuseInvites(res, error); return; }
         console.error('Invite to event error:', error);
         res.status(500).json({ error: 'Failed to send invitation' });
+    }
+}
+
+/**
+ * POST /events/:id/invites { userIds }
+ * A proposed meetup's proposer (or an admin) invites members, from its page.
+ * Who can't be (answered already, in a block either way with them, not on
+ * BIES) is skipped; each one invited is told. Only the proposer and admins
+ * see who's invited (GET /events/:id, invited).
+ */
+export async function inviteMembers(req: Request, res: Response): Promise<void> {
+    try {
+        const body = req.body as z.infer<typeof inviteMembersSchema>;
+        const event = await prisma.event.findUnique({ where: { id: req.params.id }, select: INVITE_EVENT_SELECT });
+        if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
+        if (!(await canDeleteEvent(event, req.user))) {
+            res.status(403).json({ error: 'Only the member who proposed it can invite people', reason: 'not_host' }); return;
+        }
+        const { invited, skipped } = await inviteMore(event, req.user!.id, body.userIds);
+        res.json({ invited: invited.length, skipped });
+    } catch (error) {
+        if (error instanceof InviteError) { refuseInvites(res, error); return; }
+        console.error('Invite members error:', error);
+        res.status(500).json({ error: 'Failed to send the invites' });
     }
 }
