@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, UserPlus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban, Repeat,
+    Flag, UserMinus, UserPlus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban, Repeat, Pencil, CalendarX, RotateCcw,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,7 @@ import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
 import { bothTicketLinks, firstNameOf, fullDay, hostOf, invitesOpen, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
-import { dateChip, repeatLabel } from '../utils/eventRepeat';
+import { dateChangeNotice, dateChip, repeatLabel, shortTime } from '../utils/eventRepeat';
 import Avatar from '../components/Avatar';
 import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
@@ -40,7 +40,10 @@ import '../components/moderation/Moderation.css';
  * "Edwin invited you" until they answer. Only the proposer sees who's invited.
  * Where it is can be a business or farm on BIES: its card links to its page.
  * A repeating event shows how it repeats, its next date and the three after
- * it; "I'm going" is for its next date, and starts again after it.
+ * it; "I'm going" is for its next date, and starts again after it. When the
+ * next date is different (its own time or place), a notice says how; a
+ * date called off shows crossed out. Its host side calls off one date (or
+ * brings it back) from the ⋯ menu.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -92,7 +95,7 @@ const EventDetail = () => {
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState(false);
     const [menu, setMenu] = useState(false);
-    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff' | 'invite'
+    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff' | 'invite' | 'callOffDate'
     const [notice, setNotice] = useState('');
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
@@ -201,6 +204,22 @@ const EventDetail = () => {
             setSheet(null);
         }
     };
+    // One date of a repeating event (its key), called off or brought back; the members going to it are told.
+    const setDateOff = async (key, off) => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await (off ? eventsApi.callOffDate(event.id, key) : eventsApi.restoreDate(event.id, key));
+            await load();
+            setGoing(null); // its next date may be another one now
+            setNotice(t(off ? 'events.dates.calledOffNotice' : 'events.dates.restoredNotice', { date: dateChip(key, lang) }));
+        } catch {
+            setNotice(t('events.dates.failed'));
+        } finally {
+            setBusy(false);
+            setSheet(null);
+        }
+    };
     const remove = async () => {
         setBusy(true);
         try {
@@ -231,7 +250,19 @@ const EventDetail = () => {
     // Repeating: shown at its next date, which "going" is for.
     const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
     const nextDay = repeatText ? dateChip(event.startDate, lang) : '';
-    const dates = repeatText ? (event.upcomingDates?.length ? event.upcomingDates : [event.startDate]) : [];
+    // Its dates (a called-off one too, until it passes); just this one while the page loads.
+    const dates = !repeatText ? []
+        : event.upcomingDates?.length ? event.upcomingDates
+            : [{ key: event.occurrence || event.startDate, startDate: event.startDate, changed: !!event.dateChanged, calledOff: false }];
+    const nextIndex = dates.findIndex((d) => !d.calledOff);
+    const calledOff = dates.filter((d) => d.calledOff);
+    // A date is named by its usual day ("Sat 7 Nov"), even when it's moved.
+    const keyDay = repeatText && event.occurrence ? dateChip(event.occurrence, lang) : '';
+    // The When line is how it repeats, at its usual time: the next date's own time is in its notice.
+    const usualStart = keyDay ? event.occurrence : event.startDate;
+    const usualEnd = !keyDay ? event.endDate
+        : event.firstEndDate ? new Date(new Date(event.occurrence).getTime() + (new Date(event.firstEndDate) - new Date(event.firstStartDate))).toISOString() : null;
+    const changeNotice = keyDay ? dateChangeNotice(event.dateChange, t, lang) : null;
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -268,6 +299,16 @@ const EventDetail = () => {
                                         <Edit3 size={16} /> {t('events.detail.edit')}
                                     </button>
                                 )}
+                                {event.canDelete && keyDay && !started && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOffDate'); }}>
+                                        <CalendarX size={16} /> {t('events.dates.callOff', { date: keyDay })}
+                                    </button>
+                                )}
+                                {event.canDelete && calledOff.filter((d) => new Date(d.startDate).getTime() > Date.now()).map((d) => (
+                                    <button key={d.key} type="button" role="menuitem" disabled={busy} onClick={() => { closeMenu(); setDateOff(d.key, false); }}>
+                                        <RotateCcw size={16} /> {t('events.dates.restore', { date: dateChip(d.key, lang) })}
+                                    </button>
+                                ))}
                                 {mine && invitesOpen(event) && (
                                     <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('invite'); }}>
                                         <UserPlus size={16} /> {t('events.proposals.inviteMembers')}
@@ -297,6 +338,12 @@ const EventDetail = () => {
 
             <div className="ev-body">
                 {notice && <p className="ev-notice" role="status">{notice}</p>}
+                {changeNotice && (
+                    <p className="ev-notice ev-date-notice">
+                        <Pencil size={15} aria-hidden="true" />
+                        <span>{changeNotice.lead}{changeNotice.usual && ` ${changeNotice.usual}`}</span>
+                    </p>
+                )}
                 {event.canEdit && (event.visibility === 'DRAFT' || event.visibility === 'PRIVATE') && (
                     <p className="ev-notice"><Lock size={15} aria-hidden="true" /> {event.visibility === 'DRAFT' ? t('events.detail.draft') : t('events.detail.private')}</p>
                 )}
@@ -349,21 +396,26 @@ const EventDetail = () => {
                         <span className="ev-fact-icon">{repeatText ? <Repeat size={19} aria-hidden="true" /> : <CalendarDays size={19} aria-hidden="true" />}</span>
                         <span className="ev-fact-text">
                             <b>{repeatText || fullDay(event.startDate, lang)}</b>
-                            <span>{timeRange(event.startDate, event.endDate, lang)}</span>
+                            <span>{timeRange(usualStart, usualEnd, lang)}</span>
                         </span>
                         <button type="button" className="ev-fact-link" onClick={() => addToCalendar(event)}>
                             <CalendarPlus size={15} aria-hidden="true" /> {t('events.detail.addToCalendar')}
                         </button>
                         {dates.length > 0 && (
-                            // Its next date, then the ones after it.
+                            // Its next date (with its own time when it has one), then the ones after it; one called off crossed out.
                             <ul className="ev-dates">
                                 {dates.map((d, i) => (
-                                    <li key={d} className={i === 0 ? 'next' : ''}>
-                                        {i === 0 ? `${t('events.repeat.next')} · ${dateChip(d, lang)}` : dateChip(d, lang, { weekday: false })}
+                                    <li key={d.key} className={i === nextIndex ? 'next' : d.calledOff ? 'off' : ''}>
+                                        {i === nextIndex
+                                            ? [t('events.repeat.next'), dateChip(d.startDate, lang), ...(d.changed ? [shortTime(d.startDate, lang)] : [])].join(' · ')
+                                            : dateChip(d.calledOff ? d.key : d.startDate, lang, { weekday: false })}
                                     </li>
                                 ))}
                             </ul>
                         )}
+                        {calledOff.map((d) => (
+                            <p key={d.key} className="ev-date-off">{t('events.dates.noEventOn', { title: event.title, date: dateChip(d.key, lang) })}</p>
+                        ))}
                     </div>
                     {event.isOnline ? (
                         <div className="ev-fact">
@@ -555,6 +607,17 @@ const EventDetail = () => {
                     onPurchased={(tk) => { setTicket(tk); setBuying(false); setGoing(true); }}
                 />
             )}
+            {sheet === 'callOffDate' && (
+                <ModerationSheet title={t('events.dates.callOffTitle', { date: keyDay })} onClose={() => setSheet(null)}>
+                    <p className="mod-muted">{t('events.dates.callOffConfirm', { title: event.title, date: keyDay })}</p>
+                    <div className="mod-actions">
+                        <button type="button" className="mod-button secondary" onClick={() => setSheet(null)}>{t('events.dates.keep')}</button>
+                        <button type="button" className="mod-button danger" onClick={() => setDateOff(event.occurrence, true)} disabled={busy}>
+                            {busy && <Loader2 size={18} className="mod-spin" />} {t('events.dates.callOffYes')}
+                        </button>
+                    </div>
+                </ModerationSheet>
+            )}
             {sheet === 'callOff' && (
                 <ModerationSheet title={t('events.proposals.callOff')} onClose={() => setSheet(null)}>
                     <p className="mod-muted">{t('events.proposals.callOffConfirm')}</p>
@@ -679,6 +742,10 @@ const EventDetail = () => {
                     font-size: 0.8rem; font-weight: 600; white-space: nowrap;
                 }
                 .ev-dates li.next { border-color: var(--color-primary); background: var(--color-blue-tint); color: var(--color-primary); }
+                .ev-dates li.off { color: var(--color-gray-400); text-decoration: line-through; }
+                .ev-date-off { flex-basis: 100%; margin: -4px 0 0; padding-left: 52px; font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-date-notice { align-items: flex-start; line-height: 1.4; }
+                .ev-date-notice :global(svg) { flex: none; margin-top: 2px; }
                 .ev-h { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-gray-500); }
                 .ev-person-list { display: flex; flex-direction: column; gap: 8px; }
                 .ev-sponsors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }

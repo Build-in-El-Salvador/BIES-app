@@ -188,7 +188,12 @@ describe('an event page', () => {
         const page = (await call('GET', `/api/events/${created.id}`, { token: host.token })).body;
         const dates = occurrences(s, new Date(), 4).map((o) => iso(o.startDate));
         expect(page.startDate).toBe(dates[0]);
-        expect(page.upcomingDates).toEqual(dates);
+        // Each with its key, its times as it is, and whether it's different or called off.
+        expect(page.upcomingDates).toEqual(occurrences(s, new Date(), 4).map((o) => ({
+            key: iso(o.key), startDate: iso(o.startDate), endDate: iso(o.endDate!), changed: false, calledOff: false,
+        })));
+        expect(page.occurrence).toBe(dates[0]);
+        expect(page.dateChanged).toBe(false);
         expect(page.firstStartDate).toBe(iso(first));
         expect(page.repeat).toBe('BIWEEKLY');
     });

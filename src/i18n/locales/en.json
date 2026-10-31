@@ -826,7 +826,12 @@
         "repeat_not_last_week": "\"The last\" works only from a date in the last week of its month.",
         "repeat_fifth_week": "Not every month has a fifth one: pick \"the last\" instead.",
         "repeat_too_long": "Each date has to end before the next one starts.",
-        "repeat_on_proposal": "A proposed meetup doesn't repeat."
+        "repeat_on_proposal": "A proposed meetup doesn't repeat.",
+        "date_over": "That date is over. Open the event again to edit the next one.",
+        "date_not_found": "That date isn't one of this event's anymore. Open the event again.",
+        "date_not_next": "Only its next date can change the dates after it.",
+        "date_out_of_order": "Keep that date after the one before it and before the next one.",
+        "date_end_before_start": "The end is before the start."
       },
       "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
       "card": "Highlight card",
@@ -838,7 +843,8 @@
       "repeats": "Repeats",
       "until": "Until (optional)",
       "untilHint": "After each date it moves on to the next one by itself.",
-      "timeHintRepeat": "El Salvador time. Starts is its first date; it repeats from there."
+      "timeHintRepeat": "El Salvador time. Starts is its first date; it repeats from there.",
+      "timeHintDate": "El Salvador time. This is its next date, {{date}}."
     },
     "kinds": {
       "NETWORKING": "Networking",
@@ -1007,6 +1013,29 @@
         "4": "fourth"
       },
       "next": "Next"
+    },
+    "dates": {
+      "changedForDate": "Changed for this date",
+      "different": "{{date}} is different: {{what}}.",
+      "differentOther": "{{date}} is different from usual.",
+      "usually": "Usually {{what}}.",
+      "atPlace": "at {{place}}",
+      "online": "online",
+      "noEventOn": "No {{title}} on {{date}}.",
+      "callOff": "Call off {{date}} only",
+      "callOffTitle": "Call off {{date}}?",
+      "callOffConfirm": "No {{title}} on {{date}}. The members going to it are told; the other dates stay as they are.",
+      "callOffYes": "Call it off",
+      "keep": "Keep it",
+      "restore": "Bring back {{date}}",
+      "calledOffNotice": "{{date}} is called off. The members going to it were told.",
+      "restoredNotice": "{{date}} is back on. The members going to it were told.",
+      "failed": "Couldn't change that date. Try again.",
+      "scopeTitle": "{{title}} repeats {{rule}}",
+      "scopeQuestion": "Which dates does this change?",
+      "onlyDate": "Only {{date}}",
+      "dateAndAfter": "{{date}} and every date after",
+      "cancel": "Cancel"
     }
   },
   "projectDetails": {

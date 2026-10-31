@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Check, Bitcoin, Repeat } from 'lucide-react';
+import { ExternalLink, Check, Bitcoin, Repeat, Pencil } from 'lucide-react';
 import Avatar from '../Avatar';
 import { openExternal } from '../../utils/openExternal';
 import { bothTicketLinks, hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
@@ -35,18 +35,22 @@ export function BiesTag({ className = '' }) {
 
 /**
  * How a repeating event repeats, under its next date: "↻ Every other
- * Saturday". Nothing for a one-off. On a dark card, --ev-repeat-color.
+ * Saturday". When that date is different from usual (its own time or
+ * place, shown above it), "✎ Changed for this date" instead. Nothing for a
+ * one-off. On a dark card, --ev-repeat-color and --ev-changed-color.
  */
 export function RepeatLine({ event, className = '' }) {
     const { t, i18n } = useTranslation();
     const label = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, i18n.language);
     if (!label) return null;
+    const changed = !!event.dateChanged;
     return (
-        <span className={`ev-repeat ${className}`}>
-            <Repeat size={13} aria-hidden="true" />
-            <span className="ev-repeat-text">{label}</span>
+        <span className={`ev-repeat${changed ? ' changed' : ''} ${className}`}>
+            {changed ? <Pencil size={13} aria-hidden="true" /> : <Repeat size={13} aria-hidden="true" />}
+            <span className="ev-repeat-text">{changed ? t('events.dates.changedForDate') : label}</span>
             <style jsx>{`
                 .ev-repeat { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 0.8rem; font-weight: 600; line-height: 1.3; color: var(--ev-repeat-color, var(--color-primary)); }
+                .ev-repeat.changed { color: var(--ev-changed-color, var(--color-orange-text)); }
                 .ev-repeat :global(svg) { flex-shrink: 0; }
                 .ev-repeat-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             `}</style>

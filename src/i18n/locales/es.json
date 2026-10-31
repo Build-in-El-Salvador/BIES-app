@@ -825,7 +825,12 @@
         "repeat_not_last_week": "\"El último\" solo funciona desde una fecha en la última semana del mes.",
         "repeat_fifth_week": "No todos los meses tienen un quinto: elige \"el último\".",
         "repeat_too_long": "Cada fecha tiene que terminar antes de que empiece la siguiente.",
-        "repeat_on_proposal": "Una reunión propuesta no se repite."
+        "repeat_on_proposal": "Una reunión propuesta no se repite.",
+        "date_over": "Esa fecha ya pasó. Abre el evento de nuevo para editar la próxima.",
+        "date_not_found": "Esa fecha ya no es de este evento. Abre el evento de nuevo.",
+        "date_not_next": "Solo su próxima fecha puede cambiar las siguientes.",
+        "date_out_of_order": "Deja esa fecha después de la anterior y antes de la siguiente.",
+        "date_end_before_start": "El final es antes del inicio."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
       "card": "Tarjeta destacada",
@@ -837,7 +842,8 @@
       "repeats": "Se repite",
       "until": "Hasta (opcional)",
       "untilHint": "Después de cada fecha pasa sola a la siguiente.",
-      "timeHintRepeat": "Hora de El Salvador. Empieza es su primera fecha; se repite desde ahí."
+      "timeHintRepeat": "Hora de El Salvador. Empieza es su primera fecha; se repite desde ahí.",
+      "timeHintDate": "Hora de El Salvador. Es su próxima fecha, {{date}}."
     },
     "kinds": {
       "NETWORKING": "Networking",
@@ -869,6 +875,29 @@
         "4": "cuarto"
       },
       "next": "Próximo"
+    },
+    "dates": {
+      "changedForDate": "Cambia en esta fecha",
+      "different": "El {{date}} es distinto: {{what}}.",
+      "differentOther": "El {{date}} es distinto de lo usual.",
+      "usually": "Normalmente {{what}}.",
+      "atPlace": "en {{place}}",
+      "online": "en línea",
+      "noEventOn": "No hay {{title}} el {{date}}.",
+      "callOff": "Cancelar solo el {{date}}",
+      "callOffTitle": "¿Cancelar el {{date}}?",
+      "callOffConfirm": "No habrá {{title}} el {{date}}. Se avisa a los miembros que iban; las demás fechas siguen igual.",
+      "callOffYes": "Cancelarla",
+      "keep": "Mantenerla",
+      "restore": "Volver a poner el {{date}}",
+      "calledOffNotice": "El {{date}} está cancelado. Se avisó a los miembros que iban.",
+      "restoredNotice": "El {{date}} vuelve a estar en pie. Se avisó a los miembros que iban.",
+      "failed": "No se pudo cambiar esa fecha. Inténtalo de nuevo.",
+      "scopeTitle": "{{title}} se repite {{rule}}",
+      "scopeQuestion": "¿Qué fechas cambia esto?",
+      "onlyDate": "Solo el {{date}}",
+      "dateAndAfter": "El {{date}} y todas las siguientes",
+      "cancel": "Cancelar"
     }
   },
   "news": {

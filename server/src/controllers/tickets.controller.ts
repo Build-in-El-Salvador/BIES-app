@@ -259,7 +259,7 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
             where: { id: eventId },
             select: {
                 id: true, title: true, hostId: true, isPublished: true, visibility: true, guestList: true,
-                startDate: true, endDate: true, repeat: true, repeatUntil: true,
+                startDate: true, endDate: true, repeat: true, repeatUntil: true, dateChanges: true,
                 priceSats: true, ticketCapacity: true, payoutLightningAddress: true, minAttendees: true,
                 host: { select: { profile: { select: { lightningAddress: true } } } },
             },
