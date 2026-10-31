@@ -1034,9 +1034,14 @@ model DirectoryListing {
   // A Google/Apple Maps link to the exact place, for Directions (optional:
   // a business that comes to you needs no public address).
   mapUrl    String @default("") @map("map_url")
-  // The member who added it runs the business, or works there: their own
-  // vote doesn't count, and the listing says it was added by the business.
+  // The business's own listing, not a customer's recommendation: added by
+  // the member who runs it or works there. Their own vote doesn't count, and
+  // the listing says it was added by the business.
   isOwnBusiness Boolean @default(false) @map("is_own_business")
+  // How the member who added it (ownerId) is connected to its business:
+  // "STAFF" for "I work there" (they're on its team and don't run it);
+  // otherwise "" (they run it when it's their own business).
+  addedAs       String  @default("") @map("added_as")
   // BIES's own page (admins set it): events hosted as it are BIES events.
   isOfficial    Boolean @default(false) @map("is_official")
   baseScore       Int      @default(40) @map("base_score")        // unused since the BIES Trust Score (votes only)

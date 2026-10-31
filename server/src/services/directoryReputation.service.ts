@@ -5,8 +5,8 @@
  * drops back.
  *
  * Votes that don't count: those of whoever runs the business (the linked
- * member, or the member who added it as their own business), and those of
- * banned or deleted accounts. The controller refuses the first kind; they
+ * member, or the member who added it as their own business, or as someone
+ * who works there), and those of banned or deleted accounts. The controller refuses the first kind; they
  * are left out here too in case a listing changed hands after the vote.
  */
 

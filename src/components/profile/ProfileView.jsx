@@ -21,6 +21,7 @@ import AlbumsBlock, { useAlbums } from '../albums/AlbumsBlock';
 import TalentSummary from '../talent/TalentSummary';
 import { MAX_TALENTS } from '../talent/talentOptions';
 import DirectoryListingCard from '../directory/DirectoryListingCard';
+import { runsListing, worksAt } from '../directory/listingRoles';
 import useVisitState from '../../hooks/useVisitState';
 import { cachedList, rememberList } from '../../utils/listCache';
 import { joinPages, listOf } from '../../utils/listRequests';
@@ -49,8 +50,8 @@ const sameName = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toL
  * A member's profile, laid out like Facebook's: the cover against the top
  * bar, the photo with the name and follower counts beside it, the bio, the
  * buttons, then All / Photos / Talent / Recommendations. All has their
- * details (role, the BIES business they run, projects, place, links, when
- * they joined), their
+ * details (role, the BIES businesses they run and work at, projects, place,
+ * links, when they joined), their
  * Network, and their posts in the BIES feed, as the Feed shows them (likes,
  * reposts, replies); Photos has the pictures from those posts; Talent has
  * what they offer to do, with their proof of work (BIES Talents), when
@@ -78,6 +79,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
     const [listings, setListings] = useState([]);
+    const [teamListings, setTeamListings] = useState([]); // the businesses whose team they're on
     const [talents, setTalents] = useState([]);
     // As far as "Show more" went, kept for Back (utils/listCache.js).
     const recommendationsKey = `recommended-by:${userId}`;
@@ -101,6 +103,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         profilesApi.getFollowing(userId, { limit: 50 }).then((res) => { if (!cancelled) setFollowing(page(res)); }).catch(() => {});
         directoryApi.list({ ownerId: userId, limit: 20 })
             .then((res) => { if (!cancelled) setListings(res?.data || []); })
+            .catch(() => {});
+        directoryApi.list({ teamMember: userId, limit: 20 })
+            .then((res) => { if (!cancelled) setTeamListings(res?.data || []); })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [userId]);
@@ -161,10 +166,15 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const networkHidden = !isOwn && (followers.hidden || following.hidden);
     const albums = useAlbums({ userId });
 
-    // The businesses and farms they run (theirs, or one staff linked them to).
-    const businesses = listings.filter((l) => (l.isOwnBusiness && (l.ownerId === userId || l.owner?.id === userId)) || l.memberUserId === userId);
-    const companyListing = businesses.find((l) => sameName(l.name, profile.company));
+    // The businesses and farms they run (theirs, or one staff linked them to),
+    // then the ones they work at (on its team; not one they run as well). The
+    // one named as their company links from there instead.
+    const businesses = listings.filter((l) => runsListing(l, userId));
+    const workplaces = worksAt(teamListings, userId, businesses);
+    const companyListing = businesses.find((l) => sameName(l.name, profile.company))
+        || workplaces.find((l) => sameName(l.name, profile.company));
     const otherBusinesses = businesses.filter((l) => l !== companyListing);
+    const otherWorkplaces = workplaces.filter((l) => l !== companyListing);
 
     // Pictures from their own posts (not ones they reposted).
     const photos = useMemo(
@@ -195,7 +205,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
         profile.linkedin && isSafeUrl(profile.linkedin) && { key: 'in', Icon: Linkedin, href: profile.linkedin, label: 'LinkedIn' },
     ].filter(Boolean);
     const role = profile.title && profile.company ? 'both' : profile.title ? 'title' : profile.company ? 'company' : null;
-    const filledIn = role || otherBusinesses.length || projects.length || profile.location || links.length || profile.tags?.length;
+    const filledIn = role || otherBusinesses.length || otherWorkplaces.length || projects.length || profile.location || links.length || profile.tags?.length;
     const joined = joinedDate(profile.user?.createdAt, i18n.language);
 
     const companyText = companyListing
@@ -360,6 +370,12 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                                 <li key={l.id}>
                                     {l.type === 'FARM' ? <Leaf size={20} aria-hidden="true" /> : <Store size={20} aria-hidden="true" />}
                                     <span>{t('profileView.runs')} <Link to={listingPath(l)} className="pv-link">{l.name}</Link></span>
+                                </li>
+                            ))}
+                            {otherWorkplaces.map((l) => (
+                                <li key={l.id}>
+                                    <Briefcase size={20} aria-hidden="true" />
+                                    <span>{t('profileView.worksAt')} <Link to={listingPath(l)} className="pv-link">{l.name}</Link></span>
                                 </li>
                             ))}
                             {projects.map((p) => (

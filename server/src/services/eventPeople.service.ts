@@ -1,6 +1,6 @@
 import prisma from '../lib/prisma';
 import { z } from 'zod';
-import { listingsActedFor, runsListing } from '../controllers/listingTeam.controller';
+import { listingsActedFor, runnerId, runsListing } from '../controllers/listingTeam.controller';
 import { blockedEitherWay } from './moderation.service';
 import { createNotification } from './notification.service';
 import { ownsUploads } from './uploads.service';
@@ -114,7 +114,7 @@ export async function canDeleteEvent(event: EventRef, user: Viewer, acted?: stri
     const listing = await prisma.directoryListing.findUnique({
         where: { id: event.hostListingId },
         select: {
-            status: true, isPublished: true, ownerId: true, memberUserId: true, isOwnBusiness: true,
+            status: true, isPublished: true, ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true,
             owner: { select: { isBanned: true, deletedAt: true } },
             memberUser: { select: { isBanned: true, deletedAt: true } },
             team: { where: { userId: user.id }, select: { userId: true } },
@@ -204,11 +204,10 @@ export function samePartners(inputs: PartnerInput[], shown: PartnerView[]): bool
     return JSON.stringify(inputs.map(keyIn)) === JSON.stringify(shown.map(keyOf));
 }
 
-/** The member who runs a listing, to hear about it (none for a listing only recommended). */
+/** The member who runs a listing, to hear about it (none for a listing only recommended, or added by someone who works there). */
 async function runnerOf(listingId: string): Promise<string | null> {
-    const l = await prisma.directoryListing.findUnique({ where: { id: listingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true } });
-    if (!l) return null;
-    return l.memberUserId ?? (runsListing(l, l.ownerId) ? l.ownerId : null);
+    const l = await prisma.directoryListing.findUnique({ where: { id: listingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true } });
+    return l ? runnerId(l) : null;
 }
 
 /**

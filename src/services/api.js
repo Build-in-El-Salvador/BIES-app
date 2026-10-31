@@ -273,7 +273,7 @@ export const projectsApi = {
 
 export const directoryApi = {
     list: (params = {}) => get('/directory', params),
-    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved }
+    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved, teamMember }
 
     // The businesses and farms a member recommends, newest first (their profile).
     recommendedBy: (userId, params = {}) => get(`/directory/recommended-by/${encodeURIComponent(userId)}`, params),

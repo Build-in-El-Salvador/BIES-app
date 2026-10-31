@@ -4,6 +4,7 @@ import { recomputeListingScore } from '../services/directoryReputation.service';
 import { createNotification } from '../services/notification.service';
 import { blockedEitherWay, moderatorsOwn } from '../services/moderation.service';
 import { mirrorToNostr } from './directory.controller';
+import { runnerId } from './listingTeam.controller';
 import { z } from 'zod';
 
 /**
@@ -16,7 +17,8 @@ import { z } from 'zod';
  * - staff move it outright (POST /admin/directory/:id/owner).
  *
  * Once moved, it's the new owner's own business: they can edit it, and
- * their own review of it goes, since it can't count.
+ * their own review of it goes, since it can't count. A member who added it
+ * as someone who works there stays on its team.
  */
 
 export const claimSchema = z.object({
@@ -58,14 +60,23 @@ const activeMember = (userId: string) =>
  */
 async function moveListing(listingId: string, toUserId: string, decidedById: string, transferId?: string): Promise<void> {
     const now = new Date();
+    const before = await prisma.directoryListing.findUnique({
+        where: { id: listingId },
+        select: { ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true },
+    });
+    const oldRunner = before ? runnerId(before) : null;
     await prisma.$transaction([
         prisma.directoryListing.update({
             where: { id: listingId },
-            data: { ownerId: toUserId, isOwnBusiness: true, memberUserId: null },
+            data: { ownerId: toUserId, isOwnBusiness: true, addedAs: '', memberUserId: null },
         }),
         prisma.directoryEndorsement.deleteMany({ where: { listingId, userId: toUserId } }),
         // A new runner starts with no team: the old one's people go with it.
-        prisma.listingTeamMember.deleteMany({ where: { listingId } }),
+        // When nobody ran it (say someone who works there added it), its
+        // team stays, that member too; the new owner shows as its owner.
+        prisma.listingTeamMember.deleteMany({
+            where: oldRunner && oldRunner !== toUserId ? { listingId } : { listingId, userId: toUserId },
+        }),
         prisma.listingTransfer.updateMany({
             where: { listingId, status: 'pending', ...(transferId ? { id: { not: transferId } } : {}) },
             data: { status: 'cancelled', decidedById, decidedAt: now },

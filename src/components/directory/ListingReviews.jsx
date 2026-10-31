@@ -7,20 +7,24 @@ import TranslatableText from '../TranslatableText';
 import CertifiedBadge from './CertifiedBadge';
 import { objectionableMessage } from '../moderation/objectionable';
 import { reviewCount, writtenReviews } from './recommenders';
+import { connectionOf } from './listingRoles';
 
 // The server's DOWNVOTE_REASON_MIN (directory.controller.ts).
 const REASON_MIN = 20;
 
 /**
- * Where a member stands with a listing: their own review, whether they run
- * it (and so can't review it), and whether they can review it now.
+ * Where a member stands with a listing: their own review, whether it's
+ * theirs (they run it, or added it as its own: then they can't review it,
+ * and worksThere when they added it as someone who works there), and
+ * whether they can review it now.
  */
 export function reviewState(listing, user) {
     const reviews = Array.isArray(listing.endorsements) ? listing.endorsements : [];
     const mine = user?.id ? reviews.find((r) => r.userId === user.id) || null : null;
     const runsIt = !!user?.id && (listing.memberUserId === user.id || (listing.isOwnBusiness && listing.ownerId === user.id));
+    const worksThere = runsIt && listing.ownerId === user.id && listing.memberUserId !== user.id && connectionOf(listing) === 'staff';
     const live = listing.status === 'active';
-    return { reviews, mine, runsIt, live, canReview: !!user?.id && !runsIt && live };
+    return { reviews, mine, runsIt, worksThere, live, canReview: !!user?.id && !runsIt && live };
 }
 
 /**
@@ -228,7 +232,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
-    const { reviews, mine, runsIt, live, canReview } = reviewState(listing, user);
+    const { reviews, mine, runsIt, worksThere, live, canReview } = reviewState(listing, user);
     const sectionRef = useRef(null);
     // Only reviews with words (a bare vouch is a face under "Recommended by"):
     // mine first, then the member who added it, then newest.
@@ -298,7 +302,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
         <section className="dir-detail-section dir-reviews" id="reviews" ref={sectionRef}>
             <h2 style={titleStyle}>{t('directory.reviewsTitle')} ({reviewCount(reviews)})</h2>
 
-            {runsIt && <p className="dir-review-note">{t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })}</p>}
+            {runsIt && <p className="dir-review-note">{t(worksThere ? 'directory.review.cantReviewStaff' : 'directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })}</p>}
             {!runsIt && !live && <p className="dir-review-note">{t('directory.review.notLive')}</p>}
 
             {/* Vouch / Don't recommend live in the Trust Score panel (TrustPanel onRecommend). */}
