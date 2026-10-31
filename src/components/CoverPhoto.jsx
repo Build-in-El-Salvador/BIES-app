@@ -16,6 +16,8 @@ const BACKDROP = {
  * photo (a flyer zoomed out to show all of it), a blurred copy fills it.
  * Without a chosen part, the photo centred and cropped to the box, as before.
  * Inline styles, so a page's `:global(img)` rules don't move the photo.
+ * A rounded box around it needs `clip-path: inset(0 round <its radius>)` as
+ * well as `overflow: hidden`: iOS doesn't round off the blurred fill without it.
  *
  * @param {string} src - the photo (absolute, or /uploads/...)
  * @param {string} [frame] - its stored position, "x,y,w,h"

@@ -638,7 +638,7 @@ const EventDetail = () => {
                 .ev-have { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-success-text); }
                 @media (min-width: 769px) {
                     .ev-hero-wrap { padding-top: 1.5rem; }
-                    .ev-hero { border-radius: 20px; }
+                    .ev-hero { border-radius: 20px; clip-path: inset(0 round 20px); }
                     .ev-bar { border: 1px solid var(--color-gray-200); border-radius: 16px 16px 0 0; }
                 }
             `}</style>

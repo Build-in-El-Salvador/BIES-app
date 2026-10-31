@@ -12,6 +12,7 @@ import { parseNoteContent } from '../../utils/noteUtils';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { joinedDate } from '../../utils/joinedDate';
+import { sectionHasContent } from '../../utils/profileSections';
 import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
@@ -188,7 +189,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const experience = profile.showExperience !== false && Array.isArray(profile.experience)
         ? profile.experience.filter((e) => e?.title || e?.company)
         : [];
-    const sections = Array.isArray(profile.customSections) ? profile.customSections : [];
+    // A section left blank in Edit profile would show as an empty box.
+    const sections = Array.isArray(profile.customSections) ? profile.customSections.filter(sectionHasContent) : [];
     const links = [
         profile.website && isSafeUrl(profile.website) && { key: 'web', Icon: Globe, href: profile.website, label: profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '') },
         profile.twitter && { key: 'x', Icon: Twitter, href: `https://x.com/${profile.twitter.replace('@', '')}`, label: `@${profile.twitter.replace('@', '')}` },

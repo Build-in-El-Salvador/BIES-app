@@ -218,7 +218,7 @@ export default function SharePreview({ section }) {
                 }
                 .sp-main { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 32px); }
                 .sp-cover {
-                    aspect-ratio: 16 / 10; border-radius: var(--radius-lg) var(--radius-lg) 0 0; overflow: hidden;
+                    aspect-ratio: 16 / 10; border-radius: var(--radius-lg) var(--radius-lg) 0 0; clip-path: inset(0 round var(--radius-lg) var(--radius-lg) 0 0); overflow: hidden;
                     background: var(--color-gray-100); display: flex; align-items: center; justify-content: center;
                     color: var(--color-gray-400);
                 }

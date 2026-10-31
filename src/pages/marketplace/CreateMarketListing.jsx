@@ -223,7 +223,7 @@ const CreateMarketListing = ({ editMode = false }) => {
                                     <img src={img} alt="" loading="lazy" />
                                     <button
                                         type="button"
-                                        className="mk-image-remove"
+                                        className="mk-image-remove x-remove"
                                         onClick={() => removeImage(idx)}
                                         disabled={isBusy}
                                         aria-label={t('common.cancel')}

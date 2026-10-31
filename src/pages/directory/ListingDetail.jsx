@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
 import TranslatableText from '../../components/TranslatableText';
 import ZapButton from '../../components/ZapButton';
+import EmailSheet from '../../components/EmailSheet';
 import ListingReviews, { TrustPanel, reviewState } from '../../components/directory/ListingReviews';
 import RecommendedBy from '../../components/directory/RecommendedBy';
 import ListingTeam from '../../components/directory/ListingTeam';
@@ -67,6 +68,7 @@ const ListingDetail = () => {
     // The member who runs it is one this member blocked.
     const [blockedOwner, setBlockedOwner] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false); // the Email button's Copy / Open sheet
     const [reviewRequest, setReviewRequest] = useState(null); // { vote, n }: open the review form
     const [linkCopied, setLinkCopied] = useState(false);
     const [searchParams] = useSearchParams();
@@ -278,8 +280,7 @@ const ListingDetail = () => {
             key: 'email',
             Icon: Mail,
             label: emailValue,
-            href: `mailto:${emailValue}`,
-            external: false,
+            onClick: () => setEmailOpen(true),
         },
     ].filter(Boolean);
 
@@ -685,18 +686,27 @@ const ListingDetail = () => {
                         <section className="dir-detail-section">
                             <h2 style={sectionTitleStyle}>{t('directory.learnMore')}</h2>
                             <div className="dir-learn-list">
-                                {learnMoreRows.map(({ key, Icon, label, href, external }) => (
-                                    <a
-                                        key={key}
-                                        className="dir-learn-row"
-                                        href={href}
-                                        {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                                    >
-                                        <span className="dir-learn-icon"><Icon size={18} /></span>
-                                        <span className="dir-learn-label">{label}</span>
-                                        <ChevronRight size={18} className="dir-learn-chevron" />
-                                    </a>
-                                ))}
+                                {learnMoreRows.map(({ key, Icon, label, href, external, onClick }) => {
+                                    const inner = (
+                                        <>
+                                            <span className="dir-learn-icon"><Icon size={18} /></span>
+                                            <span className="dir-learn-label">{label}</span>
+                                            <ChevronRight size={18} className="dir-learn-chevron" />
+                                        </>
+                                    );
+                                    return onClick
+                                        ? <button key={key} type="button" className="dir-learn-row" onClick={onClick}>{inner}</button>
+                                        : (
+                                            <a
+                                                key={key}
+                                                className="dir-learn-row"
+                                                href={href}
+                                                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                                            >
+                                                {inner}
+                                            </a>
+                                        );
+                                })}
                             </div>
                         </section>
                     )}
@@ -1046,6 +1056,14 @@ const ListingDetail = () => {
                     text-decoration: none;
                     color: inherit;
                 }
+                button.dir-learn-row {
+                    width: 100%;
+                    border: 0;
+                    background: none;
+                    font: inherit;
+                    text-align: left;
+                    cursor: pointer;
+                }
                 .dir-learn-row + .dir-learn-row {
                     border-top: 1px solid var(--color-gray-200);
                 }
@@ -1087,7 +1105,7 @@ const ListingDetail = () => {
                         padding-top: 1.5rem;
                     }
                     .dir-hero {
-                        border-radius: var(--radius-lg);
+                        border-radius: var(--radius-lg); clip-path: inset(0 round var(--radius-lg));
                     }
                 }
 
@@ -1101,6 +1119,7 @@ const ListingDetail = () => {
                     }
                 }
             `}</style>
+            {emailOpen && <EmailSheet email={emailValue} onClose={() => setEmailOpen(false)} />}
         </div>
     );
 };
