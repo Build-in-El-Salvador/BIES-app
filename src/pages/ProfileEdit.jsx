@@ -10,7 +10,7 @@ import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
-import { publishPublicProfile } from '../services/publicNostrProfile';
+import { keyIsMembers, publishPublicProfile } from '../services/publicNostrProfile';
 import { isNativePlatform } from '../utils/platform';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
@@ -291,11 +291,11 @@ const ProfileEdit = () => {
             };
             // Remove undefined values so Zod doesn't see them
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
-            await profilesApi.update(payload);
+            const saved = await profilesApi.update(payload);
 
             // Email accounts skip this: the server publishes their kind:0 when the
             // profile is saved, and a second, different kind:0 would race it.
-            if (nostrSigner.signsOnDevice) {
+            if (keyIsMembers()) {
                 // The kind:0 on the private BIES relay. Public Nostr is
                 // Settings → Nostr's: it follows below, once published there.
                 try {
@@ -313,10 +313,11 @@ const ProfileEdit = () => {
                 } catch (nostrErr) {
                     console.error('Relay profile sync failed (non-blocking):', nostrErr);
                 }
-                // The phone apps keep to BIES's relay (Settings → Nostr).
-                if (!isNativePlatform()) {
-                    settingsApi.getNostr()
-                        .then((pub) => (pub.on && pub.publishedAt ? publishPublicProfile() : null))
+                // A public profile the member published (Settings → Nostr on
+                // the website) follows when something on it changed, from
+                // the app too. Not where each signature is an app switch (Amber).
+                if (saved?.publicNostrStale && nostrSigner.canSignSilently) {
+                    publishPublicProfile()
                         .catch((err) => console.error('Public profile sync failed (non-blocking):', err));
                 }
             }
@@ -1078,7 +1079,7 @@ const ProfileEdit = () => {
                         <h3 style={{ fontSize: '1.05rem', fontWeight: 700, fontFamily: 'var(--font-display)', margin: 0, color: 'var(--color-gray-900)' }}>Nostr</h3>
                     </div>
                     <p style={{ margin: '0 0 0.75rem', fontSize: '0.88rem', lineHeight: 1.45, color: 'var(--color-gray-600)' }}>
-                        {t('nostrSettings.profileEditNote')}
+                        {t(isNativePlatform() ? 'nostrSettings.profileEditNoteApp' : 'nostrSettings.profileEditNote')}
                     </p>
                     <Link to="/settings/nostr" className="pe-nostr-link" style={{
                         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',

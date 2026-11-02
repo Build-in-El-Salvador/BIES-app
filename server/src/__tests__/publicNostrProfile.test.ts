@@ -88,6 +88,12 @@ describe('publicProfileContent', () => {
         expect(publicProfileContent(signup, { ...bies, nip05Name: 'nostr-1a2b3c4d' }, ['nip05']).nip05).toBe(signup.nip05);
     });
 
+    it('removes a BIES address the member no longer has even when that part is off', () => {
+        const old = { name: 'ana_btc', nip05: 'old@buildinelsalvador.com' };
+        expect(publicProfileContent(old, bies, ['about'])).not.toHaveProperty('nip05');
+        expect(publicProfileContent({ nip05: 'ana@primal.net' }, bies, ['about']).nip05).toBe('ana@primal.net');
+    });
+
     it('builds a full profile with every part ticked', () => {
         const out = publicProfileContent(null, bies, PUBLIC_PARTS);
         expect(out).toEqual({

@@ -8,6 +8,7 @@ import {
     banUser,
     setUserRole,
     verifyUser,
+    removeUserNip05,
     deleteUser,
     listTrashedUsers,
     restoreUser,
@@ -74,6 +75,7 @@ router.put('/users/:id/ban', adminOnly, banUser);
 router.put('/users/:id/role', adminOnly, setUserRole);
 router.put('/users/:id/admin', adminOnly, setUserAdmin);
 router.put('/users/:id/verify', adminOnly, verifyUser);
+router.delete('/users/:id/nip05', adminOnly, removeUserNip05);
 router.put('/users/:id/restore', adminOnly, restoreUser);
 router.delete('/users/:id', adminOnly, deleteUser);
 router.delete('/users/:id/purge', adminOnly, purgeUser);

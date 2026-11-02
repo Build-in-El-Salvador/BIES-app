@@ -31,20 +31,29 @@ class PublishError extends Error {
     constructor(public status: number, public reason: string) { super(reason); }
 }
 
-/** The profile to publish now: the one on public relays with the ticked parts from BIES. */
-async function nextProfile(member: Member, settings: PublicNostr) {
-    const current = await fetchPublicProfile(member.nostrPubkey!);
-    // BIES published one before, so there is one: the relays didn't answer.
-    // Building from nothing would wipe what the member set in other apps.
-    if (!current && settings.publishedAt) throw new PublishError(503, 'relays_unreachable');
+/**
+ * The profile to publish now: the one on public relays with the ticked parts
+ * from BIES. `seenAt`: when the profile the member saw in the preview was
+ * made (null: the preview showed none). Building from nothing, or from an
+ * older copy than the member saw, would wipe what they set in other apps,
+ * so when the relays don't give back at least that, nothing is published.
+ */
+async function nextProfile(member: Member, settings: PublicNostr, seenAt?: number | null) {
+    const found = await fetchPublicProfile(member.nostrPubkey!);
+    // BIES published one before, or the member saw one: the relays didn't answer.
+    if (!found && (settings.publishedAt || typeof seenAt === 'number')) throw new PublishError(503, 'relays_unreachable');
+    if (found && typeof seenAt === 'number' && found.createdAt < seenAt) throw new PublishError(503, 'relays_unreachable');
+    const current = found?.content ?? null;
     return { current, next: publicProfileContent(current, member.profile!, settings.parts) };
 }
 
-async function savePublished(userId: string, settings: PublicNostr) {
+/** Note when it was published, keeping the switch and parts as saved now (they may have changed meanwhile). */
+async function savePublished(userId: string) {
     const publishedAt = new Date().toISOString();
-    await prisma.profile.update({
-        where: { userId },
-        data: { publicNostr: JSON.stringify({ on: settings.on, parts: settings.parts, publishedAt }) },
+    await prisma.$transaction(async (tx) => {
+        const profile = await tx.profile.findUnique({ where: { userId }, select: { publicNostr: true } });
+        const now = publicNostrOf(profile?.publicNostr);
+        await tx.profile.update({ where: { userId }, data: { publicNostr: JSON.stringify({ ...now, publishedAt }) } });
     });
     return publishedAt;
 }
@@ -54,16 +63,16 @@ async function savePublished(userId: string, settings: PublicNostr) {
  * for a key on the member's device (the app publishes those) or when the
  * public profile is off.
  */
-export async function publishHostedPublicProfile(userId: string): Promise<boolean> {
+export async function publishHostedPublicProfile(userId: string, seenAt?: number | null): Promise<boolean> {
     const member = await memberOf(userId);
     if (!member?.nostrPubkey || !member.encryptedPrivkey || !member.profile) return false;
     const settings = publicNostrOf(member.profile.publicNostr);
     if (!settings.on) return false;
-    const { next } = await nextProfile(member, settings);
+    const { next } = await nextProfile(member, settings, seenAt);
     const signed = await signAsHostedUser(userId, kind0(next), 'server');
     if (!signed) return false;
     if (await publishToPublicRelays(signed) === 0) throw new PublishError(502, 'relays_refused');
-    await savePublished(userId, settings);
+    await savePublished(userId);
     return true;
 }
 
@@ -74,13 +83,14 @@ const kind0 = (content: Record<string, unknown>): EventTemplate => ({
     content: JSON.stringify(content),
 });
 
-function state(member: Member, settings: PublicNostr, current: Record<string, unknown> | null, next: Record<string, unknown> | null) {
+function state(member: Member, settings: PublicNostr, current: { content: Record<string, unknown>; createdAt: number } | null, next: Record<string, unknown> | null) {
     return {
         ...settings,
+        current: current?.content ?? null,
+        currentAt: current?.createdAt ?? null, // send back as `seenAt` with Publish
         hosted: !!member.encryptedPrivkey,
         nip05Name: member.profile?.nip05Name ?? null,
         verified: isClaimedNip05(member.profile?.nip05Name),
-        current,
         next,
     };
 }
@@ -95,17 +105,21 @@ function failed(res: Response, error: unknown, what: string) {
 }
 
 /**
- * GET /settings/nostr
+ * GET /settings/nostr[?preview=0]
  * The switch and ticked parts, the member's BIES address, and their public
- * profile as it is now and as BIES would publish it.
+ * profile as it is now (`current`, made at `currentAt`) and as BIES would
+ * publish it (`next`). `preview=0` leaves the
+ * profiles out (null) and skips reading the public relays: the phone apps
+ * don't show them.
  */
 export async function getPublicNostr(req: Request, res: Response): Promise<void> {
     try {
         const member = await memberOf(req.user!.id);
         if (!member?.nostrPubkey || !member.profile) { res.status(404).json({ error: 'Profile not found' }); return; }
         const settings = publicNostrOf(member.profile.publicNostr);
-        const current = await fetchPublicProfile(member.nostrPubkey);
-        res.json(state(member, settings, current, publicProfileContent(current, member.profile, settings.parts)));
+        if (req.query.preview === '0') { res.json(state(member, settings, null, null)); return; }
+        const found = await fetchPublicProfile(member.nostrPubkey);
+        res.json(state(member, settings, found, publicProfileContent(found?.content ?? null, member.profile, settings.parts)));
     } catch (error) {
         failed(res, error, 'Load public profile');
     }
@@ -138,6 +152,8 @@ export async function updatePublicNostr(req: Request, res: Response): Promise<vo
 }
 
 export const publishPublicNostrSchema = z.object({
+    // When the public profile the member saw in the preview was made (GET's currentAt).
+    seenAt: z.number().int().nonnegative().nullable().optional(),
     event: z.object({
         id: z.string().regex(/^[0-9a-f]{64}$/),
         pubkey: z.string().regex(/^[0-9a-f]{64}$/),
@@ -152,7 +168,7 @@ export const publishPublicNostrSchema = z.object({
 const SIGNED_WITHIN_S = 10 * 60;
 
 /**
- * POST /settings/nostr/publish
+ * POST /settings/nostr/publish { seenAt, event? }
  * Publish the public profile now. With a key BIES holds, BIES signs and
  * sends it. With a key on the member's device: without `event`, the answer
  * is the profile to sign (`template`); with the signed `event`, BIES checks
@@ -166,16 +182,17 @@ export async function publishPublicNostr(req: Request, res: Response): Promise<v
         const settings = publicNostrOf(member.profile.publicNostr);
         if (!settings.on) { res.status(409).json({ error: 'public_profile_off', reason: 'public_profile_off' }); return; }
 
+        const body = req.body as z.infer<typeof publishPublicNostrSchema>;
         if (member.encryptedPrivkey) {
-            await publishHostedPublicProfile(userId);
+            if (!await publishHostedPublicProfile(userId, body.seenAt)) throw new PublishError(500, 'not_published');
             const fresh = await memberOf(userId);
             res.json({ published: true, ...state(fresh!, publicNostrOf(fresh!.profile!.publicNostr), null, null) });
             return;
         }
 
-        const event = (req.body as z.infer<typeof publishPublicNostrSchema>).event as NostrEvent | undefined;
+        const event = body.event as NostrEvent | undefined;
         if (!event) {
-            const { next } = await nextProfile(member, settings);
+            const { next } = await nextProfile(member, settings, body.seenAt);
             res.json({ published: false, template: kind0(next) });
             return;
         }
@@ -189,7 +206,7 @@ export async function publishPublicNostr(req: Request, res: Response): Promise<v
             return;
         }
         if (await publishToPublicRelays(event) === 0) throw new PublishError(502, 'relays_refused');
-        const publishedAt = await savePublished(userId, settings);
+        const publishedAt = await savePublished(userId);
         res.json({ published: true, ...state(member, { ...settings, publishedAt }, null, null) });
     } catch (error) {
         failed(res, error, 'Publish public profile');

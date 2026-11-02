@@ -129,9 +129,17 @@ const RESERVED_NIP05 = new Set([
 ]);
 // A name with one of these as a part ("bies.support", "admin_mike") is kept too.
 const RESERVED_NIP05_PARTS = new Set(['admin', 'support', 'staff', 'mod', 'moderator', 'official', 'bies', 'security', 'verified']);
+// A claimed name shows as verified, so it mustn't pass for BIES's own when
+// run together either: these anywhere ("officialbies"), or "bies" with a
+// staff word ("biessupport", "teambies"). "biesta" or "adminton" are fine.
+const RESERVED_NIP05_WITHIN = ['buildinelsalvador', 'official', 'verified', 'moderator'];
+const STAFF_WORDS = ['admin', 'support', 'staff', 'team', 'mod', 'help', 'info', 'news', 'event', 'app', 'security', 'official'];
 
 export function isReservedNip05(name: string): boolean {
-    return RESERVED_NIP05.has(name) || name.split(/[._-]/).some((part) => RESERVED_NIP05_PARTS.has(part));
+    return RESERVED_NIP05.has(name)
+        || name.split(/[._-]/).some((part) => RESERVED_NIP05_PARTS.has(part))
+        || RESERVED_NIP05_WITHIN.some((word) => name.includes(word))
+        || (name.includes('bies') && STAFF_WORDS.some((word) => name.replace('bies', ' ').includes(word)));
 }
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
@@ -559,7 +567,10 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
 
         // Fetch old profile to detect lightning address / bolt12 offer changes,
         // and photos replaced
-        const oldProfile = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { lightningAddress: true, bolt12Offer: true, avatar: true, banner: true } });
+        const oldProfile = await prisma.profile.findUnique({
+            where: { userId: req.user!.id },
+            select: { name: true, bio: true, avatar: true, banner: true, website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true },
+        });
         frameNewCover(data, 'banner', oldProfile?.banner);
 
         // Convert arrays/objects to JSON strings for SQLite
@@ -602,11 +613,19 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
                 .catch((err) => console.error('[Nostr] Profile sync failed:', err));
         }
 
-        // Their public Nostr profile follows, once they've published one (for
-        // keys BIES holds; the app does it for keys on the member's device).
-        if (publicNostr.on && publicNostr.publishedAt && PUBLIC_PROFILE_FIELDS.some((f) => req.body[f] !== undefined)) {
-            publishHostedPublicProfile(req.user!.id)
-                .catch((err) => console.error('[Nostr] Public profile sync failed:', err instanceof Error ? err.message : err));
+        // Their public Nostr profile follows when something it's made from
+        // changed, once they've published one. BIES does it for keys it
+        // holds; for a key on the member's device the answer says so
+        // (`publicNostrStale`) and the app does it.
+        const changed = PUBLIC_PROFILE_FIELDS.some((f) => (oldProfile as Record<string, unknown> | null)?.[f] !== (profile as Record<string, unknown>)[f]);
+        if (publicNostr.on && publicNostr.publishedAt && changed) {
+            const owner = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { encryptedPrivkey: true } });
+            if (owner?.encryptedPrivkey) {
+                publishHostedPublicProfile(req.user!.id)
+                    .catch((err) => console.error('[Nostr] Public profile sync failed:', err instanceof Error ? err.message : err));
+            } else {
+                parsed.publicNostrStale = true;
+            }
         }
 
         // Announce lightning address addition on the BIES feed, unless the
@@ -626,6 +645,11 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
 
         res.json(parsed);
     } catch (error) {
+        // Two members claiming the same BIES address at once: the second gets "taken".
+        if ((error as { code?: string })?.code === 'P2002' && JSON.stringify((error as { meta?: unknown }).meta ?? '').includes('nip05')) {
+            res.status(409).json({ error: 'That name is already taken' });
+            return;
+        }
         console.error('Update profile error:', error);
         res.status(500).json({ error: 'Failed to update profile' });
     }

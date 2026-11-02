@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import { QRCodeSVG } from 'qrcode.react';
-import { AlertTriangle, AtSign, BadgeCheck, CheckCircle, Copy, Globe, Key, Loader2, QrCode, User, X } from 'lucide-react';
+import { AtSign, BadgeCheck, CheckCircle, Copy, Globe, Key, Loader2, QrCode, User, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { profilesApi, settingsApi, signerApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
@@ -37,8 +37,9 @@ const KIND_LABELS = {
  * is one level down, at /settings/nostr/key.
  *
  * Public Nostr is off until the member switches it on, and nothing goes out
- * until they press Publish. In the phone apps it can be seen but changed only
- * on the website: the apps keep to BIES's members-only relay.
+ * until they press Publish. It's on the website only for now: the phone
+ * apps show only what can be changed in them (Mike, 2026-11-02). A public
+ * profile published on the website still follows changes made in the app.
  */
 const NostrSettings = () => {
     const { t, i18n } = useTranslation();
@@ -54,10 +55,11 @@ const NostrSettings = () => {
 
     const load = useCallback(() => {
         setLoadError('');
-        return settingsApi.getNostr()
+        // The phone apps don't show the public profile: no preview to fetch.
+        return settingsApi.getNostr({ preview: native ? 0 : 1 })
             .then(setState)
             .catch(() => setLoadError(t('nostrSettings.loadFailed')));
-    }, [t]);
+    }, [t, native]);
     useEffect(() => { load(); }, [load]);
 
     const copyNpub = () => {
@@ -117,7 +119,7 @@ const NostrSettings = () => {
                 {state && (
                     <>
                         <BiesAddress state={state} native={native} onSaved={() => { load(); refreshUser?.(); }} />
-                        <PublicProfile state={state} setState={setState} native={native} reload={load} />
+                        {!native && <PublicProfile state={state} setState={setState} reload={load} />}
                         {state.hosted && <SigningLog language={i18n.language} />}
                     </>
                 )}
@@ -210,16 +212,18 @@ function BiesAddress({ state, native, onSaved }) {
         setError('');
         setDone('');
         try {
-            await profilesApi.update({ nip05Name: next });
-            // A key on this device: the app updates the profile on BIES's relay
-            // and, once published, on public Nostr (the server does both for
-            // keys it holds).
-            if (nostrSigner.signsOnDevice) {
+            const saved = await profilesApi.update({ nip05Name: next });
+            // The member's own key: the app updates their profile on BIES's
+            // relay and, if they published one, on public Nostr, so neither
+            // keeps an address that no longer works (the server does both for
+            // keys it holds). One signature after the other, and not where
+            // each is an app switch (Amber).
+            if (!state.hosted && nostrSigner.canSignSilently) {
                 const privacy = await settingsApi.getPrivacy().catch(() => null);
                 const nip05 = next && privacy?.links !== 'ONLY_ME' ? `${next}@${DOMAIN}` : '';
-                nostrService.updateProfileToBiesRelay({ nip05 })
+                await nostrService.updateProfileToBiesRelay({ nip05 })
                     .catch((err) => console.error('Relay profile sync failed (non-blocking):', err));
-                if (!native && state.on && state.publishedAt) {
+                if (saved?.publicNostrStale) {
                     await publishPublicProfile().catch((err) => console.error('Public profile sync failed (non-blocking):', err));
                 }
             }
@@ -241,7 +245,7 @@ function BiesAddress({ state, native, onSaved }) {
     const available = !problem && check?.name === name && check.available === true;
 
     return (
-        <SettingsGroup title={t('nostrSettings.addressTitle')} footer={t('nostrSettings.addressFooter')}>
+        <SettingsGroup title={t('nostrSettings.addressTitle')} footer={t(native ? 'nostrSettings.addressFooterApp' : 'nostrSettings.addressFooter')}>
             <div className="set-pad">
                 {verified && (
                     <div className="ns-address" data-testid="nostr-address">
@@ -290,6 +294,17 @@ function BiesAddress({ state, native, onSaved }) {
                     </form>
                 )}
 
+                {!verified && current && !editing && (
+                    <button
+                        type="button"
+                        className="ns-link-btn ns-start"
+                        disabled={saving}
+                        onClick={() => (confirmRemove ? save('') : setConfirmRemove(true))}
+                        data-testid="nostr-signup-address-remove"
+                    >
+                        {confirmRemove ? t('nostrSettings.removeOldConfirm') : t('nostrSettings.removeOld')}
+                    </button>
+                )}
                 {verified && !editing && (
                     <div className="ns-actions">
                         <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditing(true); setDone(''); }} data-testid="nostr-address-change">
@@ -306,7 +321,7 @@ function BiesAddress({ state, native, onSaved }) {
                         </button>
                     </div>
                 )}
-                {confirmRemove && <p className="ns-muted">{t('nostrSettings.removeWarning')}</p>}
+                {confirmRemove && <p className="ns-muted">{t(verified ? 'nostrSettings.removeWarning' : 'nostrSettings.removeOldWarning')}</p>}
                 {error && <p className="ns-error" role="alert">{error}</p>}
                 {done && <p className="ns-ok" role="status">{done}</p>}
             </div>
@@ -348,27 +363,37 @@ const PUBLISH_ERRORS = {
 };
 
 /** The switch, the ticked parts, a preview, and Publish. */
-function PublicProfile({ state, setState, native, reload }) {
+function PublicProfile({ state, setState, reload }) {
     const { t, i18n } = useTranslation();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [done, setDone] = useState('');
     const saves = useRef(Promise.resolve());
+    const waiting = useRef(0);
+    // What the member last chose: each save sends all of it, so quick taps
+    // can't undo each other, and the page reloads (a fresh preview) only once
+    // the last one is saved.
+    const wanted = useRef(null);
 
-    // One save at a time, so quick taps can't undo each other; then a fresh
-    // preview from the server.
     const change = (changes) => {
+        wanted.current = { on: state.on, parts: state.parts, ...wanted.current, ...changes };
         setState((s) => ({ ...s, ...changes }));
         setError('');
         setDone('');
+        waiting.current += 1;
         saves.current = saves.current
-            .then(() => settingsApi.updateNostr(changes))
-            .then(() => reload())
-            .catch(() => { setError(t('nostrSettings.saveFailed')); reload(); });
+            .then(() => settingsApi.updateNostr(wanted.current))
+            .catch(() => setError(t('nostrSettings.saveFailed')))
+            .then(() => {
+                waiting.current -= 1;
+                if (waiting.current === 0) { wanted.current = null; return reload(); }
+                return undefined;
+            });
     };
 
     const togglePart = (part, on) => {
-        const parts = on ? [...state.parts, part] : state.parts.filter((p) => p !== part);
+        const now = wanted.current?.parts ?? state.parts;
+        const parts = on ? [...now, part] : now.filter((p) => p !== part);
         change({ parts: PARTS.filter((p) => parts.includes(p)) });
     };
 
@@ -378,7 +403,9 @@ function PublicProfile({ state, setState, native, reload }) {
         setDone('');
         try {
             await saves.current;
-            await publishPublicProfile();
+            // What the preview showed as on public Nostr now: if the relays
+            // give back less this time, the server publishes nothing.
+            await publishPublicProfile(state.currentAt ?? null);
             setDone(t('nostrSettings.published'));
             await reload();
         } catch (err) {
@@ -399,14 +426,10 @@ function PublicProfile({ state, setState, native, reload }) {
                     <Switch
                         checked={state.on}
                         onChange={(on) => change({ on })}
-                        disabled={native}
                         label={t('nostrSettings.publicSwitch')}
                         testId="nostr-public-switch"
                     />
                 </SettingsRow>
-                {native && (
-                    <div className="set-note"><AlertTriangle size={16} /><span>{t('nostrSettings.nativeNote')}</span></div>
-                )}
                 {state.on && PARTS.map((part) => (
                     <SettingsRow
                         key={part}
@@ -416,7 +439,6 @@ function PublicProfile({ state, setState, native, reload }) {
                         <Switch
                             checked={state.parts.includes(part)}
                             onChange={(on) => togglePart(part, on)}
-                            disabled={native}
                             label={t(`nostrSettings.parts.${part}`)}
                             testId={`nostr-part-${part}`}
                         />
@@ -435,15 +457,14 @@ function PublicProfile({ state, setState, native, reload }) {
                                     <summary>{t('nostrSettings.nowOnPublic')}</summary>
                                     {state.current ? <ProfileCard profile={state.current} /> : <p className="ns-muted">{t('nostrSettings.nothingYet')}</p>}
                                 </details>
+                                {!state.current && !state.publishedAt && <p className="ns-muted">{t('nostrSettings.nothingFoundNote')}</p>}
                             </>
                         ) : (
                             <div className="ns-loading"><Loader2 size={18} className="ns-spin" aria-label={t('nostrSettings.loading')} /></div>
                         )}
-                        {!native && (
-                            <button type="button" className="btn btn-primary btn-sm ns-start" onClick={publish} disabled={busy || !state.next} data-testid="nostr-publish">
-                                {busy ? t('nostrSettings.publishing') : t('nostrSettings.publish')}
-                            </button>
-                        )}
+                        <button type="button" className="btn btn-primary btn-sm ns-start" onClick={publish} disabled={busy || !state.next} data-testid="nostr-publish">
+                            {busy ? t('nostrSettings.publishing') : t('nostrSettings.publish')}
+                        </button>
                         <p className="ns-muted">{when ? t('nostrSettings.lastPublished', { when }) : t('nostrSettings.notPublished')}</p>
                         {error && <p className="ns-error" role="alert">{error}</p>}
                         {done && <p className="ns-ok" role="status">{done}</p>}
@@ -458,15 +479,22 @@ function PublicProfile({ state, setState, native, reload }) {
 function SigningLog({ language }) {
     const { t } = useTranslation();
     const [rows, setRows] = useState(null);
-    const [limit, setLimit] = useState(20);
-    const [more, setMore] = useState(false);
+    const [next, setNext] = useState(null); // where the next page starts
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
 
-    useEffect(() => {
-        signerApi.log(limit, QUIET_KINDS)
-            .then((res) => { setRows(res.signatures || []); setMore(!!res.next); setError(false); })
-            .catch(() => setError(true));
-    }, [limit]);
+    const loadPage = useCallback((before) => {
+        setLoading(true);
+        return signerApi.log(20, QUIET_KINDS, before)
+            .then((res) => {
+                setRows((r) => [...(before ? r || [] : []), ...(res.signatures || [])]);
+                setNext(res.next);
+                setError(false);
+            })
+            .catch(() => setError(true))
+            .finally(() => setLoading(false));
+    }, []);
+    useEffect(() => { loadPage(null); }, [loadPage]);
 
     return (
         <SettingsGroup title={t('nostrSettings.logTitle')} footer={t('nostrSettings.logFooter')}>
@@ -480,7 +508,7 @@ function SigningLog({ language }) {
                     desc={`${s.source === 'app' ? t('nostrSettings.byYou') : t('nostrSettings.byBies')} · ${new Date(s.createdAt).toLocaleString(language, { dateStyle: 'medium', timeStyle: 'short' })}`}
                 />
             ))}
-            {more && <SettingsRow label={t('nostrSettings.showMore')} onClick={() => setLimit((l) => Math.min(l + 40, 200))} center />}
+            {next && <SettingsRow label={t('nostrSettings.showMore')} onClick={() => loadPage(next)} disabled={loading} center />}
         </SettingsGroup>
     );
 }

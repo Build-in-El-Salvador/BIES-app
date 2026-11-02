@@ -22,6 +22,7 @@ const env = vi.hoisted(() => {
 
 const relays = vi.hoisted(() => ({
     publicProfiles: new Map<string, Record<string, unknown> | null>(),
+    createdAt: new Map<string, number>(),
     sent: [] as { id: string; pubkey: string; kind: number; content: string }[],
     accept: true,
 }));
@@ -38,7 +39,10 @@ vi.mock('../services/nostr.service', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../services/nostr.service')>()),
     publishProfileUpdate: vi.fn(async () => null),
     publishAnnouncement: vi.fn(async () => null),
-    fetchPublicProfile: vi.fn(async (pubkey: string) => relays.publicProfiles.get(pubkey) ?? null),
+    fetchPublicProfile: vi.fn(async (pubkey: string) => {
+        const content = relays.publicProfiles.get(pubkey);
+        return content ? { content, createdAt: relays.createdAt.get(pubkey) ?? 1_700_000_000 } : null;
+    }),
     publishToPublicRelays: vi.fn(async (event: { id: string; pubkey: string; kind: number; content: string }) => {
         if (!relays.accept) return 0;
         relays.sent.push(event);
@@ -55,6 +59,9 @@ import prisma from '../lib/prisma';
 import profileRoutes from '../routes/profile.routes';
 import settingsRoutes from '../routes/settings.routes';
 import signerRoutes from '../routes/signer.routes';
+import nip05Routes from '../routes/nip05.routes';
+import adminRoutes from '../routes/admin.routes';
+import { sanitize } from '../middleware/sanitize';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { encryptPrivateKey } from '../services/crypto.service';
 import { createSession, signAccessToken } from '../services/session.service';
@@ -67,9 +74,12 @@ beforeAll(async () => {
     execSync('npx prisma migrate deploy', { cwd: path.resolve(__dirname, '../..'), env: process.env, stdio: 'pipe' });
     const app = express();
     app.use(express.json());
+    app.use(sanitize); // as in index.ts: a signed event must get through it unchanged
     app.use('/api/profiles', profileRoutes);
     app.use('/api/settings', settingsRoutes);
     app.use('/api/signer', signerRoutes);
+    app.use('/.well-known', nip05Routes);
+    app.use('/api/admin', adminRoutes);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -83,6 +93,7 @@ afterAll(async () => {
 
 beforeEach(() => {
     relays.publicProfiles.clear();
+    relays.createdAt.clear();
     relays.sent.length = 0;
     relays.accept = true;
 });
@@ -146,6 +157,28 @@ describe('BIES address', () => {
         expect(check.body).toMatchObject({ available: false, reason: 'reserved' });
     });
 
+    it('keeps names that would pass for BIES itself', async () => {
+        const rae = await member('Rae');
+        for (const name of ['biessupport', 'officialbies', 'buildinelsalvadorteam', 'teambies', 'biesadmin']) {
+            const res = await call('PUT', '/api/profiles/me', { token: rae.token, body: { nip05Name: name } });
+            expect(res.status, name).toBe(409);
+        }
+    });
+
+    it('can be removed by an admin, and the name is free again', async () => {
+        const sam = await member('Sam', { profile: { nip05Name: 'samuel' } });
+        const admin = await prisma.user.create({ data: { nostrPubkey: getPublicKey(generateSecretKey()), role: 'MEMBER', isAdmin: true, termsVersion: '2026-10', termsAcceptedAt: new Date(), profile: { create: { name: 'Admin' } } } });
+        const session = await createSession(admin.id, 'web');
+        const adminToken = signAccessToken({ id: admin.id, role: 'MEMBER', isAdmin: true }, session.sessionId);
+        expect((await call('DELETE', `/api/admin/users/${sam.id}/nip05`, { token: sam.token })).status).toBe(403);
+        const removed = await call('DELETE', `/api/admin/users/${sam.id}/nip05`, { token: adminToken });
+        expect(removed.status).toBe(200);
+        expect((await call('GET', '/api/profiles/me', { token: sam.token })).body.verified).toBe(false);
+        expect((await call('GET', '/.well-known/nostr.json?name=samuel')).body.names).toEqual({});
+        const log = await prisma.auditLog.findFirst({ where: { action: 'USER_NIP05_REMOVED', resource: `user:${sam.id}` } });
+        expect(JSON.parse(log!.metadata)).toEqual({ nip05Name: 'samuel' });
+    });
+
     it('a sign-up address still works but is not verified, and can be kept on save', async () => {
         const dan = await member('Dan', { profile: { nip05Name: 'nostr-0a1b2c3d' } });
         expect((await call('GET', '/api/profiles/me', { token: dan.token })).body.verified).toBe(false);
@@ -173,7 +206,7 @@ describe('Public Nostr profile', () => {
     });
 
     it('for a key on the device: BIES returns the profile to sign, checks the signed one and sends it', async () => {
-        const fay = await member('Fay');
+        const fay = await member('Fay', { profile: { bio: 'Bitcoin only = freedom & 5&#8364; javascript: and TS' } });
         relays.publicProfiles.set(fay.pubkey, { name: 'fay', website: 'https://fay.example' });
         expect((await call('PUT', '/api/settings/nostr', { token: fay.token, body: { on: true, parts: ['name', 'about'] } })).status).toBe(200);
 
@@ -181,7 +214,7 @@ describe('Public Nostr profile', () => {
         expect(asked.status).toBe(200);
         expect(asked.body.published).toBe(false);
         expect(asked.body.template.kind).toBe(0);
-        expect(JSON.parse(asked.body.template.content)).toEqual({ name: 'fay', website: 'https://fay.example', display_name: 'Fay', about: "Fay's bio" });
+        expect(JSON.parse(asked.body.template.content)).toEqual({ name: 'fay', website: 'https://fay.example', display_name: 'Fay', about: 'Bitcoin only = freedom & 5&#8364; javascript: and TS' });
 
         // Someone else's key, or a changed signature: refused.
         const stranger = finalizeEvent(asked.body.template, generateSecretKey());
@@ -251,6 +284,68 @@ describe('Public Nostr profile', () => {
         expect(refused.status).toBe(502);
         expect(refused.body.reason).toBe('relays_refused');
         expect((await call('GET', '/api/settings/nostr', { token: jo.token })).body.publishedAt).toBeNull();
+    });
+
+    it('leaves the preview out when asked (the phone apps)', async () => {
+        const lia = await member('Lia');
+        relays.publicProfiles.set(lia.pubkey, { name: 'lia' });
+        const quick = await call('GET', '/api/settings/nostr?preview=0', { token: lia.token });
+        expect(quick.status).toBe(200);
+        expect(quick.body).toMatchObject({ on: false, current: null, next: null });
+    });
+
+    it('points other apps to the public relays once published', async () => {
+        const max = await member('Max', { hosted: true, profile: { nip05Name: 'max' } });
+        const before = await call('GET', '/.well-known/nostr.json?name=max');
+        expect(before.body.relays[max.pubkey]).toEqual(['wss://relay.buildinelsalvador.com']);
+        await call('PUT', '/api/settings/nostr', { token: max.token, body: { on: true } });
+        await call('POST', '/api/settings/nostr/publish', { token: max.token, body: {} });
+        const after = await call('GET', '/.well-known/nostr.json?name=max');
+        expect(after.body.names).toEqual({ max: max.pubkey });
+        expect(after.body.relays[max.pubkey]).not.toContain('wss://relay.buildinelsalvador.com');
+    });
+
+    it("won't publish over a profile the member saw when the relays now give back less", async () => {
+        const ned = await member('Ned', { hosted: true });
+        relays.publicProfiles.set(ned.pubkey, { name: 'ned', lud16: 'ned@primal.net' });
+        relays.createdAt.set(ned.pubkey, 1_700_000_500);
+        await call('PUT', '/api/settings/nostr', { token: ned.token, body: { on: true } });
+        const seen = (await call('GET', '/api/settings/nostr', { token: ned.token })).body.currentAt;
+        expect(seen).toBe(1_700_000_500);
+
+        relays.publicProfiles.delete(ned.pubkey); // relays time out
+        const gone = await call('POST', '/api/settings/nostr/publish', { token: ned.token, body: { seenAt: seen } });
+        expect(gone.status).toBe(503);
+        relays.publicProfiles.set(ned.pubkey, { name: 'ned' });
+        relays.createdAt.set(ned.pubkey, 1_600_000_000); // an older copy
+        expect((await call('POST', '/api/settings/nostr/publish', { token: ned.token, body: { seenAt: seen } })).status).toBe(503);
+        expect(relays.sent).toHaveLength(0);
+
+        relays.createdAt.set(ned.pubkey, 1_700_000_500);
+        expect((await call('POST', '/api/settings/nostr/publish', { token: ned.token, body: { seenAt: seen } })).status).toBe(200);
+    });
+
+    it('tells the app to republish only when something on the public profile changed (key on the device)', async () => {
+        const ola = await member('Ola');
+        await call('PUT', '/api/settings/nostr', { token: ola.token, body: { on: true } });
+        const asked = await call('POST', '/api/settings/nostr/publish', { token: ola.token, body: {} });
+        await call('POST', '/api/settings/nostr/publish', { token: ola.token, body: { event: finalizeEvent(asked.body.template, ola.secret) } });
+
+        const same = await call('PUT', '/api/profiles/me', { token: ola.token, body: { name: 'Ola', location: 'Santa Ana' } });
+        expect(same.body.publicNostrStale).toBeUndefined();
+        const changed = await call('PUT', '/api/profiles/me', { token: ola.token, body: { bio: 'New bio' } });
+        expect(changed.body.publicNostrStale).toBe(true);
+    });
+
+    it('keeps the switch as the member left it when a publish finishes later', async () => {
+        const pia = await member('Pia', { hosted: true });
+        await call('PUT', '/api/settings/nostr', { token: pia.token, body: { on: true, parts: ['name'] } });
+        const publishing = call('POST', '/api/settings/nostr/publish', { token: pia.token, body: {} });
+        await call('PUT', '/api/settings/nostr', { token: pia.token, body: { on: false } });
+        await publishing;
+        const after = (await call('GET', '/api/settings/nostr?preview=0', { token: pia.token })).body;
+        expect(after.on).toBe(false);
+        expect(after.parts).toEqual(['name']);
     });
 
     it('rejects unknown parts', async () => {

@@ -3685,6 +3685,7 @@
   "nostrSettings": {
     "title": "Nostr",
     "rowDesc": "Your key, BIES address and public profile",
+    "rowDescApp": "Your key and BIES address",
     "identity": "Your Nostr identity",
     "identityFooter": "Your public key (npub) is your identity on Nostr. Anyone can see it, and any Nostr app can find you by it.",
     "copy": "Copy",
@@ -3701,8 +3702,9 @@
     "loadFailed": "Couldn't load your Nostr settings. Check your connection and try again.",
     "retry": "Try again",
     "addressTitle": "BIES address",
-    "addressFooter": "Your BIES address shows that you're a verified BIES member, with a tick on BIES and in other Nostr apps.",
-    "verifiedNote": "You're verified. Other Nostr apps show this address with a tick.",
+    "addressFooter": "Your BIES address shows that you're a verified BIES member. Other Nostr apps show it too once it's on your public Nostr profile.",
+    "addressFooterApp": "Your BIES address shows that you're a verified BIES member, with a tick by your name on BIES.",
+    "verifiedNote": "You're verified: BIES shows a tick by your name.",
     "verifiedTick": "Verified BIES member",
     "claimIntro": "Choose a name to get your BIES address and be verified.",
     "signupAddress": "You were given {{address}} when you joined. It still works, but it isn't verified. Choose a name of your own to be verified.",
@@ -3718,6 +3720,9 @@
     "remove": "Remove",
     "removeConfirm": "Confirm: remove",
     "removeWarning": "Other Nostr apps will stop showing this address, and you won't be verified. Someone else could then claim the name.",
+    "removeOldWarning": "Other Nostr apps will stop showing this address. You can claim a name of your own any time.",
+    "removeOldConfirm": "Confirm: remove",
+    "removeOld": "Remove this address",
     "saving": "Saving…",
     "saveFailed": "Couldn't save. Try again.",
     "claimed": "{{address}} is yours. You're verified.",
@@ -3727,7 +3732,6 @@
     "publicSwitchDesc": "Other Nostr apps, like Primal and Damus, show it",
     "publicFooterOff": "Off: your profile stays on BIES's members-only relay. This is only about your profile. Posts go to public Nostr only when you choose Public as you post.",
     "publicFooterOn": "Choose what other Nostr apps show. Anything you set in another Nostr app stays unless you turn that part on here.",
-    "nativeNote": "Change this on the website, app.buildinelsalvador.com. The app keeps to BIES's members-only relay.",
     "parts": {
       "name": "Name",
       "picture": "Profile photo",
@@ -3743,6 +3747,7 @@
     "afterPublishing": "After publishing",
     "nowOnPublic": "On public Nostr now",
     "nothingYet": "Nothing on public Nostr yet.",
+    "nothingFoundNote": "No Nostr profile was found for you on the public relays. If you have one in another Nostr app, close this page and come back before publishing, so it isn't replaced.",
     "noName": "No name",
     "lnurl": "Lightning",
     "publish": "Publish to public Nostr",
@@ -3777,6 +3782,7 @@
       "other": "Nostr event (kind {{kind}})"
     },
     "profileEditNote": "Your key, your BIES address (verified) and what other Nostr apps show are in Settings.",
+    "profileEditNoteApp": "Your key and your BIES address (verified) are in Settings.",
     "profileEditLink": "Nostr settings"
   }
 }

@@ -47,7 +47,16 @@ const publishLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Too many publishes, please wait a minute' },
 });
-router.get('/nostr', getPublicNostr);
+// Opening the page reads several public relays: a few dozen times a minute is plenty.
+const readLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => req.user!.id,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please wait a minute' },
+});
+router.get('/nostr', readLimiter, getPublicNostr);
 router.put('/nostr', validate(updatePublicNostrSchema), updatePublicNostr);
 router.post('/nostr/publish', publishLimiter, validate(publishPublicNostrSchema), publishPublicNostr);
 router.put('/relays', validate(updateRelaysSchema), updateRelays);

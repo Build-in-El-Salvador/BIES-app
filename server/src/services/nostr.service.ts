@@ -393,7 +393,7 @@ const QUERY_WAIT_MS = 4000;
  * those only, never from BIES's relay, which holds BIES's own copy. Null
  * when none was found.
  */
-export async function fetchPublicProfile(pubkey: string): Promise<Record<string, unknown> | null> {
+export async function fetchPublicProfile(pubkey: string): Promise<{ content: Record<string, unknown>; createdAt: number } | null> {
     const pool = await getPool();
     const events = await pool.querySync(publicPublishRelays(), { kinds: [0], authors: [pubkey] }, { maxWait: QUERY_WAIT_MS });
     const newest = events
@@ -402,7 +402,9 @@ export async function fetchPublicProfile(pubkey: string): Promise<Record<string,
     if (!newest) return null;
     try {
         const content = JSON.parse(newest.content);
-        return content && typeof content === 'object' && !Array.isArray(content) ? content : null;
+        return content && typeof content === 'object' && !Array.isArray(content)
+            ? { content, createdAt: newest.created_at }
+            : null;
     } catch {
         return null;
     }

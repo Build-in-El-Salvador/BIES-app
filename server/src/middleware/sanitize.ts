@@ -189,7 +189,9 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
 // content: any change would break the signature. They store no text.
 // Reports carry a signed note the same way; the report text they store is
 // only ever shown escaped (React in Admin → Reports, the moderator email).
-const UNSANITIZED_PREFIXES = ['/api/signer/', '/api/account/', '/api/reports'];
+// Settings → Nostr publish carries a signed event: changing a character of
+// it breaks the signature. It's checked and sent on, never stored or shown.
+const UNSANITIZED_PREFIXES = ['/api/signer/', '/api/account/', '/api/reports', '/api/settings/nostr/publish'];
 
 /**
  * Sanitize req.body, req.query, and req.params.

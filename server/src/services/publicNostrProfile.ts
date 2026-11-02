@@ -87,15 +87,12 @@ export function publicProfileContent(
         set('lud06', lnurl ? address : '');
         set('bolt12', profile.bolt12Offer);
     }
-    if (ticked.has('nip05')) {
-        if (isClaimedNip05(profile.nip05Name)) {
-            set('nip05', nip05Address(profile.nip05Name!));
-        } else if (typeof out.nip05 === 'string' && out.nip05.toLowerCase().endsWith(`@${NIP05_DOMAIN}`)
-            && out.nip05.toLowerCase() !== nip05Address(profile.nip05Name || '')) {
-            // A BIES address the member no longer has. One from another
-            // domain is theirs to keep.
-            delete out.nip05;
-        }
+    // A BIES address the member no longer has goes, ticked or not: someone
+    // else may claim the name. One from another domain is theirs to keep.
+    if (typeof out.nip05 === 'string' && out.nip05.toLowerCase().endsWith(`@${NIP05_DOMAIN}`)
+        && out.nip05.toLowerCase() !== nip05Address(profile.nip05Name || '')) {
+        delete out.nip05;
     }
+    if (ticked.has('nip05') && isClaimedNip05(profile.nip05Name)) set('nip05', nip05Address(profile.nip05Name!));
     return out;
 }
