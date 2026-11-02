@@ -6,18 +6,16 @@ import { directoryApi, profilesApi } from '../../services/api';
 import Avatar from '../Avatar';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import ModerationSheet from '../moderation/ModerationSheet';
+import { runnerIdOf, runnerOf, runsListing } from './listingRoles';
 import '../moderation/Moderation.css';
 import './ListingOwnership.css';
 
 /**
- * A business's team on its page: the member who runs it, then the members
- * who represent it (they host events as it). Who runs it manages the team
- * here; someone on it can leave. Server: listingTeam.controller.
+ * A business's team on its page: the member who runs it (Owner), then the
+ * members who represent it (Team: they host events as it). Shown whenever
+ * there's anyone to show, or to whoever can add people. Who runs it manages
+ * the team here; someone on it can leave. Server: listingTeam.controller.
  */
-
-/** Runs the listing: its owner when it's their own business, or its linked member (as runsListing on the server). */
-export const runsListing = (listing, userId) =>
-    !!userId && (listing.memberUserId === userId || (listing.isOwnBusiness && listing.ownerId === userId));
 
 const nameOf = (person, t) => {
     const name = person?.profile?.name;
@@ -34,14 +32,14 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
     const { t } = useTranslation();
     const [sheet, setSheet] = useState(null); // 'manage' | 'leave'
     const team = listing.team || [];
-    const runner = listing.memberUser || (listing.isOwnBusiness ? listing.owner : null);
+    const runner = runnerOf(listing);
     const canManage = runsListing(listing, user?.id) || !!isAdmin;
     const onTeam = team.some((m) => m.userId === user?.id);
-    if (team.length === 0 && !canManage) return null;
+    if (!runner && team.length === 0 && !canManage) return null;
 
     const people = [
-        ...(runner ? [{ id: runner.id, user: runner, role: t('directory.team.owner') }] : []),
-        ...team.map((m) => ({ id: m.userId, user: m.user })),
+        ...(runner ? [{ id: runner.id, user: runner, role: t('directory.team.owner'), owner: true }] : []),
+        ...team.map((m) => ({ id: m.userId, user: m.user, role: t('directory.team.member') })),
     ];
     const done = () => { setSheet(null); onChanged(); };
 
@@ -50,7 +48,7 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
             <div className="dir-team-head">
                 <h2 id="dir-team-title" style={titleStyle}>
                     {t('directory.team.title')}
-                    {team.length > 0 && <span className="dir-team-count">{people.length}</span>}
+                    {people.length > 0 && <span className="dir-team-count">{people.length}</span>}
                 </h2>
                 {canManage ? (
                     <button type="button" className="dir-team-action" onClick={() => setSheet('manage')}>{t('directory.team.manage')}</button>
@@ -58,12 +56,7 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
                     <button type="button" className="dir-team-action" onClick={() => setSheet('leave')}>{t('directory.team.leave')}</button>
                 )}
             </div>
-            {team.length === 0 ? (
-                <button type="button" className="dir-team-empty" onClick={() => setSheet('manage')}>
-                    <span className="dir-team-plus"><Plus size={20} /></span>
-                    <span>{t('directory.team.empty', { name: listing.name })}</span>
-                </button>
-            ) : (
+            {people.length > 0 && (
                 <ul className="dir-team-row">
                     {people.map((p) => {
                         const name = nameOf(p.user, t);
@@ -74,12 +67,18 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
                                         <Avatar src={p.user.profile?.avatar} size={64} fallback={<User size={26} />} />
                                     </span>
                                     <span className="dir-team-name">{name}</span>
-                                    {p.role && <span className="dir-team-role">{p.role}</span>}
+                                    <span className={`dir-team-role${p.owner ? ' is-owner' : ''}`}>{p.role}</span>
                                 </Link>
                             </li>
                         );
                     })}
                 </ul>
+            )}
+            {canManage && team.length === 0 && (
+                <button type="button" className="dir-team-empty" onClick={() => setSheet('manage')}>
+                    <span className="dir-team-plus"><Plus size={20} /></span>
+                    <span>{t('directory.team.empty', { name: listing.name })}</span>
+                </button>
             )}
 
             {sheet === 'manage' && <TeamSheet listing={listing} user={user} onClose={() => setSheet(null)} onChanged={onChanged} />}
@@ -98,6 +97,7 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
                     border: 1px dashed var(--color-gray-300); border-radius: var(--radius-lg); background: var(--color-surface);
                     text-align: left; font-size: 0.9rem; color: var(--color-gray-500);
                 }
+                .dir-team-row + .dir-team-empty { margin-top: 12px; }
                 .dir-team-plus {
                     width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
                     display: flex; align-items: center; justify-content: center;
@@ -126,7 +126,12 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
                     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
                     overflow-wrap: anywhere;
                 }
-                .dir-team-role { font-size: 0.75rem; color: var(--color-gray-500); }
+                .dir-team-role {
+                    margin-top: 1px; padding: 1px 8px; border-radius: 999px;
+                    font-size: 0.72rem; font-weight: 600; line-height: 1.5;
+                    background: var(--color-gray-100); color: var(--color-gray-600);
+                }
+                .dir-team-role.is-owner { background: var(--color-blue-tint); color: var(--color-primary); }
             `}</style>
         </section>
     );
@@ -140,7 +145,7 @@ function TeamSheet({ listing, user, onClose, onChanged }) {
     const [results, setResults] = useState(null); // null: nothing searched yet
     const [busy, setBusy] = useState(''); // the userId being added or removed
     const [error, setError] = useState('');
-    const runnerId = listing.memberUserId || (listing.isOwnBusiness ? listing.ownerId : null);
+    const runnerId = runnerIdOf(listing);
 
     useEffect(() => {
         const q = query.trim();

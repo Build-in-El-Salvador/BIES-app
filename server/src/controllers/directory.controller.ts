@@ -8,10 +8,11 @@ import { config } from '../config';
 import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
-import { nestedProfileForViewer } from '../services/profilePrivacy';
+import { nestedProfileForViewer, privacyOf } from '../services/profilePrivacy';
 import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds, priceLevel } from '../utils/listOrder';
 import { nameSimilarity, SIMILAR } from '../utils/similarNames';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import { ADDED_AS_STAFF, runByWhere, runnerId, worksAtWhere } from './listingTeam.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -34,8 +35,11 @@ export const createDirectoryListingSchema = z.object({
     name: z.string().min(1).max(120),
     category: z.enum(DIRECTORY_CATEGORIES).optional().or(z.literal('')),
     hours: z.string().max(200).optional(),
-    // The member adding it runs the business or works there.
+    // The business's own listing: the member adding it runs it or works there.
     isOwnBusiness: z.boolean().optional(),
+    // "STAFF": the member adding it works there (with isOwnBusiness), so
+    // they go on its team rather than run it. "": they run it, or recommend it.
+    addedAs: z.enum(['', ADDED_AS_STAFF]).optional(),
     // Create only: the member's own review, their vouch. Not a listing column.
     review: z.string().max(1000).optional(),
     // Create only: the member saw the listings with a name like this one
@@ -83,7 +87,7 @@ export const endorseSchema = z.object({
 // memberUserId only by staff: a linked member's key signs the listing's Nostr
 // event, so members can't link someone else (STAFF_FIELDS).
 const ALLOWED_FIELDS = [
-    'type', 'name', 'category', 'hours', 'isOwnBusiness', 'about', 'photo', 'coverFrame', 'logo', 'photos', 'location',
+    'type', 'name', 'category', 'hours', 'isOwnBusiness', 'addedAs', 'about', 'photo', 'coverFrame', 'logo', 'photos', 'location',
     'phone', 'whatsapp', 'email', 'website', 'instagram', 'languages',
     'btcAccepted', 'products', 'practices', 'skills', 'bestFor',
     'pricing', 'comment', 'mapUrl',
@@ -189,15 +193,37 @@ const DIRECTORY_ORDERS_IN_CODE: Record<string, (a: ListingSortKeys, b: ListingSo
 };
 
 /**
+ * Whether the viewer may see which businesses `userId` runs and works at
+ * ("Runs" and "Works at" on their profile), as they may see that profile's
+ * details (services/profilePrivacy.ts): members only; not a member blocked
+ * either way, suspended or deleted; and, when their Settings → Privacy →
+ * Details is "Only me", the member themselves alone.
+ */
+async function showsWorkOf(req: Request, userId: string): Promise<boolean> {
+    if (!req.user) return false;
+    if (req.user.id === userId) return true;
+    const member = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { isBanned: true, deletedAt: true, profile: { select: { privacy: true } } },
+    });
+    if (!member || member.isBanned || member.deletedAt) return false;
+    if ((await hiddenFromIds(req.user.id, { staff: isStaff(req) })).includes(userId)) return false;
+    return privacyOf(member.profile?.privacy).details !== 'ONLY_ME';
+}
+
+/**
  * GET /directory
  * List directory listings with filtering, sorting (?sort=newest|score|vouches|
  * name|price-low|price-high), and pagination.
  * Public scope: active + published. Owners see all statuses of their own.
+ * ?runBy= and ?worksAt=: the live ones a member runs, and the ones they say
+ * they work at ("Runs" and "Works at" on their profile), to viewers who can
+ * see that profile's details (showsWorkOf).
  */
 export async function listListings(req: Request, res: Response): Promise<void> {
     try {
         const {
-            type, search, certified, btc, language, ownerId, category, saved,
+            type, search, certified, btc, language, ownerId, category, saved, runBy, worksAt,
             page = '1', limit = '20',
             sort = 'newest',
         } = req.query;
@@ -206,8 +232,22 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         const take = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 50);
         const pageNumber = Math.max(parseInt(String(page), 10) || 1, 1);
         const skip = (pageNumber - 1) * take;
+        const reply = (listings: any[], total: number) => res.json({
+            data: listings.map(parseListing),
+            trustedThreshold: TRUSTED_THRESHOLD,
+            pagination: { page: pageNumber, limit: take, total, totalPages: Math.ceil(total / take) },
+        });
 
         const where: any = { status: 'active', isPublished: true };
+        const and: any[] = [];
+
+        const runner = typeof runBy === 'string' && runBy ? runBy : null;
+        const worker = typeof worksAt === 'string' && worksAt ? worksAt : null;
+        for (const member of new Set([runner, worker].filter((id): id is string => !!id))) {
+            if (!(await showsWorkOf(req, member))) { reply([], 0); return; }
+        }
+        if (runner) and.push({ OR: runByWhere(runner) });
+        if (worker) and.push(worksAtWhere(worker));
 
         if (type && typeof type === 'string') where.type = type.toUpperCase();
         if (ownerId && typeof ownerId === 'string') {
@@ -236,7 +276,8 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             ];
         }
         // Not while the member who runs it is suspended or deleted (their own list aside).
-        if (!(req.user && where.ownerId === req.user.id)) where.AND = [ACTIVE_MEMBER_RUNS_IT];
+        if (!(req.user && where.ownerId === req.user.id)) and.push(ACTIVE_MEMBER_RUNS_IT);
+        if (and.length) where.AND = and;
 
         const include = {
             owner: ownerSelect,
@@ -267,16 +308,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const visible = hidden.size ? listings.filter((l) => !hidden.has(listingMember(l))) : listings;
 
-        res.json({
-            data: visible.map(parseListing),
-            trustedThreshold: TRUSTED_THRESHOLD,
-            pagination: {
-                page: pageNumber,
-                limit: take,
-                total,
-                totalPages: Math.ceil(total / take),
-            },
-        });
+        reply(visible, total);
     } catch (error) {
         console.error('List directory listings error:', error);
         res.status(500).json({ error: 'Failed to list directory listings' });
@@ -487,6 +519,10 @@ export async function createListing(req: Request, res: Response): Promise<void> 
 
         const data = pickAllowedFields(req.body, isStaff(req));
         if (data.memberUserId === '') delete data.memberUserId;
+        if (data.addedAs === ADDED_AS_STAFF && !data.isOwnBusiness) {
+            res.status(400).json({ error: 'Someone who works there adds it as the business\'s own listing', reason: 'staff_not_own' });
+            return;
+        }
 
         if (data.memberUserId) {
             const memberUser = await prisma.user.findUnique({
@@ -502,13 +538,19 @@ export async function createListing(req: Request, res: Response): Promise<void> 
         const status = isStaff(req) || !config.directoryRequireApproval ? 'active' : 'pending-review';
 
         // A member recommending a business vouches for it with their review;
-        // one adding their own business doesn't.
+        // one adding their own business doesn't. One who works there goes on
+        // its team, by their own doing, while nobody runs it (staff linking
+        // the member who runs it leaves the team to that member).
+        const me = req.user!.id;
         const listing = await prisma.directoryListing.create({
             data: {
-                ...data, ownerId: req.user!.id, status,
+                ...data, ownerId: me, status,
                 ...(data.isOwnBusiness ? {} : {
-                    endorsements: { create: { userId: req.user!.id, vote: 1, comment: (req.body.review || '').trim() } },
+                    endorsements: { create: { userId: me, vote: 1, comment: (req.body.review || '').trim() } },
                 }),
+                ...(data.addedAs === ADDED_AS_STAFF && !data.memberUserId
+                    ? { team: { create: { userId: me, addedById: me } } }
+                    : {}),
             },
             include: {
                 owner: ownerSelect,
@@ -519,7 +561,7 @@ export async function createListing(req: Request, res: Response): Promise<void> 
         await recomputeListingScore(listing.id).catch((err) =>
             console.error('[Directory] Score recompute failed:', err)
         );
-        mirrorToNostr(listing, req.user!.id);
+        mirrorToNostr(listing, me);
 
         res.status(201).json(parseListing(listing));
     } catch (error) {
@@ -536,7 +578,7 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
     try {
         const existing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { ownerId: true, photo: true, logo: true, photos: true, isOwnBusiness: true, memberUserId: true },
+            select: { ownerId: true, photo: true, logo: true, photos: true, isOwnBusiness: true, addedAs: true, memberUserId: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -553,6 +595,22 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         // means hosting events as it and choosing its team.
         if (data.isOwnBusiness === true && !existing.isOwnBusiness && !isStaff(req)) {
             res.status(403).json({ error: 'Only the business itself can make this its own page: it can claim it from the ⋯ menu', reason: 'own_business' });
+            return;
+        }
+        // Its own page either way: the member who added it switches between
+        // "It's my business" and "I work there". A recommendation has neither.
+        const ownAfter = data.isOwnBusiness ?? existing.isOwnBusiness;
+        if (data.addedAs === ADDED_AS_STAFF && !ownAfter) {
+            res.status(400).json({ error: 'Someone who works there adds it as the business\'s own listing', reason: 'staff_not_own' });
+            return;
+        }
+        if (!ownAfter) data.addedAs = '';
+        // While another member runs it (staff linked them), its team is
+        // theirs to choose: whoever added it doesn't switch themselves onto
+        // it, or off running it, by changing how they're connected to it.
+        if (!isStaff(req) && data.addedAs !== undefined && data.addedAs !== existing.addedAs
+            && existing.memberUserId && existing.memberUserId !== req.user!.id) {
+            res.status(403).json({ error: 'Another member runs this business now: ask them to add you to its team', reason: 'runner_linked' });
             return;
         }
 
@@ -581,10 +639,37 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         if (removed.length) await discardUploads(removed, { uploadedBy: [existing.ownerId, req.user!.id] });
 
         await cache.delPattern('preview:events:'); // events hosted as it show its new name, or none
-        // Someone else runs it now: the team was the old runner's.
-        const runnerChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
+        // Someone else runs it now: the team was the old runner's. One nobody
+        // ran (added by someone who works there) keeps its team. Switching
+        // between "It's my business" and "I work there" keeps it too.
+        const runnerBefore = runnerId(existing);
+        const runnerAfter = runnerId(listing);
+        const linkChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
             || (data.isOwnBusiness !== undefined && data.isOwnBusiness !== existing.isOwnBusiness);
-        if (runnerChanged) await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id } });
+        const teamCleared = linkChanged && !!runnerBefore && runnerBefore !== runnerAfter;
+        if (teamCleared) {
+            await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id } });
+        }
+        // Who added it works there now, and nobody runs it: on its team, by
+        // their own doing (so it's "Works at" on their profile). Also when
+        // the team was just cleared because the member who ran it went.
+        // While someone runs it, its team is theirs to choose. Not working
+        // there any more (they run it, or recommend it): off it. Whoever runs
+        // it shows as its owner, not on the team as well.
+        const creator = listing.ownerId;
+        if (listing.addedAs === ADDED_AS_STAFF && !runnerAfter && (existing.addedAs !== ADDED_AS_STAFF || teamCleared)) {
+            await prisma.listingTeamMember.upsert({
+                where: { listingId_userId: { listingId: listing.id, userId: creator } },
+                create: { listingId: listing.id, userId: creator, addedById: creator },
+                update: {},
+            });
+        }
+        if (existing.addedAs === ADDED_AS_STAFF && listing.addedAs !== ADDED_AS_STAFF) {
+            await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id, userId: creator } });
+        }
+        if (runnerAfter && runnerAfter !== runnerBefore) {
+            await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id, userId: runnerAfter } });
+        }
 
         // Now marked as their own business: their vouch goes.
         if (data.isOwnBusiness === true) {
@@ -666,13 +751,19 @@ async function trustOf(listingId: string) {
  * POST /directory/:id/endorse
  * Review a listing: { vote: 1 | -1, comment }. One review per member per
  * listing; posting again changes it. A downvote needs a reason. Whoever runs
- * the business can't review it, and only live listings can be reviewed.
+ * the business can't review it, nor the member who added it as its own
+ * (they run it or work there), nor anyone on its team, and only live
+ * listings can be reviewed.
  */
 export async function endorseListing(req: Request, res: Response): Promise<void> {
     try {
+        const userId = req.user!.id;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, status: true },
+            select: {
+                id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, status: true,
+                team: { where: { userId }, select: { id: true } },
+            },
         });
 
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -680,9 +771,12 @@ export async function endorseListing(req: Request, res: Response): Promise<void>
             res.status(409).json({ error: 'This listing is not live yet', reason: 'not_live' });
             return;
         }
-        const userId = req.user!.id;
         if (listing.memberUserId === userId || (listing.isOwnBusiness && listing.ownerId === userId)) {
             res.status(403).json({ error: "You can't review your own business", reason: 'own_business' });
+            return;
+        }
+        if (listing.team.length) {
+            res.status(403).json({ error: "You're on its team, so you can't review it", reason: 'team' });
             return;
         }
         if (await blockedEitherWay(userId, listingMember(listing))) {

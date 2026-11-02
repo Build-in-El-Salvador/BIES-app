@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { createNotification } from '../services/notification.service';
+import { recomputeListingScore } from '../services/directoryReputation.service';
 import { cache } from '../services/redis.service';
 import { blockedEitherWay } from '../services/moderation.service';
 import { z } from 'zod';
@@ -16,7 +17,11 @@ import { z } from 'zod';
  * otherwise its owner when it's their own business (they added it as
  * theirs, or it was handed to them).
  * A member who only recommended a business (added it as a customer) doesn't
- * run it, and can't put people on its team or host as it.
+ * run it, and can't put people on its team or host as it. Nor does one who
+ * added it as someone who works there (addedAs STAFF): they're on its team,
+ * and host as it that way.
+ * Votes by anyone on the team don't count toward its Trust Score
+ * (directoryReputation.service.ts).
  */
 
 export const addTeamMemberSchema = z.object({
@@ -26,13 +31,41 @@ export const addTeamMemberSchema = z.object({
 /** Big enough for a company's staff; a bound all the same. */
 export const MAX_TEAM = 25;
 
-type Runnable = { ownerId: string; memberUserId: string | null; isOwnBusiness: boolean };
+/** addedAs for a listing added by someone who works there ("I work there"). */
+export const ADDED_AS_STAFF = 'STAFF';
+
+type Runnable = { ownerId: string; memberUserId: string | null; isOwnBusiness: boolean; addedAs: string };
+
+/** The member who runs the listing, or null when nobody does (a recommendation, or added by someone who works there). */
+export function runnerId(listing: Runnable): string | null {
+    if (listing.memberUserId) return listing.memberUserId;
+    return listing.isOwnBusiness && listing.addedAs !== ADDED_AS_STAFF ? listing.ownerId : null;
+}
 
 /** Whether `userId` runs the listing (and so manages its team). */
 export function runsListing(listing: Runnable, userId: string): boolean {
-    if (listing.memberUserId) return listing.memberUserId === userId;
-    return listing.isOwnBusiness && listing.ownerId === userId;
+    return runnerId(listing) === userId;
 }
+
+/** A where clause for the listings `userId` runs (as runsListing). */
+export const runByWhere = (userId: string) => [
+    { memberUserId: userId },
+    { memberUserId: null, isOwnBusiness: true, addedAs: { not: ADDED_AS_STAFF }, ownerId: userId },
+];
+
+/**
+ * A where clause for the businesses `userId` says they work at ("Works at"
+ * on their profile): on its team by their own doing, as the member who
+ * added it as someone who works there, or who put themselves on it. Not a
+ * team someone else put them on: that shows on the business's page only.
+ */
+export const worksAtWhere = (userId: string) => ({
+    team: { some: { userId } },
+    OR: [
+        { team: { some: { userId, addedById: userId } } },
+        { addedAs: ADDED_AS_STAFF, ownerId: userId },
+    ],
+});
 
 const ACTIVE = { isBanned: false, deletedAt: null };
 const LIVE = { status: 'active', isPublished: true };
@@ -45,15 +78,11 @@ export async function listingsActedFor(userId: string) {
     return prisma.directoryListing.findMany({
         where: {
             ...LIVE,
-            OR: [
-                { memberUserId: userId },
-                { memberUserId: null, isOwnBusiness: true, ownerId: userId },
-                { team: { some: { userId } } },
-            ],
+            OR: [...runByWhere(userId), { team: { some: { userId } } }],
             AND: [{ OR: [{ memberUserId: null, owner: ACTIVE }, { memberUser: ACTIVE }] }],
         },
         orderBy: { name: 'asc' },
-        select: { id: true, name: true, type: true, category: true, logo: true, photo: true, isOfficial: true, ownerId: true, memberUserId: true, isOwnBusiness: true },
+        select: { id: true, name: true, type: true, category: true, logo: true, photo: true, isOfficial: true, ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true },
     });
 }
 
@@ -80,9 +109,9 @@ export async function listRepresented(req: Request, res: Response): Promise<void
         const me = req.user!.id;
         const listings = await listingsActedFor(me);
         res.json({
-            data: listings.map(({ ownerId, memberUserId, isOwnBusiness, ...l }) => ({
+            data: listings.map(({ ownerId, memberUserId, isOwnBusiness, addedAs, ...l }) => ({
                 ...l,
-                role: runsListing({ ownerId, memberUserId, isOwnBusiness }, me) ? 'runs' : 'team',
+                role: runsListing({ ownerId, memberUserId, isOwnBusiness, addedAs }, me) ? 'runs' : 'team',
             })),
         });
     } catch (error) {
@@ -101,7 +130,7 @@ export async function addTeamMember(req: Request, res: Response): Promise<void> 
         const { userId } = req.body as z.infer<typeof addTeamMemberSchema>;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, isOwnBusiness: true, _count: { select: { team: true } } },
+            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true, _count: { select: { team: true } } },
         });
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
         if (!runsListing(listing, me) && !req.user!.isAdmin) {
@@ -129,6 +158,8 @@ export async function addTeamMember(req: Request, res: Response): Promise<void> 
             data: { listingId: listing.id, userId, addedById: me },
             include: { user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
         });
+        // Their own vote for it doesn't count while they're on its team.
+        await recomputeListingScore(listing.id).catch((err) => console.error('[Directory] Score recompute failed:', err));
         await createNotification({
             userId,
             type: 'SYSTEM',
@@ -154,7 +185,7 @@ export async function removeTeamMember(req: Request, res: Response): Promise<voi
         const { userId } = req.params;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, ownerId: true, memberUserId: true, isOwnBusiness: true },
+            select: { id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true },
         });
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
         if (userId !== me && !runsListing(listing, me) && !req.user!.isAdmin) {
@@ -163,6 +194,8 @@ export async function removeTeamMember(req: Request, res: Response): Promise<voi
         }
         const { count } = await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id, userId } });
         if (!count) { res.status(404).json({ error: 'Not on the team' }); return; }
+        // Off the team, their vote for it counts again.
+        await recomputeListingScore(listing.id).catch((err) => console.error('[Directory] Score recompute failed:', err));
         res.json({ removed: true });
     } catch (error) {
         console.error('Remove team member error:', error);
