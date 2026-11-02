@@ -23,7 +23,7 @@ import CoverPhoto from '../../components/CoverPhoto';
 import EmailSheet from '../../components/EmailSheet';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
-import { daysLeft, formatDay, fullDollars, hasField, industryOf, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
+import { daysLeft, formatDay, fullDollars, hasField, industryOf, isKindHidden, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
 import { isNativePlatform } from '../../utils/platform';
 import '../../components/moderation/Moderation.css';
 
@@ -185,7 +185,8 @@ const OpportunityDetail = () => {
 
     // The facts its type has, as rows: [icon, label, value]. A project shows no
     // amounts, even an older one that had a raise.
-    const kindLabel = o.kind ? t(`opportunities.kinds.${o.type}.${o.kind}`, { defaultValue: '' }) : '';
+    // Not one the phone app leaves out ("Looking for investors").
+    const kindLabel = o.kind && !isKindHidden(o.type, o.kind, isNativePlatform()) ? t(`opportunities.kinds.${o.type}.${o.kind}`, { defaultValue: '' }) : '';
     const facts = [];
     if (o.type === 'investment') {
         if (kindLabel) facts.push([Users, t('opportunities.facts.lookingFor'), kindLabel]);
@@ -415,7 +416,8 @@ const OpportunityDetail = () => {
                         </section>
                     )}
 
-                    {o.type === 'investment' && o.hasDeck && o.deckAccess && (
+                    {/* The pitch deck: the website's (the store app leaves decks out, appScope.js) */}
+                    {o.type === 'investment' && o.hasDeck && o.deckAccess && !isNativePlatform() && (
                         <DeckPanel opportunity={o} ownerName={name} />
                     )}
 

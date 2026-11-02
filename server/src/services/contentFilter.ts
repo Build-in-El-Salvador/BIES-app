@@ -12,10 +12,16 @@
  * bag, cold storage retards ripening, a tranny is a gearbox. A false positive
  * on a farm listing costs more trust than this filter earns. Report text is
  * never filtered: a report may need to quote what it reports.
+ *
+ * Feed posts and replies don't come through this server: the app
+ * (src/utils/contentFilter.js) and the relay's proxy
+ * (relay-proxy/contentFilter.js) have their own copies of these lists and
+ * of normalize(). Change them together: __tests__/contentFilterCopies.test.ts
+ * fails when they differ.
  */
 
 // Single words, without accents.
-const WORDS = [
+export const WORDS = [
     // English slurs
     'nigger', 'niggers', 'nigga', 'niggas', 'faggot', 'faggots', 'wetback', 'wetbacks',
     // English sexual and degrading terms
@@ -27,7 +33,7 @@ const WORDS = [
 ];
 
 // Phrases, without accents, words separated by single spaces.
-const PHRASES = ['kill yourself', 'hijo de puta', 'hijos de puta', 'suicidate'];
+export const PHRASES = ['kill yourself', 'hijo de puta', 'hijos de puta', 'suicidate'];
 
 const BLOCKED = new Set(WORDS);
 

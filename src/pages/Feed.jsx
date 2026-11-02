@@ -27,6 +27,8 @@ import '../components/feed/Feed.css';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { mute } from '../services/muteStore';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { findObjectionable } from '../utils/contentFilter';
+import { copyText } from '../utils/clipboard';
 
 const EXPLORE_ICONS = {
     trending_24h: TrendingUp,
@@ -141,6 +143,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [feedMode, setFeedMode] = useState('private'); // 'private' | 'explore'
     // The store app shows only the BIES private feed: Explore is the open
     // Nostr network, which BIES doesn't moderate (App Review guideline 1.2).
+    // Nor a note's ID and raw event (Copy ID, Copy Raw): those are for Nostr
+    // developers.
     const exploreAllowed = !isNativePlatform();
     const zapsOn = useFeature('zaps');
     const [exploreView, setExploreView] = useState('trending_24h');
@@ -208,6 +212,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [replyTarget, setReplyTarget] = useState(null);
     const [replyText, setReplyText] = useState('');
     const [replyPosting, setReplyPosting] = useState(false);
+    const [replyError, setReplyError] = useState(null); // { postId, text }
     const [zapTarget, setZapTarget] = useState(null);
     const [myPubkey, setMyPubkey] = useState(null);
     const [repostMenu, setRepostMenu] = useState(null); // post.id or null — shows repost relay choice
@@ -834,6 +839,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             return;
         }
 
+        // The community rules' words, checked before anything is signed or
+        // sent (the BIES relay refuses them too: relay-proxy/noteFilter.js).
+        if (findObjectionable(composeText)) {
+            setPostError(t('moderation.objectionable'));
+            return;
+        }
+
         setPosting(true);
         setPostError('');
 
@@ -884,7 +896,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         } catch (err) {
             console.error('[Feed] Post failed:', err);
             const msg = err?.errors?.[0]?.message || err?.message || String(err);
-            setPostError(`Post failed: ${msg}`);
+            setPostError(/objectionable/i.test(msg) ? t('moderation.objectionable') : `Post failed: ${msg}`);
         } finally {
             setPosting(false);
             setUploading(false);
@@ -1041,7 +1053,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const handleReply = async (post) => {
         if (!replyText.trim() || replyPosting) return;
         if (!nostrSigner.hasKey && nostrSigner.mode !== 'extension' && !nostrSigner.storedMethod && !window.nostr) return;
+        if (findObjectionable(replyText)) {
+            setReplyError({ postId: post.id, text: t('moderation.objectionable') });
+            return;
+        }
 
+        setReplyError(null);
         setReplyPosting(true);
         try {
             const content = replyText.trim();
@@ -1100,6 +1117,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             }
         } catch (err) {
             console.error('[Feed] Reply failed:', err);
+            const msg = err?.errors?.[0]?.message || err?.message || String(err);
+            if (/objectionable/i.test(msg)) setReplyError({ postId: post.id, text: t('moderation.objectionable') });
         } finally {
             setReplyPosting(false);
         }
@@ -1187,8 +1206,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 await navigator.share({ url });
             } catch { /* cancelled */ }
         } else {
-            await navigator.clipboard.writeText(url);
-            showToast(t('feed.linkCopied', 'Link copied'));
+            if (await copyText(url)) showToast(t('feed.linkCopied', 'Link copied'));
         }
     };
 
@@ -1884,10 +1902,10 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                     onMuteUser={() => { handleMuteUser(post.pubkey); setPostMenu(null); }}
                                     onBlockUser={() => handleBlockUser(post.pubkey)}
                                     onReport={() => { handleReport(post); setPostMenu(null); }}
-                                    onCopyLink={() => { navigator.clipboard.writeText(postUrl(post)); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); }}
-                                    onCopyText={() => { navigator.clipboard.writeText(post.content || ''); setPostMenu(null); showToast(t('feed.textCopied', 'Text copied')); }}
-                                    onCopyId={() => { navigator.clipboard.writeText(post.id); setPostMenu(null); showToast(t('feed.idCopied', 'Note ID copied')); }}
-                                    onCopyRaw={() => { navigator.clipboard.writeText(JSON.stringify(post, null, 2)); setPostMenu(null); showToast(t('feed.rawCopied', 'Raw data copied')); }}
+                                    onCopyLink={async () => { setPostMenu(null); if (await copyText(postUrl(post))) showToast(t('feed.linkCopied', 'Link copied')); }}
+                                    onCopyText={async () => { setPostMenu(null); if (await copyText(post.content || '')) showToast(t('feed.textCopied', 'Text copied')); }}
+                                    onCopyId={exploreAllowed ? async () => { setPostMenu(null); if (await copyText(post.id)) showToast(t('feed.idCopied', 'Note ID copied')); } : undefined}
+                                    onCopyRaw={exploreAllowed ? async () => { setPostMenu(null); if (await copyText(JSON.stringify(post, null, 2))) showToast(t('feed.rawCopied', 'Raw data copied')); } : undefined}
                                     parseNoteContent={parseNoteContent}
                                     formatTime={formatTime}
                                     formatCount={formatCount}
@@ -1915,6 +1933,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                         onChange={(e) => {
                                                             setReplyTarget({ id: post.id, pubkey: post.pubkey });
                                                             setReplyText(e.target.value);
+                                                            if (replyError) setReplyError(null);
                                                             handleMentionInput(e.target.value, e.target.selectionStart, 'reply');
                                                         }}
                                                         onFocus={() => setReplyTarget({ id: post.id, pubkey: post.pubkey })}
@@ -1963,6 +1982,10 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                     </button>
                                                 </div>
                                             </div>
+
+                                            {replyError?.postId === post.id && (
+                                                <div className="primal-compose-error" role="alert">{replyError.text}</div>
+                                            )}
 
                                             {/* Mention dropdown for replies */}
                                             {isReplying && mentionAnchor?.field === 'reply' && (mentionResults.length > 0 || mentionLoading) && (
@@ -2030,9 +2053,14 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                                                 Reply
                                                                             </button>
                                                                             {comment.pubkey !== myPubkey ? (
-                                                                                <button className="primal-comment-action" onClick={() => handleReport(comment)}>
-                                                                                    {t('moderation.menu.report')}
-                                                                                </button>
+                                                                                <>
+                                                                                    <button className="primal-comment-action" onClick={() => handleReport(comment)}>
+                                                                                        {t('moderation.menu.report')}
+                                                                                    </button>
+                                                                                    <button className="primal-comment-action" onClick={() => handleBlockUser(comment.pubkey)}>
+                                                                                        {t('moderation.menu.block')}
+                                                                                    </button>
+                                                                                </>
                                                                             ) : (
                                                                                 <button className="primal-comment-action" onClick={() => handleDeleteComment(post.id, comment)}>
                                                                                     {t('feed.deleteReply', 'Delete')}

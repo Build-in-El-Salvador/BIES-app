@@ -22,6 +22,14 @@ export const APP_FEATURES = ['directories', 'talent', 'projects', 'feedback', 'e
 // licensed company's developer account, and BIES's is a person's).
 export const APP_HIDDEN_OPPORTUNITY_TYPES = [];
 
+// Kinds of opportunity the app leaves out of its form, cards and pages, by
+// type: a Project "looking for investors", with the pitch deck that goes
+// with it (deck upload, requests and answers: OpportunityForm, DeckPanel,
+// the "Opportunities" notification switch). Mike, 2026-11-02. The website
+// shows them; an older project of that kind still opens in the app, without
+// saying so.
+export const APP_HIDDEN_OPPORTUNITY_KINDS = { investment: ['investors'] };
+
 /**
  * The flags the app runs with: the runtime flags, with everything outside
  * APP_FEATURES off when running as the native app. Pure.

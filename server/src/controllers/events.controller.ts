@@ -1576,6 +1576,10 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         if (!event || event.visibility === 'DRAFT') {
             res.status(404).json({ error: 'Event not found' }); return;
         }
+        // A host blocked either way: their event isn't there for this member.
+        if (event.hostId !== userId && await blockedEitherWay(userId, event.hostId)) {
+            res.status(404).json({ error: 'Event not found' }); return;
+        }
         // Private: its guests (and the host and admins) can say they're going.
         if (event.visibility === 'PRIVATE' && event.hostId !== userId && !req.user!.isAdmin && !(await invitedTo(event, userId))) {
             res.status(404).json({ error: 'Event not found' }); return;

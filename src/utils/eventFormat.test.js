@@ -69,6 +69,9 @@ test('free: said so, or no ticket link and no price', () => {
     assert.equal(isFree({ priceLabel: '$15', ticketUrl: 'https://lu.ma/x' }), false);
     assert.equal(isFree({ priceLabel: '', ticketUrl: '', bitcoinUrl: 'https://pretix.eu/x' }), false);
     assert.equal(isFree({ priceLabel: '', ticketUrl: 'https://lu.ma/x' }), false);
+    // A price in sats only is a price, wallet or not.
+    assert.equal(isFree({ priceLabel: '', priceSats: 21000 }), false);
+    assert.equal(isFree({ priceLabel: '', priceSats: 0 }), true);
 });
 
 test('both ticket links: a ticket page and a bitcoin one', () => {

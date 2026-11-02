@@ -2,7 +2,7 @@
 // project.controller.ts (keep both in sync). Pure, so tests can import it.
 
 import { htmlToText } from '../../utils/text.js';
-import { APP_HIDDEN_OPPORTUNITY_TYPES } from '../../config/appScope.js';
+import { APP_HIDDEN_OPPORTUNITY_KINDS, APP_HIDDEN_OPPORTUNITY_TYPES } from '../../config/appScope.js';
 
 export { asWebLink, shortLink } from '../talent/talentOptions.js';
 
@@ -42,6 +42,12 @@ export const OPPORTUNITY_KINDS = {
     partnership: ['co-founder', 'partner', 'distributor', 'supplier', 'sponsor', 'other'],
     program: ['grant', 'accelerator', 'competition', 'other'],
 };
+
+/** Whether the phone app leaves this kind out (APP_HIDDEN_OPPORTUNITY_KINDS); the website shows them all. */
+export const isKindHidden = (type, kind, native) => !!native && (APP_HIDDEN_OPPORTUNITY_KINDS[type || 'investment'] || []).includes(kind);
+
+/** The kinds of a type to choose from here. */
+export const kindsShown = (type, native) => (OPPORTUNITY_KINDS[type] || []).filter((k) => !isKindHidden(type, k, native));
 
 /** The types that must say their kind; who a project is looking for is optional. */
 export const KIND_REQUIRED = ['job', 'partnership', 'program'];
@@ -148,14 +154,14 @@ export function parseDollars(text) {
  * The line under a card's title: what matters most for its type. A job's
  * hours and pay; who a partnership is looking for; a program's kind and
  * size; who a project is looking for and its stage; a business's price. `t`
- * is i18next's.
+ * is i18next's; `native`: in the phone app, which leaves some kinds out.
  */
-export function summaryOf(opportunity, t) {
+export function summaryOf(opportunity, t, native = false) {
     const o = opportunity || {};
     const parts = [];
     const industry = industryOf(o.category);
     const industryLabel = industry && industry !== 'OTHER' ? t(`opportunities.industries.${industry}`) : '';
-    const kind = (OPPORTUNITY_KINDS[o.type] || []).includes(o.kind) ? t(`opportunities.kinds.${o.type}.${o.kind}`) : '';
+    const kind = kindsShown(o.type, native).includes(o.kind) ? t(`opportunities.kinds.${o.type}.${o.kind}`) : '';
     switch (o.type) {
         case 'investment':
             if (kind && o.kind !== 'other') parts.push(t(`opportunities.card.lookingFor.${o.kind}`));
@@ -180,9 +186,9 @@ export function summaryOf(opportunity, t) {
     return parts.join(' · ');
 }
 
-/** "Job · Full-time": its type, and its kind when it has one. */
-export function typeLine(opportunity, t) {
+/** "Job · Full-time": its type, and its kind when it has one (and it's shown here). */
+export function typeLine(opportunity, t, native = false) {
     const type = OPPORTUNITY_TYPES.includes(opportunity?.type) ? opportunity.type : 'investment';
-    const kind = (OPPORTUNITY_KINDS[type] || []).includes(opportunity?.kind) ? opportunity.kind : '';
+    const kind = kindsShown(type, native).includes(opportunity?.kind) ? opportunity.kind : '';
     return [t(`opportunities.types.${type}`), kind && t(`opportunities.kinds.${type}.${kind}`)].filter(Boolean).join(' · ');
 }

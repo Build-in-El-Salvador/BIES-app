@@ -10,6 +10,7 @@ import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../util
 import { profilePage } from '../utils/detailPages';
 import { useAuth } from '../context/AuthContext';
 import { useFeature } from '../context/FeatureFlagsContext';
+import { copyText } from '../utils/clipboard';
 import { nostrService } from '../services/nostrService';
 import ZapButton from '../components/ZapButton';
 import TranslatableText from '../components/TranslatableText';
@@ -18,6 +19,7 @@ import { RepeatLine } from '../components/events/EventBits';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { unblock } from '../services/blockStore';
 import '../components/moderation/Moderation.css';
+import { isNativePlatform } from '../utils/platform';
 
 const PublicProfile = ({ type }) => {
     const { id } = useParams();
@@ -44,6 +46,10 @@ const PublicProfile = ({ type }) => {
     const pointsEnabled = useFeature('points');
     const messagesEnabled = useFeature('messages');
     const eventsEnabled = useFeature('events');
+    // Prices in sats go with zaps; Lightning and Bolt12 addresses show on the
+    // website only (not in the store app).
+    const zapsEnabled = useFeature('zaps');
+    const showLightning = !isNativePlatform();
     // Bumped after a block or unblock: the server then answers differently.
     const [reloadKey, setReloadKey] = useState(0);
     const [unblocking, setUnblocking] = useState(false);
@@ -348,13 +354,13 @@ const PublicProfile = ({ type }) => {
                 bio={profile.bio ? <TranslatableText text={profile.bio} style={{ margin: 0, fontSize: '0.98rem', lineHeight: 1.5, color: 'var(--color-gray-800)', whiteSpace: 'pre-line' }} /> : null}
                 actions={actions}
             >
-                {!!(profile.lightningAddress || profile.bolt12Offer) && (
+                {showLightning && !!(profile.lightningAddress || profile.bolt12Offer) && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         {/* Lightning Address */}
                         {profile.lightningAddress && (
                             <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(profile.lightningAddress);
+                                onClick={async () => {
+                                    if (!(await copyText(profile.lightningAddress))) return;
                                     setLnAddrCopied(true);
                                     setTimeout(() => setLnAddrCopied(false), 2000);
                                 }}
@@ -378,8 +384,8 @@ const PublicProfile = ({ type }) => {
                         {/* Bolt12 Offer */}
                         {profile.bolt12Offer && (
                             <button
-                                onClick={() => {
-                                    navigator.clipboard.writeText(profile.bolt12Offer);
+                                onClick={async () => {
+                                    if (!(await copyText(profile.bolt12Offer))) return;
                                     setBolt12Copied(true);
                                     setTimeout(() => setBolt12Copied(false), 2000);
                                 }}
@@ -500,7 +506,7 @@ const PublicProfile = ({ type }) => {
                                                         <Users size={12} /> {event.attendeeCount}
                                                     </span>
                                                 )}
-                                                {event.priceSats > 0 && (
+                                                {zapsEnabled && event.priceSats > 0 && (
                                                     <span style={{
                                                         display: 'inline-flex', alignItems: 'center', gap: 3,
                                                         padding: '0.15rem 0.5rem', borderRadius: '999px',

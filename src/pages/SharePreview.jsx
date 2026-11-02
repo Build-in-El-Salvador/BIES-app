@@ -5,7 +5,7 @@ import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCi
 import { previewApi } from '../services/api';
 import CoverPhoto from '../components/CoverPhoto';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
-import { formatDay } from '../components/opportunities/opportunityOptions';
+import { formatDay, isKindHidden } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
 import { fullDay, ticketProvider, timeRange } from '../utils/eventFormat';
 import { repeatLabel } from '../utils/eventRepeat';
@@ -52,7 +52,8 @@ export default function SharePreview({ section }) {
     const kicker = () => {
         if (!found) return '';
         if (found.section === 'opportunities') {
-            const kind = found.kind && t(`opportunities.kinds.${found.type}.${found.kind}`, { defaultValue: '' });
+            const kind = found.kind && !isKindHidden(found.type, found.kind, isNativePlatform())
+                && t(`opportunities.kinds.${found.type}.${found.kind}`, { defaultValue: '' });
             return [t(`opportunities.types.${found.type}`, { defaultValue: '' }), kind].filter(Boolean).join(' · ');
         }
         if (found.section === 'talents') return t(`talent.categories.${found.category}`, { defaultValue: t('sharePreview.talent') });
@@ -74,7 +75,7 @@ export default function SharePreview({ section }) {
             m.hours && t('sharePreview.members.hours'),
             m.map && t('sharePreview.members.map'),
             m.rate && t('sharePreview.members.rate'),
-            m.deck && t('sharePreview.members.deck'),
+            m.deck && !isNativePlatform() && t('sharePreview.members.deck'),
             m.works > 0 && t('sharePreview.members.works', { count: m.works }),
             m.morePhotos > 0 && t('sharePreview.members.morePhotos', { count: m.morePhotos }),
             found?.vouchCount > 0 && t('sharePreview.members.whoRecommends'),
@@ -170,7 +171,7 @@ export default function SharePreview({ section }) {
                                     )}
                                     {found.bitcoinUrl && (
                                         <button type="button" className="sp-tickets sp-btc" onClick={() => openExternal(found.bitcoinUrl)}>
-                                            <Bitcoin size={19} aria-hidden="true" /> {t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
+                                            <Bitcoin size={19} aria-hidden="true" /> {native ? t('events.card.ticketsBitcoin') : t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
                                         </button>
                                     )}
                                     <p className="sp-note">{t('sharePreview.ticketsOn', { provider: ticketProvider(found.ticketUrl || found.bitcoinUrl) })}</p>

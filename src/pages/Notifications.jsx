@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Bell, Check, Trash2, Loader2, Trophy, Award, Target, Zap, RotateCcw, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { notificationsApi } from '../services/api';
+import { pathAvailable } from '../utils/appPaths';
 
 const Notifications = () => {
     const { t } = useTranslation();
     const { refreshNotifications } = useAuth();
+    const { flags } = useFeatureFlags();
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -88,8 +91,13 @@ const Notifications = () => {
     };
 
     // Deep-link for notification types that reference an entity; a notice
-    // can also carry its own in-app link (e.g. the listing it's about).
+    // can also carry its own in-app link (e.g. the listing it's about). None
+    // to a page this copy of the app doesn't have (bounties in the store app).
     const typeLink = (notif) => {
+        const link = entityLink(notif);
+        return link && pathAvailable(link, flags) ? link : null;
+    };
+    const entityLink = (notif) => {
         try {
             const data = typeof notif.data === 'string' ? JSON.parse(notif.data) : notif.data;
             if (typeof data?.link === 'string' && /^\/(?!\/)/.test(data.link)) return data.link;

@@ -79,8 +79,9 @@ export async function tellPeopleIn(eventId: string, hostId: string, note: { titl
         type: 'EVENT_RSVP',
         title: note.title,
         body: note.body,
-        // A deleted meetup has no page to open.
-        data: note.link === false ? { status: note.status } : { eventId, status: note.status },
+        // A deleted meetup has no page to open. Its proposer as the actor: a
+        // member who blocked them, or whom they blocked, isn't told.
+        data: note.link === false ? { status: note.status, actorId: hostId } : { eventId, status: note.status, actorId: hostId },
     }).catch(() => {})));
 }
 

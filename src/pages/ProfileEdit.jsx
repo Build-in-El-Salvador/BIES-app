@@ -5,13 +5,14 @@ import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, Save, 
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
+import { isNativePlatform } from '../utils/platform';
+import { copyText } from '../utils/clipboard';
 import { profilesApi, uploadApi, projectsApi, settingsApi } from '../services/api';
 import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
 import { followUpPublicProfile, keyIsMembers } from '../services/publicNostrProfile';
-import { isNativePlatform } from '../utils/platform';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
 import ImageCropModal from '../components/ImageCropModal';
@@ -53,6 +54,10 @@ const ProfileEdit = () => {
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
     const searchRef = useRef(null);
+    // Lightning and Bolt12 receive addresses: on the website (a member's way
+    // to be paid, zaps on or not), not in the store app. Hidden, they're left
+    // as saved.
+    const walletFields = !isNativePlatform();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -286,8 +291,8 @@ const ProfileEdit = () => {
                 customSections: form.customSections,
                 showExperience: form.showExperience,
                 nostrNpub: form.nostrNpub,
-                lightningAddress: form.lightningAddress,
-                bolt12Offer: form.bolt12Offer,
+                lightningAddress: walletFields ? form.lightningAddress : undefined,
+                bolt12Offer: walletFields ? form.bolt12Offer : undefined,
             };
             // Remove undefined values so Zod doesn't see them
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
@@ -636,7 +641,7 @@ const ProfileEdit = () => {
         );
     }
 
-    const projectsTitle = user?.role === 'INVESTOR' ? 'Invested In' : 'Working On';
+    const projectsTitle = 'Working On';
 
     return (
         <div className="pe-page">
@@ -758,8 +763,8 @@ const ProfileEdit = () => {
                                     />
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(nip19.npubEncode(user.nostrPubkey));
+                                        onClick={async () => {
+                                            if (!(await copyText(nip19.npubEncode(user.nostrPubkey)))) return;
                                             setNpubCopied(true);
                                             setTimeout(() => setNpubCopied(false), 2000);
                                         }}
@@ -772,7 +777,7 @@ const ProfileEdit = () => {
                         )}
                         <div className="pe-field">
                             <label className="pe-label">Current Role / Title</label>
-                            <input type="text" value={form.title} onChange={handleChange('title')} className="pe-input" placeholder="e.g. Founder, CTO, Angel Investor" />
+                            <input type="text" value={form.title} onChange={handleChange('title')} className="pe-input" placeholder="e.g. Founder, CTO, Designer" />
                         </div>
                         <div className="pe-field">
                             <label className="pe-label">Company</label>
@@ -846,7 +851,7 @@ const ProfileEdit = () => {
                                 <input type="text" value={form.linkedin} onChange={handleChange('linkedin')} className="pe-input pe-input-with-icon" placeholder="LinkedIn URL" />
                             </div>
                         </div>
-                        <div className="pe-field">
+                        {walletFields && <div className="pe-field">
                             <label className="pe-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                 Lightning Address
                                 <NostrIcon size={12} color="#8b5cf6" />
@@ -856,8 +861,8 @@ const ProfileEdit = () => {
                                 <input type="text" value={form.lightningAddress} onChange={handleChange('lightningAddress')} className="pe-input pe-input-with-icon" placeholder="you@getalby.com or lnurl1..." />
                             </div>
                             <p className="pe-hint">Lightning address (user@domain) or raw LNURL</p>
-                        </div>
-                        <div className="pe-field">
+                        </div>}
+                        {walletFields && <div className="pe-field">
                             <label className="pe-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                                 Bolt12 Offer
                                 <NostrIcon size={12} color="#8b5cf6" />
@@ -867,7 +872,7 @@ const ProfileEdit = () => {
                                 <input type="text" value={form.bolt12Offer} onChange={handleChange('bolt12Offer')} className="pe-input pe-input-with-icon" placeholder="lno1..." />
                             </div>
                             <p className="pe-hint">For private Bolt12 zaps — Phoenix, Zeus, CLN, etc.</p>
-                        </div>
+                        </div>}
                     </div>
                 </div>
 

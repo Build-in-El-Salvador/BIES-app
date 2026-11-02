@@ -84,12 +84,16 @@ const Note = ({
             <button className="primal-note-menu-item" onClick={onCopyText}>
               <Type size={14} /> {t('feed.copyNoteText', 'Copy Text')}
             </button>
-            <button className="primal-note-menu-item" onClick={onCopyId}>
-              <Hash size={14} /> {t('feed.copyNoteId', 'Copy ID')}
-            </button>
-            <button className="primal-note-menu-item" onClick={onCopyRaw}>
-              <Code size={14} /> {t('feed.copyRawData', 'Copy Raw')}
-            </button>
+            {onCopyId && (
+              <button className="primal-note-menu-item" onClick={onCopyId}>
+                <Hash size={14} /> {t('feed.copyNoteId', 'Copy ID')}
+              </button>
+            )}
+            {onCopyRaw && (
+              <button className="primal-note-menu-item" onClick={onCopyRaw}>
+                <Code size={14} /> {t('feed.copyRawData', 'Copy Raw')}
+              </button>
+            )}
             {isOwnPost && (
               <button className="primal-note-menu-item danger" onClick={onDeletePost}>
                 <Trash2 size={14} /> {t('feed.requestDelete', 'Delete')}

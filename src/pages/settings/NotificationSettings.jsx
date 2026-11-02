@@ -6,6 +6,7 @@ import { settingsApi, notificationsApi } from '../../services/api';
 import { nativePushPermission, enableNativePush, openNativeAppSettings, registerNativePushIfAllowed, PERMISSION_EVENT } from '../../services/pushService';
 import { requestNotificationPermission, subscribeToPush, getPushSubscriptionState } from '../../utils/notificationManager';
 import { isNativePlatform, getPlatform } from '../../utils/platform';
+import { ANDROID_PUSH_ENABLED } from '../../config/featureFlags';
 import { SettingsPage, SettingsGroup, SettingsRow, Switch } from '../../components/settings/SettingsUI';
 
 /**
@@ -114,18 +115,21 @@ const NotificationSettings = () => {
         flags.messages && { key: 'notifyMessages', Icon: Mail, label: t('notificationSettings.messages') },
         flags.zaps && { key: 'notifyZaps', Icon: Zap, label: t('notificationSettings.zaps') },
         flags.events && { key: 'notifyEvents', Icon: CalendarDays, label: t('notificationSettings.events'), desc: t('notificationSettings.eventsDesc') },
-        // Opportunities: pitch deck requests and answers, on projects.
-        flags.projects && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
+        // Opportunities: pitch deck requests and answers, on projects. Not in
+        // the store app, which leaves pitch decks out (appScope.js).
+        flags.projects && !native && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
     ].filter(Boolean);
 
     const thisDevice = t(native ? 'notificationSettings.thisPhone' : 'notificationSettings.thisBrowser');
+    // The Android app has no push yet: no switch there that does nothing.
+    const pushHere = !(native && getPlatform() === 'android' && !ANDROID_PUSH_ENABLED);
     const unavailableText = native && getPlatform() === 'android'
         ? t('notificationSettings.unavailableAndroid')
         : t('notificationSettings.unavailable');
 
     return (
         <SettingsPage title={t('settings.notifications')} back="/settings">
-            <SettingsGroup>
+            {pushHere && <SettingsGroup>
                 <SettingsRow icon={Bell} label={t('notificationSettings.push')} desc={t('notificationSettings.pushDescAccount')}>
                     <Switch
                         checked={pushOn}
@@ -163,7 +167,7 @@ const NotificationSettings = () => {
                         </div>
                     </div>
                 )}
-            </SettingsGroup>
+            </SettingsGroup>}
             {error && <p className="set-error" role="alert">{error}</p>}
 
             {settings && (

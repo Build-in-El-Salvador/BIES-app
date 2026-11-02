@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Rocket, Store, Briefcase, HeartHandshake, Award } from 'lucide-react';
 import { OPPORTUNITY_TYPES, typeLine } from './opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
 
 /** Each type's icon and colours (text on its tint passes WCAG AA). */
 export const TYPE_STYLE = {
@@ -36,7 +37,7 @@ const TypeBadge = ({ opportunity, size = 'sm', withKind = false }) => {
         >
             <Icon size={big ? 15 : 13} aria-hidden="true" style={{ flexShrink: 0 }} />
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {withKind ? typeLine(opportunity, t) : t(`opportunities.types.${type}`)}
+                {withKind ? typeLine(opportunity, t, isNativePlatform()) : t(`opportunities.types.${type}`)}
             </span>
         </span>
     );

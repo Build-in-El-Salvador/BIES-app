@@ -9,6 +9,7 @@ import { COINOS_SIGNUP_WALLET } from '../config/featureFlags';
 import { walletApi, profilesApi } from '../services/api';
 import EmailSignIn from '../components/EmailSignIn';
 import { saveKey, savedKeyAvailable } from '../services/savedKey';
+import { copyText } from '../utils/clipboard';
 
 const Signup = () => {
     const { t } = useTranslation();
@@ -62,8 +63,8 @@ const Signup = () => {
         setStep(1);
     };
 
-    const copyToClipboard = (text, type) => {
-        navigator.clipboard.writeText(text);
+    const copyToClipboard = async (text, type) => {
+        if (!(await copyText(text))) return;
         setCopiedItem(type);
         setTimeout(() => setCopiedItem(null), 2000);
     };

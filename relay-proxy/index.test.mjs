@@ -74,6 +74,36 @@ test('flooding before signing in closes the connection', async () => {
     assert.equal(await done, 4001);
 });
 
+test('a post with words the community rules forbid is refused and never reaches the relay', async () => {
+    const ws = await connect();
+    const challenge = await challengeOf(ws);
+    const seen = [];
+    ws.on('message', (m) => seen.push(JSON.parse(String(m))));
+    const auth = finalizeEvent({
+        kind: 22242, created_at: Math.floor(Date.now() / 1000), content: '',
+        tags: [['relay', `ws://127.0.0.1:${PROXY}/relay`], ['challenge', challenge]],
+    }, member);
+    // Sent before signing in too: buffered posts are screened when they go on.
+    const early = finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'hijo de puta' }, member);
+    ws.send(JSON.stringify(['EVENT', early]));
+    ws.send(JSON.stringify(['AUTH', auth]));
+    const bad = finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'you f4gg0t' }, member);
+    const good = finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags: [], content: 'See you at the meetup!' }, member);
+    ws.send(JSON.stringify(['EVENT', bad]));
+    ws.send(JSON.stringify(['EVENT', good]));
+    for (let i = 0; i < 50 && !seen.some((m) => m[0] === 'ECHO' && m[1].includes(good.id)); i++) {
+        await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.deepEqual(seen.filter((m) => m[0] === 'OK' && m[1] !== auth.id), [
+        ['OK', early.id, false, 'blocked: objectionable content'],
+        ['OK', bad.id, false, 'blocked: objectionable content'],
+    ]);
+    const echoed = seen.filter((m) => m[0] === 'ECHO').map((m) => m[1]).join('\n');
+    assert.ok(echoed.includes(good.id));
+    assert.ok(!echoed.includes(bad.id) && !echoed.includes(early.id));
+    ws.close();
+});
+
 test('a member taken off the whitelist is disconnected', async () => {
     const ws = await connect();
     const challenge = await challengeOf(ws);

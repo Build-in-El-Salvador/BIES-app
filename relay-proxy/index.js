@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
 import fs from 'fs';
 import { verifyEvent } from 'nostr-tools/pure';
+import { refusal } from './noteFilter.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 const LISTEN_PORT    = parseInt(process.env.PROXY_PORT || '7778', 10);
@@ -213,15 +214,30 @@ wss.on('connection', (clientWs, req) => {
         }
     }, AUTH_TIMEOUT);
 
+    // A client message on to the relay, unless it's a post or reply with
+    // words the community rules don't allow (noteFilter.js): that is
+    // answered OK false, as the relay itself refuses an event, and goes no
+    // further.
+    function forward(text, msg) {
+        const refused = refusal(msg);
+        if (refused) {
+            if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(refused));
+            return;
+        }
+        if (upstream && upstream.readyState === WebSocket.OPEN) {
+            upstream.send(normalizeMessage(text));
+        }
+    }
+
     // Flush buffered messages after successful auth
     function flushPending() {
         // Send buffered client messages to upstream
         while (pendingMessages.length > 0) {
             const buffered = pendingMessages.shift();
-            if (upstream && upstream.readyState === WebSocket.OPEN) {
-                const str = typeof buffered !== 'string' ? buffered.toString() : buffered;
-                upstream.send(normalizeMessage(str));
-            }
+            const str = typeof buffered !== 'string' ? buffered.toString() : buffered;
+            let msg = null;
+            try { msg = JSON.parse(str); } catch { /* forwarded as it came */ }
+            forward(str, msg);
         }
         // Send buffered upstream responses to client
         while (pendingUpstream.length > 0) {
@@ -297,10 +313,8 @@ wss.on('connection', (clientWs, req) => {
             return;
         }
 
-        // After auth: transparent forwarding to upstream
-        if (upstream && upstream.readyState === WebSocket.OPEN) {
-            upstream.send(normalizeMessage(text));
-        }
+        // After auth: on to upstream (posts and replies screened first)
+        forward(text, msg);
     }
 
     clientWs.on('close', () => {

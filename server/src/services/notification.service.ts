@@ -3,12 +3,13 @@
  * All notification creation goes through here to keep logic centralised.
  */
 
+import type { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { sendToUser } from './websocket.service';
 import { cache, cacheKey, TTL } from './redis.service';
 import { sendPushToUser, isWebPushEnabled } from './webpush.service';
 import { sendApnsToUser, isApnsEnabled } from './apns.service';
-import { hasBlocked } from './moderation.service';
+import { hasBlocked, hiddenFromIds } from './moderation.service';
 
 export type NotificationType =
     | 'NEW_MESSAGE'
@@ -74,6 +75,25 @@ async function fromBlockedMember(userId: string, data: Record<string, unknown>):
     // blocker either.
     const actorId = id ?? (await prisma.user.findUnique({ where: { nostrPubkey: pubkey! }, select: { id: true } }))?.id;
     return !!actorId && actorId !== userId && (await hasBlocked(actorId, { id: userId }));
+}
+
+/**
+ * The bell without what came from a member blocked either way, the ones from
+ * before the block included: a filter on the notification's stored data
+ * (JSON.stringify of `data`, so `"actorId":"<id>"` as written).
+ */
+export async function notFromHiddenMembers(userId: string): Promise<Prisma.NotificationWhereInput> {
+    const hidden = await hiddenFromIds(userId);
+    if (!hidden.length) return {};
+    const pubkeys = (await prisma.user.findMany({ where: { id: { in: hidden } }, select: { nostrPubkey: true } }))
+        .map((u) => u.nostrPubkey)
+        .filter(Boolean);
+    const field = (key: string, value: string) => JSON.stringify({ [key]: value }).slice(1, -1);
+    const needles = [
+        ...hidden.flatMap((id) => ACTOR_ID_KEYS.map((key) => field(key, id))),
+        ...pubkeys.flatMap((pubkey) => ACTOR_PUBKEY_KEYS.map((key) => field(key, pubkey))),
+    ];
+    return { NOT: needles.map((needle) => ({ data: { contains: needle } })) };
 }
 
 // Which Settings → Notifications switch decides whether a type is pushed to
