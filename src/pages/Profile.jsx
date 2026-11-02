@@ -197,7 +197,7 @@ const Profile = () => {
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                            <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                            <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.occurrenceStart || rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                             <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, background: rsvp.status === 'GOING' ? 'var(--color-green-tint)' : 'var(--color-amber-tint)', color: rsvp.status === 'GOING' ? '#15803d' : '#854d0e' }}>
                                                 {rsvp.status === 'GOING' ? 'Attending' : 'Interested'}
                                             </span>

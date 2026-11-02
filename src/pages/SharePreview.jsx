@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone } from 'lucide-react';
+import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone, Repeat } from 'lucide-react';
 import { previewApi } from '../services/api';
 import CoverPhoto from '../components/CoverPhoto';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
 import { formatDay } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
 import { fullDay, ticketProvider, timeRange } from '../utils/eventFormat';
+import { repeatLabel } from '../utils/eventRepeat';
 import { openExternal } from '../utils/openExternal';
 import { isNativePlatform } from '../utils/platform';
 import { BiesTag, namesText } from '../components/events/EventBits';
@@ -124,6 +125,10 @@ export default function SharePreview({ section }) {
                             <ul className="sp-facts">
                                 {isEvent && (
                                     <li><CalendarDays size={18} aria-hidden="true" /><span>{fullDay(found.startDate, i18n.language)}, {timeRange(found.startDate, found.endDate, i18n.language)}</span></li>
+                                )}
+                                {/* A repeating event: its next date above, how it repeats here. */}
+                                {isEvent && found.repeat && (
+                                    <li><Repeat size={18} aria-hidden="true" /><span>{repeatLabel(found.repeat, found.startDate, t, i18n.language)}</span></li>
                                 )}
                                 {found.location && (
                                     <li>

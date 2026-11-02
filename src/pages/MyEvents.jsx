@@ -8,6 +8,7 @@ import { eventsApi } from '../services/api';
 import { useApiQuery } from '../hooks/useApi';
 import { getAssetUrl } from '../utils/assets';
 import { publicUrl } from '../utils/publicUrl';
+import { RepeatLine } from '../components/events/EventBits';
 
 const VISIBILITY_CFG = {
     PUBLIC: { label: 'Public', color: 'var(--badge-success-text)', bg: 'var(--badge-success-bg)', icon: <Globe size={12} /> },
@@ -519,6 +520,7 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
                                             <VisibilityBadge visibility={event.visibility || 'DRAFT'} />
@@ -612,6 +614,7 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
                                             <span style={{
@@ -674,6 +677,7 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
                                             <span style={{

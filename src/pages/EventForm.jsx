@@ -5,6 +5,7 @@ import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move, Download, 
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
+import { fitRepeat, repeatChoiceLabel, repeatChoices } from '../utils/eventRepeat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
@@ -18,7 +19,9 @@ import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFra
  * it (me, or a business or farm I run or am on the team of: BIES's own
  * page makes it a BIES event), its cover and words, when (El Salvador
  * time) and where, the ticket link and price line (the app doesn't sell
- * tickets), co-hosts and sponsors, and who can see it.
+ * tickets), co-hosts and sponsors, and who can see it. It can repeat (every
+ * week, every other week, a weekday of every month), until a last day or
+ * for good: the dates here are its first, and the form edits all of them.
  */
 
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER'];
@@ -28,7 +31,7 @@ const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'pa
 
 const EMPTY = {
     hostListingId: '', thumbnail: '', coverFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
-    startDate: '', startTime: '19:00', endDate: '', endTime: '',
+    startDate: '', startTime: '19:00', endDate: '', endTime: '', repeat: '', repeatUntil: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
     ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
 };
@@ -69,10 +72,19 @@ export default function EventForm() {
     const [otherVisibility, setOtherVisibility] = useState(''); // an older event's invite-only or limited setting
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
     const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
+    const [proposal, setProposal] = useState(false); // a proposed meetup, which doesn't repeat
 
     const set = (key) => (e) => {
         const value = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
         setForm((f) => ({ ...f, [key]: value }));
+    };
+    // A new first date keeps how it repeats where that still fits (the last Saturday may become the fourth).
+    const setStart = (key) => (e) => {
+        const value = e.target.value;
+        setForm((f) => {
+            const next = { ...f, [key]: value };
+            return { ...next, repeat: fitRepeat(next.repeat, fromFormFields(next.startDate, next.startTime)) };
+        });
     };
 
     useEffect(() => {
@@ -85,13 +97,16 @@ export default function EventForm() {
             if (!e.canEdit) { setNotYours(true); return; }
             setHostSide(!!e.canDelete);
             setSavedHost(e.hostListing ? { id: e.hostListing.id, isOfficial: !!e.hostListing.isOfficial } : null);
-            const start = toFormFields(e.startDate);
-            const end = toFormFields(e.endDate);
+            setProposal(e.minAttendees != null);
+            // A repeating event shows its next date; the form edits it from its first.
+            const start = toFormFields('firstStartDate' in e ? e.firstStartDate : e.startDate);
+            const end = toFormFields('firstStartDate' in e ? e.firstEndDate : e.endDate);
             setForm({
                 hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
                 cardImage: e.cardImage || '', cardFrame: e.cardFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
+                repeat: e.repeat || '', repeatUntil: e.repeatUntil ? toFormFields(e.repeatUntil).date : '',
                 online: !!e.isOnline, locationName: e.locationName || '', locationAddress: e.locationAddress || '',
                 locationMapUrl: e.locationMapUrl || '', onlineUrl: e.onlineUrl || '',
                 ticketUrl: e.ticketUrl || '', bitcoinUrl: e.bitcoinUrl || '', priceLabel: e.priceLabel || '',
@@ -110,6 +125,10 @@ export default function EventForm() {
     const hostListing = hostChoices.find((l) => l.id === form.hostListingId);
     // Hosted as BIES's own page: a BIES event, with a highlight card its team sets up.
     const official = !!(hostListing?.isOfficial || (savedHost?.isOfficial && savedHost.id === form.hostListingId));
+    // How it can repeat, from its first date (none until there's one).
+    const firstStart = fromFormFields(form.startDate, form.startTime);
+    const repeatOptions = repeatChoices(firstStart);
+    const repeat = repeatOptions.includes(form.repeat) ? form.repeat : '';
 
     const importFrom = async () => {
         if (!importUrl.trim()) return;
@@ -180,6 +199,7 @@ export default function EventForm() {
         const description = (form.description || '').replace(/<p><br><\/p>/g, '').trim();
         if (!form.title.trim() || !description || !startDate) { setError(t('events.form.required')); return; }
         if (endDate && endDate < startDate) { setError(t('events.form.endBeforeStart')); return; }
+        if (repeat && form.repeatUntil && form.repeatUntil < form.startDate) { setError(t('events.form.reasons.repeat_until_before_start')); return; }
         const location = form.online ? '' : [form.locationName, form.locationAddress].map((s) => s.trim()).filter(Boolean).join(', ');
         const visibility = otherVisibility && form.visibility === 'PUBLIC' ? otherVisibility : form.visibility;
         const payload = {
@@ -189,6 +209,8 @@ export default function EventForm() {
             visibility,
             startDate,
             ...(endDate ? { endDate } : {}),
+            // The last day it may be on, as a day ("2026-12-19"): the server counts it to its end.
+            ...(proposal ? {} : { repeat, repeatUntil: repeat && form.repeatUntil ? form.repeatUntil : null }),
             isOnline: form.online,
             onlineUrl: form.online ? withHttps(form.onlineUrl) : '',
             location,
@@ -213,7 +235,7 @@ export default function EventForm() {
             navigate(`/events/${saved.id || id}`, { replace: editing });
         } catch (err) {
             const reason = err?.data?.reason;
-            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '' }))
+            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '', count: err?.data?.max }))
                 || err?.data?.details?.map((d) => `${d.field}: ${d.message}`).join(', ')
                 || err?.message || t('events.form.failed'));
             setSaving(false);
@@ -359,8 +381,8 @@ export default function EventForm() {
                     <div>
                         <label className="ef-label" htmlFor="ef-start">{t('events.form.starts')}</label>
                         <div className="ef-pair">
-                            <input id="ef-start" type="date" className="ef-input" value={form.startDate} onChange={set('startDate')} />
-                            <input type="time" className="ef-input" aria-label={t('events.form.starts')} value={form.startTime} onChange={set('startTime')} />
+                            <input id="ef-start" type="date" className="ef-input" value={form.startDate} onChange={setStart('startDate')} />
+                            <input type="time" className="ef-input" aria-label={t('events.form.starts')} value={form.startTime} onChange={setStart('startTime')} />
                         </div>
                     </div>
                     <div>
@@ -371,7 +393,22 @@ export default function EventForm() {
                         </div>
                     </div>
                 </div>
-                <p className="ef-hint">{t('events.form.timeHint')}</p>
+                <p className="ef-hint">{repeat ? t('events.form.timeHintRepeat') : t('events.form.timeHint')}</p>
+                {!proposal && (
+                    <>
+                        <label className="ef-label" htmlFor="ef-repeat">{t('events.form.repeats')}</label>
+                        <select id="ef-repeat" className="ef-input" value={repeat} onChange={set('repeat')} disabled={repeatOptions.length < 2}>
+                            {repeatOptions.map((r) => <option key={r || 'none'} value={r}>{repeatChoiceLabel(r, firstStart, t, i18n.language)}</option>)}
+                        </select>
+                        {repeat && (
+                            <>
+                                <label className="ef-label" htmlFor="ef-until">{t('events.form.until')}</label>
+                                <input id="ef-until" type="date" className="ef-input" value={form.repeatUntil} min={form.startDate || undefined} onChange={set('repeatUntil')} />
+                                <p className="ef-hint">{t('events.form.untilHint')}</p>
+                            </>
+                        )}
+                    </>
+                )}
             </section>
 
             <section className="ef-group">

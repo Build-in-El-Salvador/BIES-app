@@ -518,6 +518,12 @@ model Event {
   // Where it is, when that's a business or farm on BIES: its name, address
   // and map link fill the event's. Not a host or partner: no say needed.
   venueListingId String?  @map("venue_listing_id")
+  // An event that repeats ('' for a one-off): WEEKLY | BIWEEKLY | MONTHLY_NTH
+  // (the first to fourth of its weekday) | MONTHLY_LAST (the last of it).
+  // startDate and endDate are its first date; repeatUntil is the end of the
+  // last day it may be on (null: for good). utils/eventRepeat.ts.
+  repeat        String    @default("")
+  repeatUntil   DateTime? @map("repeat_until")
 
   host        User              @relation(fields: [hostId], references: [id], onDelete: Cascade)
   hostListing DirectoryListing? @relation("EventsHosted", fields: [hostListingId], references: [id], onDelete: SetNull)
@@ -586,6 +592,9 @@ model EventAttendee {
   status        String   @default("GOING") // GOING | INTERESTED | NOT_GOING
   nostrEventId  String?  @map("nostr_event_id") // NIP-52 RSVP event id (kind 31925)
   joinedAt      DateTime @default(now()) @map("joined_at")
+  // On an event that repeats: the date this answer is for (its start). It
+  // counts only for that date; null on a one-off event.
+  occurrenceStart DateTime? @map("occurrence_start")
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
