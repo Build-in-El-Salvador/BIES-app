@@ -68,10 +68,11 @@ export async function signForApp(req: Request, res: Response): Promise<void> {
 const ID_RE = /^[a-z0-9]{20,40}$/;
 
 /**
- * GET /api/signer/log?limit=50&kind=0&before=<id>
+ * GET /api/signer/log?limit=50&kind=0&hide=22242,24242&before=<id>
  * What BIES has signed with this account's key, newest first. Page with
- * `before` (the `next` of the previous page) and filter by `kind`, so a burst
- * of harmless signatures can't hide an important one.
+ * `before` (the `next` of the previous page), filter by `kind` or leave kinds
+ * out with `hide`, so a burst of harmless signatures can't hide an important
+ * one (Settings → Nostr leaves out relay sign-ins and upload tokens).
  */
 export async function getSignatureLog(req: Request, res: Response): Promise<void> {
     try {
@@ -79,9 +80,11 @@ export async function getSignatureLog(req: Request, res: Response): Promise<void
         const limit = Number.isNaN(requested) ? 50 : Math.min(Math.max(requested, 1), 200);
         const kind = parseInt(String(req.query.kind ?? ''), 10);
         const before = typeof req.query.before === 'string' && ID_RE.test(req.query.before) ? req.query.before : null;
+        const hide = String(req.query.hide ?? '').split(',').map((k) => parseInt(k, 10)).filter((k) => !Number.isNaN(k)).slice(0, 20);
+        const kindFilter = !Number.isNaN(kind) ? { kind } : hide.length ? { kind: { notIn: hide } } : {};
 
         const signatures = await prisma.hostedSignature.findMany({
-            where: { userId: req.user!.id, ...(Number.isNaN(kind) ? {} : { kind }) },
+            where: { userId: req.user!.id, ...kindFilter },
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
             take: limit,
             ...(before ? { cursor: { id: before }, skip: 1 } : {}),

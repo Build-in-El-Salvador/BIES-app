@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../components/moderation/objectionable';
-import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckCircle, Save, Move, Search, X, RefreshCw, AtSign, Zap, User, Link as LinkIcon, Trash2, GripVertical, Upload, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, Copy, Check } from 'lucide-react';
+import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, Save, Move, Search, X, Zap, User, Link as LinkIcon, Trash2, GripVertical, Upload, Image as ImageIcon, Layout as LayoutIcon, LineChart as LineChartIcon, AlignLeft as AlignLeftIcon, Copy, Check } from 'lucide-react';
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,8 @@ import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
+import { publishPublicProfile } from '../services/publicNostrProfile';
+import { isNativePlatform } from '../utils/platform';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
 import ImageCropModal from '../components/ImageCropModal';
@@ -89,13 +91,8 @@ const ProfileEdit = () => {
     });
     const [npubCopied, setNpubCopied] = useState(false);
 
-    // NIP-05 availability check
-    const [nip05Available, setNip05Available] = useState(null);
-    const [nip05Checking, setNip05Checking] = useState(false);
-
     // Nostr profile (fetched from relays)
     const [nostrProfile, setNostrProfile] = useState(null);
-    const [loadingNostr, setLoadingNostr] = useState(false);
 
     // Project search
     const [projectSearch, setProjectSearch] = useState('');
@@ -163,27 +160,6 @@ const ProfileEdit = () => {
         }, 300);
         return () => clearTimeout(timer);
     }, [projectSearch]);
-
-    // Debounced NIP-05 availability check
-    useEffect(() => {
-        const name = form.nip05Name.trim().toLowerCase();
-        if (!name || name.length < 3) {
-            setNip05Available(null);
-            return;
-        }
-        setNip05Checking(true);
-        const timer = setTimeout(async () => {
-            try {
-                const res = await profilesApi.checkNip05(name);
-                setNip05Available(res.available);
-            } catch {
-                setNip05Available(null);
-            } finally {
-                setNip05Checking(false);
-            }
-        }, 500);
-        return () => { clearTimeout(timer); setNip05Checking(false); };
-    }, [form.nip05Name]);
 
     // Auto-fetch projects the user owns or is a team member of
     useEffect(() => {
@@ -266,7 +242,6 @@ const ProfileEdit = () => {
     };
 
     const fetchNostrProfile = async () => {
-        setLoadingNostr(true);
         try {
             const profile = await nostrService.getProfile(user.nostrPubkey);
             setNostrProfile(profile);
@@ -275,8 +250,6 @@ const ProfileEdit = () => {
             }
         } catch (err) {
             console.error('Failed to fetch Nostr profile:', err);
-        } finally {
-            setLoadingNostr(false);
         }
     };
 
@@ -286,7 +259,7 @@ const ProfileEdit = () => {
         setForm(prev => ({ ...prev, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
     };
 
-    const handleSave = async (e, { publishPublic = false } = {}) => {
+    const handleSave = async (e) => {
         e?.preventDefault();
         setSaving(true);
         setError('');
@@ -313,7 +286,6 @@ const ProfileEdit = () => {
                 customSections: form.customSections,
                 showExperience: form.showExperience,
                 nostrNpub: form.nostrNpub,
-                nip05Name: form.nip05Name || undefined,
                 lightningAddress: form.lightningAddress,
                 bolt12Offer: form.bolt12Offer,
             };
@@ -324,8 +296,8 @@ const ProfileEdit = () => {
             // Email accounts skip this: the server publishes their kind:0 when the
             // profile is saved, and a second, different kind:0 would race it.
             if (nostrSigner.signsOnDevice) {
-                // Always sync kind:0 metadata to the private BIES relay;
-                // optionally also broadcast to public relays
+                // The kind:0 on the private BIES relay. Public Nostr is
+                // Settings → Nostr's: it follows below, once published there.
                 try {
                     const nostrData = {};
                     if (form.name) nostrData.display_name = form.name;
@@ -337,13 +309,15 @@ const ProfileEdit = () => {
                     // Links as Settings → Privacy allows ("Only me" leaves them out).
                     const privacy = await settingsApi.getPrivacy().catch(() => null);
                     Object.assign(nostrData, nostrLinkFields({ ...form, website }, privacy));
-                    if (publishPublic) {
-                        await nostrService.updateProfile(nostrData);
-                    } else {
-                        await nostrService.updateProfileToBiesRelay(nostrData);
-                    }
+                    await nostrService.updateProfileToBiesRelay(nostrData);
                 } catch (nostrErr) {
                     console.error('Relay profile sync failed (non-blocking):', nostrErr);
+                }
+                // The phone apps keep to BIES's relay (Settings → Nostr).
+                if (!isNativePlatform()) {
+                    settingsApi.getNostr()
+                        .then((pub) => (pub.on && pub.publishedAt ? publishPublicProfile() : null))
+                        .catch((err) => console.error('Public profile sync failed (non-blocking):', err));
                 }
             }
 
@@ -708,11 +682,7 @@ const ProfileEdit = () => {
                         <div className="pe-banner-save-group">
                             <button onClick={handleSave} type="button" disabled={saving} className="pe-save-btn pe-banner-save-bies">
                                 {saving ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={14} />}
-                                {saving ? 'Saving...' : 'Save to BIES'}
-                            </button>
-                            <button onClick={(e) => handleSave(e, { publishPublic: true })} type="button" disabled={saving} className="pe-save-btn pe-banner-save-nostr">
-                                {saving ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <NostrIcon size={14} />}
-                                {saving ? 'Saving...' : 'Save to public Nostr'}
+                                {saving ? 'Saving...' : 'Save'}
                             </button>
                         </div>
                     </div>
@@ -798,16 +768,6 @@ const ProfileEdit = () => {
                                 </div>
                             </div>
                         )}
-                        <div className="pe-field">
-                            <label className="pe-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                Nostr @Name
-                                <NostrIcon size={12} color="#8b5cf6" />
-                            </label>
-                            <div className="pe-input-icon">
-                                <AtSign size={16} className="pe-icon" />
-                                <input type="text" value={form.nostrName} onChange={handleChange('nostrName')} className="pe-input pe-input-with-icon" placeholder="username" />
-                            </div>
-                        </div>
                         <div className="pe-field">
                             <label className="pe-label">Current Role / Title</label>
                             <input type="text" value={form.title} onChange={handleChange('title')} className="pe-input" placeholder="e.g. Founder, CTO, Angel Investor" />
@@ -905,32 +865,6 @@ const ProfileEdit = () => {
                                 <input type="text" value={form.bolt12Offer} onChange={handleChange('bolt12Offer')} className="pe-input pe-input-with-icon" placeholder="lno1..." />
                             </div>
                             <p className="pe-hint">For private Bolt12 zaps — Phoenix, Zeus, CLN, etc.</p>
-                        </div>
-                        <div className="pe-field">
-                            <label className="pe-label" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                NIP-05 Identity
-                                <NostrIcon size={12} color="#8b5cf6" />
-                            </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                <div className="pe-input-icon" style={{ flex: 1 }}>
-                                    <AtSign size={16} className="pe-icon" />
-                                    <input
-                                        type="text"
-                                        value={form.nip05Name}
-                                        onChange={handleChange('nip05Name')}
-                                        className="pe-input pe-input-with-icon"
-                                        placeholder="alice"
-                                    />
-                                </div>
-                                {nip05Checking && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-gray-400)' }} />}
-                                {!nip05Checking && nip05Available === true && <CheckCircle size={14} style={{ color: '#16a34a' }} />}
-                                {!nip05Checking && nip05Available === false && <X size={14} style={{ color: '#ef4444' }} />}
-                            </div>
-                            {form.nip05Name && (
-                                <p className="pe-hint" style={{ color: nip05Available === false ? '#ef4444' : undefined }}>
-                                    {nip05Available === false ? 'Taken' : `${form.nip05Name.toLowerCase()}@buildinelsalvador.com`}
-                                </p>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -1143,15 +1077,16 @@ const ProfileEdit = () => {
                         <NostrIcon size={18} color="#8b5cf6" />
                         <h3 style={{ fontSize: '1.05rem', fontWeight: 700, fontFamily: 'var(--font-display)', margin: 0, color: 'var(--color-gray-900)' }}>Nostr</h3>
                     </div>
-                    <button type="button" onClick={fetchNostrProfile} disabled={loadingNostr} style={{
+                    <p style={{ margin: '0 0 0.75rem', fontSize: '0.88rem', lineHeight: 1.45, color: 'var(--color-gray-600)' }}>
+                        {t('nostrSettings.profileEditNote')}
+                    </p>
+                    <Link to="/settings/nostr" className="pe-nostr-link" style={{
                         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-                        padding: '0.6rem 0.75rem', background: 'none', border: '1px solid #e9d5ff', borderRadius: 'var(--radius-md, 6px)',
-                        color: '#8b5cf6', fontWeight: 600, fontSize: '0.85rem', cursor: loadingNostr ? 'not-allowed' : 'pointer', marginBottom: '0.75rem',
-                        opacity: loadingNostr ? 0.6 : 1,
+                        padding: '0.6rem 0.75rem', border: '1px solid #e9d5ff', borderRadius: 'var(--radius-md, 6px)',
+                        color: '#8b5cf6', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none', boxSizing: 'border-box',
                     }}>
-                        {loadingNostr ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={15} />}
-                        {loadingNostr ? 'Fetching...' : 'Fetch from public Nostr'}
-                    </button>
+                        <NostrIcon size={15} color="#8b5cf6" /> {t('nostrSettings.profileEditLink')}
+                    </Link>
                 </div>
 
                     </div>
@@ -1163,11 +1098,7 @@ const ProfileEdit = () => {
                 <div className="pe-bottom-save">
                     <button onClick={handleSave} type="button" disabled={saving} className="pe-save-btn pe-save-btn-full">
                         {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={16} />}
-                        {saving ? 'Saving...' : 'Save to BIES'}
-                    </button>
-                    <button onClick={(e) => handleSave(e, { publishPublic: true })} type="button" disabled={saving} className="pe-save-btn pe-save-btn-full pe-save-btn-nostr">
-                        {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <NostrIcon size={16} />}
-                        {saving ? 'Saving...' : 'Save to public Nostr'}
+                        {saving ? 'Saving...' : 'Save'}
                     </button>
                 </div>
 
@@ -1394,11 +1325,6 @@ const ProfileEdit = () => {
                 .pe-banner-save-bies {
                     box-shadow: 0 2px 6px rgba(0,0,0,0.25);
                 }
-                .pe-banner-save-nostr {
-                    background: #8b5cf6;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-                }
-                .pe-banner-save-nostr:hover { background: #7c3aed; }
                 .pe-avatar-row {
                     padding: 0 1.25rem 1rem;
                     position: relative;
@@ -1472,8 +1398,6 @@ const ProfileEdit = () => {
                 }
                 .pe-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
                 .pe-save-btn-full { flex: 1; justify-content: center; height: 40px; }
-                .pe-save-btn-nostr { background: #8b5cf6; }
-                .pe-save-btn-nostr:hover { background: #7c3aed; }
                 .pe-bottom-save { padding-top: 0.25rem; display: flex; gap: 0.5rem; }
 
                 /* ── Toggle ── */

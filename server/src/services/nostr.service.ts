@@ -386,6 +386,35 @@ const MAX_EVENTS_TO_RETRACT = 5000;
 const EVENTS_PER_DELETION = 300;
 const QUERY_WAIT_MS = 4000;
 
+// ─── A member's profile on public Nostr (services/publicNostrProfile.ts) ─────
+
+/**
+ * The newest profile (kind 0) a key has on the public relays, read from
+ * those only, never from BIES's relay, which holds BIES's own copy. Null
+ * when none was found.
+ */
+export async function fetchPublicProfile(pubkey: string): Promise<Record<string, unknown> | null> {
+    const pool = await getPool();
+    const events = await pool.querySync(publicPublishRelays(), { kinds: [0], authors: [pubkey] }, { maxWait: QUERY_WAIT_MS });
+    const newest = events
+        .filter((e) => e.pubkey === pubkey && e.kind === 0)
+        .sort((a, b) => b.created_at - a.created_at)[0];
+    if (!newest) return null;
+    try {
+        const content = JSON.parse(newest.content);
+        return content && typeof content === 'object' && !Array.isArray(content) ? content : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Send a signed event to the public relays (not BIES's). How many took it. */
+export async function publishToPublicRelays(event: NostrEvent): Promise<number> {
+    const pool = await getPool();
+    const results = await Promise.allSettled(pool.publish(publicPublishRelays(), event));
+    return results.filter((r) => r.status === 'fulfilled').length;
+}
+
 /** The events a pubkey published, from BIES's relay and the public ones. */
 async function findEventsBy(pubkey: string): Promise<NostrEvent[]> {
     const pool = await getPool();

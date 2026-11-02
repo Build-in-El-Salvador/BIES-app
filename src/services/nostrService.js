@@ -882,7 +882,7 @@ class NostrService {
      * Publish a directory listing as a NIP-99 classified listing (kind:30402).
      * For Nostr-native users — signs via browser extension. Twin of the
      * server's publishDirectoryListing (nostr.service.ts): same kind, tags,
-     * and content. Returns the signed event id so callers can persist it
+     * content and relay. Returns the signed event id so callers can persist it
      * as nostrListingEventId.
      * @param {Object} listing - { id, type, name, about, photo, location, products, skills }
      */
@@ -929,8 +929,10 @@ class NostrService {
             content: about,
         };
 
+        // BIES's relay only, as the server does for keys it holds: what a
+        // member shares on public Nostr is their choice (Settings → Nostr).
         const signedEvent = await nostrSigner.signEvent(event);
-        await Promise.any(this.pool.publish(this.relays, signedEvent, { onauth: handleRelayAuth }));
+        await Promise.any(this.pool.publish([this.biesRelay], signedEvent, { onauth: handleRelayAuth }));
         return signedEvent.id;
     }
 

@@ -15,10 +15,9 @@ const EXTENSION_HINT = "This error is usually caused by a password manager brows
 const NO_PRF = "This device can't create passkeys (missing PRF support). Try a device with a fingerprint or face sensor.";
 
 /**
- * Settings → Nostr key: the public key to copy, the secret key (revealed
- * on request, or where it's held: an extension, a signer, Amber, or BIES
- * for email accounts), and the passkey backup on the web. Moved here from
- * the Settings page as it was.
+ * Settings → Nostr → Your key: the public key to copy, the secret key
+ * (revealed on request, or where it's held: an extension, a signer, Amber,
+ * or BIES for email accounts), and the passkey backup on the web.
  */
 const NostrKeys = () => {
     const { t } = useTranslation();
@@ -184,7 +183,7 @@ const NostrKeys = () => {
     );
 
     return (
-        <SettingsPage title={t('settings.nostrKey')} back="/settings">
+        <SettingsPage title={t('nostrSettings.yourKey')} back="/settings/nostr">
             <div className="nostr-keys">
             {!npub ? (
                 <SettingsGroup>

@@ -214,7 +214,8 @@ export const moderationApi = {
 
 export const signerApi = {
     sign: (event) => post('/signer/sign', { event }).then((data) => data.event),
-    log: (limit) => get('/signer/log', { limit }),
+    // hide: kinds to leave out, e.g. [22242, 24242]
+    log: (limit, hide = []) => get('/signer/log', { limit, ...(hide.length ? { hide: hide.join(',') } : {}) }),
 };
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
@@ -776,6 +777,10 @@ export const settingsApi = {
     updateNotifications: (data) => put('/settings/notifications', data),
     getPrivacy: () => get('/settings/privacy'),
     updatePrivacy: (data) => put('/settings/privacy', data),
+    // Settings → Nostr: the public Nostr profile (server: controllers/publicNostr.controller.ts)
+    getNostr: () => get('/settings/nostr'),
+    updateNostr: (data) => put('/settings/nostr', data), // { on, parts }
+    publishNostr: (event) => post('/settings/nostr/publish', event ? { event } : {}),
 };
 
 // BIES Talents: what members offer to do, with their proof of work (members only).

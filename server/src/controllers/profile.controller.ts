@@ -13,6 +13,9 @@ import { removeTags } from '../middleware/sanitize';
 import { alphabetical, inOrder } from '../utils/listOrder';
 import { networkPreviews } from '../services/memberNetwork';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import { isClaimedNip05, looksGivenAtSignup } from '../services/nip05';
+import { publicNostrOf } from '../services/publicNostrProfile';
+import { publishHostedPublicProfile } from './publicNostr.controller';
 
 // What a member card shows (Members: icons, list and cards). Everything else
 // comes with the profile page itself (GET /profiles/:id), so a list of 48
@@ -23,6 +26,7 @@ function memberCard(p: any) {
         id: p.id,
         userId: p.userId,
         name: p.name,
+        verified: !!p.verified, // a BIES address they chose (profilePrivacy.ts)
         avatar: p.avatar,
         title: p.title,
         company: p.company,
@@ -98,7 +102,8 @@ export const updateProfileSchema = z.object({
     nostrFeedMode: z.enum(['off', 'private', 'public', 'combined']).optional(),
     nostrNpub: short.optional(),
     // NIP-05 & Lightning
-    nip05Name: z.string().min(3).max(30).regex(/^[a-z0-9._-]+$/, 'Only lowercase letters, numbers, dots, hyphens, underscores').optional(),
+    // '' removes it (Settings → Nostr).
+    nip05Name: z.string().trim().toLowerCase().min(3).max(30).regex(/^[a-z0-9._-]+$/, 'Only lowercase letters, numbers, dots, hyphens, underscores').optional().or(z.literal('')),
     lightningAddress: z.string().max(320).optional(),
     bolt12Offer: z.string().max(2000).regex(/^lno1[a-z0-9]+$/, 'Must be a valid Bolt12 offer (starts with lno1)').optional().or(z.literal('')),
     // Investor-specific
@@ -110,6 +115,9 @@ export const updateProfileSchema = z.object({
     lookingFor: list().optional(),
     isPublic: z.boolean().optional(),
 });
+
+// What the public Nostr profile is made from (services/publicNostrProfile.ts).
+const PUBLIC_PROFILE_FIELDS = ['name', 'bio', 'avatar', 'banner', 'website', 'nip05Name', 'lightningAddress', 'bolt12Offer'];
 
 // Names@buildinelsalvador.com that would read as BIES itself speaking: kept
 // for staff. Other Nostr clients show the name as verified by BIES's domain.
@@ -530,6 +538,15 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
                         return;
                     }
                 }
+                // Names like the ones sign-up used to hand out stay with those
+                // who were given them: they don't count as verified.
+                if (looksGivenAtSignup(data.nip05Name)) {
+                    const mine = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { nip05Name: true } });
+                    if (mine?.nip05Name !== data.nip05Name) {
+                        res.status(409).json({ error: 'Choose a name of your own.', reason: 'reserved' });
+                        return;
+                    }
+                }
                 const existing = await prisma.profile.findFirst({
                     where: { nip05Name: data.nip05Name, userId: { not: req.user!.id } },
                 });
@@ -564,9 +581,12 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             cache.delPattern('profiles:'),
         ]);
 
-        // A profile photo or cover replaced: the old file goes, if it was theirs.
+        // A profile photo or cover replaced: the old file goes, if it was
+        // theirs. Not once BIES has published a public Nostr profile for
+        // them: copies of it with the old photo stay on relays it can't update.
+        const publicNostr = publicNostrOf(profile.publicNostr);
         const replaced = [oldProfile?.avatar, oldProfile?.banner].filter((url): url is string => !!url && url !== profile.avatar && url !== profile.banner);
-        if (replaced.length) await discardUploads(replaced, { uploadedBy: [req.user!.id] });
+        if (replaced.length && !publicNostr.publishedAt) await discardUploads(replaced, { uploadedBy: [req.user!.id] });
 
         const arrayParsedFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
         const parsed: any = { ...profile, coinosToken: undefined };
@@ -580,6 +600,13 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         if (req.body.nip05Name !== undefined || req.body.lightningAddress !== undefined || req.body.bolt12Offer !== undefined || req.body.name !== undefined) {
             publishProfileUpdate(req.user!.id, nostrProfileFor(profile, privacy))
                 .catch((err) => console.error('[Nostr] Profile sync failed:', err));
+        }
+
+        // Their public Nostr profile follows, once they've published one (for
+        // keys BIES holds; the app does it for keys on the member's device).
+        if (publicNostr.on && publicNostr.publishedAt && PUBLIC_PROFILE_FIELDS.some((f) => req.body[f] !== undefined)) {
+            publishHostedPublicProfile(req.user!.id)
+                .catch((err) => console.error('[Nostr] Public profile sync failed:', err instanceof Error ? err.message : err));
         }
 
         // Announce lightning address addition on the BIES feed, unless the
@@ -620,6 +647,15 @@ export async function checkNip05(req: Request, res: Response): Promise<void> {
         if (isReservedNip05(name) && !isStaffUser(req.user)) {
             res.json({ available: false, name, reason: 'reserved' });
             return;
+        }
+        if (looksGivenAtSignup(name)) {
+            const mine = req.user?.id
+                ? await prisma.profile.findUnique({ where: { userId: req.user.id }, select: { nip05Name: true } })
+                : null;
+            if (mine?.nip05Name !== name) {
+                res.json({ available: false, name, reason: 'reserved' });
+                return;
+            }
         }
         const existing = await prisma.profile.findFirst({
             where: {
@@ -682,7 +718,7 @@ export async function getMyProfile(req: Request, res: Response): Promise<void> {
         }
 
         const arrayFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
-        const parsed: any = { ...profile, coinosToken: undefined };
+        const parsed: any = { ...profile, coinosToken: undefined, verified: isClaimedNip05(profile.nip05Name) };
         for (const f of arrayFields) {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }

@@ -507,8 +507,8 @@ describe('POST /api/auth/email/verify', () => {
         // The stored key decrypts to the account's own pubkey.
         const secret = Uint8Array.from(Buffer.from(decryptPrivateKey(created.encryptedPrivkey), 'hex'));
         expect(getPublicKey(secret)).toBe(created.nostrPubkey);
-        // The NIP-05 name comes from the pubkey, not the email address.
-        expect(created.profile.nip05Name).toBe(`nostr-${created.nostrPubkey.slice(0, 8)}`);
+        // No BIES address yet: the member claims one in Settings → Nostr.
+        expect(created.profile.nip05Name ?? null).toBeNull();
         expect(created.profile.name).toBe('');
 
         expect(addToRelayWhitelist).toHaveBeenCalledWith(created.nostrPubkey, { proven: true });

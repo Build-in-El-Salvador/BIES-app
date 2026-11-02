@@ -8,6 +8,8 @@
  * cache (profile.controller.ts), so one cached profile serves everyone.
  */
 
+import { isClaimedNip05, nip05Address } from './nip05';
+
 export type Viewer = 'self' | 'member' | 'public';
 
 export const PRIVACY_CHOICES = {
@@ -82,13 +84,16 @@ export function canSeeNetwork(privacy: Privacy, viewer: Viewer): boolean {
 /**
  * A profile (parsed, as the profile routes send it) as this viewer may see
  * it. `networkHidden` tells the app the follower lists are private.
+ * `verified`: the member claimed a BIES address (services/nip05.ts), shown
+ * to everyone, even when the address itself is in their hidden links.
  */
 export function profileForViewer<T extends Record<string, any>>(profile: T, viewer: Viewer): Record<string, any> {
     const privacy = privacyOf(profile.privacy);
-    if (viewer === 'self') return { ...profile, privacy };
+    const verified = isClaimedNip05(profile.nip05Name);
+    if (viewer === 'self') return { ...profile, privacy, verified };
 
     if (viewer === 'public') {
-        const out: Record<string, any> = {};
+        const out: Record<string, any> = { verified };
         for (const field of PUBLIC_FIELDS) if (field in profile) out[field] = profile[field];
         if (privacy.bio !== 'PUBLIC') out.bio = '';
         if (profile.user) out.user = { id: profile.user.id, nostrPubkey: profile.user.nostrPubkey };
@@ -96,8 +101,9 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
         return out;
     }
 
-    const out: Record<string, any> = { ...profile };
+    const out: Record<string, any> = { ...profile, verified };
     delete out.privacy;
+    delete out.publicNostr;
     for (const key of ['location', 'links', 'details'] as const) {
         if (privacy[key] === 'ONLY_ME') Object.assign(out, HIDDEN_AS[key]);
     }
@@ -136,7 +142,7 @@ export function nostrProfileFor(profile: {
         picture: profile.avatar || '',
         banner: profile.banner || '',
         website: links ? profile.website || '' : '',
-        nip05: links && profile.nip05Name ? `${profile.nip05Name}@buildinelsalvador.com` : '',
+        nip05: links && profile.nip05Name ? nip05Address(profile.nip05Name) : '',
         lud16: links && !isLnurl ? profile.lightningAddress || '' : '',
         lud06: links && isLnurl ? profile.lightningAddress || '' : '',
         bolt12: links ? profile.bolt12Offer || '' : '',

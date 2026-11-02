@@ -207,6 +207,9 @@ model Profile {
   // Who sees what (Settings → Privacy), JSON: { bio, location, links, details, network }.
   // Missing keys take the defaults in services/profilePrivacy.ts.
   privacy      String   @default("{}")
+  // Their profile on public Nostr (Settings → Nostr), JSON: { on, parts, publishedAt }.
+  // See services/publicNostrProfile.ts.
+  publicNostr  String   @default("{}") @map("public_nostr")
   viewCount    Int      @default(0) @map("view_count")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
