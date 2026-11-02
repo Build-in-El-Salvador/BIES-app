@@ -7,6 +7,8 @@ import { removeTags } from '../middleware/sanitize';
 import { isOpen } from './project.controller';
 import { isRepeat, repeatLabel, shownOccurrence } from '../utils/eventRepeat';
 import { dayView } from '../services/eventDates.service';
+import { proposalStage } from '../services/eventProposals.service';
+import { cardFile, cardKey, shareCardSpec, SQUARE, WIDE, type CardSpec } from '../services/shareCard.service';
 
 /**
  * Public previews of a shared page, for people who aren't signed in to BIES:
@@ -35,9 +37,19 @@ const parseJson = <T>(value: string | null | undefined, fallback: T): T => {
     try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
 };
 
-/** Plain text, cut at a word near `length`, with … when cut. */
+// Where the words break onto a new line or paragraph.
+const BREAK = /<\/(?:p|div|h[1-6]|li|blockquote)>|<br\s*\/?>/gi;
+
+/**
+ * Plain text, cut at a word near `length`, with … when cut. Its lines run on
+ * with a space between, and a full stop after one without (a heading):
+ * "BIES Networking night. Just a room…", not "nightJust a room".
+ */
 export function summary(text: string, length = SUMMARY_LENGTH): { text: string; cut: boolean } {
-    const plain = removeTags(text || '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    const plain = (text || '').split(BREAK)
+        .map((piece) => removeTags(piece).replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .reduce((all, piece) => (all ? `${all}${/[.!?…:;,]$/.test(all) ? '' : '.'} ${piece}` : piece), '');
     if (plain.length <= length) return { text: plain, cut: false };
     const space = plain.lastIndexOf(' ', length);
     return { text: `${plain.slice(0, space > length * 0.6 ? space : length).replace(/[\s,.;:–-]+$/, '')}…`, cut: true };
@@ -206,6 +218,11 @@ async function eventTeaser(id: string) {
         repeat: isRepeat(event.repeat) ? event.repeat : '',
         photo: event.thumbnail || '',
         coverFrame: event.coverFrame,
+        // The cover as the link's picture shows it (shareCard.service.ts).
+        shareFrame: event.shareFrame,
+        // A proposed meetup: proposed until enough people are in.
+        stage: proposalStage(event),
+        minAttendees: event.minAttendees,
         about: about.text,
         isOfficial: liveListing(event.hostListing) && event.hostListing!.isOfficial,
         priceLabel: event.priceLabel,
@@ -273,20 +290,51 @@ const OPPORTUNITY_TYPES: Record<string, string> = {
     investment: 'Project', 'business-for-sale': 'Business for sale', job: 'Job', partnership: 'Partnership', program: 'Grant or program',
 };
 
+const whenParts = (date: Date | string) => Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/El_Salvador', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+}).formatToParts(new Date(date)).map((p) => [p.type, p.value]));
+
+/** The day an event is on, in El Salvador: "Sat 14 Nov". */
+export function eventDay(date: Date | string): string {
+    const parts = whenParts(date);
+    return `${parts.weekday} ${parts.day} ${parts.month}`;
+}
+
+/** The time it starts, in El Salvador: "7:00 PM". */
+export function eventTime(date: Date | string): string {
+    const parts = whenParts(date);
+    return `${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
+}
+
 /** When an event starts, in El Salvador: "Sat 14 Nov · 7:00 PM". */
 export function eventWhen(date: Date | string): string {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/El_Salvador', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
-    }).formatToParts(new Date(date)).map((p) => [p.type, p.value]));
-    return `${parts.weekday} ${parts.day} ${parts.month} · ${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
+    return `${eventDay(date)} · ${eventTime(date)}`;
+}
+
+type EventTeaser = NonNullable<Awaited<ReturnType<typeof eventTeaser>>>;
+const isEventTeaser = (found: Teaser): found is EventTeaser => found.section === 'events' && 'startDate' in found;
+
+/** What the picture of an event's link card shows. */
+export function eventCardSpec(found: EventTeaser): CardSpec {
+    return shareCardSpec({ ...found, repeatText: found.repeat ? repeatLabel(found.repeat, new Date(found.startDate)) : '' });
 }
 
 /** The link card's words: what it is and where, then its own words. */
 export function cardText(found: Teaser): { title: string; description: string } {
+    if (isEventTeaser(found)) {
+        // The day is in its name, as iMessage shows only the name (and the
+        // picture says BIES): "BIES Soccer · Sat 7 Nov", then
+        // "4:00 PM · Every other Saturday · Sports field — …".
+        const lead = [
+            eventTime(found.startDate),
+            found.repeat ? repeatLabel(found.repeat, new Date(found.startDate)) : '',
+            found.stage === 'proposed' ? 'Proposed meetup' : '',
+            found.location,
+        ].filter(Boolean).join(' · ');
+        const about = summary(found.about, 160).text;
+        return { title: `${found.name} · ${eventDay(found.startDate)}`, description: [lead, about].filter(Boolean).join(' — ') };
+    }
     const parts: string[] = [];
-    if (found.section === 'events' && 'startDate' in found) parts.push(eventWhen(found.startDate));
-    // "Sat 7 Nov · 9:00 AM · Every other Saturday"
-    if (found.section === 'events' && 'repeat' in found && found.repeat) parts.push(repeatLabel(found.repeat, new Date(found.startDate)));
     if (found.section === 'opportunities' && 'type' in found) parts.push(OPPORTUNITY_TYPES[found.type] || 'Opportunity');
     if (found.section === 'talents') parts.push('Talent');
     if (found.location) parts.push(found.location);
@@ -315,16 +363,28 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
     let title = 'BIES | Build in El Salvador';
     let description = 'Trusted businesses and farms, opportunities and talent, recommended by members of Build in El Salvador.';
     let image = `${base}/icons/icon-512.png`;
+    let imageSize: { width: number; height: number } | null = null;
     try {
         const found = await teaser(section, id);
         if (found) {
             ({ title, description } = cardText(found));
-            if (found.photo) image = /^https?:\/\//i.test(found.photo) ? found.photo : `${base}${found.photo.startsWith('/') ? '' : '/'}${found.photo}`;
+            if (isEventTeaser(found)) {
+                // An event's picture is drawn for it (getEventCard), named after what's on it.
+                const spec = eventCardSpec(found);
+                image = `${base}/api/preview/events/${id}/card.jpg?v=${cardKey(spec)}`;
+                imageSize = spec.format === 'square' ? SQUARE : WIDE;
+            } else if (found.photo) {
+                image = /^https?:\/\//i.test(found.photo) ? found.photo : `${base}${found.photo.startsWith('/') ? '' : '/'}${found.photo}`;
+            }
         }
     } catch (error) {
         console.error('Preview card error:', error);
     }
     const [t, d, i, u] = [title, description, image, page].map(escapeHtml);
+    // Its size up front, so WhatsApp shows the picture before it has it.
+    const sized = imageSize
+        ? `\n  <meta property="og:image:width" content="${imageSize.width}" />\n  <meta property="og:image:height" content="${imageSize.height}" />\n  <meta property="og:image:type" content="image/jpeg" />`
+        : '';
     res.set('Cache-Control', 'public, max-age=600');
     res.type('html').send(`<!DOCTYPE html>
 <html lang="en">
@@ -333,7 +393,7 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
   <meta name="robots" content="noindex" />
   <meta property="og:title" content="${t}" />
   <meta property="og:description" content="${d}" />
-  <meta property="og:image" content="${i}" />
+  <meta property="og:image" content="${i}" />${sized}
   <meta property="og:url" content="${u}" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="BIES" />
@@ -348,4 +408,32 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
   <p><a href="${u}">${t}</a></p>
 </body>
 </html>`);
+}
+
+/**
+ * GET /preview/events/:id/card.jpg — the picture a shared event's link card
+ * shows (shareCard.service.ts). No sign-in, like the card page that links it.
+ */
+export async function getEventCard(req: Request, res: Response): Promise<void> {
+    const id = req.params.id;
+    try {
+        const found = SAFE_ID_RE.test(id) ? await teaser('events', id) : null;
+        if (!found || !isEventTeaser(found)) {
+            res.status(404).end();
+            return;
+        }
+        const spec = eventCardSpec(found);
+        const file = await cardFile(id, spec);
+        if (!file) {
+            res.redirect(302, `${config.appPublicUrl}/icons/icon-512.png`);
+            return;
+        }
+        // The card page links it by what's on it (?v=), so that link can be kept a day.
+        res.set('Cache-Control', `public, max-age=${req.query.v === cardKey(spec) ? 86400 : 300}`);
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.type('image/jpeg').sendFile(file);
+    } catch (error) {
+        console.error('Share card error:', error);
+        res.status(500).end();
+    }
 }

@@ -5,7 +5,7 @@ import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move } from 'luc
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
-import { dateChip, editScope, fitRepeat, repeatChoiceLabel, repeatChoices, scopeTitle } from '../utils/eventRepeat';
+import { dateChip, editScope, fitRepeat, repeatChoiceLabel, repeatChoices, repeatLabel, scopeTitle } from '../utils/eventRepeat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
@@ -13,6 +13,8 @@ import PartnerPicker from '../components/events/PartnerPicker';
 import CoverPhoto from '../components/CoverPhoto';
 import { useCoverFramer } from '../components/CoverFramer';
 import DateScopeSheet from '../components/events/DateScopeSheet';
+import ShareCardPreview from '../components/events/ShareCardPreview';
+import { cardDate, SHARE_ASPECT, SHARE_SHADE, shareFormat } from '../utils/shareCard';
 import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFrame';
 
 /**
@@ -26,6 +28,8 @@ import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFra
  * shows its next date as it is; saving a change to that date's time,
  * title, words or place asks whether it's for that date only or for it and
  * every date after (DateScopeSheet). How it repeats is for every date.
+ * Its link preview (what WhatsApp shows when it's shared) is shown as it
+ * will look, and its cover can be positioned for it.
  */
 
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
@@ -34,7 +38,7 @@ const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame'];
 
 const EMPTY = {
-    hostListingId: '', thumbnail: '', coverFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
+    hostListingId: '', thumbnail: '', coverFrame: '', shareFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
     startDate: '', startTime: '19:00', endDate: '', endTime: '', repeat: '', repeatUntil: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
     ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
@@ -75,6 +79,7 @@ export default function EventForm() {
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
     const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
     const [proposal, setProposal] = useState(false); // a proposed meetup, which doesn't repeat
+    const [proposed, setProposed] = useState(null); // …and how many it needs, while it's still proposed
     // A repeating event edited at its next date: that date's key, and the form as it loaded (to see what changed).
     const [atDate, setAtDate] = useState(null); // { key, loaded }
     const [asking, setAsking] = useState(null); // the payload waiting for "only this date, or every date after?"
@@ -105,6 +110,7 @@ export default function EventForm() {
             setHostSide(!!e.canDelete);
             setSavedHost(e.hostListing ? { id: e.hostListing.id, isOfficial: !!e.hostListing.isOfficial } : null);
             setProposal(e.minAttendees != null);
+            setProposed(e.stage === 'proposed' ? { min: e.minAttendees } : null);
             // A repeating event with dates ahead: at its next one, as it is
             // (its own time, title and place, if it has them). One that's all
             // over: from its first date.
@@ -112,7 +118,7 @@ export default function EventForm() {
             const start = toFormFields(next || !('firstStartDate' in e) ? e.startDate : e.firstStartDate);
             const end = toFormFields(next || !('firstStartDate' in e) ? e.endDate : e.firstEndDate);
             const loaded = {
-                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
+                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '', shareFrame: e.shareFrame || '',
                 cardImage: e.cardImage || '', cardFrame: e.cardFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
@@ -165,7 +171,7 @@ export default function EventForm() {
                 ...(data.isOnline !== undefined && { online: !!data.isOnline }),
                 ...(data.onlineUrl && { onlineUrl: data.onlineUrl }),
                 ticketUrl: data.ticketUrl || data.sourceUrl || f.ticketUrl,
-                ...(data.thumbnail && { thumbnail: data.thumbnail, coverFrame: '' }),
+                ...(data.thumbnail && { thumbnail: data.thumbnail, coverFrame: '', shareFrame: '' }),
             }));
             setImported(true);
             setImportUrl('');
@@ -183,8 +189,8 @@ export default function EventForm() {
         setError('');
         try {
             const res = await uploadApi.media(file);
-            // A card showing the cover starts centred on the new one.
-            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, cardFrame: f.cardImage ? f.cardFrame : '' }));
+            // A card showing the cover starts centred on the new one, and so does its link preview.
+            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, shareFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }));
         } catch (err) {
             setError(err?.message || t('events.form.failed'));
         } finally {
@@ -206,6 +212,14 @@ export default function EventForm() {
             setUploading(false);
         }
     }, { title: t('events.form.cardTitle'), shade: CARD_SHADE });
+
+    // Its link preview: a BIES event's cover square, any other's the wide card's photo side.
+    const share = useCoverFramer(official ? SHARE_ASPECT.square : SHARE_ASPECT.wide, ({ frame }) => {
+        setForm((f) => ({ ...f, shareFrame: frame }));
+    }, { title: t('events.form.shareTitle'), shade: official ? undefined : SHARE_SHADE });
+    const shareStart = fromFormFields(form.startDate, form.startTime);
+    // In English, as the picture is (the server draws it).
+    const english = i18n.getFixedT('en');
 
     const submit = async (e) => {
         e.preventDefault();
@@ -235,6 +249,7 @@ export default function EventForm() {
             locationMapUrl: form.online ? '' : withHttps(form.locationMapUrl),
             thumbnail: form.thumbnail,
             coverFrame: form.thumbnail ? form.coverFrame : '',
+            shareFrame: form.thumbnail ? form.shareFrame : '',
             ...(official ? { cardImage: form.cardImage, cardFrame: form.cardImage || form.thumbnail ? form.cardFrame : '' } : {}),
             ticketUrl: withHttps(form.ticketUrl),
             bitcoinUrl: withHttps(form.bitcoinUrl),
@@ -325,7 +340,7 @@ export default function EventForm() {
                                 <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
                             </button>
                             <label className="ef-small-btn">{t('events.form.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
-                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }))}>{t('events.form.removeCover')}</button>
+                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', shareFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }))}>{t('events.form.removeCover')}</button>
                         </div>
                     </>
                 ) : (
@@ -344,6 +359,32 @@ export default function EventForm() {
                 </select>
                 <span className="ef-label">{t('events.form.description')}</span>
                 <RichTextEditor value={form.description} onChange={set('description')} placeholder={t('events.form.descriptionPlaceholder')} />
+            </section>
+
+            <section className="ef-group">
+                {/* What WhatsApp and the like show when it's shared (server/src/services/shareCard.service.ts) */}
+                <span className="ef-label">{t('events.form.share')}</span>
+                <p className="ef-hint">{official ? t('events.form.shareHintOfficial') : t('events.form.shareHint')}</p>
+                <div className={`ef-share${official ? ' sq' : ''}`}>
+                    <ShareCardPreview
+                        format={shareFormat(official)}
+                        label={official ? '' : proposed ? 'proposed' : 'community'}
+                        title={form.title.trim() || t('events.form.sharePlaceholder')}
+                        date={cardDate(shareStart)}
+                        venue={form.online ? 'Online' : form.locationName.trim()}
+                        extra={proposed ? `Goes ahead with ${proposed.min} people` : repeat ? repeatLabel(repeat, ruleDate, english, 'en') : ''}
+                        cover={form.thumbnail}
+                        frame={form.thumbnail ? form.shareFrame || form.coverFrame : ''}
+                    />
+                </div>
+                {form.thumbnail ? (
+                    <div className="ef-cover-tools">
+                        <button type="button" className="ef-small-btn quiet" onClick={() => share.adjust(form.thumbnail, form.shareFrame || form.coverFrame)} disabled={uploading}>
+                            <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
+                        </button>
+                    </div>
+                ) : <p className="ef-hint">{t('events.form.shareNoCover')}</p>}
+                {share.framer}
             </section>
 
             {official && hostSide && (
@@ -543,6 +584,8 @@ export default function EventForm() {
                 .ef-card-words small { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFD3BA; }
                 .ef-card-words b { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.05; overflow-wrap: anywhere; }
                 .ef-card-empty { max-width: 280px; aspect-ratio: 4 / 5; }
+                .ef-share { width: 100%; max-width: 420px; }
+                .ef-share.sq { max-width: 320px; }
                 .ef-cover-busy { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
                 .ef-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
                 .ef-cover-tools .ef-small-btn.quiet { border: 1px solid var(--color-gray-300); background: var(--color-surface); }

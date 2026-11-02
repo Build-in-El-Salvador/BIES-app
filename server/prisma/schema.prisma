@@ -474,6 +474,9 @@ model Event {
   // otherwise) and how it shows in the card's shape. Official events only.
   cardImage   String   @default("") @map("card_image")
   cardFrame   String   @default("") @map("card_frame")
+  /// The cover as a shared link's preview shows it (WhatsApp and the like), "x,y,w,h" as
+  /// coverFrame: square for a BIES event, the photo side of the card otherwise (shareCard.service.ts).
+  shareFrame  String   @default("") @map("share_frame")
   ticketUrl   String   @default("") @map("ticket_url")
   maxAttendees Int?    @map("max_attendees")
   priceSats   Int?     @map("price_sats") // null/0 = free (RSVP-only)

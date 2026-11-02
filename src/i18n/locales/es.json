@@ -843,7 +843,13 @@
       "until": "Hasta (opcional)",
       "untilHint": "Después de cada fecha pasa sola a la siguiente.",
       "timeHintRepeat": "Hora de El Salvador. Empieza es su primera fecha; se repite desde ahí.",
-      "timeHintDate": "Hora de El Salvador. Es su próxima fecha, {{date}}."
+      "timeHintDate": "Hora de El Salvador. Es su próxima fecha, {{date}}.",
+      "share": "Vista previa del enlace",
+      "shareHint": "Lo que muestran WhatsApp y otras apps cuando alguien comparte este evento. Ajusta la portada para la vista previa.",
+      "shareHintOfficial": "Un evento de BIES comparte su portada tal cual, cuadrada, como los pósters de eventos. Ajústala para que se vea todo el póster.",
+      "shareTitle": "Ajustar para la vista previa",
+      "sharePlaceholder": "El nombre de tu evento",
+      "shareNoCover": "Agrega una foto de portada y también se mostrará aquí."
     },
     "kinds": {
       "NETWORKING": "Networking",

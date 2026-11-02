@@ -55,6 +55,8 @@ export const createEventSchema = z.object({
     // A BIES event's highlight card: another photo (optional) and its position.
     cardImage: z.string().max(2000).optional().or(z.literal('')),
     cardFrame: coverFrameSchema.optional(),
+    // The cover as a shared link's preview shows it (shareCard.service.ts).
+    shareFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
@@ -171,7 +173,7 @@ const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
     'location', 'locationName', 'locationAddress', 'locationMapUrl',
     'isOnline', 'onlineUrl', 'startDate', 'endDate',
-    'thumbnail', 'coverFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'thumbnail', 'coverFrame', 'shareFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
     'minAttendees', 'decideBy', 'repeat', 'repeatUntil',
@@ -228,7 +230,7 @@ function venueData(venue: Venue, data: Record<string, any>, current?: { thumbnai
     const fromOld = (field: 'locationMapUrl' | 'thumbnail', oldValue?: string) => !!oldValue && (data[field] ?? current?.[field]) === oldValue;
     const mapUrl = /^https?:\/\//i.test(venue.mapUrl || '') ? venue.mapUrl : '';
     if (!(data.locationMapUrl ?? current?.locationMapUrl) || fromOld('locationMapUrl', old?.mapUrl)) data.locationMapUrl = mapUrl;
-    if (!(data.thumbnail ?? current?.thumbnail) || fromOld('thumbnail', old?.photo)) { data.thumbnail = venue.photo || ''; data.coverFrame = venue.photo ? (venue.coverFrame || '') : ''; }
+    if (!(data.thumbnail ?? current?.thumbnail) || fromOld('thumbnail', old?.photo)) { data.thumbnail = venue.photo || ''; data.coverFrame = venue.photo ? (venue.coverFrame || '') : ''; if (data.shareFrame === undefined) data.shareFrame = ''; }
 }
 
 const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
@@ -252,7 +254,7 @@ function eventCard(e: any, hidden: Set<string>, now = new Date(), at: Date | nul
         repeat: e.repeat || '', repeatUntil: e.repeatUntil ?? null, firstStartDate: e.startDate, firstEndDate: e.endDate ?? null,
         ...(repeats(e) ? { occurrence: when.key, dateChanged: hasOverrides(when.change) } : {}),
         location: day.location, locationName: day.locationName, isOnline: day.isOnline,
-        thumbnail: e.thumbnail, coverFrame: e.coverFrame,
+        thumbnail: e.thumbnail, coverFrame: e.coverFrame, shareFrame: e.shareFrame ?? '',
         // The highlight card, for BIES events (the list shows them as cards).
         ...(hostListing?.isOfficial ? { cardImage: e.cardImage, cardFrame: e.cardFrame } : {}),
         ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
@@ -972,6 +974,8 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             }
         }
         frameNewCover(data, 'thumbnail', existing.thumbnail);
+        // Its link preview's framing belongs to the old cover too.
+        if (data.thumbnail !== undefined && data.thumbnail !== (existing.thumbnail ?? '') && data.shareFrame === undefined) data.shareFrame = '';
         if (!hostSide) {
             // Co-hosts edit what the event is; its tickets and money, who hosts
             // it and who sees it stay with the host side. Unchanged copies pass.

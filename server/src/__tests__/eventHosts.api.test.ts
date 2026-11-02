@@ -556,8 +556,9 @@ describe('a shared event, signed out', () => {
         expect(res.text).not.toMatch(/Calle La Reforma|Secret Goer|Daniela Owner/);
 
         const card = await call('GET', `/api/preview/events/${created.body.id}/og`);
-        expect(card.text).toContain('content="BIES Networking Night | BIES"');
-        expect(card.text).toContain('Sat 14 Nov · 7:00 PM · Rooftop venue');
+        // The day in its name (iMessage shows only that), the time and place under it.
+        expect(card.text).toContain('content="BIES Networking Night · Sat 14 Nov"');
+        expect(card.text).toContain('7:00 PM · Rooftop venue');
         expect(card.text).toContain('content="noindex"');
     });
 
