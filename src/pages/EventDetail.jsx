@@ -40,7 +40,8 @@ import '../components/moderation/Moderation.css';
  * "Edwin invited you" until they answer. Only the proposer sees who's invited.
  * Where it is can be a business or farm on BIES: its card links to its page.
  * A repeating event shows how it repeats, its next date and the three after
- * it; "I'm going" is for its next date, and starts again after it.
+ * it; "I'm going" is for its next date, and starts again after it. Once it's
+ * all over it shows as ended, at its last date, with nothing to answer.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -150,8 +151,13 @@ const EventDetail = () => {
     const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
     const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
     const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
+    // Repeating: shown at its next date, which "going" is for. Once it's all
+    // over (no dates ahead), at its last date, as ended: nothing to answer.
+    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
+    const shownOver = new Date(event.endDate || new Date(event.startDate).getTime() + 6 * 3600_000).getTime() < Date.now();
+    const seriesOver = !!repeatText && (isFull ? !event.upcomingDates?.length : shownOver);
     // With tickets sold elsewhere, members still say they're going here.
-    const rsvpRow = hasTickets && isFull;
+    const rsvpRow = hasTickets && isFull && !seriesOver;
 
     const rsvp = async (next) => {
         setGoing(next);
@@ -242,10 +248,9 @@ const EventDetail = () => {
     // Called off by its proposer: once it was on, or before the deadline (the deadline itself is the other way).
     const byProposer = !!event.confirmedAt || (event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy));
     const started = new Date(event.startDate).getTime() <= Date.now();
-    // Repeating: shown at its next date, which "going" is for.
-    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
-    const nextDay = repeatText ? dateChip(event.startDate, lang) : '';
-    const dates = repeatText ? (event.upcomingDates?.length ? event.upcomingDates : [event.startDate]) : [];
+    // A repeating event's next date, then the ones after it (none once it's all over).
+    const nextDay = repeatText && !seriesOver ? dateChip(event.startDate, lang) : '';
+    const dates = repeatText && !seriesOver ? (event.upcomingDates?.length ? event.upcomingDates : [event.startDate]) : [];
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -378,6 +383,12 @@ const EventDetail = () => {
                                 ))}
                             </ul>
                         )}
+                        {seriesOver && (
+                            // All over: its last date.
+                            <ul className="ev-dates">
+                                <li data-testid="series-ended">{`${t('events.repeat.ended')} · ${dateChip(event.startDate, lang)}`}</li>
+                            </ul>
+                        )}
                     </div>
                     {event.isOnline ? (
                         <div className="ev-fact">
@@ -504,7 +515,7 @@ const EventDetail = () => {
                 )}
             </div>
 
-            {stage !== 'calledOff' && (
+            {stage !== 'calledOff' && !seriesOver && (
             <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
                 {proposed ? (
                     <>

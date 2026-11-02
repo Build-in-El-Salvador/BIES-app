@@ -233,7 +233,7 @@ export default function EventForm() {
             navigate(`/events/${saved.id || id}`, { replace: editing });
         } catch (err) {
             const reason = err?.data?.reason;
-            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '' }))
+            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '', count: err?.data?.max }))
                 || err?.data?.details?.map((d) => `${d.field}: ${d.message}`).join(', ')
                 || err?.message || t('events.form.failed'));
             setSaving(false);

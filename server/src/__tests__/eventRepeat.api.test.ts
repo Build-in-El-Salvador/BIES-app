@@ -37,6 +37,7 @@ import previewRoutes from '../routes/preview.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { endOfDay, nextOccurrence, occurrences } from '../utils/eventRepeat';
+import { MAX_REPEATING } from '../controllers/events.controller';
 
 let server: http.Server;
 let base: string;
@@ -301,6 +302,125 @@ describe('going, one date at a time', () => {
         expect(again.status).toBe(200);
         expect((await prisma.eventAttendee.findFirst({ where: { eventId: id, userId: guest.id } }))!.occurrenceStart!.toISOString()).toBe(iso(next));
         expect(await page(guest, id)).toMatchObject({ goingCount: 1, rsvpStatus: 'GOING' });
+    });
+
+    it('"Doesn\'t repeat" as the form sends it (its first date as it was) makes a one-off on the next date, not the first', async () => {
+        const host = await member();
+        const guest = await member();
+        const other = await member();
+        const { id, next, before } = await weekly(host);
+        await go(guest, id);
+        await go(other, id);
+        await prisma.eventAttendee.updateMany({ where: { eventId: id, userId: other.id }, data: { occurrenceStart: before } });
+        // The form loads the series from its first date and sends it back unchanged.
+        const loaded = await page(host, id);
+        const res = await call('PUT', `/api/events/${id}`, {
+            token: host.token,
+            body: { title: loaded.title, description: loaded.description, startDate: loaded.firstStartDate, endDate: loaded.firstEndDate, repeat: '', repeatUntil: null },
+        });
+        expect(res.status).toBe(200);
+        const saved = (await prisma.event.findUnique({ where: { id } }))!;
+        expect(saved.repeat).toBe('');
+        expect(iso(saved.startDate)).toBe(iso(next));
+        expect(iso(saved.endDate!)).toBe(iso(new Date(next.getTime() + 4 * 3600_000)));
+        // The next date's answers stay; the one for a date that's over goes.
+        const rows = await prisma.eventAttendee.findMany({ where: { eventId: id } });
+        expect(rows.map((r) => [r.userId, r.status, r.occurrenceStart])).toEqual([[guest.id, 'GOING', null]]);
+        expect(await page(guest, id)).toMatchObject({ goingCount: 1, rsvpStatus: 'GOING', startDate: iso(next) });
+        // Still ahead: in Upcoming, not in Past.
+        expect(ids(await list(host, `upcoming=true&search=${encodeURIComponent(loaded.title)}`))).toEqual([id]);
+        expect(ids(await list(host, `past=true&search=${encodeURIComponent(loaded.title)}`))).toEqual([]);
+    });
+
+    it('stopping the repeat keeps a new time sent with the first date', async () => {
+        const host = await member();
+        const { id, next } = await weekly(host);
+        const first = svAt(-11, '10:30');
+        const res = await call('PUT', `/api/events/${id}`, { token: host.token, body: { repeat: '', startDate: iso(first), endDate: iso(new Date(first.getTime() + 2 * 3600_000)) } });
+        expect(res.status).toBe(200);
+        const saved = (await prisma.event.findUnique({ where: { id } }))!;
+        const at = new Date(next.getTime() + 90 * 60_000);
+        expect(iso(saved.startDate)).toBe(iso(at));
+        expect(iso(saved.endDate!)).toBe(iso(new Date(at.getTime() + 2 * 3600_000)));
+    });
+
+    it('stopping the repeat keeps an invite-only guest\'s invitation, so they can still say they\'re going', async () => {
+        const host = await member();
+        const guest = await member();
+        const { id, before } = await weekly(host, { visibility: 'INVITE_ONLY' });
+        expect((await call('POST', `/api/events/${id}/invite`, { token: host.token, body: { userId: guest.id } })).status).toBe(201);
+        await go(guest, id);
+        // Their answer was for a date that's over.
+        await prisma.eventAttendee.updateMany({ where: { eventId: id, userId: guest.id }, data: { occurrenceStart: before } });
+        const loaded = await page(host, id);
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: loaded.firstStartDate, endDate: loaded.firstEndDate, repeat: '' } })).status).toBe(200);
+        const row = await prisma.eventAttendee.findFirst({ where: { eventId: id, userId: guest.id } });
+        expect(row).toMatchObject({ status: 'INVITED', occurrenceStart: null });
+        expect((await go(guest, id)).status).toBe(200);
+    });
+
+    it('stopping the repeat keeps the invitation of a member its host invited, on a public event too', async () => {
+        const host = await member();
+        const guest = await member();
+        const stranger = await member();
+        const { id, before } = await weekly(host);
+        expect((await call('POST', `/api/events/${id}/invite`, { token: host.token, body: { userId: guest.id } })).status).toBe(201);
+        // The invite's notice goes out in the background.
+        for (let i = 0; i < 50 && !(await prisma.notification.count({ where: { userId: guest.id } })); i++) await new Promise((r) => setTimeout(r, 20));
+        await go(guest, id);
+        await go(stranger, id);
+        await prisma.eventAttendee.updateMany({ where: { eventId: id }, data: { occurrenceStart: before } });
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { repeat: '' } })).status).toBe(200);
+        const rows = await prisma.eventAttendee.findMany({ where: { eventId: id } });
+        expect(rows.map((r) => [r.userId, r.status, r.occurrenceStart])).toEqual([[guest.id, 'INVITED', null]]);
+    });
+});
+
+describe('a monthly event five weeks apart', () => {
+    it('once its last date is over, it is in Past straight away (first Saturday: 3 Oct, then 7 Nov 2026)', async () => {
+        // Only Date is faked: the HTTP server's own timers keep working.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            // Monday 5 October 2026, in El Salvador: 3 October was its only date (7 November is after its last day).
+            vi.setSystemTime(new Date('2026-10-05T12:00:00-06:00'));
+            const host = await member();
+            const tag = `firstsat${Date.now()}`;
+            const first = new Date('2026-10-03T09:00:00-06:00');
+            const series = await event(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 4 * 3600_000)), repeat: 'MONTHLY_NTH', repeatUntil: '2026-11-06' });
+            expect(nextOccurrence({ startDate: first, repeat: 'MONTHLY_NTH' }, new Date())!.startDate.toISOString()).toBe(new Date('2026-11-07T09:00:00-06:00').toISOString());
+            expect(ids(await list(host, `upcoming=true&search=${tag}`))).toEqual([]);
+            const past = await list(host, `past=true&search=${tag}`);
+            expect(ids(past)).toEqual([series.id]);
+            expect(past.data[0].startDate).toBe(iso(first));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('repeating events a member can have', () => {
+    it(`at most ${MAX_REPEATING} at once; one long over doesn't count, and deleting one makes room`, async () => {
+        const host = await member();
+        const made: string[] = [];
+        // One whose last day was long ago (it's only in Past).
+        await event(host, 'old', { startDate: iso(svAt(-120, '09:00')), repeat: 'WEEKLY', repeatUntil: svDay(-90) });
+        for (let i = 0; i < MAX_REPEATING; i++) {
+            made.push((await event(host, 'cap', { startDate: iso(svAt(-3 + i, '09:00')), repeat: 'WEEKLY' })).id);
+        }
+        const more = await call('POST', '/api/events', { token: host.token, body: { title: 'One more', description: 'More.', startDate: iso(svAt(2, '09:00')), repeat: 'BIWEEKLY' } });
+        expect(more.status).toBe(400);
+        expect(more.body).toMatchObject({ reason: 'too_many_repeating', max: MAX_REPEATING });
+        // A one-off is fine; making it repeat isn't.
+        const oneOff = await event(host, 'cap', { startDate: iso(svAt(4, '09:00')) });
+        expect((await call('PUT', `/api/events/${oneOff.id}`, { token: host.token, body: { repeat: 'WEEKLY' } })).body.reason).toBe('too_many_repeating');
+        // Editing one that repeats already is fine.
+        expect((await call('PUT', `/api/events/${made[0]}`, { token: host.token, body: { title: 'Renamed' } })).status).toBe(200);
+        // Another member isn't held back by this one's.
+        const other = await member();
+        expect((await call('POST', '/api/events', { token: other.token, body: { title: 'Theirs', description: 'Theirs.', startDate: iso(svAt(2, '09:00')), repeat: 'WEEKLY' } })).status).toBe(201);
+
+        expect((await call('DELETE', `/api/events/${made[0]}`, { token: host.token })).status).toBe(200);
+        expect((await call('PUT', `/api/events/${oneOff.id}`, { token: host.token, body: { repeat: 'WEEKLY' } })).status).toBe(200);
     });
 });
 

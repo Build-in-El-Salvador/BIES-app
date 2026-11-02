@@ -826,7 +826,8 @@
         "repeat_not_last_week": "\"The last\" works only from a date in the last week of its month.",
         "repeat_fifth_week": "Not every month has a fifth one: pick \"the last\" instead.",
         "repeat_too_long": "Each date has to end before the next one starts.",
-        "repeat_on_proposal": "A proposed meetup doesn't repeat."
+        "repeat_on_proposal": "A proposed meetup doesn't repeat.",
+        "too_many_repeating": "You can have up to {{count}} repeating events at a time. Delete one you no longer need to add another."
       },
       "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
       "card": "Highlight card",
@@ -1009,7 +1010,8 @@
         "3": "third",
         "4": "fourth"
       },
-      "next": "Next"
+      "next": "Next",
+      "ended": "Ended"
     }
   },
   "projectDetails": {

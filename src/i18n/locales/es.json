@@ -825,7 +825,8 @@
         "repeat_not_last_week": "\"El último\" solo funciona desde una fecha en la última semana del mes.",
         "repeat_fifth_week": "No todos los meses tienen un quinto: elige \"el último\".",
         "repeat_too_long": "Cada fecha tiene que terminar antes de que empiece la siguiente.",
-        "repeat_on_proposal": "Una reunión propuesta no se repite."
+        "repeat_on_proposal": "Una reunión propuesta no se repite.",
+        "too_many_repeating": "Puedes tener hasta {{count}} eventos que se repiten a la vez. Elimina uno que ya no necesites para agregar otro."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
       "card": "Tarjeta destacada",
@@ -868,7 +869,8 @@
         "3": "tercer",
         "4": "cuarto"
       },
-      "next": "Próximo"
+      "next": "Próximo",
+      "ended": "Terminó"
     }
   },
   "news": {
