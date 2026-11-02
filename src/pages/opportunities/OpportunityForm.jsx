@@ -1000,7 +1000,7 @@ const FormStyles = () => (
             aspect-ratio: 16 / 9;
             overflow: hidden;
             margin-bottom: 0.75rem;
-            border-radius: var(--radius-lg);
+            border-radius: var(--radius-lg); clip-path: inset(0 round var(--radius-lg));
             background: var(--color-gray-100);
         }
         .opportunity-form-page .of-cover-position {

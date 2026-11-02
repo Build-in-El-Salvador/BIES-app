@@ -17,7 +17,7 @@ import {
     EVENT_PEOPLE, MAX_PARTNERS, PartnerError, actedForIds, canDeleteEvent, canEditEvent, checkPartners,
     hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
 } from '../services/eventPeople.service';
-import { listingsActedFor, runsListing } from './listingTeam.controller';
+import { listingsActedFor, runByWhere, runsListing } from './listingTeam.controller';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 import { forgetCards } from '../services/shareCard.service';
 import {
@@ -44,7 +44,7 @@ export const createEventSchema = z.object({
     title: z.string().min(1).max(200),
     // Required, except on a proposed meetup (createEvent checks).
     description: z.string().max(20_000),
-    category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'OTHER']).default('NETWORKING'),
+    category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER']).default('NETWORKING'),
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
     location: z.string().max(200).optional(),
     isOnline: z.boolean().default(false),
@@ -594,7 +594,7 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 { hostId: me, hostListingId: null },
                 ...(acted.length ? [{ hostListingId: { in: acted } }] : []),
                 // A business I run or am on the team of, while it's down.
-                { hostListing: { is: { OR: [{ memberUserId: me }, { memberUserId: null, isOwnBusiness: true, ownerId: me }, { team: { some: { userId: me } } }] } } },
+                { hostListing: { is: { OR: [...runByWhere(me), { team: { some: { userId: me } } }] } } },
                 { partners: { some: { role: 'COHOST', OR: [{ userId: me }, ...(acted.length ? [{ listingId: { in: acted } }] : [])] } } },
             ],
         };
@@ -1209,7 +1209,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         if (hostSide && body.hostListingId !== undefined && (body.hostListingId || null) !== existing.hostListingId) {
             // Off its business: the member who made it, the one who runs the business, or an admin.
             const from = existing.hostListingId
-                ? await prisma.directoryListing.findUnique({ where: { id: existing.hostListingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true } })
+                ? await prisma.directoryListing.findUnique({ where: { id: existing.hostListingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true } })
                 : null;
             if (from && !req.user!.isAdmin && me !== existing.hostId && !runsListing(from, me)) {
                 res.status(403).json({ error: 'Only who made this event, or who runs the business, can move it', reason: 'host_only' });

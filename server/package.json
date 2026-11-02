@@ -20,6 +20,7 @@
         "@aws-sdk/core": "^3.973.26",
         "@aws-sdk/s3-request-presigner": "^3.1021.0",
         "@prisma/client": "^5.10.0",
+        "@scure/base": "^2.0.0",
         "@smithy/core": "^3.23.13",
         "@smithy/protocol-http": "^5.3.12",
         "@smithy/smithy-client": "^4.12.8",

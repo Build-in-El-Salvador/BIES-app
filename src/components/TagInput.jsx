@@ -31,8 +31,8 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ
             {tags.map(tag => (
                 <span key={tag} className="tag-chip">
                     {tag}
-                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove" aria-label={`Remove ${tag}`}>
-                        <X size={11} />
+                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove x-remove" aria-label={`Remove ${tag}`}>
+                        <X size={12} />
                     </button>
                 </span>
             ))}
@@ -64,7 +64,7 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ
                 }
                 .tag-chip-remove {
                     display: flex; align-items: center; justify-content: center;
-                    width: 14px; height: 14px; border-radius: 50%; border: none;
+                    width: 20px; height: 20px; border-radius: 50%; border: none;
                     background: #fed7aa; color: #9a3412; cursor: pointer; padding: 0;
                     transition: background 0.1s;
                 }

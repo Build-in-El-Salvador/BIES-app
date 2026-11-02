@@ -547,7 +547,7 @@ const TalentForm = ({ editMode = false }) => {
                                                             <Play size={14} fill="currentColor" aria-hidden="true" />
                                                         </span>
                                                     )}
-                                                    <button type="button" className="tf-photo-remove" onClick={() => removeWorkMedia(work.key, item.url)} aria-label={t(video ? 'talent.form.removeVideo' : 'talent.form.removePhoto')} disabled={isBusy}>
+                                                    <button type="button" className="tf-photo-remove x-remove" onClick={() => removeWorkMedia(work.key, item.url)} aria-label={t(video ? 'talent.form.removeVideo' : 'talent.form.removePhoto')} disabled={isBusy}>
                                                         <X size={14} />
                                                     </button>
                                                 </div>
@@ -1032,7 +1032,7 @@ const TalentForm = ({ editMode = false }) => {
                     position: relative;
                     aspect-ratio: 16 / 9;
                     overflow: hidden;
-                    border-radius: var(--radius-lg);
+                    border-radius: var(--radius-lg); clip-path: inset(0 round var(--radius-lg));
                     background-color: var(--color-blue-tint);
                     display: flex;
                     align-items: flex-end;

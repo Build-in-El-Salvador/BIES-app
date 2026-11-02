@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move } from 'lucide-react';
+import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
@@ -32,7 +32,7 @@ import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFra
  * will look, and its cover can be positioned for it.
  */
 
-const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
+const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 // What only the host side changes (a co-host edits the rest): the server says the same.
 const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame'];
@@ -75,6 +75,8 @@ export default function EventForm() {
     const [importUrl, setImportUrl] = useState('');
     const [importing, setImporting] = useState(false);
     const [imported, setImported] = useState(false);
+    // Import from a link folds into one row until it's wanted.
+    const [importOpen, setImportOpen] = useState(false);
     const [otherVisibility, setOtherVisibility] = useState(''); // an older event's invite-only or limited setting
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
     const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
@@ -303,17 +305,25 @@ export default function EventForm() {
             </div>
 
             {!editing && (
-                <section className="ef-group">
-                    <label className="ef-label" htmlFor="ef-import">{t('events.form.importLabel')}</label>
-                    <p className="ef-hint">{t('events.form.importHint')}</p>
-                    <div className="ef-inline">
-                        <span className="ef-input-icon"><Link2 size={16} aria-hidden="true" /></span>
-                        <input id="ef-import" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
-                        <button type="button" className="ef-small-btn" onClick={importFrom} disabled={importing || !importUrl.trim()}>
-                            {importing ? <Loader2 size={16} className="ef-spin" /> : t('events.form.importButton')}
-                        </button>
-                    </div>
-                    {imported && <p className="ef-ok">{t('events.form.imported')}</p>}
+                <section className={`ef-group ef-import${importOpen ? ' open' : ''}`}>
+                    <button type="button" className="ef-import-toggle" aria-expanded={importOpen} aria-controls="ef-import-body" onClick={() => setImportOpen((o) => !o)}>
+                        <Download size={18} aria-hidden="true" />
+                        <span>{t('events.form.importLabel')}</span>
+                        {importOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+                    </button>
+                    {importOpen && (
+                        <div id="ef-import-body" className="ef-import-body">
+                            <p className="ef-hint">{t('events.form.importHint')}</p>
+                            <div className="ef-inline">
+                                <span className="ef-input-icon"><Link2 size={16} aria-hidden="true" /></span>
+                                <input id="ef-import" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" aria-label={t('events.form.importLabel')} value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
+                                <button type="button" className="ef-small-btn" onClick={importFrom} disabled={importing || !importUrl.trim()}>
+                                    {importing ? <Loader2 size={16} className="ef-spin" /> : t('events.form.importButton')}
+                                </button>
+                            </div>
+                            {imported && <p className="ef-ok">{t('events.form.imported')}</p>}
+                        </div>
+                    )}
                 </section>
             )}
 
@@ -559,6 +569,15 @@ export default function EventForm() {
                 .ef-host-only { padding: 12px 14px; border-radius: 12px; background: var(--color-gray-100); }
                 .ef-group { background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
                 .ef-h { margin: 0; font-family: var(--font-display); font-size: 1.3rem; color: var(--color-gray-900); }
+                .ef-import { padding-top: 6px; padding-bottom: 6px; }
+                .ef-import.open { padding-bottom: 14px; }
+                .ef-import-toggle {
+                    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; cursor: pointer;
+                    font: inherit; font-size: 0.95rem; font-weight: 600; color: var(--color-primary); text-align: left;
+                }
+                .ef-import-toggle span { flex: 1; min-width: 0; }
+                .ef-import-toggle :global(svg:last-child) { color: var(--color-gray-400); }
+                .ef-import-body { display: flex; flex-direction: column; gap: 8px; }
                 .ef-label { font-size: 0.85rem; font-weight: 600; color: var(--color-gray-800); margin-top: 4px; }
                 .ef-hint { margin: -2px 0 0; font-size: 0.8rem; color: var(--color-gray-500); }
                 .ef-ok { margin: 0; font-size: 0.8rem; color: var(--color-success-text); font-weight: 600; }
@@ -579,8 +598,8 @@ export default function EventForm() {
                 }
                 .ef-small-btn.quiet { background: rgba(255, 255, 255, 0.92); color: var(--color-gray-900); }
                 .ef-small-btn:disabled { opacity: 0.5; cursor: default; }
-                .ef-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
-                .ef-card { position: relative; width: 100%; max-width: 280px; aspect-ratio: 4 / 5; border-radius: 20px; overflow: hidden; background: linear-gradient(135deg, var(--color-primary), #0A192F); }
+                .ef-cover { position: relative; border-radius: 14px; clip-path: inset(0 round 14px); overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .ef-card { position: relative; width: 100%; max-width: 280px; aspect-ratio: 4 / 5; border-radius: 20px; clip-path: inset(0 round 20px); overflow: hidden; background: linear-gradient(135deg, var(--color-primary), #0A192F); }
                 .ef-card-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
                 .ef-card-words { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 4px; color: #FFFFFF; }
                 .ef-card-words small { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFD3BA; }

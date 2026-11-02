@@ -238,44 +238,52 @@ export async function updateInvestment(req: Request, res: Response): Promise<voi
 
         const { status, terms, notes } = req.body;
         const updateData: any = {};
+        // The same status sent back (an investor editing notes or terms) is no change.
+        const statusChange = status && status !== investment.status ? status : null;
 
-        if (status) {
+        if (statusChange) {
             // Only builders and admins can change status
             if (!isBuilder && !isAdmin) {
                 res.status(403).json({ error: 'Only the project builder can update investment status' });
                 return;
             }
-            updateData.status = status;
+            updateData.status = statusChange;
         }
         if (terms !== undefined) updateData.terms = terms;
         if (notes !== undefined) updateData.notes = notes;
 
-        const updated = await prisma.investment.update({
-            where: { id: req.params.id },
-            data: updateData,
+        // The project's raised total follows the investment into COMPLETED and
+        // back out of it, once each way: the edit saves only if the status is
+        // still the one it was decided on, in the same transaction.
+        const wasCompleted = investment.status === 'COMPLETED';
+        const isCompleted = (statusChange ?? investment.status) === 'COMPLETED';
+        const updated = await prisma.$transaction(async (tx) => {
+            if (Object.keys(updateData).length > 0) {
+                const saved = await tx.investment.updateMany({
+                    where: { id: investment.id, status: investment.status },
+                    data: updateData,
+                });
+                if (saved.count !== 1) return null;
+            }
+            if (wasCompleted !== isCompleted) {
+                await tx.project.update({
+                    where: { id: investment.projectId },
+                    data: { raisedAmount: isCompleted ? { increment: investment.amount } : { decrement: investment.amount } },
+                });
+            }
+            return tx.investment.findUnique({ where: { id: investment.id } });
         });
-
-        // Update project raised amount when investment is COMPLETED
-        if (status === 'COMPLETED') {
-            await prisma.project.update({
-                where: { id: investment.projectId },
-                data: { raisedAmount: { increment: investment.amount } },
-            });
-        }
-        // Reverse if withdrawn from COMPLETED
-        if (status === 'WITHDRAWN' && investment.status === 'COMPLETED') {
-            await prisma.project.update({
-                where: { id: investment.projectId },
-                data: { raisedAmount: { decrement: investment.amount } },
-            });
+        if (!updated) {
+            res.status(409).json({ error: 'This investment was changed meanwhile. Reload it and try again.' });
+            return;
         }
 
         // Notify investor of status change
-        if (status && isBuilder) {
+        if (statusChange && isBuilder) {
             await notifyInvestmentStatus({
                 investorId: investment.investorId,
                 projectTitle: investment.project.title,
-                status,
+                status: statusChange,
                 projectId: investment.projectId,
             });
         }
