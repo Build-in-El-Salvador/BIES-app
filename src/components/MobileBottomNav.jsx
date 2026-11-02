@@ -32,8 +32,10 @@ const itemStyle = (active) => ({
 });
 
 // One line, always: the page lets long words break anywhere (index.css), which
-// split "Opportunities" on narrow phones. The short labels beside it leave room.
-const labelStyle = { whiteSpace: 'nowrap' };
+// split "Opportunities" on narrow phones. A label longer than its tab (a bar
+// the member chose, or Spanish) ends in "…" inside it rather than running
+// under the tab beside it.
+const labelStyle = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' };
 
 const iconWrapStyle = (active) => ({
   display: 'flex',
