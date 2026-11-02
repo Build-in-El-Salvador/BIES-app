@@ -43,7 +43,8 @@ import '../components/moderation/Moderation.css';
  * it; "I'm going" is for its next date, and starts again after it. When the
  * next date is different (its own time or place), a notice says how; a
  * date called off shows crossed out. Its host side calls off one date (or
- * brings it back) from the ⋯ menu.
+ * brings it back) from the ⋯ menu. Once it's all over it shows as ended, at
+ * its last date, with nothing to answer.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -153,8 +154,14 @@ const EventDetail = () => {
     const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
     const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
     const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
+    // Repeating: shown at its next date, which "going" is for. Once it's all
+    // over (no dates ahead), at its last date, as ended: nothing to answer.
+    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
+    // (It shows its next date while it has one, so the date it shows is over only then.)
+    const shownOver = new Date(event.endDate || new Date(event.startDate).getTime() + 6 * 3600_000).getTime() < Date.now();
+    const seriesOver = !!repeatText && shownOver;
     // With tickets sold elsewhere, members still say they're going here.
-    const rsvpRow = hasTickets && isFull;
+    const rsvpRow = hasTickets && isFull && !seriesOver;
 
     const rsvp = async (next) => {
         setGoing(next);
@@ -170,6 +177,20 @@ const EventDetail = () => {
             const reason = err?.data?.reason;
             if (event.stage) setNotice(t(`events.proposals.errors.${reason}`, { defaultValue: t('events.proposals.errors.generic') }));
             if (reason === 'called_off') load();
+        } finally {
+            setBusy(false);
+        }
+    };
+    // An invite to a meetup: "Can't make it". The answer stays, so the
+    // invite is closed and they aren't invited to it again.
+    const decline = async () => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await eventsApi.rsvp(event.id, 'NOT_GOING');
+            await load();
+        } catch (err) {
+            setNotice(t(`events.proposals.errors.${err?.data?.reason}`, { defaultValue: t('events.proposals.errors.generic') }));
         } finally {
             setBusy(false);
         }
@@ -247,11 +268,10 @@ const EventDetail = () => {
     // Called off by its proposer: once it was on, or before the deadline (the deadline itself is the other way).
     const byProposer = !!event.confirmedAt || (event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy));
     const started = new Date(event.startDate).getTime() <= Date.now();
-    // Repeating: shown at its next date, which "going" is for.
-    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
-    const nextDay = repeatText ? dateChip(event.startDate, lang) : '';
+    // Repeating: shown at its next date, which "going" is for (none once it's all over).
+    const nextDay = repeatText && !seriesOver ? dateChip(event.startDate, lang) : '';
     // Its dates (a called-off one too, until it passes); just this one while the page loads.
-    const dates = !repeatText ? []
+    const dates = !repeatText || seriesOver ? []
         : event.upcomingDates?.length ? event.upcomingDates
             : [{ key: event.occurrence || event.startDate, startDate: event.startDate, changed: !!event.dateChanged, calledOff: false }];
     const nextIndex = dates.findIndex((d) => !d.calledOff);
@@ -416,6 +436,12 @@ const EventDetail = () => {
                         {calledOff.map((d) => (
                             <p key={d.key} className="ev-date-off">{t('events.dates.noEventOn', { title: event.title, date: dateChip(d.key, lang) })}</p>
                         ))}
+                        {seriesOver && (
+                            // All over: its last date.
+                            <ul className="ev-dates">
+                                <li data-testid="series-ended">{`${t('events.repeat.ended')} · ${dateChip(event.startDate, lang)}`}</li>
+                            </ul>
+                        )}
                     </div>
                     {event.isOnline ? (
                         <div className="ev-fact">
@@ -542,7 +568,7 @@ const EventDetail = () => {
                 )}
             </div>
 
-            {stage !== 'calledOff' && (
+            {stage !== 'calledOff' && !seriesOver && (
             <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
                 {proposed ? (
                     <>
@@ -559,6 +585,11 @@ const EventDetail = () => {
                                             : t('events.proposals.areYouIn')}
                                 </b>
                                 <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                                {invitedBy && !closed && (
+                                    <button type="button" className="ev-decline" onClick={decline} disabled={busy} data-testid="invite-decline">
+                                        {t('events.proposals.cantMakeIt')}
+                                    </button>
+                                )}
                             </span>
                         </span>
                         {mine ? (
@@ -697,6 +728,8 @@ const EventDetail = () => {
                 .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
                 .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-decline { align-self: flex-start; margin-top: 2px; padding: 4px 0; min-height: 0; border: 0; background: none; font-size: 0.82rem; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+                .ev-decline:disabled { opacity: 0.6; }
                 .ev-in {
                     flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 24px; border-radius: var(--radius-full); cursor: pointer;
                     border: 1.5px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; font-size: 0.95rem; font-weight: 700;

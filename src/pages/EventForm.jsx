@@ -113,8 +113,10 @@ export default function EventForm() {
             setProposed(e.stage === 'proposed' ? { min: e.minAttendees } : null);
             // A repeating event with dates ahead: at its next one, as it is
             // (its own time, title and place, if it has them). One that's all
-            // over: from its first date.
-            const next = e.repeat && e.occurrence && e.upcomingDates?.length > 0;
+            // over (the date it shows has passed, though later ones may be
+            // there, called off): from its first date.
+            const shownEnd = new Date(e.endDate || new Date(e.startDate).getTime() + 6 * 3600_000).getTime();
+            const next = !!(e.repeat && e.occurrence && e.upcomingDates?.length > 0) && shownEnd >= Date.now();
             const start = toFormFields(next || !('firstStartDate' in e) ? e.startDate : e.firstStartDate);
             const end = toFormFields(next || !('firstStartDate' in e) ? e.endDate : e.firstEndDate);
             const loaded = {
@@ -276,7 +278,7 @@ export default function EventForm() {
             navigate(`/events/${saved.id || id}`, { replace: editing });
         } catch (err) {
             const reason = err?.data?.reason;
-            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '' }))
+            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '', count: err?.data?.max }))
                 || err?.data?.details?.map((d) => `${d.field}: ${d.message}`).join(', ')
                 || err?.message || t('events.form.failed'));
             setSaving(false);

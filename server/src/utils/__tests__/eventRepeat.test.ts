@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    dateChangeProblem, endOfDay, hasEnded, hasOverrides, inLastWeek, lastOccurrence, nextOccurrence, occurrenceFor, occurrences,
+    dateChangeProblem, dateIndex, endOfDay, hasEnded, hasOverrides, inLastWeek, keyAt, lastOccurrence, nextOccurrence, occurrenceFor, occurrences,
     repeatLabel, repeatProblem, shownOccurrence, weekOfMonth,
 } from '../eventRepeat';
 
@@ -277,5 +277,43 @@ describe('one date different, or called off', () => {
         expect(dateChangeProblem(market, market.startDate, market.startDate, null)).toBe('date_not_found');
         // The first date may move earlier, up to where the one before it would be.
         expect(dateChangeProblem(weekly, market.startDate, sv('2026-11-02 09:00'), null)).toBeNull();
+    });
+
+    it('a date ends before the next one starts, and keeps its place among dates that moved', () => {
+        const key = sv('2026-11-14 09:00');
+        // Ending at or after the next date's start.
+        expect(dateChangeProblem(weekly, key, sv('2026-11-20 20:00'), sv('2026-11-21 09:00'))).toBe('date_overlaps');
+        expect(dateChangeProblem(weekly, key, sv('2026-11-20 20:00'), sv('2026-11-20 23:00'))).toBeNull();
+        // The 21st moved to Monday the 16th: the 14th can't move past it, nor end after it starts.
+        const movedNext = withChanges({ occurrenceStart: sv('2026-11-21 09:00'), startDate: sv('2026-11-16 09:00'), endDate: sv('2026-11-16 13:00') });
+        expect(dateChangeProblem(movedNext, key, sv('2026-11-17 09:00'), null)).toBe('date_out_of_order');
+        expect(dateChangeProblem(movedNext, key, sv('2026-11-15 20:00'), sv('2026-11-16 10:00'))).toBe('date_overlaps');
+        expect(dateChangeProblem(movedNext, key, sv('2026-11-15 09:00'), sv('2026-11-15 13:00'))).toBeNull();
+        // The 7th moved to Thursday the 12th, 6 to 10 PM: the 14th can't start before it, nor while it's on.
+        const movedPrev = withChanges({ occurrenceStart: sv('2026-11-07 09:00'), startDate: sv('2026-11-12 18:00'), endDate: sv('2026-11-12 22:00') });
+        expect(dateChangeProblem(movedPrev, key, sv('2026-11-12 17:00'), null)).toBe('date_out_of_order');
+        expect(dateChangeProblem(movedPrev, key, sv('2026-11-12 21:00'), sv('2026-11-12 23:00'))).toBe('date_overlaps');
+        expect(dateChangeProblem(movedPrev, key, sv('2026-11-13 09:00'), sv('2026-11-13 11:00'))).toBeNull();
+    });
+
+    it('a series whose last dates are all called off ends on the last one that wasn\'t, however far back', () => {
+        const until = endOfDay('2026-12-26');
+        const offs = ['2026-11-28 09:00', '2026-12-05 09:00', '2026-12-12 09:00', '2026-12-19 09:00', '2026-12-26 09:00'];
+        const s = { ...weekly, repeatUntil: until, dateChanges: offs.map((d) => ({ occurrenceStart: sv(d), calledOffAt: sv('2026-11-20 08:00') })) };
+        expect(local(lastOccurrence(s)!.key)).toBe('2026-11-21 09:00');
+        expect(lastOccurrence(s)!.calledOff).toBe(false);
+        expect(local(shownOccurrence(s, sv('2026-11-21 14:00')).key)).toBe('2026-11-21 09:00');
+    });
+
+    it('finds where a date is in a series, and the date at a place', () => {
+        expect(dateIndex(weekly, sv('2026-11-21 09:00'))).toBe(2);
+        expect(dateIndex(weekly, sv('2026-11-21 10:00'))).toBeNull();
+        expect(dateIndex({ ...weekly, repeatUntil: endOfDay('2026-11-14') }, sv('2026-11-21 09:00'))).toBeNull();
+        expect(local(keyAt(weekly, 3)!)).toBe('2026-11-28 09:00');
+        expect(keyAt(weekly, -1)).toBeNull();
+        expect(keyAt({ ...weekly, repeatUntil: endOfDay('2026-11-14') }, 2)).toBeNull();
+        const monthly = { ...market, repeat: 'MONTHLY_NTH' };
+        expect(local(keyAt(monthly, 1)!)).toBe('2026-12-05 09:00');
+        expect(dateIndex(monthly, sv('2027-01-02 09:00'))).toBe(2);
     });
 });

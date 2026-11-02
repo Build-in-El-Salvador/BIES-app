@@ -27,11 +27,11 @@ import {
     INVITE_EVENT_SELECT, InviteError, MAX_INVITES, inviteMore, invitedMembers, myInvite, planInviteList, sendInvites, withdrawInvites,
 } from '../services/eventInvites.service';
 import {
-    DATE_FIELDS, SERIES_REACH, SIX_HOURS, dateChangeProblem, endOfDay, hasEnded, hasOverrides, isRepeat, nextOccurrence, occurrenceFor,
-    occurrences, repeatLabel, repeatProblem, shownOccurrence, type DateChange, type Occurrence,
+    DATES_AHEAD, DATE_FIELDS, SERIES_REACH, SIX_HOURS, dateChangeProblem, dateIndex, endOfDay, hasEnded, hasOverrides, isRepeat, keyAt,
+    nextOccurrence, occurrenceFor, occurrences, repeatLabel, repeatProblem, shownOccurrence, type DateChange, type Occurrence, type Series,
 } from '../utils/eventRepeat';
 import {
-    anyChange, changeNote, dayName, dayView, differences, tellGoingTo, timeText, usualView,
+    anyChange, changeNote, dayName, dayView, differences, movedNote, tellGoingTo, timeText, usualView,
 } from '../services/eventDates.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -105,6 +105,8 @@ export const createEventSchema = z.object({
     // on a new one, who to invite; on an edit, everyone who should be (an
     // invite left off is taken back, unless they've answered).
     inviteeIds: z.array(z.string().min(1).max(64)).max(MAX_INVITES).optional(),
+    // On an edit: the invites the form showed when it opened (only those can be taken back).
+    inviteeIdsShown: z.array(z.string().min(1).max(64)).max(MAX_INVITES * 2).optional(),
 });
 
 /** POST /events/:id/invites: members to invite to a proposed meetup. */
@@ -146,8 +148,18 @@ const over = (now: Date) => ({ OR: [{ endDate: { lt: now } }, { endDate: null, s
 const GOING_COUNT = { _count: { select: { attendees: { where: { status: 'GOING' } } } } };
 /** Hosted as BIES's own page, while it's up: a BIES event. */
 const OFFICIAL_HOST = { hostListing: { is: { isOfficial: true, status: 'active', isPublished: true } } };
-/** Who's behind an event, the business or farm where it is, and a repeating one's dates that are different. */
-const EVENT_INCLUDE = { ...EVENT_PEOPLE, venueListing: { select: VENUE_SELECT }, dateChanges: true };
+/**
+ * Who's behind an event, the business or farm where it is, and a repeating
+ * one's dates that are different: those from SERIES_REACH ago on, which is
+ * all its next date needs (one that's all over looks up its last dates:
+ * withLastDates).
+ */
+const eventInclude = (now: Date) => ({
+    ...EVENT_PEOPLE, venueListing: { select: VENUE_SELECT },
+    dateChanges: { where: { occurrenceStart: { gte: new Date(now.getTime() - SERIES_REACH) } } },
+});
+/** Date changes one event can have ahead (each within DATES_AHEAD). */
+export const MAX_DATE_CHANGES = 60;
 
 /**
  * What only the host side changes: tickets and money, who hosts it, who sees
@@ -237,23 +249,35 @@ function venueData(venue: Venue, data: Record<string, any>, current?: { thumbnai
 const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
 
 /**
+ * A date a member answered for that the event's dates no longer have (they
+ * moved since, or it was before its first date now): as it was, with its
+ * change if it had one, at the event's usual length.
+ */
+function formerDate(e: Dated, key: Date): Occurrence {
+    const change = e.dateChanges?.find((c) => c.occurrenceStart.getTime() === key.getTime()) ?? null;
+    const start = change?.startDate ?? key;
+    const end = change?.endDate ?? (e.endDate ? new Date(start.getTime() + e.endDate.getTime() - e.startDate.getTime()) : null);
+    return { key, startDate: start, endDate: end, change, calledOff: !!change?.calledOffAt };
+}
+
+/**
  * An event as the list shows it (no guest list, payout address or online
  * link). A repeating one shows its next date (its last, once it's all over),
  * or the date keyed `at`, as that date is (its own time, title and place
- * when it has them: dateChanged); its key is `occurrence`, its first date
- * firstStartDate.
+ * when it has them: dateChanged; calledOff when it was); its key is
+ * `occurrence`, its first date firstStartDate.
  */
 function eventCard(e: any, hidden: Set<string>, now = new Date(), at: Date | null = null) {
     // Hosted as a business that's since been taken down: neither it nor the BIES tag show.
     const { status: _status, isPublished: _published, ...listing } = isLiveListing(e.hostListing) ? e.hostListing : { status: '', isPublished: false };
     const hostListing = isLiveListing(e.hostListing) ? listing : null;
-    const when = (at && occurrenceFor(e, at)) || shownOccurrence(e, now);
+    const when = (at && (occurrenceFor(e, at) ?? (repeats(e) ? formerDate(e, at) : null))) || shownOccurrence(e, now);
     const day = dayView(e, when);
     return {
         id: e.id, title: day.title, category: e.category, visibility: e.visibility,
         startDate: when.startDate, endDate: when.endDate,
         repeat: e.repeat || '', repeatUntil: e.repeatUntil ?? null, firstStartDate: e.startDate, firstEndDate: e.endDate ?? null,
-        ...(repeats(e) ? { occurrence: when.key, dateChanged: hasOverrides(when.change) } : {}),
+        ...(repeats(e) ? { occurrence: when.key, dateChanged: hasOverrides(when.change), calledOff: when.calledOff } : {}),
         location: day.location, locationName: day.locationName, isOnline: day.isOnline,
         thumbnail: e.thumbnail, coverFrame: e.coverFrame, shareFrame: e.shareFrame ?? '',
         // The highlight card, for BIES events (the list shows them as cards).
@@ -283,6 +307,24 @@ const shownStart = (e: Dated, now: Date) => shownOccurrence(e, now).startDate;
 const shownKey = (e: Dated, now: Date) => shownOccurrence(e, now).key;
 /** At most this many repeating events in one list (they're merged in code). */
 const MAX_SERIES = 500;
+/**
+ * Repeating events one member can have at once: those the upcoming list
+ * looks at (running, or past their last day for less than SERIES_REACH), so
+ * one member's can't take the places of everyone else's (MAX_SERIES).
+ */
+export const MAX_REPEATING = 10;
+/** Repeating events the upcoming list looks at: going on for good, or not long past their last day. */
+const notLongOver = (now: Date) => ({ OR: [{ repeatUntil: null }, { repeatUntil: { gte: new Date(now.getTime() - SERIES_REACH) } }] });
+/** Whether an event, as a create or edit leaves it, counts towards MAX_REPEATING. */
+const countsAsRepeating = (e: { repeat?: string | null; repeatUntil?: Date | null }, now: Date) => isRepeat(e.repeat)
+    && (!e.repeatUntil || e.repeatUntil.getTime() >= now.getTime() - SERIES_REACH);
+/** Whether a member has as many repeating events as they can (MAX_REPEATING). */
+async function repeatingFull(hostId: string, now: Date): Promise<boolean> {
+    return await prisma.event.count({ where: { hostId, repeat: { not: '' }, ...notLongOver(now) } }) >= MAX_REPEATING;
+}
+const tooManyRepeating = (res: Response) => res.status(400).json({
+    error: `You can have ${MAX_REPEATING} repeating events at once`, reason: 'too_many_repeating', max: MAX_REPEATING,
+});
 
 /**
  * How a repeating event's date is different from usual, for the notice on
@@ -312,6 +354,26 @@ async function countShownDates<T extends Dated>(rows: T[], now: Date): Promise<T
 }
 
 /**
+ * A list loads a repeating event's date changes from SERIES_REACH ago on
+ * (eventInclude). One that's all over shows its last date, which can be
+ * older: the changes of its last year are looked up (its call-offs too, so
+ * its last date is one that wasn't called off).
+ */
+async function withLastDates<T extends Dated>(rows: T[], now: Date): Promise<T[]> {
+    const cutoff = new Date(now.getTime() - SERIES_REACH);
+    const over = rows.filter((e) => repeats(e) && e.repeatUntil && e.repeatUntil.getTime() - DATES_AHEAD < cutoff.getTime() && !nextOccurrence(e, now));
+    if (!over.length) return rows;
+    const found = await prisma.eventDateChange.findMany({
+        where: { OR: over.map((e) => ({ eventId: e.id, occurrenceStart: { gte: new Date(e.repeatUntil!.getTime() - DATES_AHEAD), lt: cutoff } })) },
+    });
+    if (!found.length) return rows;
+    return rows.map((e) => {
+        const own = found.filter((c) => c.eventId === e.id);
+        return own.length ? { ...e, dateChanges: [...own, ...(e.dateChanges || [])] } : e;
+    });
+}
+
+/**
  * A member's answer for the date an event shows: on a repeating event, an
  * answer for another of its dates is no answer (an invitation is for all of
  * them).
@@ -323,12 +385,60 @@ function answerFor(e: Dated, row: { status: string; occurrenceStart: Date | null
 }
 
 /**
+ * A repeating event made a one-off at one of its dates: the one-off is that
+ * date as it is, its own title, words and place included (where the edit
+ * doesn't say otherwise). Somewhere else that day: not at the business or
+ * farm it's usually at.
+ */
+function foldDate(existing: Dated & { locationName: string; locationAddress: string }, data: Record<string, any>, date: Occurrence, body: { venueListingId?: string | null }): void {
+    for (const f of DATE_FIELDS) if (data[f] === undefined && date.change?.[f] != null) data[f] = date.change[f];
+    if (date.change?.locationName == null && date.change?.locationAddress == null) return;
+    data.location = [data.locationName ?? existing.locationName, data.locationAddress ?? existing.locationAddress].filter(Boolean).join(', ');
+    if (body.venueListingId === undefined && (data.locationName ?? existing.locationName) !== existing.locationName) data.venueListingId = null;
+}
+
+/**
+ * A repeating event made a one-off with its first date sent (a form for the
+ * whole event shows a running series from its first date): the one-off is on
+ * the date it showed, its next (or its last, once it's all over), as that
+ * date is (its own time, unless the edit gives another, and what it has of
+ * its own), not on a date that's long over. Another day picked stays as
+ * picked.
+ */
+function oneOffAtShownDate(existing: Dated & { locationName: string; locationAddress: string }, data: Record<string, any>, body: { venueListingId?: string | null }, now: Date): void {
+    const start: Date = data.startDate ?? existing.startDate;
+    if (endOfDay(start)?.getTime() !== endOfDay(existing.startDate)?.getTime()) return;
+    const date = shownOccurrence(existing, now);
+    const end: Date | null = data.endDate !== undefined ? data.endDate : existing.endDate;
+    if (sameTime(start, existing.startDate) && sameTime(end, existing.endDate)) {
+        data.startDate = date.startDate;
+        data.endDate = date.endDate;
+    } else {
+        // A new time: on that date, at it.
+        const shift = date.key.getTime() - existing.startDate.getTime();
+        data.startDate = new Date(start.getTime() + shift);
+        data.endDate = end ? new Date(end.getTime() + shift) : null;
+    }
+    foldDate(existing, data, date, body);
+}
+
+/** How many of an event's dates from now on have a change (or are called off). */
+const changesAhead = (eventId: string, now: Date) => prisma.eventDateChange.count({ where: { eventId, occurrenceStart: { gte: now } } });
+
+/** Where a member's answer is also their invitation: invite-only and private events. */
+const INVITED_BY_ROW = ['INVITE_ONLY', 'PRIVATE'];
+
+/**
  * When an edit moves a repeating event's dates, or makes it repeat or stop,
  * the answers for its next date move with it, as answers do when a one-off
- * event moves. Answers for dates that are over stay with them; when it stops
- * repeating, those go (a one-off counts every answer it has).
+ * event moves. Answers for dates that are over stay with them. When it
+ * stops repeating, the one-off keeps the answers for the date it showed (its
+ * next, or its last once it was all over), and the others go (a one-off
+ * counts every answer it has), except an invitation: on an invite-only or
+ * private event, or for a member its host invited, the answer goes back to
+ * being an invitation, so they can still say they're going.
  */
-async function moveAnswers(tx: Prisma.TransactionClient, before: Dated, after: Dated, now: Date): Promise<void> {
+async function moveAnswers(tx: Prisma.TransactionClient, before: Dated & { visibility?: string }, after: Dated & { visibility?: string }, now: Date): Promise<void> {
     const wasNext = repeats(before) ? nextOccurrence(before, now)?.key ?? null : null;
     const willNext = repeats(after) ? nextOccurrence(after, now)?.key ?? null : null;
     const eventId = before.id;
@@ -342,9 +452,21 @@ async function moveAnswers(tx: Prisma.TransactionClient, before: Dated, after: D
             await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: wasNext }, data: { occurrenceStart: willNext } });
         }
     } else if (repeats(before)) {
-        if (wasNext) await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: wasNext }, data: { occurrenceStart: null } });
-        await tx.eventAttendee.deleteMany({ where: { eventId, occurrenceStart: { not: null }, status: { not: 'INVITED' } } });
-        await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: { not: null } }, data: { occurrenceStart: null } });
+        await tx.eventAttendee.updateMany({ where: { eventId, occurrenceStart: shownKey(before, now) }, data: { occurrenceStart: null } });
+        const others = await tx.eventAttendee.findMany({ where: { eventId, occurrenceStart: { not: null } }, select: { id: true, userId: true, status: true } });
+        if (!others.length) return;
+        const byRow = INVITED_BY_ROW.includes(before.visibility ?? '') || INVITED_BY_ROW.includes(after.visibility ?? '');
+        // Members its host invited were told so (services/eventInvites.service.ts writes the same).
+        const told = byRow ? [] : await tx.notification.findMany({
+            where: { userId: { in: others.map((a) => a.userId) }, type: 'EVENT_RSVP', data: { contains: `"eventId":"${eventId}","inviterId":` } },
+            select: { userId: true },
+        });
+        const invited = new Set(told.map((n) => n.userId));
+        const stays = (a: { userId: string; status: string }) => byRow || a.status === 'INVITED' || invited.has(a.userId);
+        const back = others.filter(stays).map((a) => a.id);
+        const goes = others.filter((a) => !stays(a)).map((a) => a.id);
+        if (back.length) await tx.eventAttendee.updateMany({ where: { id: { in: back } }, data: { status: 'INVITED', occurrenceStart: null } });
+        if (goes.length) await tx.eventAttendee.deleteMany({ where: { id: { in: goes } } });
     }
 }
 
@@ -381,7 +503,7 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
         const past = q.past === 'true';
         const timed = [...(upcoming ? [stillOn(now)] : []), ...(past ? [over(now)] : [])];
         const seriesTimed = [
-            ...(upcoming ? [{ OR: [{ repeatUntil: null }, { repeatUntil: { gte: new Date(now.getTime() - SERIES_REACH) } }] }] : []),
+            ...(upcoming ? [notLongOver(now)] : []),
             // Over only with a last day (its remaining dates may all be called off, however far ahead).
             ...(past ? [{ repeatUntil: { not: null } }] : []),
         ];
@@ -409,12 +531,15 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
         const seriesWhere = { ...where, repeat: { not: '' }, ...(and.length || seriesTimed.length ? { AND: [...and, ...seriesTimed] } : {}) };
 
         const order = past ? 'desc' : 'asc';
-        const include = { ...EVENT_INCLUDE, ...GOING_COUNT };
+        const include = { ...eventInclude(now), ...GOING_COUNT };
         // Repeating events, at the date each shows, in the list's order.
         const direction = order === 'asc' ? 1 : -1;
         const byDate = (a: Dated, b: Dated) => direction * (shownStart(a, now).getTime() - shownStart(b, now).getTime())
             || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-        const series = (await prisma.event.findMany({ where: seriesWhere, include, orderBy: { id: 'asc' }, take: MAX_SERIES }))
+        const found = await prisma.event.findMany({ where: seriesWhere, include, orderBy: { id: 'asc' }, take: MAX_SERIES });
+        // More than that: the rest are left out of this list (logged, to raise it).
+        if (found.length >= MAX_SERIES) console.warn(`[Events] The list took the first ${MAX_SERIES} repeating events; any more were left out`);
+        const series = found
             .filter((e) => (!upcoming || !!nextOccurrence(e, now)) && (!past || !nextOccurrence(e, now)))
             .sort(byDate);
         // They're merged in among the one-off events: of those, the page needs
@@ -427,7 +552,7 @@ export async function listEvents(req: Request, res: Response): Promise<void> {
             prisma.event.count({ where: oneOffWhere }),
         ]);
         const merged = [...oneOffs, ...series].sort(byDate);
-        const rows = await countShownDates(merged.slice(start - skip, start - skip + take), now);
+        const rows = await countShownDates(await withLastDates(merged.slice(start - skip, start - skip + take), now), now);
         const total = oneOffTotal + series.length;
         const hiddenSet = new Set(hidden);
         const mine = rows.length
@@ -481,12 +606,12 @@ export async function listMyEvents(req: Request, res: Response): Promise<void> {
                 skip,
                 take,
                 // Who's going (not who's invited, interested or not going).
-                include: { ...EVENT_INCLUDE, ...GOING_COUNT },
+                include: { ...eventInclude(now), ...GOING_COUNT },
             }),
             prisma.event.count({ where: mineWhere }),
         ]);
         // A repeating event's people: those going to the date it shows.
-        const events = await countShownDates(found, now);
+        const events = await countShownDates(await withLastDates(found, now), now);
 
         // Ticket sales per hosted event (PAID only)
         const eventIds = events.map((e) => e.id);
@@ -535,23 +660,43 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
         const me = req.user!;
         const take = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10) || 50, 1), 100);
         const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
-        const where = { userId: me.id, status: { in: ['GOING', 'INTERESTED', 'INVITED'] } };
-        const [records, total, hidden] = await Promise.all([
+        const hidden = await hiddenFromIds(me.id, { staff: isStaffUser(me) });
+        const now = new Date();
+        // Not events whose host is in a block with them, suspended or gone,
+        // nor invites to a meetup that was called off or missed its deadline.
+        const where = {
+            userId: me.id,
+            status: { in: ['GOING', 'INTERESTED', 'INVITED'] },
+            event: { hostId: { notIn: hidden }, host: { isBanned: false, deletedAt: null } },
+            NOT: [
+                { status: 'INVITED', event: { calledOffAt: { not: null } } },
+                { status: 'INVITED', event: { confirmedAt: null, decideBy: { lt: new Date() } } },
+            ],
+        };
+        const [records, total] = await Promise.all([
             prisma.eventAttendee.findMany({
                 where,
-                include: { event: { include: { ...EVENT_INCLUDE, ...GOING_COUNT } } },
+                include: { event: { include: { ...eventInclude(now), ...GOING_COUNT } } },
                 orderBy: { joinedAt: 'desc' },
                 skip: (page - 1) * take,
                 take,
             }),
             prisma.eventAttendee.count({ where }),
-            hiddenFromIds(me.id, { staff: isStaffUser(me) }),
         ]);
         const hiddenSet = new Set(hidden);
-        const now = new Date();
-        const events = new Map((await countShownDates(records.map((a) => a.event), now)).map((e) => [e.id, e]));
+        // An answer for a date older than the list loads: that date's change, looked up.
+        const older = records.filter((a) => repeats(a.event) && a.occurrenceStart && a.occurrenceStart.getTime() < now.getTime() - SERIES_REACH);
+        const olderChanges = older.length
+            ? await prisma.eventDateChange.findMany({ where: { OR: older.map((a) => ({ eventId: a.eventId, occurrenceStart: a.occurrenceStart! })) } })
+            : [];
+        const withOlder = records.map((a) => {
+            const own = olderChanges.filter((c) => c.eventId === a.eventId);
+            return own.length ? { ...a.event, dateChanges: [...own, ...a.event.dateChanges] } : a.event;
+        });
+        const events = new Map((await countShownDates(await withLastDates(withOlder, now), now)).map((e) => [e.id, e]));
         // As the list shows them: no guest list, payout address or online link.
-        // An answer for a repeating event's date that's over shows that date.
+        // An answer for another of a repeating event's dates shows that date
+        // (and whether it was called off).
         const data = records.map((a) => {
             const e = events.get(a.eventId) ?? a.event;
             const at = repeats(e) && a.occurrenceStart && a.occurrenceStart.getTime() !== shownKey(e, now).getTime() ? a.occurrenceStart : null;
@@ -578,11 +723,12 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
     try {
         const me = req.user!;
         const now = new Date();
-        const event = await prisma.event.findUnique({
+        const found = await prisma.event.findUnique({
             where: { id: req.params.id },
-            include: { ...EVENT_INCLUDE, ...GOING_COUNT },
+            include: { ...eventInclude(now), ...GOING_COUNT },
         });
-        if (!event) { res.status(404).json({ error: 'Event not found' }); return; }
+        if (!found) { res.status(404).json({ error: 'Event not found' }); return; }
+        const [event] = await withLastDates([found], now);
 
         const acted = await actedForIds(me.id);
         const canEdit = await canEditEvent(event, me, acted);
@@ -680,6 +826,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
         if (!data.repeat) delete data.repeatUntil;
         const repeatIssue = repeatProblem({ startDate: data.startDate, endDate: data.endDate, repeat: data.repeat, repeatUntil: data.repeatUntil });
         if (repeatIssue) { res.status(400).json({ error: 'Check when it repeats', reason: repeatIssue }); return; }
+        if (countsAsRepeating(data, new Date()) && await repeatingFull(me, new Date())) { tooManyRepeating(res); return; }
         if (!proposal && !(data.description || '').trim()) {
             res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;
         }
@@ -726,7 +873,7 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
                 // Whoever proposes a meetup is the first one in.
                 ...(proposal ? { attendees: { create: { userId: me, status: 'GOING' } } } : {}),
             } as any,
-            include: EVENT_INCLUDE,
+            include: eventInclude(new Date()),
         });
         await cache.delPattern('events:');
         const hostName = hostNameOf(event);
@@ -808,8 +955,9 @@ async function publishToNostr(signerId: string, event: any, target: 'bies' | 'pu
  * edited at one of its dates (`occurrence`, the date the form shows): for
  * that date only (`scope: 'date'`: its time, title, words and place; the
  * members going to it are told), or for it and every date after (the
- * default), when it becomes the first date. How it repeats is always the
- * event's.
+ * default; with a new time it becomes the first date, and the members going
+ * to it are told). How it repeats is always the event's. When dates move,
+ * what each date had of its own (a call-off, another place) moves with it.
  */
 export async function updateEvent(req: Request, res: Response): Promise<void> {
     try {
@@ -842,29 +990,81 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         // them, checked when one of them is sent. Never on a proposal.
         if (badDate(data.repeatUntil)) { res.status(400).json({ error: 'Pick the last day it repeats', reason: 'repeat_until_invalid' }); return; }
 
+        const now = new Date();
+        // An edit that doesn't name one of a repeating event's dates (from an
+        // app made before dates could change: iOS up to build 17, Android up
+        // to 8) sends the event as its page showed it: at its next date, as
+        // that date is. What's that date's own stays its own (it isn't the
+        // event's), and with a next date it's an edit of that date and every
+        // date after, so no date's change or call-off is lost and its first
+        // date stays where it is. Sent from its first date (a form for the
+        // whole event, while that date is over), it's the event's as it was.
+        if (repeats(existing) && body.occurrence === undefined) {
+            const showing = shownOccurrence(existing, now);
+            const its = dayView(existing, showing);
+            for (const f of DATE_FIELDS) if (showing.change?.[f] != null && data[f] === its[f]) delete data[f];
+            const ownPlace = showing.change?.locationName != null || showing.change?.locationAddress != null;
+            if (ownPlace && data.location === its.location) delete data.location;
+            const next = nextOccurrence(existing, now);
+            const day = (d: Date) => endOfDay(d)?.getTime();
+            const fromFirst = data.startDate !== undefined && day(data.startDate) === day(existing.startDate) && next?.key.getTime() !== existing.startDate.getTime();
+            if (next && !fromFirst) {
+                body.occurrence = next.key.toISOString();
+                body.scope = 'series';
+            } else if (data.startDate !== undefined && sameTime(data.startDate, showing.startDate) && (data.endDate === undefined || sameTime(data.endDate, showing.endDate))) {
+                delete data.startDate;
+                delete data.endDate;
+            }
+        }
+        if (!hostSide) {
+            // Co-hosts edit what the event is; its tickets and money, who hosts
+            // it, who sees it and where people join online stay with the host
+            // side, for every date and for one. Unchanged copies pass: as the
+            // event has them, or, edited at a date, as that date has them.
+            // Taken out before what an edit does to a date or the event is
+            // worked out, so neither gets them.
+            const at = repeats(existing) && body.occurrence !== undefined && !Number.isNaN(new Date(body.occurrence).getTime())
+                ? occurrenceFor(existing, new Date(body.occurrence)) : null;
+            const its: Record<string, unknown> | null = at ? dayView(existing, at) : null;
+            const same = (f: string) => (its && f in its
+                ? !differs(body[f as keyof typeof body], its[f])
+                : !differs(body[f as keyof typeof body], existing[f as keyof typeof existing]));
+            const changed = HOST_ONLY.find((f) => body[f] !== undefined && !same(f))
+                ?? (body.partners !== undefined && !samePartners(body.partners, shown) ? 'partners' : undefined);
+            if (changed) {
+                res.status(403).json({ error: 'Only the host can change tickets, co-hosts, sponsors or who sees the event', reason: 'host_only', field: changed });
+                return;
+            }
+            for (const field of HOST_ONLY) delete data[field];
+            delete data.nostrPublish;
+        }
+
         // A repeating event edited at one of its dates. What's as that date
         // shows already isn't an edit (and mustn't reach the event: another
-        // date's place, a co-host's host-only field). For that date only, what
-        // changed is kept for it (dateEdit) and the rest is the event's; for
-        // it and every date after, the event changes from it (seriesFrom).
-        const now = new Date();
+        // date's place). For that date only, what changed is kept for it
+        // (dateEdit) and the rest is the event's; for it and every date after,
+        // the event changes from it (seriesFrom).
         let dateEdit: { key: Date; before: Occurrence; row: Record<string, any> } | null = null;
-        let seriesFrom: { key: Date; keysMoved: boolean; cleared: string[] } | null = null;
+        let seriesFrom: { key: Date; keysMoved: boolean; cleared: string[]; offset: number } | null = null;
         if (repeats(existing) && body.occurrence !== undefined) {
             const key = new Date(body.occurrence);
             const date = Number.isNaN(key.getTime()) ? null : occurrenceFor(existing, key);
             if (!date) { res.status(400).json({ error: 'That date isn\'t one of this event\'s', reason: 'date_not_found' }); return; }
             if (hasEnded(date, now)) { res.status(409).json({ error: 'That date is over', reason: 'date_over' }); return; }
-            const shown = dayView(existing, date);
+            const shownDay = dayView(existing, date);
             const sent = body as Record<string, unknown>;
-            for (const f of DATE_FIELDS) if (data[f] !== undefined && data[f] === shown[f]) { delete data[f]; delete sent[f]; }
+            for (const f of DATE_FIELDS) if (data[f] !== undefined && data[f] === shownDay[f]) { delete data[f]; delete sent[f]; }
             delete data.location; // the one-line place follows its name and address
             const timeEdited = (data.startDate !== undefined && !sameTime(data.startDate, date.startDate))
                 || (data.endDate !== undefined && !sameTime(data.endDate, date.endDate));
             // How it repeats is the event's: a change to it is for every date.
-            const ruleChanged = (data.repeat !== undefined && data.repeat !== existing.repeat)
-                || (data.repeatUntil !== undefined && !sameTime(data.repeatUntil, existing.repeatUntil));
+            const repeatChanged = data.repeat !== undefined && data.repeat !== existing.repeat;
+            const ruleChanged = repeatChanged || (data.repeatUntil !== undefined && !sameTime(data.repeatUntil, existing.repeatUntil));
             if (body.scope === 'date' && !ruleChanged) {
+                // Up to a year ahead: further on, it's the event's.
+                if (key.getTime() > now.getTime() + DATES_AHEAD) {
+                    res.status(400).json({ error: 'Dates can be changed up to a year ahead', reason: 'date_too_far' }); return;
+                }
                 // Its own time: a new start keeps its length, unless it has a new end too.
                 const start = timeEdited ? (data.startDate ?? date.startDate) : date.startDate;
                 const end = !timeEdited ? date.endDate
@@ -887,32 +1087,50 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                     row.endDate = row.startDate || !sameTime(end, usual.endDate) ? end : null;
                 }
                 for (const f of DATE_FIELDS) if (data[f] !== undefined) row[f] = data[f] === usual[f] ? null : data[f];
+                // A date that had nothing of its own gets a change: within as many as an event can have ahead.
+                if (!c && hasOverrides(row as DateChange) && await changesAhead(existing.id, now) >= MAX_DATE_CHANGES) {
+                    res.status(400).json({ error: `An event can have ${MAX_DATE_CHANGES} changed dates ahead`, reason: 'too_many_date_changes', max: MAX_DATE_CHANGES });
+                    return;
+                }
                 dateEdit = { key, before: date, row };
                 // The rest of the edit (its photo, tickets…) is the event's.
                 for (const f of [...DATE_FIELDS, 'startDate', 'endDate', 'repeat', 'repeatUntil']) delete data[f];
             } else {
-                // From this date on: it becomes the first date (those before it
-                // aren't shown anywhere), so only the next date can be.
+                // From this date on: only the next date can be (those before it
+                // are over; from a later one, the dates between would be left behind).
                 if (nextOccurrence(existing, now)?.key.getTime() !== key.getTime()) {
                     res.status(400).json({ error: 'Only the next date changes the dates after it', reason: 'date_not_next' }); return;
                 }
                 if (timeEdited) {
+                    // A new time: this date is the first now, at that time.
                     const start: Date = data.startDate ?? date.startDate;
                     data.startDate = start;
                     if (data.endDate === undefined) data.endDate = date.endDate ? new Date(start.getTime() + date.endDate.getTime() - date.startDate.getTime()) : null;
-                } else {
-                    // At its usual time: a time of its own was that date's only.
+                } else if (repeatChanged && data.repeat) {
+                    // A new rule: from this date, at its usual time.
                     data.startDate = key;
                     data.endDate = existing.endDate ? new Date(key.getTime() + existing.endDate.getTime() - existing.startDate.getTime()) : null;
+                } else if (repeatChanged) {
+                    // A one-off: this date, as it is.
+                    data.startDate = date.startDate;
+                    data.endDate = date.endDate;
+                } else {
+                    // Its dates stay where they are (its first date too).
+                    delete data.startDate;
+                    delete data.endDate;
                 }
+                if (repeatChanged && !data.repeat) foldDate(existing, data, date, body);
                 if (data.locationName !== undefined || data.locationAddress !== undefined) {
                     data.location = [data.locationName ?? existing.locationName, data.locationAddress ?? existing.locationAddress].filter(Boolean).join(', ');
                 }
                 seriesFrom = {
                     key,
                     // Another time, weekday or rule: its dates from here are other dates.
-                    keysMoved: (data.repeat !== undefined && data.repeat !== existing.repeat) || !sameTime(data.startDate, key),
-                    cleared: DATE_FIELDS.filter((f) => data[f] !== undefined),
+                    keysMoved: repeatChanged || (data.startDate !== undefined && !sameTime(data.startDate, key)),
+                    // What's the event's from this date on is no longer this date's own.
+                    cleared: [...DATE_FIELDS.filter((f) => data[f] !== undefined), ...(timeEdited ? ['startDate', 'endDate'] : [])],
+                    // When its dates move, this date is the first: the one after it the second…
+                    offset: -(dateIndex(existing, key) ?? 0),
                 };
             }
         }
@@ -922,6 +1140,8 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         }
         if (!repeat) {
             if (data.repeatUntil !== undefined || existing.repeatUntil) data.repeatUntil = null;
+            // Made a one-off from its first date (a form for the whole event): on the date it showed.
+            if (repeats(existing) && !seriesFrom) oneOffAtShownDate(existing, data, body, now);
         } else if (['repeat', 'startDate', 'endDate', 'repeatUntil'].some((f) => data[f] !== undefined)) {
             const repeatIssue = repeatProblem({
                 startDate: data.startDate ?? existing.startDate,
@@ -930,6 +1150,11 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 repeatUntil: data.repeatUntil !== undefined ? data.repeatUntil : existing.repeatUntil,
             });
             if (repeatIssue) { res.status(400).json({ error: 'Check when it repeats', reason: repeatIssue }); return; }
+            // Made to repeat (again, or for longer): one more of its host's repeating events.
+            const after = { repeat, repeatUntil: data.repeatUntil !== undefined ? data.repeatUntil : existing.repeatUntil };
+            if (countsAsRepeating(after, now) && !countsAsRepeating(existing, now) && await repeatingFull(existing.hostId, now)) {
+                tooManyRepeating(res); return;
+            }
         }
         // A proposal's number and deadline change only while it's still a
         // proposal (and never to nothing); a usual event doesn't become one.
@@ -977,18 +1202,6 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         frameNewCover(data, 'thumbnail', existing.thumbnail);
         // Its link preview's framing belongs to the old cover too.
         if (data.thumbnail !== undefined && data.thumbnail !== (existing.thumbnail ?? '') && data.shareFrame === undefined) data.shareFrame = '';
-        if (!hostSide) {
-            // Co-hosts edit what the event is; its tickets and money, who hosts
-            // it and who sees it stay with the host side. Unchanged copies pass.
-            const changed = HOST_ONLY.find((f) => body[f] !== undefined && differs(body[f], existing[f]))
-                ?? (body.partners !== undefined && !samePartners(body.partners, shown) ? 'partners' : undefined);
-            if (changed) {
-                res.status(403).json({ error: 'Only the host can change tickets, co-hosts, sponsors or who sees the event', reason: 'host_only', field: changed });
-                return;
-            }
-            for (const field of HOST_ONLY) delete data[field];
-            delete data.nostrPublish;
-        }
         const nostrPublish: string = data.nostrPublish || 'none';
         if (data.visibility !== undefined) data.isPublished = visibilityToPublished(data.visibility);
 
@@ -1029,7 +1242,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             try {
                 invitePlan = await planInviteList({
                     ...existing, startDate: data.startDate ?? existing.startDate, decideBy: data.decideBy ?? existing.decideBy,
-                }, me, body.inviteeIds);
+                }, me, body.inviteeIds, body.inviteeIdsShown);
             } catch (err) {
                 if (err instanceof InviteError) { refuseInvites(res, err); return; }
                 throw err;
@@ -1042,7 +1255,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 if (partners.length) await tx.eventPartner.createMany({ data: partners.map((p) => ({ ...p, eventId: existing.id })) });
             }
             if (repeats(existing)) await changeDates(tx, existing, data, dateEdit, seriesFrom, now);
-            const updated = await tx.event.update({ where: { id: existing.id }, data, include: EVENT_INCLUDE });
+            const updated = await tx.event.update({ where: { id: existing.id }, data, include: eventInclude(now) });
             // One date's change moves no answers: the event's dates stay where they were.
             if (!dateEdit && (repeats(existing) || repeats(updated))) await moveAnswers(tx, existing, updated, now);
             return updated;
@@ -1067,11 +1280,13 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
                 status: 'CHANGED',
             }, me);
         }
-        // Who's going to a date that's now different hears how.
+        // Who's going to a date that's now different hears how: one date's
+        // change, or the next date moved with every date after it.
         if (dateEdit) await tellDateChanged(existing, event, dateEdit, me);
+        else if (repeats(existing) && repeats(event)) await tellNextMoved(existing, event, now, me);
         // Then the invites (as it is now): taken back quietly, new ones told.
         const invites = invitePlan
-            ? { withdrawn: await withdrawInvites(event.id, invitePlan.remove), invited: (await sendInvites(event, invitePlan.add)).length }
+            ? { withdrawn: await withdrawInvites(event.id, invitePlan.remove), invited: (await sendInvites(event, invitePlan.add, me)).length }
             : null;
 
         // On Nostr, under the host's key: gone when it stops being public,
@@ -1098,13 +1313,14 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
 
 /**
  * A repeating event's date changes, as an edit leaves them: that date's own
- * (one date), none from the date edited on when its dates become other
- * dates (another time, weekday or rule), and none at all once it stops
- * repeating. From it on, what's now the event's own is no longer the date's.
+ * (one date), none once it stops repeating, and when its dates move (another
+ * time, weekday or rule) the ones still ahead move with them (moveDateChanges).
+ * From the date edited on, what's now the event's own is no longer the date's.
  */
 async function changeDates(
     tx: Prisma.TransactionClient, existing: Dated & { dateChanges: DateChange[] }, data: Record<string, any>,
-    dateEdit: { key: Date; row: Record<string, any> } | null, seriesFrom: { key: Date; keysMoved: boolean; cleared: string[] } | null, now: Date,
+    dateEdit: { key: Date; row: Record<string, any> } | null,
+    seriesFrom: { key: Date; keysMoved: boolean; cleared: string[]; offset: number } | null, now: Date,
 ): Promise<void> {
     const eventId = existing.id;
     const at = (key: Date) => ({ eventId_occurrenceStart: { eventId, occurrenceStart: key } });
@@ -1115,8 +1331,14 @@ async function changeDates(
         return;
     }
     if (!isRepeat(data.repeat ?? existing.repeat)) { await tx.eventDateChange.deleteMany({ where: { eventId } }); return; }
+    const after: Series = {
+        startDate: data.startDate ?? existing.startDate,
+        endDate: data.endDate !== undefined ? data.endDate : existing.endDate,
+        repeat: data.repeat ?? existing.repeat,
+        repeatUntil: data.repeatUntil !== undefined ? data.repeatUntil : existing.repeatUntil,
+    };
     if (seriesFrom) {
-        if (seriesFrom.keysMoved) { await tx.eventDateChange.deleteMany({ where: { eventId, occurrenceStart: { gte: seriesFrom.key } } }); return; }
+        if (seriesFrom.keysMoved) { await moveDateChanges(tx, existing, after, seriesFrom.key, seriesFrom.offset, seriesFrom); return; }
         const own = existing.dateChanges.find((c) => c.occurrenceStart.getTime() === seriesFrom.key.getTime());
         if (!own || !seriesFrom.cleared.length) return;
         const cleared = Object.fromEntries(seriesFrom.cleared.map((f) => [f, null]));
@@ -1125,9 +1347,72 @@ async function changeDates(
         else await tx.eventDateChange.delete({ where: at(seriesFrom.key) });
         return;
     }
-    // Edited as a whole (not at a date): when its dates move, those still ahead lose what they had.
+    // Edited as a whole (not at a date): when its dates move, those still ahead move with them, each keeping its place.
     const moved = (data.repeat !== undefined && data.repeat !== existing.repeat) || (data.startDate !== undefined && !sameTime(data.startDate, existing.startDate));
-    if (moved) await tx.eventDateChange.deleteMany({ where: { eventId, occurrenceStart: { gte: nextOccurrence(existing, now)?.key ?? now } } });
+    if (moved) await moveDateChanges(tx, existing, after, nextOccurrence(existing, now)?.key ?? now, 0, null);
+}
+
+/**
+ * When an edit moves a repeating event's dates from one date on (`from`),
+ * what those dates had of their own moves with them, so a date called off
+ * stays called off and one somewhere else stays there. With the same rule,
+ * each date keeps its place (the third date after the one edited is the
+ * third after it still: `offset` from its old place) and loses only a time
+ * of its own (the new time is every date's); with another rule, a date keeps
+ * what it had where the new rule has the same date, and its own time where
+ * that still fits. A date with no place in the new dates (past the last day)
+ * goes. `edited`: the date the edit was made at, which loses what's now the
+ * event's (`cleared`).
+ */
+async function moveDateChanges(
+    tx: Prisma.TransactionClient, before: Dated & { dateChanges: DateChange[] }, after: Series, from: Date, offset: number,
+    edited: { key: Date; cleared: string[] } | null,
+): Promise<void> {
+    const rows = before.dateChanges.filter((c) => c.occurrenceStart.getTime() >= from.getTime());
+    if (!rows.length) return;
+    const sameRule = before.repeat === after.repeat;
+    const moved: { key: Date; row: Record<string, any> }[] = [];
+    for (const c of rows) {
+        const index = sameRule ? dateIndex(before, c.occurrenceStart) : null;
+        const key = sameRule
+            ? (index === null ? null : keyAt(after, index + offset))
+            : (occurrenceFor(after, c.occurrenceStart) ? c.occurrenceStart : null);
+        if (!key) continue;
+        const row: Record<string, any> = {
+            calledOffAt: c.calledOffAt ?? null, startDate: null, endDate: null,
+            ...Object.fromEntries(DATE_FIELDS.map((f) => [f, c[f] ?? null])),
+        };
+        const ownTime = c.startDate ?? null;
+        if (!sameRule && ownTime && !dateChangeProblem(after, key, ownTime, c.endDate ?? null)) {
+            row.startDate = ownTime;
+            row.endDate = c.endDate ?? null;
+        }
+        if (edited && c.occurrenceStart.getTime() === edited.key.getTime()) for (const f of edited.cleared) row[f] = null;
+        if (hasOverrides(row as DateChange) || row.calledOffAt) moved.push({ key, row });
+    }
+    await tx.eventDateChange.deleteMany({ where: { eventId: before.id, occurrenceStart: { in: rows.map((c) => c.occurrenceStart) } } });
+    for (const { key, row } of moved) {
+        await tx.eventDateChange.upsert({
+            where: { eventId_occurrenceStart: { eventId: before.id, occurrenceStart: key } },
+            create: { eventId: before.id, occurrenceStart: key, ...row },
+            update: row,
+        });
+    }
+}
+
+/**
+ * An edit of every date that moved the next one (another time or day): the
+ * members going to it (their answers moved with it) hear its new time.
+ */
+async function tellNextMoved(existing: Dated, event: any, now: Date, me: string): Promise<void> {
+    const was = nextOccurrence(existing, now);
+    const is = nextOccurrence(event, now);
+    if (!was || !is || (sameTime(was.startDate, is.startDate) && sameTime(was.endDate, is.endDate))) return;
+    await tellGoingTo(event.id, is.key, {
+        title: `${event.title}: ${dayName(was.key)} changed`,
+        body: movedNote(was, is),
+        status: 'DATE_CHANGED',
+    }, me);
 }
 
 /** The members going to a date that an edit for it changed hear what's different (only what this edit changed). */
@@ -1497,7 +1782,8 @@ export async function callOffEvent(req: Request, res: Response): Promise<void> {
  * POST /events/:id/dates/call-off { occurrence }
  * POST /events/:id/dates/restore { occurrence }
  * One date of a repeating event called off (rain, a holiday), or brought
- * back: the host side, and only a date that hasn't started. The event goes
+ * back: the host side, and only a date that hasn't started (and is up to a
+ * year ahead, within MAX_DATE_CHANGES). The event goes
  * on at its next date; the members going to that date are told. Answers for
  * it stay, so bringing it back brings them back too.
  */
@@ -1524,6 +1810,13 @@ async function setDateOff(req: Request, res: Response, off: boolean): Promise<vo
         const now = new Date();
         if (date.startDate.getTime() <= now.getTime()) { res.status(400).json({ error: 'That date has started already', reason: 'started' }); return; }
         if (date.calledOff === off) { res.json({ calledOff: off }); return; }
+        // Up to a year ahead, and within as many changed dates as an event can have ahead.
+        if (off && key.getTime() > now.getTime() + DATES_AHEAD) {
+            res.status(400).json({ error: 'Dates can be called off up to a year ahead', reason: 'date_too_far' }); return;
+        }
+        if (off && !date.change && await changesAhead(event.id, now) >= MAX_DATE_CHANGES) {
+            res.status(400).json({ error: `An event can have ${MAX_DATE_CHANGES} changed dates ahead`, reason: 'too_many_date_changes', max: MAX_DATE_CHANGES }); return;
+        }
 
         const at = { eventId_occurrenceStart: { eventId: event.id, occurrenceStart: key } };
         if (off) {

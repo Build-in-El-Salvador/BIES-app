@@ -67,7 +67,7 @@ router.post('/:id/call-off', authenticate, callOffEvent);
 // One date of a repeating event called off, or brought back (its host side; who's going to it is told)
 router.post('/:id/dates/call-off', authenticate, validate(eventDateSchema), callOffDate);
 router.post('/:id/dates/restore', authenticate, validate(eventDateSchema), restoreDate);
-router.post('/:id/invite', authenticate, inviteToEvent);
+router.post('/:id/invite', authenticate, requireTerms, inviteToEvent);
 // A proposed meetup's proposer inviting members (each is told; only they see who)
 router.post('/:id/invites', authenticate, requireTerms, validate(inviteMembersSchema), inviteMembers);
 // A co-host or sponsor taking their name off (or whoever can edit it)

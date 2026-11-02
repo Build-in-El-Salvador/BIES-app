@@ -102,6 +102,22 @@ export function changeNote(key: Date, now: DayView, usual: DayView, changed: Cha
     return parts.length ? parts.join('. ') : 'Details changed';
 }
 
+/**
+ * A date that moved with every date after it, in words: "Now 5:00 PM (was
+ * 4:00 PM)", with its days when it's on another day ("Now Sun 8 Nov, 5:00
+ * PM (was Sat 7 Nov, 4:00 PM)"); a new end only: "Now until 7:00 PM (was
+ * until 6:00 PM)".
+ */
+export function movedNote(was: { startDate: Date; endDate: Date | null }, now: { startDate: Date; endDate: Date | null }): string {
+    if (was.startDate.getTime() === now.startDate.getTime()) {
+        const until = (d: Date | null) => (d ? `until ${timeText(d)}` : 'with no end time');
+        return `Now ${until(now.endDate)} (was ${until(was.endDate)})`;
+    }
+    const sameDay = dayName(was.startDate) === dayName(now.startDate);
+    const at = (d: Date) => (sameDay ? timeText(d) : `${dayName(d)}, ${timeText(d)}`);
+    return `Now ${at(now.startDate)} (was ${at(was.startDate)})`;
+}
+
 /** The members going to one date of an event (by its key), but not whoever's doing this. */
 export async function goingTo(eventId: string, key: Date, except?: string): Promise<string[]> {
     const rows = await prisma.eventAttendee.findMany({

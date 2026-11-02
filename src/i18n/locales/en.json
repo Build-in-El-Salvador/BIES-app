@@ -831,7 +831,11 @@
         "date_not_found": "That date isn't one of this event's anymore. Open the event again.",
         "date_not_next": "Only its next date can change the dates after it.",
         "date_out_of_order": "Keep that date after the one before it and before the next one.",
-        "date_end_before_start": "The end is before the start."
+        "date_end_before_start": "The end is before the start.",
+        "date_overlaps": "That date has to end before the next one starts, and start after the one before ends.",
+        "date_too_far": "One date can be changed up to a year ahead.",
+        "too_many_date_changes": "An event can have up to {{count}} changed or called-off dates ahead.",
+        "too_many_repeating": "You can have up to {{count}} repeating events at a time. Delete one you no longer need to add another."
       },
       "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
       "card": "Highlight card",
@@ -871,6 +875,7 @@
       "needs_one": "needs {{count}} more",
       "needs_other": "needs {{count}} more",
       "imIn": "I'm in",
+      "cantMakeIt": "Can't make it",
       "in": "In",
       "youreIn": "You're in",
       "you": "You",
@@ -911,6 +916,7 @@
         "proposer_stays": "You proposed it, so you're in. To cancel it, use Call it off in the ⋯ menu.",
         "generic": "Couldn't do that. Try again.",
         "too_many_invites": "A meetup can have up to {{count}} members invited.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
         "started": "It has started already."
       },
       "inviteMembers": "Invite members",
@@ -985,6 +991,7 @@
         "start_invalid": "Pick when it starts.",
         "end_invalid": "Pick when it ends.",
         "too_many_invites": "You can invite up to {{count}} members to a meetup.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
         "called_off": "It's too late to invite anyone: nobody can join any more.",
         "started": "It has started, so it's too late to invite anyone."
       },
@@ -1018,7 +1025,8 @@
         "3": "third",
         "4": "fourth"
       },
-      "next": "Next"
+      "next": "Next",
+      "ended": "Ended"
     },
     "dates": {
       "changedForDate": "Changed for this date",

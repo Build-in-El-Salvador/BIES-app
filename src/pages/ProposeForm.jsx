@@ -67,6 +67,7 @@ export default function ProposeForm() {
     // hasn't answered; one taken off has their invite taken back. Only while
     // the meetup can still be joined.
     const [invitees, setInvitees] = useState([]);
+    const invitedAtOpen = useRef([]);
     const [canInvite, setCanInvite] = useState(!editing);
     const [goingIds, setGoingIds] = useState([]); // editing: who's in already
 
@@ -112,6 +113,7 @@ export default function ProposeForm() {
                 setKept({ venueListingId: e.venueListingId || e.venueListing?.id || null, placeName: e.venueListing?.name || e.locationName || '' });
                 setStage(e.stage || 'proposed');
                 setInvitees((e.invited || []).map((p) => ({ userId: p.id, name: p.name, avatar: p.avatar })));
+                invitedAtOpen.current = (e.invited || []).map((p) => p.id);
                 setCanInvite(Array.isArray(e.invited) && invitesOpen(e));
                 setGoingIds((e.going || []).map((p) => p.id));
             }).catch((err) => (err?.status === 403 || err?.status === 404 ? setNotYours(true) : setLoadFailed(true)))
@@ -206,7 +208,9 @@ export default function ProposeForm() {
             maxAttendees: Number.isFinite(max) && max > 0 ? max : null,
             priceLabel: form.priceLabel.trim(),
             // Everyone to invite (on an edit, everyone who should stay invited).
-            ...(canInvite ? { inviteeIds: invitees.map((g) => g.userId) } : {}),
+            // With the invites the form opened with: only those can be taken
+            // back, not one sent from the meetup's page meanwhile.
+            ...(canInvite ? { inviteeIds: invitees.map((g) => g.userId), ...(editing ? { inviteeIdsShown: invitedAtOpen.current } : {}) } : {}),
         };
         setSaving(true);
         try {
