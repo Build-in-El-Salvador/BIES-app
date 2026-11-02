@@ -12,7 +12,7 @@ import { COVER_ASPECT } from '../../utils/coverFrame';
 import { getAssetUrl } from '../../utils/assets';
 import TypeBadge, { TYPE_STYLE, styleOf } from '../../components/opportunities/TypeBadge';
 import {
-    typesShown, isTypeShown, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
+    typesShown, isTypeShown, kindsShown, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN,
     asWebLink, elSalvadorToday, fullDollars, hasField, industryOf, isOpen, parseDollars, plainText,
 } from '../../components/opportunities/opportunityOptions';
 import { isNativePlatform } from '../../utils/platform';
@@ -233,7 +233,8 @@ const OpportunityForm = ({ editMode = false }) => {
         if (hasField(type, 'pay')) payload.pay = form.pay.trim();
         if (hasField(type, 'remote')) payload.remote = form.remote;
         if (hasField(type, 'btcAccepted')) payload.btcAccepted = form.btcAccepted;
-        if (hasField(type, 'requiresDeckApproval')) payload.requiresDeckApproval = form.requiresDeckApproval;
+        // The pitch deck's setting is the website's: the store app leaves decks out.
+        if (hasField(type, 'requiresDeckApproval') && !NATIVE) payload.requiresDeckApproval = form.requiresDeckApproval;
         return payload;
     };
 
@@ -399,7 +400,8 @@ const OpportunityForm = ({ editMode = false }) => {
         );
     }
 
-    const kinds = OPPORTUNITY_KINDS[type] || [];
+    // In the phone app, not "Investors" (appScope.js); a project's saved kind stays.
+    const kinds = kindsShown(type, NATIVE);
     const today = elSalvadorToday();
     const { color } = styleOf(type);
     const applies = type === 'job' || type === 'program';
@@ -508,7 +510,7 @@ const OpportunityForm = ({ editMode = false }) => {
                                 </div>
                                 {fieldErrorFor('of-stage')}
                             </div>
-                            <div className="of-deck">
+                            {!NATIVE && <div className="of-deck">
                                 <span className="of-label">{t('opportunities.deck.title')}</span>
                                 <p className="of-hint" style={{ marginTop: 0, marginBottom: '0.6rem' }}>{t('opportunities.form.deckHint')}</p>
                                 <div className="of-deck-row">
@@ -528,7 +530,7 @@ const OpportunityForm = ({ editMode = false }) => {
                                     <input type="checkbox" name="requiresDeckApproval" checked={form.requiresDeckApproval} onChange={handleChange} />
                                     <span>{t('opportunities.form.deckAskFirst')}</span>
                                 </label>
-                            </div>
+                            </div>}
                         </div>
                     )}
 
@@ -663,7 +665,7 @@ const OpportunityForm = ({ editMode = false }) => {
                         <div className="of-delete">
                             {confirmDelete ? (
                                 <div className="of-delete-confirm" role="alert" ref={deleteRef}>
-                                    <p>{t(type === 'investment' ? 'opportunities.form.deleteConfirm' : 'opportunities.form.deleteConfirmNoDeck')}</p>
+                                    <p>{t(type === 'investment' && (!NATIVE || hasDeck) ? 'opportunities.form.deleteConfirm' : 'opportunities.form.deleteConfirmNoDeck')}</p>
                                     <div className="of-delete-buttons">
                                         <button type="button" className="btn btn-outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
                                             {t('common.cancel')}

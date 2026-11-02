@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import {
     OPPORTUNITY_TYPES, OPPORTUNITY_KINDS, KIND_REQUIRED, INDUSTRIES, STAGES, MAX_PHOTOS, MAX_OPEN, TYPE_FIELDS,
     amountOf, daysLeft, elSalvadorToday, formatDay, fullDollars, hasField, industryOf, isOpen, parseDollars,
-    plainText, shortDollars, summaryOf, typeLine, typesShown, isTypeShown,
+    plainText, shortDollars, summaryOf, typeLine, typesShown, isTypeShown, kindsShown, isKindHidden,
 } from '../../src/components/opportunities/opportunityOptions.js';
 
 const server = readFileSync(new URL('../../server/src/controllers/project.controller.ts', import.meta.url), 'utf8');
@@ -155,4 +155,22 @@ test('the phone app and the website show every type, projects too', () => {
     assert.equal(isTypeShown('investment', true), true);
     // An older project, with no type, is a project.
     assert.equal(isTypeShown(undefined, true), true);
+});
+
+test('the phone app leaves out a project looking for investors; the website shows it', () => {
+    const t = (key, vars) => (vars ? `${key}(${Object.values(vars).join(',')})` : key);
+    assert.deepEqual(kindsShown('investment', false), OPPORTUNITY_KINDS.investment);
+    assert.deepEqual(kindsShown('investment', true), OPPORTUNITY_KINDS.investment.filter((k) => k !== 'investors'));
+    assert.deepEqual(kindsShown('job', true), OPPORTUNITY_KINDS.job);
+    assert.deepEqual(kindsShown('business-for-sale', true), []);
+    assert.equal(isKindHidden('investment', 'investors', true), true);
+    assert.equal(isKindHidden(undefined, 'investors', true), true); // an older project is a project
+    assert.equal(isKindHidden('investment', 'investors', false), false);
+    assert.equal(isKindHidden('partnership', 'co-founder', true), false);
+    // On a card and its badge, the project stays, without the kind.
+    const project = { type: 'investment', kind: 'investors', stage: 'MVP' };
+    assert.equal(summaryOf(project, t, true), 'opportunities.stages.MVP');
+    assert.equal(summaryOf(project, t, false), 'opportunities.card.lookingFor.investors · opportunities.stages.MVP');
+    assert.equal(typeLine(project, t, true), 'opportunities.types.investment');
+    assert.equal(typeLine({ type: 'investment', kind: 'mentors' }, t, true), 'opportunities.types.investment · opportunities.kinds.investment.mentors');
 });

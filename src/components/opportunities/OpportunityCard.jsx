@@ -6,6 +6,7 @@ import Avatar from '../Avatar';
 import { focusOf, parseFrame } from '../../utils/coverFrame';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { daysLeft, isOpen, summaryOf } from './opportunityOptions';
+import { isNativePlatform } from '../../utils/platform';
 import TypeBadge, { styleOf } from './TypeBadge';
 import { prefetchDetail } from '../../utils/detailCache';
 import { opportunityPage } from '../../utils/detailPages';
@@ -23,7 +24,7 @@ const OpportunityCard = ({ opportunity }) => {
     const o = opportunity;
     const profile = o.owner?.profile || {};
     const name = isPlaceholderName(profile.name) ? t('profileView.newMember') : profile.name;
-    const summary = summaryOf(o, t);
+    const summary = summaryOf(o, t, isNativePlatform());
     const place = [o.location, o.remote && t('opportunities.remote')].filter(Boolean).join(' · ');
     const open = isOpen(o);
     const days = daysLeft(o);

@@ -115,14 +115,15 @@ const NotificationSettings = () => {
         flags.messages && { key: 'notifyMessages', Icon: Mail, label: t('notificationSettings.messages') },
         flags.zaps && { key: 'notifyZaps', Icon: Zap, label: t('notificationSettings.zaps') },
         flags.events && { key: 'notifyEvents', Icon: CalendarDays, label: t('notificationSettings.events'), desc: t('notificationSettings.eventsDesc') },
-        // Opportunities: pitch deck requests and answers, on projects.
-        flags.projects && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
+        // Opportunities: pitch deck requests and answers, on projects. Not in
+        // the store app, which leaves pitch decks out (appScope.js).
+        flags.projects && !native && { key: 'notifyInvestments', also: 'notifyProjectUpdates', Icon: Rocket, label: t('notificationSettings.projects'), desc: t('notificationSettings.projectsDesc') },
     ].filter(Boolean);
 
     const thisDevice = t(native ? 'notificationSettings.thisPhone' : 'notificationSettings.thisBrowser');
-    const unavailableText = native && getPlatform() === 'android'
     // The Android app has no push yet: no switch there that does nothing.
     const pushHere = !(native && getPlatform() === 'android' && !ANDROID_PUSH_ENABLED);
+    const unavailableText = native && getPlatform() === 'android'
         ? t('notificationSettings.unavailableAndroid')
         : t('notificationSettings.unavailable');
 
