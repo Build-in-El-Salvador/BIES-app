@@ -171,6 +171,20 @@ const EventDetail = () => {
             setBusy(false);
         }
     };
+    // An invite to a meetup: "Can't make it". The answer stays, so the
+    // invite is closed and they aren't invited to it again.
+    const decline = async () => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await eventsApi.rsvp(event.id, 'NOT_GOING');
+            await load();
+        } catch (err) {
+            setNotice(t(`events.proposals.errors.${err?.data?.reason}`, { defaultValue: t('events.proposals.errors.generic') }));
+        } finally {
+            setBusy(false);
+        }
+    };
     const share = async () => {
         const url = publicUrl(`/events/${event.id}`);
         try {
@@ -507,6 +521,11 @@ const EventDetail = () => {
                                             : t('events.proposals.areYouIn')}
                                 </b>
                                 <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                                {invitedBy && !closed && (
+                                    <button type="button" className="ev-decline" onClick={decline} disabled={busy} data-testid="invite-decline">
+                                        {t('events.proposals.cantMakeIt')}
+                                    </button>
+                                )}
                             </span>
                         </span>
                         {mine ? (
@@ -634,6 +653,8 @@ const EventDetail = () => {
                 .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
                 .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-decline { align-self: flex-start; margin-top: 2px; padding: 4px 0; min-height: 0; border: 0; background: none; font-size: 0.82rem; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+                .ev-decline:disabled { opacity: 0.6; }
                 .ev-in {
                     flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 24px; border-radius: var(--radius-full); cursor: pointer;
                     border: 1.5px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; font-size: 0.95rem; font-weight: 700;

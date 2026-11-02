@@ -859,6 +859,7 @@
       "needs_one": "needs {{count}} more",
       "needs_other": "needs {{count}} more",
       "imIn": "I'm in",
+      "cantMakeIt": "Can't make it",
       "in": "In",
       "youreIn": "You're in",
       "you": "You",
@@ -899,6 +900,7 @@
         "proposer_stays": "You proposed it, so you're in. To cancel it, use Call it off in the ⋯ menu.",
         "generic": "Couldn't do that. Try again.",
         "too_many_invites": "A meetup can have up to {{count}} members invited.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
         "started": "It has started already."
       },
       "inviteMembers": "Invite members",
@@ -973,6 +975,7 @@
         "start_invalid": "Pick when it starts.",
         "end_invalid": "Pick when it ends.",
         "too_many_invites": "You can invite up to {{count}} members to a meetup.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
         "called_off": "It's too late to invite anyone: nobody can join any more.",
         "started": "It has started, so it's too late to invite anyone."
       },

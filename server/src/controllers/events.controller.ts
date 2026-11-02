@@ -98,6 +98,8 @@ export const createEventSchema = z.object({
     // on a new one, who to invite; on an edit, everyone who should be (an
     // invite left off is taken back, unless they've answered).
     inviteeIds: z.array(z.string().min(1).max(64)).max(MAX_INVITES).optional(),
+    // On an edit: the invites the form showed when it opened (only those can be taken back).
+    inviteeIdsShown: z.array(z.string().min(1).max(64)).max(MAX_INVITES * 2).optional(),
 });
 
 /** POST /events/:id/invites: members to invite to a proposed meetup. */
@@ -499,8 +501,19 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
         const me = req.user!;
         const take = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10) || 50, 1), 100);
         const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
-        const where = { userId: me.id, status: { in: ['GOING', 'INTERESTED', 'INVITED'] } };
-        const [records, total, hidden] = await Promise.all([
+        const hidden = await hiddenFromIds(me.id, { staff: isStaffUser(me) });
+        // Not events whose host is in a block with them, suspended or gone,
+        // nor invites to a meetup that was called off or missed its deadline.
+        const where = {
+            userId: me.id,
+            status: { in: ['GOING', 'INTERESTED', 'INVITED'] },
+            event: { hostId: { notIn: hidden }, host: { isBanned: false, deletedAt: null } },
+            NOT: [
+                { status: 'INVITED', event: { calledOffAt: { not: null } } },
+                { status: 'INVITED', event: { confirmedAt: null, decideBy: { lt: new Date() } } },
+            ],
+        };
+        const [records, total] = await Promise.all([
             prisma.eventAttendee.findMany({
                 where,
                 include: { event: { include: { ...EVENT_INCLUDE, ...GOING_COUNT } } },
@@ -509,7 +522,6 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
                 take,
             }),
             prisma.eventAttendee.count({ where }),
-            hiddenFromIds(me.id, { staff: isStaffUser(me) }),
         ]);
         const hiddenSet = new Set(hidden);
         const now = new Date();
@@ -900,7 +912,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             try {
                 invitePlan = await planInviteList({
                     ...existing, startDate: data.startDate ?? existing.startDate, decideBy: data.decideBy ?? existing.decideBy,
-                }, me, body.inviteeIds);
+                }, me, body.inviteeIds, body.inviteeIdsShown);
             } catch (err) {
                 if (err instanceof InviteError) { refuseInvites(res, err); return; }
                 throw err;
@@ -936,7 +948,7 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
         }
         // Then the invites (as it is now): taken back quietly, new ones told.
         const invites = invitePlan
-            ? { withdrawn: await withdrawInvites(event.id, invitePlan.remove), invited: (await sendInvites(event, invitePlan.add)).length }
+            ? { withdrawn: await withdrawInvites(event.id, invitePlan.remove), invited: (await sendInvites(event, invitePlan.add, me)).length }
             : null;
 
         // On Nostr, under the host's key: gone when it stops being public,
