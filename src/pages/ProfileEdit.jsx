@@ -5,7 +5,6 @@ import { Globe, MapPin, Linkedin, Briefcase, Plus, Hash, Camera, Loader2, CheckC
 import NostrIcon from '../components/NostrIcon';
 import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
-import { useFeature } from '../context/FeatureFlagsContext';
 import { isNativePlatform } from '../utils/platform';
 import { copyText } from '../utils/clipboard';
 import { profilesApi, uploadApi, projectsApi, settingsApi } from '../services/api';
@@ -54,9 +53,10 @@ const ProfileEdit = () => {
     const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
     const searchRef = useRef(null);
-    // Lightning and Bolt12 receive addresses go with zaps: not in the store
-    // app, nor while zaps are off. Hidden, they're left as saved.
-    const walletFields = useFeature('zaps') && !isNativePlatform();
+    // Lightning and Bolt12 receive addresses: on the website (a member's way
+    // to be paid, zaps on or not), not in the store app. Hidden, they're left
+    // as saved.
+    const walletFields = !isNativePlatform();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);

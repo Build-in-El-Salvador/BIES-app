@@ -18,6 +18,7 @@ import ProfileView from '../components/profile/ProfileView';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { unblock } from '../services/blockStore';
 import '../components/moderation/Moderation.css';
+import { isNativePlatform } from '../utils/platform';
 
 const PublicProfile = ({ type }) => {
     const { id } = useParams();
@@ -44,8 +45,10 @@ const PublicProfile = ({ type }) => {
     const pointsEnabled = useFeature('points');
     const messagesEnabled = useFeature('messages');
     const eventsEnabled = useFeature('events');
-    // Lightning and Bolt12 addresses, and prices in sats, go with zaps (not in the store app).
+    // Prices in sats go with zaps; Lightning and Bolt12 addresses show on the
+    // website only (not in the store app).
     const zapsEnabled = useFeature('zaps');
+    const showLightning = !isNativePlatform();
     // Bumped after a block or unblock: the server then answers differently.
     const [reloadKey, setReloadKey] = useState(0);
     const [unblocking, setUnblocking] = useState(false);
@@ -350,7 +353,7 @@ const PublicProfile = ({ type }) => {
                 bio={profile.bio ? <TranslatableText text={profile.bio} style={{ margin: 0, fontSize: '0.98rem', lineHeight: 1.5, color: 'var(--color-gray-800)', whiteSpace: 'pre-line' }} /> : null}
                 actions={actions}
             >
-                {zapsEnabled && !!(profile.lightningAddress || profile.bolt12Offer) && (
+                {showLightning && !!(profile.lightningAddress || profile.bolt12Offer) && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                         {/* Lightning Address */}
                         {profile.lightningAddress && (

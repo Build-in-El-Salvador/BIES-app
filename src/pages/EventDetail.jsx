@@ -137,7 +137,8 @@ const EventDetail = () => {
     // event too): "Block Ana Pérez", never "Block Sunday Hike".
     const hostMember = { userId: event.hostId };
     const hostMemberName = isPlaceholderName(event.host?.profile?.name) ? '' : event.host.profile.name.trim();
-    const canBlockHost = !!event.hostId && event.hostId !== user?.id;
+    // Not on an official BIES event: its host is BIES (an admin posted it).
+    const canBlockHost = !!event.hostId && event.hostId !== user?.id && !event.isOfficial;
     const partners = event.partners || [];
     const cohosts = partners.filter((p) => p.role === 'COHOST');
     const sponsors = partners.filter((p) => p.role === 'SPONSOR');

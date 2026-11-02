@@ -6,7 +6,7 @@ import { nostrSigner } from '../../services/nostrSigner';
 import { nostrService } from '../../services/nostrService';
 import { nostrLinkFields } from '../../services/nostrProfileLinks';
 import { SettingsPage, SettingsGroup, SettingsRow, SettingsSelect, Switch } from '../../components/settings/SettingsUI';
-import { useFeature } from '../../context/FeatureFlagsContext';
+import { isNativePlatform } from '../../utils/platform';
 
 // Who can see each part of a profile (server: services/profilePrivacy.ts).
 const AUDIENCE_ROWS = [
@@ -27,9 +27,8 @@ const PrivacySettings = () => {
     const { t } = useTranslation();
     const [privacy, setPrivacy] = useState(null);
     const [error, setError] = useState('');
-    // Without zaps (the store app), links are just links: no Lightning address.
-    const zapsOn = useFeature('zaps');
-    const partKey = (key) => (key === 'links' && !zapsOn ? 'linksOnly' : key);
+    // In the store app, links are just links: it shows no Lightning address.
+    const partKey = (key) => (key === 'links' && isNativePlatform() ? 'linksOnly' : key);
 
     useEffect(() => {
         settingsApi.getPrivacy().then(setPrivacy).catch(() => setError(t('privacySettings.loadFailed')));
