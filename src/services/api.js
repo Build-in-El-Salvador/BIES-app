@@ -509,6 +509,9 @@ export const eventsApi = {
     removePartner: (id, partnerId) => del(`/events/${id}/partners/${partnerId}`),
     // A proposed meetup's proposer calling it off (everyone in is told)
     callOff: (id) => post(`/events/${id}/call-off`, {}),
+    // One date of a repeating event (its key), called off or brought back (its host side)
+    callOffDate: (id, occurrence) => post(`/events/${id}/dates/call-off`, { occurrence }),
+    restoreDate: (id, occurrence) => post(`/events/${id}/dates/restore`, { occurrence }),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
     // A proposed meetup's proposer inviting members → { invited, skipped }

@@ -391,7 +391,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
                     border-radius: 20px; clip-path: inset(0 round 20px); overflow: hidden; scroll-snap-align: start;
                     background: linear-gradient(135deg, var(--color-primary), #0A192F); color: #FFFFFF;
                     display: flex; flex-direction: column; justify-content: flex-end;
-                    --ev-face-ring: rgba(8, 15, 45, 0.9); --ev-who-color: rgba(255, 255, 255, 0.85); --ev-repeat-color: #FFD3BA;
+                    --ev-face-ring: rgba(8, 15, 45, 0.9); --ev-who-color: rgba(255, 255, 255, 0.85); --ev-repeat-color: #FFD3BA; --ev-changed-color: #FDBA74;
                     --ev-price-color: #FFFFFF; --ev-price-sub: rgba(255, 255, 255, 0.75);
                 }
                 .ev-spot-photo { position: absolute; inset: 0; }

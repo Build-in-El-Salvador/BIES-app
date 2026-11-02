@@ -1,4 +1,4 @@
-import { EVENT_TIME_ZONE, dayTile } from './eventFormat.js';
+import { EVENT_TIME_ZONE, dayKey, dayTile, timeOf } from './eventFormat.js';
 
 /**
  * Events that repeat, in the app: which repeats a first date can have (as
@@ -7,6 +7,10 @@ import { EVENT_TIME_ZONE, dayTile } from './eventFormat.js';
  * out its dates, with the same rules (server/src/utils/eventRepeat.ts). All
  * in El Salvador time (UTC-6, no daylight saving): 11 PM on a Saturday
  * there is a Saturday, whatever the device says.
+ *
+ * One date can be different or called off. A date is named by its usual
+ * day (its key, "Sat 7 Nov") and shown at its own times; editing one asks
+ * whether the change is for it only or for it and every date after.
  */
 
 export const REPEATS = ['WEEKLY', 'BIWEEKLY', 'MONTHLY_NTH', 'MONTHLY_LAST'];
@@ -86,4 +90,64 @@ export function repeatLabel(repeat, date, t, lang) {
 export function dateChip(date, lang, { weekday = true } = {}) {
     const { month, day, weekday: wd } = dayTile(date, lang);
     return weekday ? `${wd} ${day} ${month}` : `${day} ${month}`;
+}
+
+/** A time without its ":00": "10 AM", "4:30 PM" ("10 a. m." in Spanish). */
+export function shortTime(date, lang) {
+    return timeOf(date, lang).replace(/:00(?=\D|$)/, '');
+}
+
+const lowerFirst = (s) => (s ? s[0].toLowerCase() + s.slice(1) : '');
+
+/** What a date's notice says of its time and place: "10:00 AM at Beach field", "Sun 8 Nov, 10:00 AM", "online". */
+function timeAndPlace(view, key, { time, place }, t, lang) {
+    const when = !time ? ''
+        : dayKey(view.startDate) === dayKey(key) ? timeOf(view.startDate, lang) : `${dateChip(view.startDate, lang)}, ${timeOf(view.startDate, lang)}`;
+    const where = !place ? ''
+        : view.isOnline ? t('events.dates.online') : view.locationName ? t('events.dates.atPlace', { place: view.locationName }) : '';
+    return [when, where].filter(Boolean).join(' ');
+}
+
+/**
+ * The notice on a repeating event's page when its next date is different
+ * (the API's dateChange): "Sat 7 Nov is different: 10:00 AM at Beach
+ * field." and "Usually 4:00 PM at Usual field.", saying only the time and
+ * place that differ. Another title or other words: "Sat 7 Nov is different
+ * from usual." with no second line.
+ */
+export function dateChangeNotice(change, t, lang) {
+    if (!change) return null;
+    const date = dateChip(change.key, lang);
+    const what = timeAndPlace(change.date, change.key, change, t, lang);
+    if (!what) return { lead: t('events.dates.differentOther', { date }), usual: '' };
+    return {
+        lead: t('events.dates.different', { date, what }),
+        usual: t('events.dates.usually', { what: timeAndPlace(change.usual, change.key, change, t, lang) }),
+    };
+}
+
+/** The question an edit of a repeating event asks: "BIES Soccer repeats every Saturday". */
+export function scopeTitle(title, repeat, date, t, lang) {
+    return t('events.dates.scopeTitle', { title, rule: lowerFirst(repeatLabel(repeat, date, t, lang)) });
+}
+
+/** The form's fields one date can have its own of (its time, title, words and place). */
+export const DATE_FORM_FIELDS = [
+    'title', 'description', 'startDate', 'startTime', 'endDate', 'endTime',
+    'online', 'locationName', 'locationAddress', 'locationMapUrl', 'onlineUrl',
+];
+/** How it repeats: always the event's, for every date. */
+export const RULE_FORM_FIELDS = ['repeat', 'repeatUntil'];
+
+/**
+ * Whether saving an edit of a repeating event at one of its dates asks
+ * "only this date, or this and every date after?": when what changed is
+ * that date's (its time, title, words or place). A change to how it repeats
+ * is for every date; so is one only to what's the event's anyway (its
+ * photo, tickets, co-hosts…), and so is no change at all.
+ */
+export function editScope(before, after) {
+    const changed = (f) => (before?.[f] ?? '') !== (after?.[f] ?? '');
+    if (RULE_FORM_FIELDS.some(changed)) return 'series';
+    return DATE_FORM_FIELDS.some(changed) ? 'ask' : 'series';
 }

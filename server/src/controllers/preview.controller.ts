@@ -6,6 +6,7 @@ import { isEnabled } from '../services/featureFlags.service';
 import { removeTags } from '../middleware/sanitize';
 import { isOpen } from './project.controller';
 import { isRepeat, repeatLabel, shownOccurrence } from '../utils/eventRepeat';
+import { dayView } from '../services/eventDates.service';
 
 /**
  * Public previews of a shared page, for people who aren't signed in to BIES:
@@ -172,6 +173,7 @@ async function eventTeaser(id: string) {
                 },
             },
             _count: { select: { attendees: { where: { status: 'GOING' } } } },
+            dateChanges: true,
         },
     });
     if (!event || !event.isPublished || event.visibility === 'PRIVATE' || event.visibility === 'DRAFT') return null;
@@ -184,19 +186,21 @@ async function eventTeaser(id: string) {
         return p.name;
     };
     const named = (role: string) => event.partners.filter((p) => p.role === role).map(partnerName).filter(Boolean);
-    const about = summary(event.description);
-    // A repeating event: its next date (its last, once it's all over), and who's going to that one.
+    // A repeating event: its next date as it really is (its last, once it's
+    // all over: its own time, title and place), and who's going to that one.
     const when = shownOccurrence(event, new Date());
+    const day = dayView(event, when);
+    const about = summary(day.description);
     const going = isRepeat(event.repeat)
-        ? await prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING', occurrenceStart: when.startDate } })
+        ? await prisma.eventAttendee.count({ where: { eventId: event.id, status: 'GOING', occurrenceStart: when.key } })
         : event._count.attendees;
     return {
         section: 'events' as Section,
         id: event.id,
-        name: event.title,
+        name: day.title,
         kind: event.category,
-        location: event.isOnline ? 'Online' : event.locationName,
-        isOnline: event.isOnline,
+        location: day.isOnline ? 'Online' : day.locationName,
+        isOnline: day.isOnline,
         startDate: when.startDate,
         endDate: when.endDate,
         repeat: isRepeat(event.repeat) ? event.repeat : '',
@@ -214,8 +218,8 @@ async function eventTeaser(id: string) {
         cohosts: named('COHOST'),
         sponsors: named('SPONSOR'),
         members: {
-            address: !!(event.locationAddress || event.locationMapUrl),
-            onlineLink: !!event.onlineUrl,
+            address: !!(day.locationAddress || day.locationMapUrl),
+            onlineLink: !!day.onlineUrl,
             going,
             fullText: about.cut,
         },

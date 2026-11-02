@@ -5,13 +5,14 @@ import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move, Download, 
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
-import { fitRepeat, repeatChoiceLabel, repeatChoices } from '../utils/eventRepeat';
+import { dateChip, editScope, fitRepeat, repeatChoiceLabel, repeatChoices, scopeTitle } from '../utils/eventRepeat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
 import PartnerPicker from '../components/events/PartnerPicker';
 import CoverPhoto from '../components/CoverPhoto';
 import { useCoverFramer } from '../components/CoverFramer';
+import DateScopeSheet from '../components/events/DateScopeSheet';
 import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFrame';
 
 /**
@@ -21,7 +22,10 @@ import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFra
  * time) and where, the ticket link and price line (the app doesn't sell
  * tickets), co-hosts and sponsors, and who can see it. It can repeat (every
  * week, every other week, a weekday of every month), until a last day or
- * for good: the dates here are its first, and the form edits all of them.
+ * for good: a new one's dates here are its first. Editing one, the form
+ * shows its next date as it is; saving a change to that date's time,
+ * title, words or place asks whether it's for that date only or for it and
+ * every date after (DateScopeSheet). How it repeats is for every date.
  */
 
 const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER'];
@@ -73,17 +77,22 @@ export default function EventForm() {
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
     const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
     const [proposal, setProposal] = useState(false); // a proposed meetup, which doesn't repeat
+    // A repeating event edited at its next date: that date's key, and the form as it loaded (to see what changed).
+    const [atDate, setAtDate] = useState(null); // { key, loaded }
+    const [asking, setAsking] = useState(null); // the payload waiting for "only this date, or every date after?"
 
     const set = (key) => (e) => {
         const value = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
         setForm((f) => ({ ...f, [key]: value }));
     };
-    // A new first date keeps how it repeats where that still fits (the last Saturday may become the fourth).
+    // A new first date keeps how it repeats where that still fits (the last
+    // Saturday may become the fourth). Not when one date moves: how it
+    // repeats stays as it is, unless it's changed itself.
     const setStart = (key) => (e) => {
         const value = e.target.value;
         setForm((f) => {
             const next = { ...f, [key]: value };
-            return { ...next, repeat: fitRepeat(next.repeat, fromFormFields(next.startDate, next.startTime)) };
+            return atDate ? next : { ...next, repeat: fitRepeat(next.repeat, fromFormFields(next.startDate, next.startTime)) };
         });
     };
 
@@ -98,10 +107,15 @@ export default function EventForm() {
             setHostSide(!!e.canDelete);
             setSavedHost(e.hostListing ? { id: e.hostListing.id, isOfficial: !!e.hostListing.isOfficial } : null);
             setProposal(e.minAttendees != null);
-            // A repeating event shows its next date; the form edits it from its first.
-            const start = toFormFields('firstStartDate' in e ? e.firstStartDate : e.startDate);
-            const end = toFormFields('firstStartDate' in e ? e.firstEndDate : e.endDate);
-            setForm({
+            // A repeating event with dates ahead: at its next one, as it is
+            // (its own time, title and place, if it has them). One that's all
+            // over (the date it shows has passed, though later ones may be
+            // there, called off): from its first date.
+            const shownEnd = new Date(e.endDate || new Date(e.startDate).getTime() + 6 * 3600_000).getTime();
+            const next = !!(e.repeat && e.occurrence && e.upcomingDates?.length > 0) && shownEnd >= Date.now();
+            const start = toFormFields(next || !('firstStartDate' in e) ? e.startDate : e.firstStartDate);
+            const end = toFormFields(next || !('firstStartDate' in e) ? e.endDate : e.firstEndDate);
+            const loaded = {
                 hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
                 cardImage: e.cardImage || '', cardFrame: e.cardFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
@@ -111,7 +125,9 @@ export default function EventForm() {
                 locationMapUrl: e.locationMapUrl || '', onlineUrl: e.onlineUrl || '',
                 ticketUrl: e.ticketUrl || '', bitcoinUrl: e.bitcoinUrl || '', priceLabel: e.priceLabel || '',
                 visibility: VISIBILITIES.includes(e.visibility) ? e.visibility : 'PUBLIC',
-            });
+            };
+            setForm(loaded);
+            setAtDate(next ? { key: e.occurrence, loaded } : null);
             if (!VISIBILITIES.includes(e.visibility)) setOtherVisibility(e.visibility);
             setPartners(pickerValue(e.partners));
             setGuests((e.guestList || []).map((g) => ({ name: g.name, userId: g.userId })));
@@ -125,10 +141,14 @@ export default function EventForm() {
     const hostListing = hostChoices.find((l) => l.id === form.hostListingId);
     // Hosted as BIES's own page: a BIES event, with a highlight card its team sets up.
     const official = !!(hostListing?.isOfficial || (savedHost?.isOfficial && savedHost.id === form.hostListingId));
-    // How it can repeat, from its first date (none until there's one).
+    // How it can repeat, from its first date (none until there's one). Edited
+    // at a date, from that date as the rule makes it: moving one date to
+    // another day leaves how it repeats as it was.
     const firstStart = fromFormFields(form.startDate, form.startTime);
-    const repeatOptions = repeatChoices(firstStart);
+    const ruleDate = atDate ? atDate.key : firstStart;
+    const repeatOptions = repeatChoices(ruleDate);
     const repeat = repeatOptions.includes(form.repeat) ? form.repeat : '';
+    const dateName = atDate ? dateChip(atDate.key, i18n.language) : '';
 
     const importFrom = async () => {
         if (!importUrl.trim()) return;
@@ -229,6 +249,16 @@ export default function EventForm() {
             ...(editing ? {} : { nostrPublish: 'bies' }),
         };
         if (!hostSide) for (const key of HOST_ONLY) delete payload[key];
+        // Edited at its next date: a change that date can have of its own asks which dates it's for.
+        if (atDate) {
+            payload.occurrence = atDate.key;
+            if (editScope(atDate.loaded, form) === 'ask') { setAsking(payload); return; }
+            payload.scope = 'series';
+        }
+        await save(payload);
+    };
+
+    const save = async (payload) => {
         setSaving(true);
         try {
             const saved = editing ? await eventsApi.update(id, payload) : await eventsApi.create(payload);
@@ -393,12 +423,12 @@ export default function EventForm() {
                         </div>
                     </div>
                 </div>
-                <p className="ef-hint">{repeat ? t('events.form.timeHintRepeat') : t('events.form.timeHint')}</p>
+                <p className="ef-hint">{atDate ? t('events.form.timeHintDate', { date: dateName }) : repeat ? t('events.form.timeHintRepeat') : t('events.form.timeHint')}</p>
                 {!proposal && (
                     <>
                         <label className="ef-label" htmlFor="ef-repeat">{t('events.form.repeats')}</label>
                         <select id="ef-repeat" className="ef-input" value={repeat} onChange={set('repeat')} disabled={repeatOptions.length < 2}>
-                            {repeatOptions.map((r) => <option key={r || 'none'} value={r}>{repeatChoiceLabel(r, firstStart, t, i18n.language)}</option>)}
+                            {repeatOptions.map((r) => <option key={r || 'none'} value={r}>{repeatChoiceLabel(r, ruleDate, t, i18n.language)}</option>)}
                         </select>
                         {repeat && (
                             <>
@@ -482,6 +512,14 @@ export default function EventForm() {
             <button type="submit" className="ef-submit" disabled={saving || uploading}>
                 {saving ? <><Loader2 size={18} className="ef-spin" /> {t('events.form.saving')}</> : editing ? t('events.form.save') : t('events.form.create')}
             </button>
+            {asking && atDate && (
+                <DateScopeSheet
+                    title={scopeTitle(atDate.loaded.title, atDate.loaded.repeat, atDate.key, t, i18n.language)}
+                    date={dateName}
+                    onPick={(scope) => { const payload = { ...asking, scope }; setAsking(null); save(payload); }}
+                    onClose={() => setAsking(null)}
+                />
+            )}
 
             <style jsx>{`
                 .event-form { max-width: 640px; margin: 0 auto; padding-top: var(--page-top, 1.5rem); padding-bottom: 3rem; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }

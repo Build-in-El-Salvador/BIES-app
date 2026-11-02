@@ -531,6 +531,7 @@ model Event {
   attendees   EventAttendee[]
   tickets     Ticket[]
   partners    EventPartner[]
+  dateChanges EventDateChange[]
 
   @@index([hostListingId])
   @@index([venueListingId])
@@ -560,6 +561,34 @@ model EventPartner {
   @@index([userId])
   @@index([listingId])
   @@map("event_partners")
+}
+
+// One date of a repeating event that's different (another time, another
+// place) or called off, kept by the date's key: its start as the event's
+// rule makes it, as members' answers are (EventAttendee.occurrenceStart).
+// Null: as usual. Tickets, price, photos, co-hosts and who sees it are the
+// event's, for every date. utils/eventRepeat.ts.
+model EventDateChange {
+  id              String    @id @default(cuid())
+  eventId         String    @map("event_id")
+  occurrenceStart DateTime  @map("occurrence_start")
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  title           String?
+  description     String?
+  locationName    String?   @map("location_name")
+  locationAddress String?   @map("location_address")
+  locationMapUrl  String?   @map("location_map_url")
+  isOnline        Boolean?  @map("is_online")
+  onlineUrl       String?   @map("online_url")
+  calledOffAt     DateTime? @map("called_off_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, occurrenceStart])
+  @@map("event_date_changes")
 }
 
 model Ticket {
