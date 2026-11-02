@@ -10,6 +10,7 @@ import { PASSKEY_ENABLED } from '../../config/featureFlags';
 import { isNativePlatform } from '../../utils/platform';
 import { confirmDeviceOwner } from '../../services/deviceAuth';
 import { SettingsPage, SettingsGroup } from '../../components/settings/SettingsUI';
+import { copyText } from '../../utils/clipboard';
 
 const EXTENSION_HINT = "This error is usually caused by a password manager browser extension (such as Bitwarden, 1Password, or Dashlane) intercepting the passkey request. Try disabling your password manager's passkey/WebAuthn feature and retry.";
 const NO_PRF = "This device can't create passkeys (missing PRF support). Try a device with a fingerprint or face sensor.";
@@ -51,8 +52,8 @@ const NostrKeys = () => {
         keytrService.checkPrfSupport().then(setPrfSupport);
     }, []);
 
-    const copyToClipboard = useCallback((text, label) => {
-        navigator.clipboard.writeText(text);
+    const copyToClipboard = useCallback(async (text, label) => {
+        if (!(await copyText(text))) return;
         setCopiedKey(label);
         setTimeout(() => setCopiedKey(null), 2000);
     }, []);

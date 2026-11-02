@@ -28,6 +28,7 @@ import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { mute } from '../services/muteStore';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { findObjectionable } from '../utils/contentFilter';
+import { copyText } from '../utils/clipboard';
 
 const EXPLORE_ICONS = {
     trending_24h: TrendingUp,
@@ -142,6 +143,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [feedMode, setFeedMode] = useState('private'); // 'private' | 'explore'
     // The store app shows only the BIES private feed: Explore is the open
     // Nostr network, which BIES doesn't moderate (App Review guideline 1.2).
+    // Nor a note's ID and raw event (Copy ID, Copy Raw): those are for Nostr
+    // developers.
     const exploreAllowed = !isNativePlatform();
     const zapsOn = useFeature('zaps');
     const [exploreView, setExploreView] = useState('trending_24h');
@@ -1203,8 +1206,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 await navigator.share({ url });
             } catch { /* cancelled */ }
         } else {
-            await navigator.clipboard.writeText(url);
-            showToast(t('feed.linkCopied', 'Link copied'));
+            if (await copyText(url)) showToast(t('feed.linkCopied', 'Link copied'));
         }
     };
 
@@ -1900,10 +1902,10 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                     onMuteUser={() => { handleMuteUser(post.pubkey); setPostMenu(null); }}
                                     onBlockUser={() => handleBlockUser(post.pubkey)}
                                     onReport={() => { handleReport(post); setPostMenu(null); }}
-                                    onCopyLink={() => { navigator.clipboard.writeText(postUrl(post)); setPostMenu(null); showToast(t('feed.linkCopied', 'Link copied')); }}
-                                    onCopyText={() => { navigator.clipboard.writeText(post.content || ''); setPostMenu(null); showToast(t('feed.textCopied', 'Text copied')); }}
-                                    onCopyId={() => { navigator.clipboard.writeText(post.id); setPostMenu(null); showToast(t('feed.idCopied', 'Note ID copied')); }}
-                                    onCopyRaw={() => { navigator.clipboard.writeText(JSON.stringify(post, null, 2)); setPostMenu(null); showToast(t('feed.rawCopied', 'Raw data copied')); }}
+                                    onCopyLink={async () => { setPostMenu(null); if (await copyText(postUrl(post))) showToast(t('feed.linkCopied', 'Link copied')); }}
+                                    onCopyText={async () => { setPostMenu(null); if (await copyText(post.content || '')) showToast(t('feed.textCopied', 'Text copied')); }}
+                                    onCopyId={exploreAllowed ? async () => { setPostMenu(null); if (await copyText(post.id)) showToast(t('feed.idCopied', 'Note ID copied')); } : undefined}
+                                    onCopyRaw={exploreAllowed ? async () => { setPostMenu(null); if (await copyText(JSON.stringify(post, null, 2))) showToast(t('feed.rawCopied', 'Raw data copied')); } : undefined}
                                     parseNoteContent={parseNoteContent}
                                     formatTime={formatTime}
                                     formatCount={formatCount}

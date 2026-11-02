@@ -7,6 +7,7 @@ import { nip19 } from 'nostr-tools';
 import { useAuth } from '../context/AuthContext';
 import { useFeature } from '../context/FeatureFlagsContext';
 import { isNativePlatform } from '../utils/platform';
+import { copyText } from '../utils/clipboard';
 import { profilesApi, uploadApi, projectsApi, settingsApi } from '../services/api';
 import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
@@ -791,8 +792,8 @@ const ProfileEdit = () => {
                                     />
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(nip19.npubEncode(user.nostrPubkey));
+                                        onClick={async () => {
+                                            if (!(await copyText(nip19.npubEncode(user.nostrPubkey)))) return;
                                             setNpubCopied(true);
                                             setTimeout(() => setNpubCopied(false), 2000);
                                         }}
