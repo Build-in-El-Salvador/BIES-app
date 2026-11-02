@@ -17,6 +17,7 @@ import { coverOf } from '../../components/talent/talentOptions';
 import { useModerationDialogs } from '../../components/moderation/useModerationDialogs';
 import BackButton from '../../components/BackButton';
 import CoverPhoto from '../../components/CoverPhoto';
+import EmailSheet from '../../components/EmailSheet';
 import { useLightbox } from '../../context/LightboxContext';
 import '../../components/moderation/Moderation.css';
 
@@ -46,6 +47,7 @@ const TalentDetail = () => {
     // Its member is one this member blocked.
     const [blockedMember, setBlockedMember] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false); // the Email button's Copy / Open sheet
     const [linkCopied, setLinkCopied] = useState(false);
     // Focus goes back to the menu button when a Report or Block sheet closes.
     const menuButtonRef = useRef(null);
@@ -132,7 +134,7 @@ const TalentDetail = () => {
     // The place-page action row: only what this talent has.
     const actions = [
         waDigits && { key: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp', onClick: () => openExternal(`https://wa.me/${waDigits}`) },
-        talent.email && { key: 'email', Icon: Mail, label: t('talent.actions.email'), href: `mailto:${talent.email}` },
+        talent.email && { key: 'email', Icon: Mail, label: t('talent.actions.email'), onClick: () => setEmailOpen(true) },
         talent.website && { key: 'website', Icon: Globe, label: t('talent.actions.website'), onClick: () => openExternal(talent.website) },
         { key: 'profile', Icon: User, label: t('talent.actions.profile'), to: profilePath },
         { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('talent.actions.copied') : t('talent.actions.share'), onClick: share },
@@ -598,10 +600,11 @@ const TalentDetail = () => {
                         padding-top: 1.5rem;
                     }
                     .tal-hero {
-                        border-radius: var(--radius-lg);
+                        border-radius: var(--radius-lg); clip-path: inset(0 round var(--radius-lg));
                     }
                 }
             `}</style>
+            {emailOpen && <EmailSheet email={talent.email} onClose={() => setEmailOpen(false)} />}
         </div>
     );
 };

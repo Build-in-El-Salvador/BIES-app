@@ -740,9 +740,9 @@
     "form": {
       "newTitle": "New event",
       "editTitle": "Edit event",
-      "importLabel": "Fill this in from a link",
-      "importHint": "Paste a Luma, Eventbrite or Meetup page and check what comes in.",
-      "importButton": "Fill in",
+      "importLabel": "Import event from external link",
+      "importHint": "Paste a Luma, Eventbrite or Meetup page, then check what comes in.",
+      "importButton": "Import",
       "imported": "Filled in from the link. Check it over.",
       "hostAs": "Host as",
       "me": "Me ({{name}})",
@@ -753,7 +753,7 @@
       "removeCover": "Remove",
       "uploading": "Uploading…",
       "title": "Title",
-      "titlePlaceholder": "BIES Networking Night",
+      "titlePlaceholder": "e.g. Bitcoin meetup",
       "category": "Kind of event",
       "description": "About",
       "descriptionPlaceholder": "What happens, who it's for, what to bring.",
@@ -765,7 +765,7 @@
       "inPerson": "In person",
       "online": "Online",
       "venue": "Venue",
-      "venuePlaceholder": "Café Ruta",
+      "venuePlaceholder": "e.g. a café or co-working space",
       "address": "Address",
       "mapLink": "Map link",
       "mapLinkHint": "A Google Maps, Apple Maps or Waze link.",
@@ -777,7 +777,7 @@
       "bitcoinLink": "Bitcoin payment link (optional)",
       "bitcoinLinkHint": "A page where people pay in bitcoin, like your pretix or BTCPay page. Adds a \"Pay with Bitcoin\" button under Get tickets.",
       "price": "Price on the card",
-      "pricePlaceholder": "Free, $15, From $25",
+      "pricePlaceholder": "e.g. Free, $15, From $25",
       "partners": "Co-hosts and sponsors",
       "partnersHint": "Members, businesses and farms on BIES. They're told, and can take their name off. Co-hosts can edit the event too.",
       "searchPartners": "Add a member or business",
@@ -833,6 +833,9 @@
       "HACKATHON": "Hackathon",
       "MEETUP": "Meetup",
       "DEMO_DAY": "Demo day",
+      "HEALTH_FITNESS": "Health & Fitness",
+      "FOOD_DRINK": "Food & Drink",
+      "EXCURSION": "Excursion",
       "OTHER": "Other"
     },
     "proposals": {
@@ -892,7 +895,7 @@
       "editTitle": "Edit your meetup",
       "intro": "Suggest a plan. It goes ahead if enough members say they're in by the time you pick.",
       "title": "What's the plan?",
-      "titlePlaceholder": "Steak lunch",
+      "titlePlaceholder": "e.g. Sunday hike",
       "when": "When",
       "date": "Date",
       "starts": "Starts",
@@ -928,7 +931,7 @@
       "maxCapacityPlaceholder": "e.g. 8",
       "maxCapacityHint": "Counting you. Leave empty for no limit.",
       "cost": "Cost",
-      "costPlaceholder": "Everyone pays their own",
+      "costPlaceholder": "e.g. Everyone pays their own",
       "about": "About",
       "aboutPlaceholder": "Anything people should know",
       "submit": "Propose meetup",
@@ -1142,7 +1145,8 @@
     "loading": "Loading...",
     "searching": "Searching...",
     "deleteReply": "Delete",
-    "deleteReplyConfirm": "Delete this reply?"
+    "deleteReplyConfirm": "Delete this reply?",
+    "removeAttachment": "Remove"
   },
   "nostrFeed": {
     "publicTab": "Public",
@@ -3681,5 +3685,13 @@
     "cancel": "Cancel",
     "done": "Done",
     "position": "Position"
+  },
+  "emailSheet": {
+    "title": "Email",
+    "copy": "Copy email address",
+    "copied": "Email address copied",
+    "copyFailed": "Couldn't copy it. Press and hold the address above to copy it.",
+    "open": "Open in email app",
+    "cancel": "Cancel"
   }
 }

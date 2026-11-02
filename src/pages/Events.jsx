@@ -385,7 +385,7 @@ function SpotlightCard({ event, lang, going, onGoing }) {
             <style jsx>{`
                 .ev-spot {
                     position: relative; flex: none; width: 86%; max-width: 420px; aspect-ratio: 4 / 5;
-                    border-radius: 20px; overflow: hidden; scroll-snap-align: start;
+                    border-radius: 20px; clip-path: inset(0 round 20px); overflow: hidden; scroll-snap-align: start;
                     background: linear-gradient(135deg, var(--color-primary), #0A192F); color: #FFFFFF;
                     display: flex; flex-direction: column; justify-content: flex-end;
                     --ev-face-ring: rgba(8, 15, 45, 0.9); --ev-who-color: rgba(255, 255, 255, 0.85);

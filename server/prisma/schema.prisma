@@ -461,7 +461,7 @@ model Event {
   title       String
   description String
   category    String   @default("NETWORKING")
-  // NETWORKING | CONFERENCE | WORKSHOP | HACKATHON | MEETUP | DEMO_DAY | OTHER
+  // NETWORKING | CONFERENCE | WORKSHOP | HACKATHON | MEETUP | DEMO_DAY | HEALTH_FITNESS | FOOD_DRINK | EXCURSION | OTHER
   visibility  String   @default("PUBLIC") // PUBLIC | LIMITED_SPACES | INVITE_ONLY | PRIVATE | DRAFT
   location    String   @default("")
   isOnline    Boolean  @default(false) @map("is_online")

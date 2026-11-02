@@ -477,7 +477,7 @@ export default function ProposeForm() {
                 .pf-venue-text b { font-size: 1rem; color: var(--color-gray-900); }
                 .pf-venue-text span { font-size: 0.82rem; color: var(--color-gray-500); }
                 .pf-venue-x { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--color-gray-100); color: var(--color-gray-700); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
-                .pf-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .pf-cover { position: relative; border-radius: 14px; clip-path: inset(0 round 14px); overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
                 .pf-cover-busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
                 .pf-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
                 .pf-small {

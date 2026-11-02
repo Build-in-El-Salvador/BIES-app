@@ -714,6 +714,30 @@ textarea {
   }
 }
 
+/* A small round × that removes a tag, a photo or a file. The tap-target rule
+   above would stretch it into an oval on phones, so it keeps its own height,
+   and an invisible ring around it gives fingers at least 36px to hit. Its own
+   rule sets the size and colours. Static ones are positioned for the ring;
+   :where() lets a rule that places one absolutely win. */
+.x-remove {
+  flex: none;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:where(.x-remove) { position: relative; }
+.x-remove::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
+
 /* Safe area adjustments for notched phones (iPhone X+) */
 @supports (padding-top: env(safe-area-inset-top)) {
   .navbar {

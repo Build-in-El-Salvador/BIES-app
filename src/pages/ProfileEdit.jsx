@@ -600,7 +600,7 @@ const ProfileEdit = () => {
                             {(section.images || []).map((img, iIdx) => (
                                 <div key={iIdx} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-gray-200)' }}>
                                     <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    <button type="button" onClick={() => removeCarouselImage(idx, iIdx)} style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', padding: '2px', cursor: 'pointer' }}><X size={10} /></button>
+                                    <button type="button" className="x-remove" onClick={() => removeCarouselImage(idx, iIdx)} style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
                             ))}
                             <label style={{ width: '80px', height: '80px', border: '2px dashed var(--color-gray-300)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '2px', cursor: 'pointer', background: 'var(--color-gray-50)' }}>
@@ -846,7 +846,7 @@ const ProfileEdit = () => {
                                 {form.tags.map((tag, idx) => (
                                     <span key={idx} className="pe-tag">
                                         {tag}
-                                        <button onClick={() => removeTag(tag)} type="button"><X size={11} /></button>
+                                        <button onClick={() => removeTag(tag)} type="button" className="x-remove" aria-label={`Remove ${tag}`}><X size={11} /></button>
                                     </span>
                                 ))}
                             </div>
@@ -1337,13 +1337,13 @@ const ProfileEdit = () => {
                     font-weight: 500;
                 }
                 .pe-tag button {
+                    width: 18px;
+                    height: 18px;
                     color: inherit;
                     opacity: 0.6;
                     background: none;
                     border: none;
                     cursor: pointer;
-                    padding: 0;
-                    display: flex;
                 }
 
                 /* ── Banner / Avatar ── */

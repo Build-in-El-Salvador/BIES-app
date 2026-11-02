@@ -679,7 +679,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 onChange={handleChange}
                                 className="dir-input"
                                 maxLength={200}
-                                placeholder="El Zonte, La Libertad"
+                                placeholder="e.g. El Zonte, La Libertad"
                             />
                         </div>
                     </div>
@@ -791,7 +791,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     {form.logo && !uploading && (
                                         <button
                                             type="button"
-                                            className="dir-logo-remove"
+                                            className="dir-logo-remove x-remove"
                                             onClick={() => setForm((p) => ({ ...p, logo: '' }))}
                                             aria-label={t('directory.removeLogo')}
                                         >
@@ -809,7 +809,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     {photos.map((url) => (
                                         <div key={url} className="dir-gallery-thumb">
                                             <img src={getAssetUrl(url)} alt="" />
-                                            <button type="button" className="dir-gallery-remove" onClick={() => removePhoto(url)} aria-label={t('directory.removePhoto')} disabled={isBusy}>
+                                            <button type="button" className="dir-gallery-remove x-remove" onClick={() => removePhoto(url)} aria-label={t('directory.removePhoto')} disabled={isBusy}>
                                                 <X size={14} />
                                             </button>
                                         </div>
@@ -900,12 +900,12 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                 <div className="dir-form-group">
                                     <label className="dir-label" htmlFor="dir-instagram">{t('directory.instagramLabel')}</label>
-                                    <input type="text" id="dir-instagram" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder="@yourfarm" />
+                                    <input type="text" id="dir-instagram" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder={isFarm ? '@yourfarm' : '@yourbusiness'} />
                                 </div>
 
                                 <div className="dir-form-group">
                                     <label className="dir-label" htmlFor="dir-languages">{t('directory.languages')}</label>
-                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="Español, English…" />
+                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="e.g. Español, English…" />
                                 </div>
 
                                 <label className="dir-btc-toggle" style={{ marginBottom: 0 }}>
@@ -946,7 +946,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                     <div className="dir-form-group">
                                         <label className="dir-label" htmlFor="dir-skills">{t('directory.skillsLabel')}</label>
-                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="Solar, Permaculture…" />
+                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="e.g. Web design, Accounting…" />
                                     </div>
 
                                     <div className="dir-form-group">
@@ -1152,7 +1152,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     position: relative;
                     aspect-ratio: 16 / 9;
                     overflow: hidden;
-                    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+                    border-radius: var(--radius-lg) var(--radius-lg) 0 0; clip-path: inset(0 round var(--radius-lg) var(--radius-lg) 0 0);
                     background-color: var(--color-blue-tint);
                     display: flex;
                     align-items: flex-end;

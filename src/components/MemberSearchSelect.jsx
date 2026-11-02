@@ -85,7 +85,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                             <span className="chip-name">{g.name}</span>
                             <button
                                 type="button"
-                                className="chip-remove"
+                                className="chip-remove x-remove"
                                 onClick={() => handleRemove(g.userId)}
                                 title={`Remove ${g.name}`}
                             >
@@ -197,8 +197,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 16px;
-                    height: 16px;
+                    width: 20px;
+                    height: 20px;
                     border-radius: 50%;
                     border: none;
                     background: #bfdbfe;
