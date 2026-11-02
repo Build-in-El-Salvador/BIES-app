@@ -90,7 +90,7 @@ const EventDetail = () => {
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
     const menuButton = useRef(null);
-    const { dialogs, openReport } = useModerationDialogs({ onBlocked: () => navigate('/events') });
+    const { dialogs, openReport, openBlock } = useModerationDialogs({ onBlocked: () => navigate('/events') });
 
     const load = useCallback(async () => {
         try {
@@ -133,6 +133,11 @@ const EventDetail = () => {
     }
 
     const host = hostOf(event);
+    // Report and Block are about the member who created it (a business's
+    // event too): "Block Ana Pérez", never "Block Sunday Hike".
+    const hostMember = { userId: event.hostId };
+    const hostMemberName = isPlaceholderName(event.host?.profile?.name) ? '' : event.host.profile.name.trim();
+    const canBlockHost = !!event.hostId && event.hostId !== user?.id;
     const partners = event.partners || [];
     const cohosts = partners.filter((p) => p.role === 'COHOST');
     const sponsors = partners.filter((p) => p.role === 'SPONSOR');
@@ -267,8 +272,13 @@ const EventDetail = () => {
                                     <button type="button" role="menuitem" className="danger" onClick={() => { closeMenu(); setSheet('delete'); }}><Trash2 size={16} /> {t('events.detail.delete')}</button>
                                 )}
                                 {!event.canEdit && (
-                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); openReport({ type: 'event', id: event.id }, { name: event.title, blockTarget: { userId: event.hostId } }); }}>
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); openReport({ type: 'event', id: event.id }, { name: hostMemberName, blockTarget: canBlockHost ? hostMember : undefined }); }}>
                                         <Flag size={16} /> {t('events.detail.report')}
+                                    </button>
+                                )}
+                                {!event.canEdit && canBlockHost && (
+                                    <button type="button" role="menuitem" className="danger" onClick={() => { closeMenu(); openBlock(hostMember, { name: hostMemberName }); }}>
+                                        <Ban size={16} /> {t('events.detail.blockHost')}
                                     </button>
                                 )}
                             </div>

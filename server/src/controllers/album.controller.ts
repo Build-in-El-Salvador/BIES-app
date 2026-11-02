@@ -55,11 +55,18 @@ const isStaff = (req: Request) => !!req.user && (req.user.isAdmin || req.user.ro
 
 type AlbumWithOwner = NonNullable<Awaited<ReturnType<typeof loadAlbum>>>;
 
+/** A listing's album: the listing, and the names of the members who answer for it. */
+const LISTING_SELECT = {
+    id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true,
+    owner: { select: { profile: { select: { name: true } } } },
+    memberUser: { select: { profile: { select: { name: true } } } },
+} as const;
+
 function loadAlbum(id: string) {
     return prisma.album.findUnique({
         where: { id },
         include: {
-            listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true } },
+            listing: { select: LISTING_SELECT },
             user: { select: { id: true, deletedAt: true, isBanned: true, profile: { select: { name: true, avatar: true } } } },
         },
     });
@@ -128,7 +135,7 @@ export async function listAlbums(req: Request, res: Response): Promise<void> {
             where: userId ? { userId } : { listingId },
             orderBy: { updatedAt: 'desc' },
             include: {
-                listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true } },
+                listing: { select: LISTING_SELECT },
                 user: { select: { id: true, deletedAt: true, isBanned: true, profile: { select: { name: true, avatar: true } } } },
                 photos: { orderBy: { createdAt: 'asc' }, take: 1, select: { id: true, url: true } },
                 _count: { select: { photos: true } },
@@ -163,7 +170,12 @@ function albumResponse(req: Request, album: AlbumWithOwner, photos: { id: string
         createdAt: album.createdAt,
         updatedAt: album.updatedAt,
         owner: album.listing
-            ? { type: 'listing', id: album.listing.id, name: album.listing.name, kind: album.listing.type, path: listingPath }
+            ? {
+                type: 'listing', id: album.listing.id, name: album.listing.name, kind: album.listing.type, path: listingPath,
+                // The member who answers for the listing (as for reports): who Block blocks.
+                memberId: albumMember(album),
+                memberName: (album.listing.memberUserId ? album.listing.memberUser?.profile?.name : album.listing.owner?.profile?.name) || '',
+            }
             : { type: 'user', id: album.userId, name: album.user?.profile?.name || '', avatar: album.user?.profile?.avatar || '', path: `/builder/${album.userId}` },
         photos,
         canManage: canManage(req, album),

@@ -728,6 +728,7 @@
       "deleteYes": "Delete",
       "cancel": "Cancel",
       "report": "Report event",
+      "blockHost": "Block host",
       "takeNameOff": "Take my name off",
       "nameOff": "Your name is off this event.",
       "draft": "Draft: only you and your co-hosts see it.",

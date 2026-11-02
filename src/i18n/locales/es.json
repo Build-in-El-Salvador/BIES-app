@@ -727,6 +727,7 @@
       "deleteYes": "Eliminar",
       "cancel": "Cancelar",
       "report": "Reportar evento",
+      "blockHost": "Bloquear al anfitrión",
       "takeNameOff": "Quitar mi nombre",
       "nameOff": "Tu nombre ya no está en este evento.",
       "draft": "Borrador: solo tú y tus coorganizadores lo ven.",

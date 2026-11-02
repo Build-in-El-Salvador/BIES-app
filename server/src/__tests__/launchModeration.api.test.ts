@@ -4,7 +4,8 @@
  * meetup's notices come from its proposer, so a block stops them; a comment
  * notification never quotes words the community rules don't allow; every
  * moderator and admin hears of a new report in the app; a member can't RSVP
- * across a block; inviting needs the terms. Real routes against a real SQLite
+ * across a block; inviting needs the terms; a listing's album says which
+ * member Block would block. Real routes against a real SQLite
  * database built from the repo's migrations. Email and relays go nowhere.
  */
 
@@ -39,6 +40,7 @@ import path from 'path';
 import express from 'express';
 import prisma from '../lib/prisma';
 import eventRoutes from '../routes/events.routes';
+import albumRoutes from '../routes/album.routes';
 import moderationRoutes from '../routes/moderation.routes';
 import notificationRoutes from '../routes/notification.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
@@ -56,6 +58,7 @@ beforeAll(async () => {
     const app = express();
     app.use(express.json());
     app.use('/api/events', eventRoutes);
+    app.use('/api/albums', albumRoutes);
     app.use('/api/notifications', notificationRoutes);
     app.use('/api', moderationRoutes);
     server = http.createServer(app);
@@ -274,5 +277,25 @@ describe('events across a block', () => {
         const refused = await call('POST', `/api/events/${id}/invite`, { token: host.token, body: { userId: guest.id } });
         expect(refused.status).toBe(403);
         expect(refused.body.reason).toBe('terms_required');
+    });
+});
+
+describe("a listing's album", () => {
+    it('names the member who answers for it, whom Block blocks', async () => {
+        const staff = await member('Staff', { admin: true });
+        const farmer = await member('Farmer');
+        const viewer = await member('Viewer');
+        const listing = await prisma.directoryListing.create({
+            data: { type: 'FARM', name: 'Finca Verde', ownerId: staff.id, memberUserId: farmer.id, status: 'active', isPublished: true },
+        });
+        const album = await prisma.album.create({ data: { listingId: listing.id, title: 'Harvest', visibility: 'MEMBERS' } });
+        const seen = await call('GET', `/api/albums/${album.id}`, { token: viewer.token });
+        expect(seen.status).toBe(200);
+        expect(seen.body.owner).toMatchObject({ type: 'listing', name: 'Finca Verde', memberId: farmer.id, memberName: 'Farmer' });
+
+        // Entered by a member for themselves: that member.
+        const own = await prisma.directoryListing.create({ data: { type: 'PROVIDER', name: 'Cafe Uno', ownerId: farmer.id, status: 'active', isPublished: true } });
+        const second = await prisma.album.create({ data: { listingId: own.id, title: 'Menu', visibility: 'MEMBERS' } });
+        expect((await call('GET', `/api/albums/${second.id}`, { token: viewer.token })).body.owner).toMatchObject({ memberId: farmer.id, memberName: 'Farmer' });
     });
 });

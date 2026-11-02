@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Flag, ImagePlus, GalleryVerticalEnd, Loader2, MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react';
+import { AlertCircle, Ban, Flag, ImagePlus, GalleryVerticalEnd, Loader2, MoreHorizontal, Pencil, Star, Trash2 } from 'lucide-react';
 import { albumsApi, uploadApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { mediaService } from '../services/mediaService';
 import { useLightbox } from '../context/LightboxContext';
 import { getAssetUrl } from '../utils/assets';
@@ -19,7 +20,8 @@ const BATCH = 20; // photos per request (album.controller.ts addPhotosSchema)
  * One album (/albums/:id): its photos in the order they were added, each
  * with its caption and date, so an album can tell a story (a harvest week by
  * week, a renovation). Whoever runs it adds photos, edits captions, picks
- * the cover, and edits or deletes it; anyone else can report it or a photo.
+ * the cover, and edits or deletes it; anyone else can report it or a photo,
+ * or block the member it belongs to (a listing's: the member who runs it).
  */
 const AlbumPage = () => {
     const { t, i18n } = useTranslation();
@@ -34,7 +36,9 @@ const AlbumPage = () => {
     const [editing, setEditing] = useState(false);
     const [menu, setMenu] = useState(null); // 'album' | a photo
     const [captionFor, setCaptionFor] = useState(null);
-    const { openReport, dialogs } = useModerationDialogs();
+    const { user } = useAuth();
+    // Blocked: the album is no longer theirs to see, and says so.
+    const { openReport, openBlock, dialogs } = useModerationDialogs({ onBlocked: () => load() });
 
     const load = useCallback(() => albumsApi.get(id)
         .then((a) => { setAlbum(a); setMissing(false); })
@@ -55,6 +59,15 @@ const AlbumPage = () => {
     }
 
     const forListing = album.owner.type === 'listing';
+    // Whom Block blocks: the album's member, or the member who runs its listing.
+    const memberId = forListing ? album.owner.memberId : album.owner.id;
+    const memberName = forListing ? album.owner.memberName : album.owner.name;
+    const block = memberId && memberId !== user?.id ? { userId: memberId } : null;
+    const blockRow = block && (
+        <button type="button" className="alb-sheet-row danger" onClick={() => { setMenu(null); openBlock(block, { name: memberName }); }}>
+            <Ban size={18} /> {t('moderation.menu.blockMember')}
+        </button>
+    );
     const Audience = AUDIENCE_ICONS[album.visibility];
     const coverId = album.coverPhotoId || album.photos[0]?.id;
     const urls = album.photos.map((p) => getAssetUrl(p.url));
@@ -190,9 +203,12 @@ const AlbumPage = () => {
                                 <button type="button" className="alb-sheet-row danger" onClick={deleteAlbum}><Trash2 size={18} /> {t('albums.delete')}</button>
                             </>
                         ) : (
-                            <button type="button" className="alb-sheet-row danger" onClick={() => { setMenu(null); openReport({ type: 'album', id: album.id }, { name: album.owner.name }); }}>
-                                <Flag size={18} /> {t('albums.reportAlbum')}
-                            </button>
+                            <>
+                                <button type="button" className="alb-sheet-row danger" onClick={() => { setMenu(null); openReport({ type: 'album', id: album.id }, { name: memberName, blockTarget: block || undefined }); }}>
+                                    <Flag size={18} /> {t('albums.reportAlbum')}
+                                </button>
+                                {blockRow}
+                            </>
                         )}
                     </div>
                 </ModerationSheet>
@@ -210,9 +226,12 @@ const AlbumPage = () => {
                                 <button type="button" className="alb-sheet-row danger" onClick={() => deletePhoto(menu)}><Trash2 size={18} /> {t('albums.deletePhoto')}</button>
                             </>
                         ) : (
-                            <button type="button" className="alb-sheet-row danger" onClick={() => { const photo = menu; setMenu(null); openReport({ type: 'photo', id: photo.id }, { name: album.owner.name }); }}>
-                                <Flag size={18} /> {t('albums.reportPhoto')}
-                            </button>
+                            <>
+                                <button type="button" className="alb-sheet-row danger" onClick={() => { const photo = menu; setMenu(null); openReport({ type: 'photo', id: photo.id }, { name: memberName, blockTarget: block || undefined }); }}>
+                                    <Flag size={18} /> {t('albums.reportPhoto')}
+                                </button>
+                                {blockRow}
+                            </>
                         )}
                     </div>
                 </ModerationSheet>

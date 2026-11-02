@@ -2051,9 +2051,14 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                                                 Reply
                                                                             </button>
                                                                             {comment.pubkey !== myPubkey ? (
-                                                                                <button className="primal-comment-action" onClick={() => handleReport(comment)}>
-                                                                                    {t('moderation.menu.report')}
-                                                                                </button>
+                                                                                <>
+                                                                                    <button className="primal-comment-action" onClick={() => handleReport(comment)}>
+                                                                                        {t('moderation.menu.report')}
+                                                                                    </button>
+                                                                                    <button className="primal-comment-action" onClick={() => handleBlockUser(comment.pubkey)}>
+                                                                                        {t('moderation.menu.block')}
+                                                                                    </button>
+                                                                                </>
                                                                             ) : (
                                                                                 <button className="primal-comment-action" onClick={() => handleDeleteComment(post.id, comment)}>
                                                                                     {t('feed.deleteReply', 'Delete')}
