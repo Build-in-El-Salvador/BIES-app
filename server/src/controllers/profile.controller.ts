@@ -13,6 +13,12 @@ import { removeTags } from '../middleware/sanitize';
 import { alphabetical, inOrder } from '../utils/listOrder';
 import { networkPreviews } from '../services/memberNetwork';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import { isClaimedNip05, isReservedNip05, looksGivenAtSignup } from '../services/nip05';
+import { nip05IsHeld, recordReleasedNip05 } from '../services/releasedNip05';
+import { allowedParts, publicNostrOf, publicUrl, sourceFields } from '../services/publicNostrProfile';
+import { followPublicProfile, isFollowing } from './publicNostr.controller';
+
+export { isReservedNip05 };
 
 // What a member card shows (Members: icons, list and cards). Everything else
 // comes with the profile page itself (GET /profiles/:id), so a list of 48
@@ -23,6 +29,7 @@ function memberCard(p: any) {
         id: p.id,
         userId: p.userId,
         name: p.name,
+        verified: !!p.verified, // a BIES address they chose (profilePrivacy.ts)
         avatar: p.avatar,
         title: p.title,
         company: p.company,
@@ -98,7 +105,8 @@ export const updateProfileSchema = z.object({
     nostrFeedMode: z.enum(['off', 'private', 'public', 'combined']).optional(),
     nostrNpub: short.optional(),
     // NIP-05 & Lightning
-    nip05Name: z.string().min(3).max(30).regex(/^[a-z0-9._-]+$/, 'Only lowercase letters, numbers, dots, hyphens, underscores').optional(),
+    // '' removes it (Settings → Nostr).
+    nip05Name: z.string().trim().toLowerCase().min(3).max(30).regex(/^[a-z0-9._-]+$/, 'Only lowercase letters, numbers, dots, hyphens, underscores').optional().or(z.literal('')),
     lightningAddress: z.string().max(320).optional(),
     bolt12Offer: z.string().max(2000).regex(/^lno1[a-z0-9]+$/, 'Must be a valid Bolt12 offer (starts with lno1)').optional().or(z.literal('')),
     // Investor-specific
@@ -111,19 +119,28 @@ export const updateProfileSchema = z.object({
     isPublic: z.boolean().optional(),
 });
 
-// Names@buildinelsalvador.com that would read as BIES itself speaking: kept
-// for staff. Other Nostr clients show the name as verified by BIES's domain.
-const RESERVED_NIP05 = new Set([
-    'admin', 'administrator', 'root', 'support', 'help', 'info', 'contact', 'hello', 'team', 'staff',
-    'mod', 'mods', 'moderator', 'moderators', 'official', 'bies', 'buildinelsalvador', 'security', 'abuse',
-    'noreply', 'no-reply', 'postmaster', 'hostmaster', 'webmaster', 'billing', 'payments', 'press',
-    'media', 'news', 'events', 'legal', 'privacy', 'verify', 'verified', 'system', 'app',
-]);
-// A name with one of these as a part ("bies.support", "admin_mike") is kept too.
-const RESERVED_NIP05_PARTS = new Set(['admin', 'support', 'staff', 'mod', 'moderator', 'official', 'bies', 'security', 'verified']);
-
-export function isReservedNip05(name: string): boolean {
-    return RESERVED_NIP05.has(name) || name.split(/[._-]/).some((part) => RESERVED_NIP05_PARTS.has(part));
+/**
+ * Why this member can't claim a BIES address (services/nip05.ts), or null
+ * when they can. Their own name is always theirs to keep, even one that
+ * would be kept for BIES now. Names like the ones sign-up handed out stay
+ * with those given them; names kept for BIES are for admins; a name given
+ * up is held (90 days, or for good when an admin took it away); and a name
+ * someone has is taken.
+ */
+async function whyNotNip05(name: string, user: Request['user']): Promise<'reserved' | 'held' | 'taken' | null> {
+    const me = user?.id
+        ? await prisma.user.findUnique({ where: { id: user.id }, select: { nostrPubkey: true, profile: { select: { nip05Name: true } } } })
+        : null;
+    if (me?.profile?.nip05Name === name) return null;
+    if (looksGivenAtSignup(name)) return 'reserved';
+    if (isReservedNip05(name) && !user?.isAdmin) return 'reserved';
+    const existing = await prisma.profile.findFirst({
+        where: { nip05Name: name, ...(user?.id ? { userId: { not: user.id } } : {}) },
+        select: { id: true },
+    });
+    if (existing) return 'taken';
+    if (await nip05IsHeld(name, me?.nostrPubkey)) return 'held';
+    return null;
 }
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
@@ -516,33 +533,43 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             if (req.body[field] !== undefined) data[field] = req.body[field];
         }
 
-        // NIP-05 name uniqueness check
+        // Fetch old profile to detect lightning address / bolt12 offer changes,
+        // photos replaced, and a BIES address changed
+        const oldProfile = await prisma.profile.findUnique({
+            where: { userId: req.user!.id },
+            select: {
+                name: true, bio: true, avatar: true, banner: true, website: true, nip05Name: true, nip05ClaimedAt: true,
+                lightningAddress: true, bolt12Offer: true,
+            },
+        });
+
+        // A BIES address claimed, changed or removed (Settings → Nostr). A
+        // new name the member chose is what makes them verified; the same
+        // name sent again (the app's Edit profile did, up to build 17)
+        // changes nothing.
+        let released: string | null = null;
         if (data.nip05Name !== undefined) {
-            if (data.nip05Name === '') {
-                data.nip05Name = null;
-            } else {
-                data.nip05Name = data.nip05Name.toLowerCase().trim();
-                // A staff-sounding name, unless it's already theirs.
-                if (isReservedNip05(data.nip05Name) && !isStaffUser(req.user)) {
-                    const mine = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { nip05Name: true } });
-                    if (mine?.nip05Name !== data.nip05Name) {
-                        res.status(409).json({ error: `"${data.nip05Name}" is kept for BIES staff. Choose another name.`, reason: 'reserved' });
-                        return;
-                    }
+            data.nip05Name = data.nip05Name === '' ? null : data.nip05Name.toLowerCase().trim();
+            if (data.nip05Name !== null) {
+                const why = await whyNotNip05(data.nip05Name, req.user);
+                if (why === 'reserved') {
+                    res.status(409).json({ error: `"${data.nip05Name}" is kept for BIES. Choose another name.`, reason: 'reserved' });
+                    return;
                 }
-                const existing = await prisma.profile.findFirst({
-                    where: { nip05Name: data.nip05Name, userId: { not: req.user!.id } },
-                });
-                if (existing) {
-                    res.status(409).json({ error: `NIP-05 name "${data.nip05Name}" is already taken` });
+                if (why === 'held') {
+                    res.status(409).json({ error: `"${data.nip05Name}" isn't available right now. Choose another name.`, reason: 'held' });
+                    return;
+                }
+                if (why === 'taken') {
+                    res.status(409).json({ error: `NIP-05 name "${data.nip05Name}" is already taken`, reason: 'taken' });
                     return;
                 }
             }
+            if (data.nip05Name !== (oldProfile?.nip05Name ?? null)) {
+                released = oldProfile?.nip05Name ?? null;
+                data.nip05ClaimedAt = data.nip05Name ? new Date() : null;
+            }
         }
-
-        // Fetch old profile to detect lightning address / bolt12 offer changes,
-        // and photos replaced
-        const oldProfile = await prisma.profile.findUnique({ where: { userId: req.user!.id }, select: { lightningAddress: true, bolt12Offer: true, avatar: true, banner: true } });
         frameNewCover(data, 'banner', oldProfile?.banner);
 
         // Convert arrays/objects to JSON strings for SQLite
@@ -551,10 +578,16 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             if (data[field] !== undefined) data[field] = JSON.stringify(data[field]);
         }
 
-        const profile = await prisma.profile.upsert({
-            where: { userId: req.user!.id },
-            update: data,
-            create: { userId: req.user!.id, ...data },
+        // The name given up is held for a while (services/releasedNip05.ts).
+        const profile = await prisma.$transaction(async (tx) => {
+            const saved = await tx.profile.upsert({
+                where: { userId: req.user!.id },
+                update: data,
+                create: { userId: req.user!.id, ...data },
+                include: { user: { select: { nostrPubkey: true, encryptedPrivkey: true } } },
+            });
+            if (released) await recordReleasedNip05(tx, released, saved.user.nostrPubkey);
+            return saved;
         });
 
         // Bust caches
@@ -564,12 +597,19 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             cache.delPattern('profiles:'),
         ]);
 
-        // A profile photo or cover replaced: the old file goes, if it was theirs.
-        const replaced = [oldProfile?.avatar, oldProfile?.banner].filter((url): url is string => !!url && url !== profile.avatar && url !== profile.banner);
+        // A profile photo or cover replaced: the old file goes, if it was
+        // theirs. Not one on the public Nostr profile BIES last published for
+        // them: copies of it stay on relays BIES can't update.
+        const publicNostr = publicNostrOf(profile.publicNostr);
+        const onPublicNostr = new Set([publicNostr.publishedValues.picture, publicNostr.publishedValues.banner].filter(Boolean));
+        const replaced = [oldProfile?.avatar, oldProfile?.banner]
+            .filter((url): url is string => !!url && url !== profile.avatar && url !== profile.banner)
+            .filter((url) => !onPublicNostr.has(publicUrl(url)));
         if (replaced.length) await discardUploads(replaced, { uploadedBy: [req.user!.id] });
 
         const arrayParsedFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
-        const parsed: any = { ...profile, coinosToken: undefined };
+        const { user: owner, ...saved } = profile;
+        const parsed: any = { ...saved, coinosToken: undefined, verified: isClaimedNip05(profile) };
         for (const f of arrayParsedFields) {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }
@@ -580,6 +620,18 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         if (req.body.nip05Name !== undefined || req.body.lightningAddress !== undefined || req.body.bolt12Offer !== undefined || req.body.name !== undefined) {
             publishProfileUpdate(req.user!.id, nostrProfileFor(profile, privacy))
                 .catch((err) => console.error('[Nostr] Profile sync failed:', err));
+        }
+
+        // Their public Nostr profile follows when something a published part
+        // is made from changed (Settings → Nostr). BIES does it for keys it
+        // holds; for a key on the member's device the answer says so
+        // (`publicNostrStale`) and the app does it.
+        if (isFollowing(publicNostr)) {
+            const same = (a: unknown, b: unknown) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b);
+            const changed = sourceFields(allowedParts(publicNostr.publishedParts, privacy))
+                .some((f) => !same((oldProfile as Record<string, unknown> | null)?.[f] ?? null, (profile as Record<string, unknown>)[f] ?? null));
+            if (changed && owner.encryptedPrivkey) followPublicProfile(req.user!.id);
+            else if (changed) parsed.publicNostrStale = true;
         }
 
         // Announce lightning address addition on the BIES feed, unless the
@@ -599,6 +651,11 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
 
         res.json(parsed);
     } catch (error) {
+        // Two members claiming the same BIES address at once: the second gets "taken".
+        if ((error as { code?: string })?.code === 'P2002' && JSON.stringify((error as { meta?: unknown }).meta ?? '').includes('nip05')) {
+            res.status(409).json({ error: 'That name is already taken', reason: 'taken' });
+            return;
+        }
         console.error('Update profile error:', error);
         res.status(500).json({ error: 'Failed to update profile' });
     }
@@ -617,19 +674,12 @@ export async function checkNip05(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        if (isReservedNip05(name) && !isStaffUser(req.user)) {
-            res.json({ available: false, name, reason: 'reserved' });
+        const why = await whyNotNip05(name, req.user);
+        if (why === 'reserved' || why === 'held') {
+            res.json({ available: false, name, reason: why });
             return;
         }
-        const existing = await prisma.profile.findFirst({
-            where: {
-                nip05Name: name,
-                ...(req.user?.id ? { userId: { not: req.user.id } } : {}),
-            },
-            select: { id: true },
-        });
-
-        res.json({ available: !existing, name });
+        res.json({ available: !why, name });
     } catch (error) {
         console.error('Check NIP-05 error:', error);
         res.status(500).json({ error: 'Failed to check availability' });
@@ -682,7 +732,7 @@ export async function getMyProfile(req: Request, res: Response): Promise<void> {
         }
 
         const arrayFields = ['skills', 'tags', 'investmentFocus', 'investmentStage', 'lookingFor', 'experience', 'biesProjects', 'customSections'];
-        const parsed: any = { ...profile, coinosToken: undefined };
+        const parsed: any = { ...profile, coinosToken: undefined, verified: isClaimedNip05(profile) };
         for (const f of arrayFields) {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }

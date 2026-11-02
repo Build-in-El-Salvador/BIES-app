@@ -103,6 +103,26 @@ describe('the request sanitizer', () => {
     });
 });
 
+describe('routes left as sent', () => {
+    const at = (path: string) => {
+        const req = { path, body: { title: '<b>signed</b>' }, query: {}, params: {} } as unknown as express.Request;
+        sanitize(req, {} as express.Response, () => {});
+        return (req.body as { title: string }).title;
+    };
+
+    it('leaves the Settings → Nostr publish route alone, with or without a trailing slash', () => {
+        expect(at('/api/settings/nostr/publish')).toBe('<b>signed</b>');
+        expect(at('/api/settings/nostr/publish/')).toBe('<b>signed</b>');
+        expect(at('/API/Settings//nostr/publish')).toBe('<b>signed</b>');
+    });
+
+    it('cleans anything else that starts the same way', () => {
+        expect(at('/api/settings/nostr/publishx')).toBe('signed');
+        expect(at('/api/settings/nostr/publish/more')).toBe('signed');
+        expect(at('/api/settings/nostr')).toBe('signed');
+    });
+});
+
 describe('rich text\'s inline styles', () => {
     it('keep their alignment, written the one way, and nothing else', () => {
         expect(keepAlignmentOnly('<p style="text-align: center;">Hi</p>')).toBe('<p style="text-align: center">Hi</p>');

@@ -91,7 +91,7 @@ describe('member cards', () => {
         expect(card).toBeTruthy();
         // The network line only when asked for (the Cards layout).
         expect(Object.keys(card).sort()).toEqual(
-            ['avatar', 'bio', 'company', 'id', 'joinedAt', 'location', 'name', 'skills', 'tags', 'title', 'user', 'userId'].sort());
+            ['avatar', 'bio', 'company', 'id', 'joinedAt', 'location', 'name', 'skills', 'tags', 'title', 'user', 'userId', 'verified'].sort());
         const withNetwork = (await get('/api/profiles?limit=50&fields=card&network=1', viewer.token)).body.data.find((p: any) => p.userId === m.id);
         expect(withNetwork.network).toEqual({ hidden: false, total: 0, youFollow: 0, people: [] });
         expect(card.user).toEqual({ id: m.id, nostrPubkey: m.pubkey });

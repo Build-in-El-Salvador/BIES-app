@@ -26,6 +26,7 @@ import { runsListing, worksAt } from '../directory/listingRoles';
 import useVisitState from '../../hooks/useVisitState';
 import { cachedList, rememberList } from '../../utils/listCache';
 import { joinPages, listOf } from '../../utils/listRequests';
+import VerifiedTick from '../VerifiedTick';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -253,7 +254,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                         {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <User size={44} />}
                     </button>
                     <div className="pv-title">
-                        <h1 className="pv-name">{name}</h1>
+                        <h1 className="pv-name">{name}{profile.verified && <VerifiedTick size={24} />}</h1>
                         {userId && (
                             <p className="pv-counts">
                                 <Link to={`/members/${userId}/followers`} className="pv-count">

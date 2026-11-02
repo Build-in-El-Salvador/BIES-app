@@ -214,7 +214,8 @@ export const moderationApi = {
 
 export const signerApi = {
     sign: (event) => post('/signer/sign', { event }).then((data) => data.event),
-    log: (limit) => get('/signer/log', { limit }),
+    // hide: kinds to leave out, e.g. [22242, 24242]
+    log: (limit, hide = [], before = null) => get('/signer/log', { limit, ...(hide.length ? { hide: hide.join(',') } : {}), ...(before ? { before } : {}) }),
 };
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
@@ -622,6 +623,7 @@ export const adminApi = {
     setRole: (id, role) => put(`/admin/users/${id}/role`, { role }),
     setAdmin: (id, isAdmin) => put(`/admin/users/${id}/admin`, { isAdmin }),
     verifyUser: (id) => put(`/admin/users/${id}/verify`, {}),
+    removeNip05: (id) => del(`/admin/users/${id}/nip05`),
     featureProject: (id, featured) => put(`/admin/projects/${id}/feature`, { featured }),
     deleteProject: (id) => del(`/admin/projects/${id}`),
     changeProjectOwner: (id, newOwnerId) => put(`/admin/projects/${id}/owner`, { newOwnerId }),
@@ -782,6 +784,10 @@ export const settingsApi = {
     updateNotifications: (data) => put('/settings/notifications', data),
     getPrivacy: () => get('/settings/privacy'),
     updatePrivacy: (data) => put('/settings/privacy', data),
+    // Settings → Nostr: the public Nostr profile (server: controllers/publicNostr.controller.ts)
+    getNostr: (params = {}) => get('/settings/nostr', params), // { preview: 0 } skips reading public relays
+    updateNostr: (data) => put('/settings/nostr', data), // { on, parts }
+    publishNostr: (body = {}) => post('/settings/nostr/publish', body), // { seenAt, event }
 };
 
 // BIES Talents: what members offer to do, with their proof of work (members only).

@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { config } from '../config';
+import { publicNostrOf } from '../services/publicNostrProfile';
 
 /**
  * GET /.well-known/nostr.json?name=<username>
@@ -36,10 +38,16 @@ export async function nostrJson(req: Request, res: Response): Promise<void> {
         }
 
         const pubkey = profile.user.nostrPubkey;
+        // Where other apps can find them: the public relays once they've
+        // published a public profile (Settings → Nostr), otherwise BIES's
+        // members' relay.
+        const relays = publicNostrOf(profile.publicNostr).publishedAt
+            ? config.nostrRelays
+            : [config.nostrPublicRelay];
 
         res.json({
             names: { [normalizedName]: pubkey },
-            relays: { [pubkey]: ['wss://relay.buildinelsalvador.com'] },
+            relays: { [pubkey]: relays },
         });
     } catch (error) {
         console.error('NIP-05 lookup error:', error);

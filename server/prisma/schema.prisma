@@ -197,6 +197,9 @@ model Profile {
   nostrNpub      String   @default("") @map("nostr_npub")
   // NIP-05 & Lightning
   nip05Name        String?  @unique @map("nip05_name")
+  // When the member claimed nip05Name in Settings → Nostr (or an admin did):
+  // what makes them verified. Null for the names sign-up handed out.
+  nip05ClaimedAt   DateTime? @map("nip05_claimed_at")
   lightningAddress String   @default("") @map("lightning_address")
   bolt12Offer      String   @default("") @map("bolt12_offer")
   // Coinos custodial wallet
@@ -207,6 +210,10 @@ model Profile {
   // Who sees what (Settings → Privacy), JSON: { bio, location, links, details, network }.
   // Missing keys take the defaults in services/profilePrivacy.ts.
   privacy      String   @default("{}")
+  // Their profile on public Nostr (Settings → Nostr), JSON: { on, parts,
+  // publishedAt, publishedParts, publishedCreatedAt, publishedValues }.
+  // See services/publicNostrProfile.ts.
+  publicNostr  String   @default("{}") @map("public_nostr")
   viewCount    Int      @default(0) @map("view_count")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -1584,4 +1591,20 @@ model Block {
   @@id([blockerId, blockedId])
   @@index([blockedId])
   @@map("blocks")
+}
+
+// A BIES address someone gave up (changed, removed, account deleted) or an
+// admin took away. Nobody else can claim it for 90 days, so it can't pass
+// at once to someone else; one an admin took away (`blocked`) stays held
+// for everyone until an admin deletes the row. See services/nip05.ts.
+model ReleasedNip05 {
+  name       String   @id
+  // The key that held it: it may take the name back within the 90 days.
+  // Null once that account is deleted.
+  pubkey     String?
+  releasedAt DateTime @default(now()) @map("released_at")
+  blocked    Boolean  @default(false)
+
+  @@index([pubkey])
+  @@map("released_nip05")
 }
