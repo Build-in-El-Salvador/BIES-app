@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { createNotification } from '../services/notification.service';
+import { recomputeListingScore } from '../services/directoryReputation.service';
 import { cache } from '../services/redis.service';
 import { blockedEitherWay } from '../services/moderation.service';
 import { z } from 'zod';
@@ -19,6 +20,8 @@ import { z } from 'zod';
  * run it, and can't put people on its team or host as it. Nor does one who
  * added it as someone who works there (addedAs STAFF): they're on its team,
  * and host as it that way.
+ * Votes by anyone on the team don't count toward its Trust Score
+ * (directoryReputation.service.ts).
  */
 
 export const addTeamMemberSchema = z.object({
@@ -49,6 +52,20 @@ export const runByWhere = (userId: string) => [
     { memberUserId: userId },
     { memberUserId: null, isOwnBusiness: true, addedAs: { not: ADDED_AS_STAFF }, ownerId: userId },
 ];
+
+/**
+ * A where clause for the businesses `userId` says they work at ("Works at"
+ * on their profile): on its team by their own doing, as the member who
+ * added it as someone who works there, or who put themselves on it. Not a
+ * team someone else put them on: that shows on the business's page only.
+ */
+export const worksAtWhere = (userId: string) => ({
+    team: { some: { userId } },
+    OR: [
+        { team: { some: { userId, addedById: userId } } },
+        { addedAs: ADDED_AS_STAFF, ownerId: userId },
+    ],
+});
 
 const ACTIVE = { isBanned: false, deletedAt: null };
 const LIVE = { status: 'active', isPublished: true };
@@ -141,6 +158,8 @@ export async function addTeamMember(req: Request, res: Response): Promise<void> 
             data: { listingId: listing.id, userId, addedById: me },
             include: { user: { select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } } } },
         });
+        // Their own vote for it doesn't count while they're on its team.
+        await recomputeListingScore(listing.id).catch((err) => console.error('[Directory] Score recompute failed:', err));
         await createNotification({
             userId,
             type: 'SYSTEM',
@@ -175,6 +194,8 @@ export async function removeTeamMember(req: Request, res: Response): Promise<voi
         }
         const { count } = await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id, userId } });
         if (!count) { res.status(404).json({ error: 'Not on the team' }); return; }
+        // Off the team, their vote for it counts again.
+        await recomputeListingScore(listing.id).catch((err) => console.error('[Directory] Score recompute failed:', err));
         res.json({ removed: true });
     } catch (error) {
         console.error('Remove team member error:', error);

@@ -78,8 +78,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const [tab, setTab] = useVisitState('profile.tab', 'all');
     const [followers, setFollowers] = useState({ list: [], total: 0 });
     const [following, setFollowing] = useState({ list: [], total: 0 });
-    const [listings, setListings] = useState([]);
-    const [teamListings, setTeamListings] = useState([]); // the businesses whose team they're on
+    const [listings, setListings] = useState([]); // the businesses and farms they run
+    const [teamListings, setTeamListings] = useState([]); // the ones they say they work at
     const [talents, setTalents] = useState([]);
     // As far as "Show more" went, kept for Back (utils/listCache.js).
     const recommendationsKey = `recommended-by:${userId}`;
@@ -95,16 +95,26 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     // Their posts in the BIES feed, unless they turned them off (Settings → Privacy).
     const showPosts = !!pubkey && profile.nostrFeedMode !== 'off';
 
+    // Another member's profile in the same page (from their network): none
+    // of the last one's people or businesses meanwhile, and its answers,
+    // when they come late, are dropped (cancelled).
+    // "Runs" and "Works at" come from the server as their profile's
+    // details do (Settings → Privacy), and "Works at" only for businesses
+    // they said they work at themselves, not a team someone put them on.
     useEffect(() => {
+        setFollowers({ list: [], total: 0 });
+        setFollowing({ list: [], total: 0 });
+        setListings([]);
+        setTeamListings([]);
         if (!userId) return undefined;
         let cancelled = false;
         const page = (res) => ({ list: res?.data || [], total: res?.pagination?.total ?? (res?.data || []).length, hidden: !!res?.hidden });
         profilesApi.getFollowers(userId, { limit: 50 }).then((res) => { if (!cancelled) setFollowers(page(res)); }).catch(() => {});
         profilesApi.getFollowing(userId, { limit: 50 }).then((res) => { if (!cancelled) setFollowing(page(res)); }).catch(() => {});
-        directoryApi.list({ ownerId: userId, limit: 20 })
+        directoryApi.list({ runBy: userId, limit: 20 })
             .then((res) => { if (!cancelled) setListings(res?.data || []); })
             .catch(() => {});
-        directoryApi.list({ teamMember: userId, limit: 20 })
+        directoryApi.list({ worksAt: userId, limit: 20 })
             .then((res) => { if (!cancelled) setTeamListings(res?.data || []); })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -167,8 +177,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const albums = useAlbums({ userId });
 
     // The businesses and farms they run (theirs, or one staff linked them to),
-    // then the ones they work at (on its team; not one they run as well). The
-    // one named as their company links from there instead.
+    // then the ones they work at (not one they run as well). The one named as
+    // their company links from there instead.
     const businesses = listings.filter((l) => runsListing(l, userId));
     const workplaces = worksAt(teamListings, userId, businesses);
     const companyListing = businesses.find((l) => sameName(l.name, profile.company))

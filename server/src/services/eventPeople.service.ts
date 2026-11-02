@@ -204,15 +204,28 @@ export function samePartners(inputs: PartnerInput[], shown: PartnerView[]): bool
     return JSON.stringify(inputs.map(keyIn)) === JSON.stringify(shown.map(keyOf));
 }
 
-/** The member who runs a listing, to hear about it (none for a listing only recommended, or added by someone who works there). */
-async function runnerOf(listingId: string): Promise<string | null> {
-    const l = await prisma.directoryListing.findUnique({ where: { id: listingId }, select: { ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true } });
-    return l ? runnerId(l) : null;
+/**
+ * Who hears about a business or farm named on an event, with its name: the
+ * member who runs it; when nobody does (say someone who works there added
+ * it), the active members on its team. Nobody for one only recommended.
+ */
+async function peopleOf(listingId: string): Promise<{ name: string; userIds: string[] }> {
+    const l = await prisma.directoryListing.findUnique({
+        where: { id: listingId },
+        select: {
+            name: true, ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true,
+            team: { where: { user: ACTIVE }, orderBy: { createdAt: 'asc' }, select: { userId: true } },
+        },
+    });
+    if (!l) return { name: '', userIds: [] };
+    const runner = runnerId(l);
+    return { name: l.name, userIds: runner ? [runner] : l.team.map((m) => m.userId) };
 }
 
 /**
  * Tell newly added co-hosts and sponsors (a member, or the member who runs
- * a business) that they're on the event. `before` are the rows it had.
+ * a business, or its team when nobody runs it) that they're on the event.
+ * `before` are the rows it had.
  */
 export async function notifyNewPartners(
     me: string,
@@ -226,23 +239,22 @@ export async function notifyNewPartners(
     for (const p of rows) {
         if (!p.userId && !p.listingId) continue;
         if (had.has(p.userId ? `u:${p.userId}` : `l:${p.listingId}`)) continue;
-        const to = p.userId || (p.listingId ? await runnerOf(p.listingId) : null);
-        if (!to || to === me || told.has(to)) continue;
-        told.add(to);
-        const listingName = p.listingId
-            ? (await prisma.directoryListing.findUnique({ where: { id: p.listingId }, select: { name: true } }))?.name
-            : null;
+        const { name: listingName, userIds } = p.userId ? { name: '', userIds: [p.userId] } : await peopleOf(p.listingId!);
         const who = listingName || 'you';
         const what = p.role === 'COHOST' ? 'a co-host' : 'a sponsor';
-        await createNotification({
-            userId: to,
-            type: 'SYSTEM',
-            title: `${hostName} added ${who} as ${what} of ${event.title}`,
-            body: p.role === 'COHOST' && p.userId
-                ? 'You can edit the event too. To take your name off, open the event.'
-                : 'To take the name off, open the event.',
-            data: { link: `/events/${event.id}`, eventId: event.id, actorId: me },
-        }).catch((err) => console.error('[Events] Partner notification failed:', err));
+        for (const to of userIds) {
+            if (to === me || told.has(to)) continue;
+            told.add(to);
+            await createNotification({
+                userId: to,
+                type: 'SYSTEM',
+                title: `${hostName} added ${who} as ${what} of ${event.title}`,
+                body: p.role === 'COHOST' && p.userId
+                    ? 'You can edit the event too. To take your name off, open the event.'
+                    : 'To take the name off, open the event.',
+                data: { link: `/events/${event.id}`, eventId: event.id, actorId: me },
+            }).catch((err) => console.error('[Events] Partner notification failed:', err));
+        }
     }
 }
 

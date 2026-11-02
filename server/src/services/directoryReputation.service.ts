@@ -6,8 +6,10 @@
  *
  * Votes that don't count: those of whoever runs the business (the linked
  * member, or the member who added it as their own business, or as someone
- * who works there), and those of banned or deleted accounts. The controller refuses the first kind; they
- * are left out here too in case a listing changed hands after the vote.
+ * who works there), of anyone on its team, and of banned or deleted
+ * accounts. The controller refuses the first two kinds; they are left out
+ * here too, for a listing that changed hands or a member who joined its
+ * team after voting.
  */
 
 import prisma from '../lib/prisma';
@@ -24,12 +26,15 @@ export async function recomputeListingScore(listingId: string): Promise<void> {
                 where: { user: { isBanned: false, deletedAt: null } },
                 select: { userId: true, vote: true },
             },
+            team: { select: { userId: true } },
         },
     });
     if (!listing) return;
 
-    const runsIt = new Set([listing.memberUserId, listing.isOwnBusiness ? listing.ownerId : null].filter(Boolean));
-    const counted = listing.endorsements.filter((e) => !runsIt.has(e.userId));
+    const itsOwn = new Set([
+        listing.memberUserId, listing.isOwnBusiness ? listing.ownerId : null, ...listing.team.map((m) => m.userId),
+    ].filter(Boolean));
+    const counted = listing.endorsements.filter((e) => !itsOwn.has(e.userId));
     const vouchCount = counted.filter((e) => e.vote > 0).length;
     const downvoteCount = counted.filter((e) => e.vote < 0).length;
     const score = vouchCount - downvoteCount;

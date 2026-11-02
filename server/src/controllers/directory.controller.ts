@@ -8,11 +8,11 @@ import { config } from '../config';
 import { transfersFor } from './listingTransfer.controller';
 import { z } from 'zod';
 import { discardUploads } from '../services/uploads.service';
-import { nestedProfileForViewer } from '../services/profilePrivacy';
+import { nestedProfileForViewer, privacyOf } from '../services/profilePrivacy';
 import { alphabetical, inIdOrder, inOrder, missingLast, newestFirst, pageIds, priceLevel } from '../utils/listOrder';
 import { nameSimilarity, SIMILAR } from '../utils/similarNames';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
-import { ADDED_AS_STAFF, runnerId } from './listingTeam.controller';
+import { ADDED_AS_STAFF, runByWhere, runnerId, worksAtWhere } from './listingTeam.controller';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -193,17 +193,37 @@ const DIRECTORY_ORDERS_IN_CODE: Record<string, (a: ListingSortKeys, b: ListingSo
 };
 
 /**
+ * Whether the viewer may see which businesses `userId` runs and works at
+ * ("Runs" and "Works at" on their profile), as they may see that profile's
+ * details (services/profilePrivacy.ts): members only; not a member blocked
+ * either way, suspended or deleted; and, when their Settings → Privacy →
+ * Details is "Only me", the member themselves alone.
+ */
+async function showsWorkOf(req: Request, userId: string): Promise<boolean> {
+    if (!req.user) return false;
+    if (req.user.id === userId) return true;
+    const member = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { isBanned: true, deletedAt: true, profile: { select: { privacy: true } } },
+    });
+    if (!member || member.isBanned || member.deletedAt) return false;
+    if ((await hiddenFromIds(req.user.id, { staff: isStaff(req) })).includes(userId)) return false;
+    return privacyOf(member.profile?.privacy).details !== 'ONLY_ME';
+}
+
+/**
  * GET /directory
  * List directory listings with filtering, sorting (?sort=newest|score|vouches|
  * name|price-low|price-high), and pagination.
  * Public scope: active + published. Owners see all statuses of their own.
- * ?teamMember= the live ones a member is on the team of ("Works at" on their
- * profile); members only, as a listing's team is.
+ * ?runBy= and ?worksAt=: the live ones a member runs, and the ones they say
+ * they work at ("Runs" and "Works at" on their profile), to viewers who can
+ * see that profile's details (showsWorkOf).
  */
 export async function listListings(req: Request, res: Response): Promise<void> {
     try {
         const {
-            type, search, certified, btc, language, ownerId, category, saved, teamMember,
+            type, search, certified, btc, language, ownerId, category, saved, runBy, worksAt,
             page = '1', limit = '20',
             sort = 'newest',
         } = req.query;
@@ -212,8 +232,22 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         const take = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 50);
         const pageNumber = Math.max(parseInt(String(page), 10) || 1, 1);
         const skip = (pageNumber - 1) * take;
+        const reply = (listings: any[], total: number) => res.json({
+            data: listings.map(parseListing),
+            trustedThreshold: TRUSTED_THRESHOLD,
+            pagination: { page: pageNumber, limit: take, total, totalPages: Math.ceil(total / take) },
+        });
 
         const where: any = { status: 'active', isPublished: true };
+        const and: any[] = [];
+
+        const runner = typeof runBy === 'string' && runBy ? runBy : null;
+        const worker = typeof worksAt === 'string' && worksAt ? worksAt : null;
+        for (const member of new Set([runner, worker].filter((id): id is string => !!id))) {
+            if (!(await showsWorkOf(req, member))) { reply([], 0); return; }
+        }
+        if (runner) and.push({ OR: runByWhere(runner) });
+        if (worker) and.push(worksAtWhere(worker));
 
         if (type && typeof type === 'string') where.type = type.toUpperCase();
         if (ownerId && typeof ownerId === 'string') {
@@ -227,8 +261,6 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         if (certified === 'true') where.isCertified = true;
         // The viewer's saved listings (signed out: none).
         if (saved === 'true') where.saves = { some: { userId: req.user?.id ?? '' } };
-        // Signed out: none (the team shows to members only).
-        if (teamMember && typeof teamMember === 'string') where.team = { some: { userId: req.user ? teamMember : '' } };
         if (category && typeof category === 'string') where.category = category;
         if (btc === 'true') where.btcAccepted = true;
         if (language && typeof language === 'string') {
@@ -244,7 +276,8 @@ export async function listListings(req: Request, res: Response): Promise<void> {
             ];
         }
         // Not while the member who runs it is suspended or deleted (their own list aside).
-        if (!(req.user && where.ownerId === req.user.id)) where.AND = [ACTIVE_MEMBER_RUNS_IT];
+        if (!(req.user && where.ownerId === req.user.id)) and.push(ACTIVE_MEMBER_RUNS_IT);
+        if (and.length) where.AND = and;
 
         const include = {
             owner: ownerSelect,
@@ -275,16 +308,7 @@ export async function listListings(req: Request, res: Response): Promise<void> {
         const hidden = new Set(await hiddenFromIds(req.user?.id, { staff: isStaff(req) }));
         const visible = hidden.size ? listings.filter((l) => !hidden.has(listingMember(l))) : listings;
 
-        res.json({
-            data: visible.map(parseListing),
-            trustedThreshold: TRUSTED_THRESHOLD,
-            pagination: {
-                page: pageNumber,
-                limit: take,
-                total,
-                totalPages: Math.ceil(total / take),
-            },
-        });
+        reply(visible, total);
     } catch (error) {
         console.error('List directory listings error:', error);
         res.status(500).json({ error: 'Failed to list directory listings' });
@@ -515,7 +539,8 @@ export async function createListing(req: Request, res: Response): Promise<void> 
 
         // A member recommending a business vouches for it with their review;
         // one adding their own business doesn't. One who works there goes on
-        // its team (unless staff linked them as the member who runs it).
+        // its team, by their own doing, while nobody runs it (staff linking
+        // the member who runs it leaves the team to that member).
         const me = req.user!.id;
         const listing = await prisma.directoryListing.create({
             data: {
@@ -523,7 +548,7 @@ export async function createListing(req: Request, res: Response): Promise<void> 
                 ...(data.isOwnBusiness ? {} : {
                     endorsements: { create: { userId: me, vote: 1, comment: (req.body.review || '').trim() } },
                 }),
-                ...(data.addedAs === ADDED_AS_STAFF && data.memberUserId !== me
+                ...(data.addedAs === ADDED_AS_STAFF && !data.memberUserId
                     ? { team: { create: { userId: me, addedById: me } } }
                     : {}),
             },
@@ -580,6 +605,14 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
             return;
         }
         if (!ownAfter) data.addedAs = '';
+        // While another member runs it (staff linked them), its team is
+        // theirs to choose: whoever added it doesn't switch themselves onto
+        // it, or off running it, by changing how they're connected to it.
+        if (!isStaff(req) && data.addedAs !== undefined && data.addedAs !== existing.addedAs
+            && existing.memberUserId && existing.memberUserId !== req.user!.id) {
+            res.status(403).json({ error: 'Another member runs this business now: ask them to add you to its team', reason: 'runner_linked' });
+            return;
+        }
 
         if (data.memberUserId) {
             const memberUser = await prisma.user.findUnique({
@@ -613,17 +646,21 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         const runnerAfter = runnerId(listing);
         const linkChanged = (data.memberUserId !== undefined && data.memberUserId !== existing.memberUserId)
             || (data.isOwnBusiness !== undefined && data.isOwnBusiness !== existing.isOwnBusiness);
-        if (linkChanged && runnerBefore && runnerBefore !== runnerAfter) {
+        const teamCleared = linkChanged && !!runnerBefore && runnerBefore !== runnerAfter;
+        if (teamCleared) {
             await prisma.listingTeamMember.deleteMany({ where: { listingId: listing.id } });
         }
-        // Who added it works there now: on its team. Not any more (they run
-        // it, or recommend it): off it. Whoever runs it shows as its owner,
-        // not on the team as well.
+        // Who added it works there now, and nobody runs it: on its team, by
+        // their own doing (so it's "Works at" on their profile). Also when
+        // the team was just cleared because the member who ran it went.
+        // While someone runs it, its team is theirs to choose. Not working
+        // there any more (they run it, or recommend it): off it. Whoever runs
+        // it shows as its owner, not on the team as well.
         const creator = listing.ownerId;
-        if (listing.addedAs === ADDED_AS_STAFF && existing.addedAs !== ADDED_AS_STAFF && runnerAfter !== creator) {
+        if (listing.addedAs === ADDED_AS_STAFF && !runnerAfter && (existing.addedAs !== ADDED_AS_STAFF || teamCleared)) {
             await prisma.listingTeamMember.upsert({
                 where: { listingId_userId: { listingId: listing.id, userId: creator } },
-                create: { listingId: listing.id, userId: creator, addedById: req.user!.id },
+                create: { listingId: listing.id, userId: creator, addedById: creator },
                 update: {},
             });
         }
@@ -715,13 +752,18 @@ async function trustOf(listingId: string) {
  * Review a listing: { vote: 1 | -1, comment }. One review per member per
  * listing; posting again changes it. A downvote needs a reason. Whoever runs
  * the business can't review it, nor the member who added it as its own
- * (they run it or work there), and only live listings can be reviewed.
+ * (they run it or work there), nor anyone on its team, and only live
+ * listings can be reviewed.
  */
 export async function endorseListing(req: Request, res: Response): Promise<void> {
     try {
+        const userId = req.user!.id;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, status: true },
+            select: {
+                id: true, ownerId: true, memberUserId: true, isOwnBusiness: true, status: true,
+                team: { where: { userId }, select: { id: true } },
+            },
         });
 
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
@@ -729,9 +771,12 @@ export async function endorseListing(req: Request, res: Response): Promise<void>
             res.status(409).json({ error: 'This listing is not live yet', reason: 'not_live' });
             return;
         }
-        const userId = req.user!.id;
         if (listing.memberUserId === userId || (listing.isOwnBusiness && listing.ownerId === userId)) {
             res.status(403).json({ error: "You can't review your own business", reason: 'own_business' });
+            return;
+        }
+        if (listing.team.length) {
+            res.status(403).json({ error: "You're on its team, so you can't review it", reason: 'team' });
             return;
         }
         if (await blockedEitherWay(userId, listingMember(listing))) {

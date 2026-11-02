@@ -516,8 +516,9 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <div className="dir-error-banner"><AlertCircle size={16} /> {submitError}</div>
                     )}
 
-                    {/* Whose listing this is */}
-                    {(!editMode || isStaff || wasOwnBusiness) && (
+                    {/* Whose listing this is. Not for its creator once staff linked
+                        another member as the one who runs it: its team is theirs. */}
+                    {(!editMode || isStaff || (wasOwnBusiness && !(memberLink[0]?.userId && memberLink[0].userId !== user?.id))) && (
                     <div className="dir-form-card">
                         <h3 className="dir-card-heading">{t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}</h3>
                         <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}>

@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    ADDED_AS_STAFF, connectionFields, connectionOf, runnerIdOf, runnerOf, runsListing, worksAt,
+    ADDED_AS_STAFF, connectionFields, connectionOf, onTeam, runnerIdOf, runnerOf, runsListing, worksAt,
 } from '../../src/components/directory/listingRoles.js';
 
 const owner = { id: 'ana', profile: { name: 'Ana' } };
@@ -80,4 +80,14 @@ test('works at: the teams they are on, less what they run or the profile shows a
     assert.deepEqual(worksAt([shop, shop], 'ana').map((l) => l.id), ['shop']);
     assert.deepEqual(worksAt(undefined, 'ana'), []);
     assert.deepEqual(worksAt([null, { name: 'no id' }], 'ana'), []);
+});
+
+test('on its team: as the listing page sends its team (to members)', () => {
+    const shop = listing({ team: [{ userId: 'ben' }, { userId: 'cy' }] });
+    assert.equal(onTeam(shop, 'ben'), true);
+    assert.equal(onTeam(shop, 'ana'), false);
+    assert.equal(onTeam(shop, undefined), false);
+    assert.equal(onTeam(listing(), 'ben'), false);
+    assert.equal(onTeam(listing({ team: [null] }), 'ben'), false);
+    assert.equal(onTeam(null, 'ben'), false);
 });

@@ -29,6 +29,10 @@ export function runnerOf(listing) {
     return runnerIdOf(listing) ? listing.owner || null : null;
 }
 
+/** Whether `userId` is on the listing's team, as GET /directory/:id sends it (to members). */
+export const onTeam = (listing, userId) =>
+    !!userId && Array.isArray(listing?.team) && listing.team.some((m) => m?.userId === userId);
+
 /**
  * The adder's connection, as the form asks it: 'customer' (they recommend
  * it), 'owner' (it's their business) or 'staff' (they work there).
@@ -46,7 +50,8 @@ export const connectionFields = (connection) => ({
 
 /**
  * The listings a member works at, for "Works at" on their profile: those
- * whose team they're on (`teamListings`), less the ones they run and any in
+ * the server says they work at (`teamListings`: GET /directory?worksAt=, a
+ * team they're on by their own doing), less the ones they run and any in
  * `shown` (already on the profile another way), each once.
  */
 export function worksAt(teamListings, userId, shown = []) {

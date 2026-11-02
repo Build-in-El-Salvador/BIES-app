@@ -7,24 +7,27 @@ import TranslatableText from '../TranslatableText';
 import CertifiedBadge from './CertifiedBadge';
 import { objectionableMessage } from '../moderation/objectionable';
 import { reviewCount, writtenReviews } from './recommenders';
-import { connectionOf } from './listingRoles';
+import { connectionOf, onTeam } from './listingRoles';
 
 // The server's DOWNVOTE_REASON_MIN (directory.controller.ts).
 const REASON_MIN = 20;
 
 /**
  * Where a member stands with a listing: their own review, whether it's
- * theirs (they run it, or added it as its own: then they can't review it,
- * and worksThere when they added it as someone who works there), and
- * whether they can review it now.
+ * theirs (they run it, added it as its own, or are on its team: then they
+ * can't review it, and worksThere when they added it as someone who works
+ * there or are on its team), and whether they can review it now. As the
+ * server's endorse check (directory.controller.ts).
  */
 export function reviewState(listing, user) {
     const reviews = Array.isArray(listing.endorsements) ? listing.endorsements : [];
-    const mine = user?.id ? reviews.find((r) => r.userId === user.id) || null : null;
-    const runsIt = !!user?.id && (listing.memberUserId === user.id || (listing.isOwnBusiness && listing.ownerId === user.id));
-    const worksThere = runsIt && listing.ownerId === user.id && listing.memberUserId !== user.id && connectionOf(listing) === 'staff';
+    const me = user?.id;
+    const mine = me ? reviews.find((r) => r.userId === me) || null : null;
+    const team = onTeam(listing, me);
+    const runsIt = !!me && (listing.memberUserId === me || (listing.isOwnBusiness && listing.ownerId === me) || team);
+    const worksThere = runsIt && listing.memberUserId !== me && (team || (listing.ownerId === me && connectionOf(listing) === 'staff'));
     const live = listing.status === 'active';
-    return { reviews, mine, runsIt, worksThere, live, canReview: !!user?.id && !runsIt && live };
+    return { reviews, mine, runsIt, worksThere, live, canReview: !!me && !runsIt && live };
 }
 
 /**
@@ -274,8 +277,9 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
             setError(
                 reason === 'reason_required' ? t('directory.review.reasonRequired', { min: REASON_MIN })
                     : reason === 'own_business' ? t('directory.review.cantReviewOwn', { context: listing.type === 'FARM' ? 'farm' : undefined })
-                        : reason === 'not_live' ? t('directory.review.notLive')
-                            : objectionableMessage(t, err) || err?.message || String(err),
+                        : reason === 'team' ? t('directory.review.cantReviewStaff', { context: listing.type === 'FARM' ? 'farm' : undefined })
+                            : reason === 'not_live' ? t('directory.review.notLive')
+                                : objectionableMessage(t, err) || err?.message || String(err),
             );
         } finally {
             setBusy(false);
