@@ -1,17 +1,18 @@
 import React, { useMemo } from 'react';
 import { marked } from 'marked';
-import { cleanMemberHtml } from '../../utils/memberHtml';
+import { cleanDocumentHtml } from '../../utils/memberHtml';
 
 marked.setOptions({ gfm: true, breaks: true });
 
 /**
- * Renders sanitized markdown as HTML.
- * Follows the DOMPurify + dangerouslySetInnerHTML precedent from ArticleDetail.jsx,
- * with equivalent typography so lesson text reads like article text.
+ * Renders sanitized markdown as HTML: a document (memberHtml.js), so its
+ * pictures, tables and task lists stay. Follows the dangerouslySetInnerHTML
+ * precedent from ArticleDetail.jsx, with equivalent typography so lesson text
+ * reads like article text.
  */
 const MarkdownView = ({ markdown, className }) => {
     const html = useMemo(
-        () => cleanMemberHtml(marked.parse(markdown || '')),
+        () => cleanDocumentHtml(marked.parse(markdown || '')),
         [markdown]
     );
 
