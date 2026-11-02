@@ -889,6 +889,7 @@ model ZapReceipt {
   courseId        String?  @map("course_id")
   bolt11          String   @default("")
   bolt12          String   @default("")
+  paymentHash     String?  @unique @map("payment_hash") // the bolt11 invoice's payment hash: one receipt per payment (NULL on receipts stored before it was kept)
   eventCreatedAt  DateTime? @map("event_created_at") // Nostr event created_at (createdAt is row-insert time)
   createdAt       DateTime @default(now()) @map("created_at")
 

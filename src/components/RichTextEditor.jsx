@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import DOMPurify from 'dompurify';
+import { cleanMemberHtml } from '../utils/memberHtml';
 import { Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 
 const RichTextEditor = ({ value, onChange, placeholder, minHeight = '120px' }) => {
@@ -33,7 +33,7 @@ const RichTextEditor = ({ value, onChange, placeholder, minHeight = '120px' }) =
 
     useEffect(() => {
         if (editorRef.current && editorRef.current.innerHTML !== value) {
-            editorRef.current.innerHTML = DOMPurify.sanitize(value || '', { ADD_ATTR: ['style'] });
+            editorRef.current.innerHTML = cleanMemberHtml(value);
         }
     }, [value]);
 
@@ -49,7 +49,7 @@ const RichTextEditor = ({ value, onChange, placeholder, minHeight = '120px' }) =
         const html = e.clipboardData.getData('text/html');
         const text = e.clipboardData.getData('text/plain');
         if (html) {
-            const clean = DOMPurify.sanitize(html, { FORBID_ATTR: ['style', 'color'] });
+            const clean = cleanMemberHtml(html);
             document.execCommand('insertHTML', false, clean);
         } else {
             document.execCommand('insertText', false, text);

@@ -22,6 +22,7 @@ let authorPk: string, buyerPk: string, zapperPk: string, attackerPk: string;
 
 const COURSE_ID = 'clx0course000000000000000';
 const PRICE_MSATS = 5_000_000n; // 5000 sats
+const PAYMENT_HASH = 'ab'.repeat(32);
 
 beforeAll(async () => {
     ({ finalizeEvent, generateSecretKey, getPublicKey } = await import('nostr-tools/pure'));
@@ -77,7 +78,7 @@ function makeReceipt(
 function decodeFor(receipt: { tags: string[][] }, amountMsats = PRICE_MSATS) {
     const description = receipt.tags.find((t) => t[0] === 'description')?.[1] ?? '';
     const hash = createHash('sha256').update(description).digest('hex');
-    return (): DecodedInvoice => ({ amountMsats, descriptionHashHex: hash });
+    return (): DecodedInvoice => ({ amountMsats, descriptionHashHex: hash, paymentHashHex: PAYMENT_HASH });
 }
 
 function ctx(overrides: Partial<ReceiptVerifyContext> = {}): ReceiptVerifyContext {
@@ -147,6 +148,7 @@ describe('verifyZapReceiptForPurchase', () => {
         const wrongHash = (): DecodedInvoice => ({
             amountMsats: PRICE_MSATS,
             descriptionHashHex: createHash('sha256').update('unrelated').digest('hex'),
+            paymentHashHex: PAYMENT_HASH,
         });
         const sats = await verifyZapReceiptForPurchase(receipt, ctx(), wrongHash);
         expect(sats).toBe(0);
@@ -155,8 +157,16 @@ describe('verifyZapReceiptForPurchase', () => {
     it('rejects when the invoice has no description-hash at all', async () => {
         const request = makeZapRequest();
         const receipt = makeReceipt(request);
-        const noHash = (): DecodedInvoice => ({ amountMsats: PRICE_MSATS, descriptionHashHex: null });
+        const noHash = (): DecodedInvoice => ({ amountMsats: PRICE_MSATS, descriptionHashHex: null, paymentHashHex: PAYMENT_HASH });
         const sats = await verifyZapReceiptForPurchase(receipt, ctx(), noHash);
+        expect(sats).toBe(0);
+    });
+
+    it('rejects an invoice with no payment hash', async () => {
+        const request = makeZapRequest();
+        const receipt = makeReceipt(request);
+        const bound = decodeFor(receipt)();
+        const sats = await verifyZapReceiptForPurchase(receipt, ctx(), () => ({ ...bound, paymentHashHex: null }));
         expect(sats).toBe(0);
     });
 
