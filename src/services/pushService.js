@@ -16,6 +16,9 @@
 import { isNativePlatform, getPlatform } from '../utils/platform';
 import { notificationsApi } from './api';
 import { ANDROID_PUSH_ENABLED } from '../config/featureFlags';
+import { isAppPath } from '../utils/appPaths';
+import { appPathFromUrl } from '../utils/appLinks';
+import { publicUrl } from '../utils/publicUrl';
 
 // initNativePush runs on every login and session restore, so guard the
 // listener binding with a module-level flag — otherwise a single tap would
@@ -34,6 +37,26 @@ const rememberToken = (value) => {
 
 /** Fired on window when this phone's notification permission may have changed. */
 export const PERMISSION_EVENT = 'bies:push-permission';
+
+/** Fired on window when a tapped notification has a page to open (takeTappedPath). */
+export const OPEN_PATH_EVENT = 'bies:push-open';
+
+// The page the last tapped notification opens, until the app's router takes
+// it: a tap that launches the app arrives before the router is up.
+let tappedPath = null;
+
+/** The page a tapped notification opens, once (AppLinkListener navigates to it). */
+export function takeTappedPath() {
+    const path = tappedPath;
+    tappedPath = null;
+    return path;
+}
+
+/** A notification's link as an in-app path: "/feed?post=…", or this site's full address. */
+function tappedLinkPath(url) {
+    if (isAppPath(url)) return url;
+    return appPathFromUrl(url, publicUrl(''));
+}
 
 /** The runtime PushNotifications plugin, or null on web / older shells. */
 function getPlugin() {
@@ -69,12 +92,14 @@ export async function initNativePush() {
                 console.warn('[Push] Native registration error:', err?.error || err);
             });
 
-            // Tapping a delivered notification navigates to the server-provided
-            // url (set by getNotificationUrl on the backend), matching the
-            // existing window.location.href navigation pattern.
+            // Tapping a delivered notification opens its page (getNotificationUrl
+            // on the server) in the app, through its router: no reload, and the
+            // signed-in app stays as it was. Anything else isn't followed.
             push.addListener('pushNotificationActionPerformed', (action) => {
-                const url = action?.notification?.data?.url;
-                if (url) window.location.href = url;
+                const path = tappedLinkPath(action?.notification?.data?.url);
+                if (!path) return;
+                tappedPath = path;
+                window.dispatchEvent(new Event(OPEN_PATH_EVENT));
             });
         } catch (err) {
             console.warn('[Push] Failed to bind native push listeners:', err);

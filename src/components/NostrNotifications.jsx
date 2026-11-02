@@ -5,6 +5,8 @@ import { nostrService, BIES_RELAY } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
 import { notificationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useFeatureFlags } from '../context/FeatureFlagsContext';
+import { pathOrNotifications } from '../utils/appPaths';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { nip19 } from 'nostr-tools';
 
@@ -54,6 +56,7 @@ const NostrNotifications = ({ mobile = false }) => {
     const postsSubRef = useRef(null);
 
     const { user, notifications: appNotifications, refreshNotifications } = useAuth();
+    const { flags } = useFeatureFlags();
     useEffect(() => { refreshNotifications?.(); }, []);
     // Nothing from members blocked either way, or muted on this device:
     // filtered when shown, so a new block clears what came before too.
@@ -253,7 +256,8 @@ const NostrNotifications = ({ mobile = false }) => {
             if (!notif.app.isRead) {
                 notificationsApi.markRead(notif.app.id).then(() => refreshNotifications?.()).catch(() => {});
             }
-            navigate(appLink(notif.app) || '/notifications');
+            // Not to a page this copy of the app doesn't have (utils/appPaths.js).
+            navigate(pathOrNotifications(appLink(notif.app) || '/notifications', flags));
             return;
         }
         markRead(notif.id);
