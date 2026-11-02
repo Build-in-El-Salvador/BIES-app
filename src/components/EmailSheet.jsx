@@ -87,6 +87,7 @@ export default function EmailSheet({ email, subject, onClose }) {
             <style jsx>{`
                 .es-overlay {
                     position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10100;
+                    cursor: pointer; /* iOS WebKit only sends taps on the backdrop to elements that look tappable */
                     display: flex; align-items: flex-end; justify-content: center;
                     padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
                     background: rgba(15, 23, 42, 0.45);

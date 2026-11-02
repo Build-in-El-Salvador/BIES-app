@@ -35,3 +35,9 @@ test('anything else is left out', () => {
     assert.equal(sectionHasContent('text'), false);
     assert.equal(sectionHasContent({ type: 'VIDEO', url: 'x' }), false);
 });
+
+test("a new chart's example point alone doesn't count", () => {
+    assert.equal(sectionHasContent({ type: 'GRAPH', dataPoints: [{ label: 'Data 1', value: '100' }] }), false);
+    assert.equal(sectionHasContent({ type: 'GRAPH', dataPoints: [{ label: 'Data 1', value: '100' }, { label: 'Q2', value: '4' }] }), true);
+    assert.equal(sectionHasContent({ type: 'GRAPH', dataPoints: [{ label: 'Data 1', value: '250' }] }), true);
+});

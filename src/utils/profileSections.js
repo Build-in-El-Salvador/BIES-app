@@ -20,6 +20,11 @@ export function sectionHasContent(section) {
     }
     if (type === 'PHOTO') return !!section.imageUrl;
     if (type === 'CAROUSEL') return Array.isArray(section.images) && section.images.some(Boolean);
-    if (type === 'GRAPH') return Array.isArray(section.dataPoints) && section.dataPoints.length > 0;
+    // A chart counts once it has a point the member filled in: a new one
+    // starts with an example point ("Data 1", 100), which isn't theirs.
+    if (type === 'GRAPH') {
+        return Array.isArray(section.dataPoints)
+            && section.dataPoints.some((d) => d && !(d.label === 'Data 1' && String(d.value) === '100'));
+    }
     return false;
 }

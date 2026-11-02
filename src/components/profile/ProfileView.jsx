@@ -630,7 +630,8 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
 
                 @media (min-width: 769px) {
                     .pv { margin-top: 1rem; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08); }
-                    .pv-cover { height: 220px; }
+                    /* Rounded with the card: WebKit lets a zoomed-out cover's blurred fill past overflow + radius. */
+                    .pv-cover { height: 220px; clip-path: inset(0 round 16px 16px 0 0); }
                     .pv-sheet { padding: 0 24px 4px; }
                     .pv-avatar { width: 148px; height: 148px; margin-top: -74px; }
                     .pv-title { padding-top: 18px; }
