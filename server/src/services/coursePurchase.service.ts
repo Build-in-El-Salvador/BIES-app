@@ -14,8 +14,8 @@
  *      is the amount credited — the client-supplied `amount` tag is ignored
  *   4. the request targets this course's addressable coordinate
  *
- * Sum of verified receipts >= priceSats → CoursePurchase + Enrollment in
- * one transaction. Unique constraints make claims idempotent.
+ * Sum of verified receipts (each payment once) >= priceSats → CoursePurchase
+ * + Enrollment in one transaction. Unique constraints make claims idempotent.
  */
 
 import type { Event } from 'nostr-tools/pure';
@@ -24,12 +24,18 @@ import prisma from '../lib/prisma';
 import { config } from '../config';
 import { createNotification } from './notification.service';
 import { decodeInvoice, firstTag, getLnurlPayMetadata, verifyZapReceipt, type DecodedInvoice } from './zapReceipt';
+import { coalesced } from '../utils/coalesce';
 
 // Where they live now; imported from here before.
 export { decodeInvoice, getLnurlPayMetadata } from './zapReceipt';
 export type { DecodedInvoice, LnurlPayMetadata } from './zapReceipt';
 
 const RELAY_QUERY_TIMEOUT_MS = 8000;
+// Course zaps from one buyer arriving within this long make one check.
+const AUTO_CLAIM_DELAY_MS = 5000;
+// Checks (each a relay query) at once, and buyers waiting for one at most.
+const AUTO_CLAIM_MAX_CONCURRENT = 2;
+const AUTO_CLAIM_MAX_WAITING = 200;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,20 +68,30 @@ export async function verifyZapReceiptForPurchase(
     ctx: ReceiptVerifyContext,
     decode: (bolt11: string) => DecodedInvoice | null = decodeInvoice
 ): Promise<number> {
+    return (await verifiedPurchasePayment(receipt, ctx, decode))?.sats ?? 0;
+}
+
+/** As verifyZapReceiptForPurchase, with the payment's hash; null if it fails. */
+async function verifiedPurchasePayment(
+    receipt: Event,
+    ctx: ReceiptVerifyContext,
+    decode: (bolt11: string) => DecodedInvoice | null = decodeInvoice
+): Promise<{ sats: number; paymentHash: string } | null> {
     try {
         // 1–3 (zapReceipt.ts): the zapper's signature, the request's, the invoice binding.
         const zap = await verifyZapReceipt(receipt, { zapperPubkey: ctx.zapperPubkey, recipientPubkey: ctx.authorPubkey }, decode);
-        if (!zap) return 0;
+        if (!zap) return null;
 
         // The request was signed by the claiming buyer…
-        if (zap.request.pubkey.toLowerCase() !== ctx.buyerPubkey.toLowerCase()) return 0;
+        if (zap.request.pubkey.toLowerCase() !== ctx.buyerPubkey.toLowerCase()) return null;
         // …and targets this course's coordinate.
         const coordinate = firstTag(zap.request, 'a') ?? firstTag(receipt, 'a');
-        if (!coordinate || !ctx.coordinates.has(coordinate)) return 0;
+        if (!coordinate || !ctx.coordinates.has(coordinate)) return null;
 
-        return Number(zap.amountMsats / 1000n);
+        const sats = Number(zap.amountMsats / 1000n);
+        return sats > 0 ? { sats, paymentHash: zap.paymentHash } : null;
     } catch {
-        return 0;
+        return null;
     }
 }
 
@@ -225,10 +241,13 @@ export async function claimZapPurchase(userId: string, courseId: string): Promis
 
     let verifiedSats = 0;
     const usedReceiptIds: string[] = [];
+    const paymentsCounted = new Set<string>();
     for (const receipt of candidates) {
-        const sats = await verifyZapReceiptForPurchase(receipt, ctx);
-        if (sats > 0) {
-            verifiedSats += sats;
+        const payment = await verifiedPurchasePayment(receipt, ctx);
+        // A payment counts once, whatever number of receipts carry it.
+        if (payment && !paymentsCounted.has(payment.paymentHash)) {
+            paymentsCounted.add(payment.paymentHash);
+            verifiedSats += payment.sats;
             usedReceiptIds.push(receipt.id);
         }
     }
@@ -287,10 +306,24 @@ export async function claimZapPurchase(userId: string, courseId: string): Promis
     };
 }
 
+const autoClaims = coalesced(
+    ({ senderPubkey, courseId }: { senderPubkey: string; courseId: string }) => attemptAutoClaim(senderPubkey, courseId),
+    { delayMs: AUTO_CLAIM_DELAY_MS, maxConcurrent: AUTO_CLAIM_MAX_CONCURRENT, maxWaiting: AUTO_CLAIM_MAX_WAITING },
+);
+
 /**
- * Fire-and-forget hook for the zap indexer: when a receipt matched to a
- * course arrives from a known user without a purchase, try to auto-claim so
- * external-wallet payers unlock without pressing a button. Never throws.
+ * Hook for the zap indexer: a receipt matched to a course from a known user
+ * without a purchase leads to an auto-claim (attemptAutoClaim). Receipts from
+ * the same buyer for the same course arriving together make one claim, and
+ * so one relay query; a few claims run at once. Never throws.
+ */
+export function scheduleAutoClaim(senderPubkey: string, courseId: string): void {
+    autoClaims(`${senderPubkey}:${courseId}`, { senderPubkey, courseId });
+}
+
+/**
+ * Try to auto-claim a course purchase so external-wallet payers unlock
+ * without pressing a button (through scheduleAutoClaim). Never throws.
  */
 export async function attemptAutoClaim(senderPubkey: string, courseId: string): Promise<void> {
     try {

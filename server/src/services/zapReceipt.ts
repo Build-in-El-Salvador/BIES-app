@@ -12,6 +12,7 @@
  *
  * Course purchases (coursePurchase.service.ts) check this and more; the
  * receipt indexer (zap.service.ts) stores and counts only receipts that pass.
+ * Either way a payment (its invoice's payment hash) counts once.
  */
 
 import { createHash } from 'crypto';
@@ -38,11 +39,15 @@ export interface DecodedInvoice {
     amountMsats: bigint;
     /** hex sha256 the invoice commits to (description_hash), or null. */
     descriptionHashHex: string | null;
+    /** The payment's hash (hex), one per payment; null if the invoice has none. */
+    paymentHashHex: string | null;
 }
 
 /** A receipt that passed: the invoice's amount and the zap request inside it. */
 export interface VerifiedZap {
     amountMsats: bigint;
+    /** The invoice's payment hash (lowercase hex): the same payment, whatever receipt carries it. */
+    paymentHash: string;
     /** The kind-9734 request: its pubkey is who paid, its content their comment. */
     request: Event;
     /** The exact request JSON the invoice commits to. */
@@ -103,14 +108,18 @@ export function decodeInvoice(bolt11: string): DecodedInvoice | null {
         const decoded = decodeBolt11(bolt11);
         let amountMsats = 0n;
         let descriptionHashHex: string | null = null;
+        let paymentHashHex: string | null = null;
         // The lib's d.ts section union omits description_hash; the JS emits it.
         for (const section of (decoded.sections ?? []) as Array<{ name: string; value?: unknown }>) {
             if (section.name === 'amount') amountMsats = BigInt(String(section.value));
             if (section.name === 'description_hash' && section.value) {
                 descriptionHashHex = String(section.value).toLowerCase();
             }
+            if (section.name === 'payment_hash' && section.value) {
+                paymentHashHex = String(section.value).toLowerCase();
+            }
         }
-        return { amountMsats, descriptionHashHex };
+        return { amountMsats, descriptionHashHex, paymentHashHex };
     } catch {
         return null;
     }
@@ -159,11 +168,14 @@ export async function verifyZapReceipt(
 
         // 3. bolt11 binding: description_hash commits to this exact request,
         //    amount comes from the invoice — never from client-supplied tags.
+        //    Its payment hash names the payment, so it can be counted once.
         const bolt11 = firstTag(receipt, 'bolt11');
         if (!bolt11) return null;
         const decoded = decode(bolt11);
         if (!decoded || decoded.amountMsats <= 0n) return null;
         if (!decoded.descriptionHashHex) return null;
+        const paymentHash = decoded.paymentHashHex?.toLowerCase() ?? '';
+        if (!/^[0-9a-f]{64}$/.test(paymentHash)) return null;
         const expectedHash = createHash('sha256').update(description).digest('hex');
         if (decoded.descriptionHashHex !== expectedHash) return null;
 
@@ -171,7 +183,7 @@ export async function verifyZapReceipt(
         const requestAmount = firstTag(request, 'amount');
         if (requestAmount && BigInt(requestAmount) !== decoded.amountMsats) return null;
 
-        return { amountMsats: decoded.amountMsats, request, description };
+        return { amountMsats: decoded.amountMsats, paymentHash, request, description };
     } catch {
         return null;
     }
