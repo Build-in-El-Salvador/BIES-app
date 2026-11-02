@@ -1,6 +1,8 @@
 /**
  * Zap Receipt Indexer — subscribes to kind:9735 events on public relays
  * and stores zap receipts in the database, updating project funding totals.
+ * Only receipts that verify (zapReceipt.ts) are stored, so totals and bounty
+ * payouts only ever follow real payments.
  */
 
 // nostr-tools is ESM-only (@noble/curves has no CJS build);
@@ -11,6 +13,7 @@ import { config } from '../config';
 import prisma from '../lib/prisma';
 import { notifyZapReceived } from './notification.service';
 import { matchBountyPayout } from './bounty.service';
+import { decodeInvoice, firstTag, getLnurlPayMetadata, verifyZapReceipt, type DecodedInvoice } from './zapReceipt';
 
 let _pool: InstanceType<Awaited<typeof import('nostr-tools/pool')>['SimplePool']> | null = null;
 async function getPool() {
@@ -119,7 +122,8 @@ async function subscribe(): Promise<void> {
     });
 }
 
-async function processZapReceipt(event: Event): Promise<void> {
+/** Store one kind-9735 receipt from the relays, if it verifies. Exported for tests (`decode` too). */
+export async function processZapReceipt(event: Event, decode: (bolt11: string) => DecodedInvoice | null = decodeInvoice): Promise<void> {
     const eventId = event.id;
 
     // Dedup — skip if already stored
@@ -128,51 +132,32 @@ async function processZapReceipt(event: Event): Promise<void> {
     });
     if (existing) return;
 
-    // Extract recipient pubkey from 'p' tag
-    const pTag = event.tags.find((t) => t[0] === 'p');
-    if (!pTag || !pTag[1]) return;
-    const recipientPubkey = pTag[1];
+    // Only a receipt signed by its recipient's Lightning provider, for an
+    // invoice bound to the zap request inside it, is stored or counted
+    // (zapReceipt.ts). Anything else is ignored.
+    const recipientPubkey = firstTag(event, 'p');
+    if (!recipientPubkey) return;
+    const recipientUser = await prisma.user.findUnique({
+        where: { nostrPubkey: recipientPubkey },
+        select: { id: true, profile: { select: { lightningAddress: true } } },
+    });
+    if (!recipientUser) return;
+    const lnurl = await getLnurlPayMetadata(recipientUser.profile?.lightningAddress || '');
+    if (!lnurl?.allowsNostr || !lnurl.nostrPubkey) return;
+    const zap = await verifyZapReceipt(event, { zapperPubkey: lnurl.nostrPubkey, recipientPubkey }, decode);
+    if (!zap) return;
 
-    // Extract zapped event ID from 'e' tag
-    const eTag = event.tags.find((t) => t[0] === 'e');
-    const zappedEventId = eTag?.[1] || null;
-
-    // Parse the kind:9734 zap request from the 'description' tag
-    const descTag = event.tags.find((t) => t[0] === 'description');
-    let senderPubkey = '';
-    let comment = '';
-    let requestATag: string | null = null;
-    if (descTag?.[1]) {
-        try {
-            const zapRequest = JSON.parse(descTag[1]) as Event;
-            senderPubkey = zapRequest.pubkey || '';
-            comment = zapRequest.content || '';
-            requestATag = zapRequest.tags?.find((t) => t[0] === 'a')?.[1] || null;
-        } catch {
-            // Malformed description — use event pubkey as fallback
-            senderPubkey = event.pubkey;
-        }
-    } else {
-        senderPubkey = event.pubkey;
-    }
-
-    // Parse amount from bolt11 or bolt12 tag, with amount tag as fallback
-    const bolt11Tag = event.tags.find((t) => t[0] === 'bolt11');
-    const bolt11 = bolt11Tag?.[1] || '';
-    const bolt12Tag = event.tags.find((t) => t[0] === 'bolt12');
-    const bolt12 = bolt12Tag?.[1] || '';
-
-    let amountMsats: bigint;
-    if (bolt11) {
-        amountMsats = decodeBolt11Amount(bolt11);
-    } else {
-        // Bolt12 receipts or non-standard: use the 'amount' tag from the zap request
-        const amountTag = event.tags.find((t) => t[0] === 'amount');
-        amountMsats = amountTag?.[1] ? BigInt(amountTag[1]) : 0n;
-    }
-    if (amountMsats === 0n) return; // No valid amount
-
+    // Who paid, what they said and what they zapped: from their signed request.
+    const { request } = zap;
+    const senderPubkey = request.pubkey;
+    const comment = request.content || '';
+    const zappedEventId = firstTag(request, 'e');
+    const requestATag = firstTag(request, 'a');
+    const bolt11 = firstTag(event, 'bolt11') || '';
+    // The invoice's amount.
+    const amountMsats = zap.amountMsats;
     const amountSats = Number(amountMsats / 1000n);
+    if (amountSats <= 0) return;
 
     // Match zapped event to a project
     let projectId: string | null = null;
@@ -188,7 +173,7 @@ async function processZapReceipt(event: Event): Promise<void> {
 
     // Match addressable-event zaps (a tag) to a course — display/attribution
     // only; entitlement verification happens in coursePurchase.service.
-    const aTag = event.tags.find((t) => t[0] === 'a')?.[1] || requestATag;
+    const aTag = requestATag || firstTag(event, 'a');
     const courseId = aTag ? await resolveCourseFromCoordinate(aTag) : null;
 
     // Store the zap receipt
@@ -204,7 +189,6 @@ async function processZapReceipt(event: Event): Promise<void> {
             projectId,
             courseId,
             bolt11,
-            bolt12,
             // The zap's own timestamp — createdAt is insert time, which lies
             // for receipts backfilled via the `since` window after downtime.
             eventCreatedAt: new Date(event.created_at * 1000),
@@ -234,31 +218,23 @@ async function processZapReceipt(event: Event): Promise<void> {
         console.error('[Zap Indexer] Bounty payout match failed:', err);
     });
 
-    // Notify the recipient if they are a BIES user
-    const recipientUser = await prisma.user.findUnique({
-        where: { nostrPubkey: recipientPubkey },
-        select: { id: true },
-    });
-
-    if (recipientUser) {
-        let projectTitle: string | undefined;
-        if (projectId) {
-            const project = await prisma.project.findUnique({
-                where: { id: projectId },
-                select: { title: true },
-            });
-            projectTitle = project?.title;
-        }
-
-        await notifyZapReceived({
-            recipientUserId: recipientUser.id,
-            senderPubkey,
-            amountSats,
-            comment: comment || undefined,
-            projectId: projectId || undefined,
-            projectTitle,
+    // Notify the recipient
+    let projectTitle: string | undefined;
+    if (projectId) {
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { title: true },
         });
+        projectTitle = project?.title;
     }
+    await notifyZapReceived({
+        recipientUserId: recipientUser.id,
+        senderPubkey,
+        amountSats,
+        comment: comment || undefined,
+        projectId: projectId || undefined,
+        projectTitle,
+    });
 
     console.log(`[Zap Indexer] Stored zap: ${amountSats} sats → ${recipientPubkey.slice(0, 8)}...${projectId ? ` (project ${projectId})` : ''}`);
 }

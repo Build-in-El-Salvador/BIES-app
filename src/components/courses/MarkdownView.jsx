@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { cleanMemberHtml } from '../../utils/memberHtml';
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -11,7 +11,7 @@ marked.setOptions({ gfm: true, breaks: true });
  */
 const MarkdownView = ({ markdown, className }) => {
     const html = useMemo(
-        () => DOMPurify.sanitize(marked.parse(markdown || '')),
+        () => cleanMemberHtml(marked.parse(markdown || '')),
         [markdown]
     );
 

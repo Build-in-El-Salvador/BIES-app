@@ -21,6 +21,7 @@ const itemStyle = (active) => ({
   justifyContent: 'center',
   gap: '3px',
   flex: 1,
+  minWidth: 0,
   minHeight: '48px',
   color: active ? 'white' : 'rgba(255, 255, 255, 0.85)',
   textDecoration: 'none',
@@ -29,6 +30,10 @@ const itemStyle = (active) => ({
   letterSpacing: '0.03em',
   WebkitTapHighlightColor: 'transparent',
 });
+
+// One line, always: the page lets long words break anywhere (index.css), which
+// split "Opportunities" on narrow phones. The short labels beside it leave room.
+const labelStyle = { whiteSpace: 'nowrap' };
 
 const iconWrapStyle = (active) => ({
   display: 'flex',
@@ -100,7 +105,7 @@ const MobileBottomNav = () => {
             return (
               <Link key={'login-' + tab.id} to="/login" style={itemStyle(false)} data-testid={'bottom-nav-' + tab.id}>
                 <div style={iconWrapStyle(false)}><User size={22} strokeWidth={1.8} /></div>
-                <span>{t('common.login')}</span>
+                <span style={labelStyle}>{t('common.login')}</span>
               </Link>
             );
           }
@@ -111,7 +116,7 @@ const MobileBottomNav = () => {
               <div style={iconWrapStyle(active)}>
                 <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
               </div>
-              <span>{t(tab.labelKey)}</span>
+              <span style={labelStyle}>{t(tab.labelKey)}</span>
             </Link>
           );
         })}

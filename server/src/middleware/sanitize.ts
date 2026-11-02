@@ -150,6 +150,35 @@ const DANGEROUS_HTML: ReadonlyArray<[RegExp, RegExp]> = [
     [/<form/gi, TAG_END],
 ];
 
+// A style="…" attribute, quoted or not, inside one tag.
+const STYLE_ATTR = /([\s/"'])style\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']*))/gi;
+const ALIGN = /(?:^|;)\s*text-align\s*:\s*(left|center|right|justify|start|end)\s*(?=;|$)/i;
+
+/**
+ * Inline styles in rich HTML keep only text alignment (the editor's align
+ * buttons write it), as the app shows them (src/utils/memberHtml.js). One
+ * pass over the tags, like removeTags: each "<" looks only as far as its ">".
+ */
+export function keepAlignmentOnly(str: string): string {
+    let out = '';
+    let kept = 0;
+    for (let lt = str.indexOf('<'); lt !== -1;) {
+        const gt = str.indexOf('>', lt + 1);
+        // No ">" after this "<", so none after a later one either.
+        if (gt === -1) break;
+        const tag = str.slice(lt, gt + 1);
+        if (/style/i.test(tag)) {
+            out += str.slice(kept, lt) + tag.replace(STYLE_ATTR, (_all, before: string, dq?: string, sq?: string, bare?: string) => {
+                const align = ALIGN.exec(dq ?? sq ?? bare ?? '');
+                return align ? `${before}style="text-align: ${align[1].toLowerCase()}"` : before;
+            });
+            kept = gt + 1;
+        }
+        lt = str.indexOf('<', gt + 1);
+    }
+    return out + str.slice(kept);
+}
+
 // Strip only dangerous content from rich HTML, preserving safe formatting tags.
 function sanitizeRichHtml(str: string): string {
     // Decode entities first, so encoded attributes are caught too. Not a full
@@ -167,7 +196,7 @@ function sanitizeRichHtml(str: string): string {
     // Also strip vbscript: and data: URIs in attributes (additional protocol vectors)
     result = removeBase64DataUris(result.replace(/vbscript\s*:/gi, ''));
 
-    return result.trim();
+    return keepAlignmentOnly(result).trim();
 }
 
 function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
