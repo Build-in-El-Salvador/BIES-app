@@ -274,7 +274,8 @@ export const projectsApi = {
 
 export const directoryApi = {
     list: (params = {}) => get('/directory', params),
-    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved }
+    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved, runBy, worksAt }
+    // runBy / worksAt: a member's "Runs" and "Works at" (their profile).
 
     // The businesses and farms a member recommends, newest first (their profile).
     recommendedBy: (userId, params = {}) => get(`/directory/recommended-by/${encodeURIComponent(userId)}`, params),
@@ -509,8 +510,13 @@ export const eventsApi = {
     removePartner: (id, partnerId) => del(`/events/${id}/partners/${partnerId}`),
     // A proposed meetup's proposer calling it off (everyone in is told)
     callOff: (id) => post(`/events/${id}/call-off`, {}),
+    // One date of a repeating event (its key), called off or brought back (its host side)
+    callOffDate: (id, occurrence) => post(`/events/${id}/dates/call-off`, { occurrence }),
+    restoreDate: (id, occurrence) => post(`/events/${id}/dates/restore`, { occurrence }),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
+    // A proposed meetup's proposer inviting members → { invited, skipped }
+    inviteMembers: (id, userIds) => post(`/events/${id}/invites`, { userIds }),
 
     importUrl: (url) => post('/events/import-url', { url }),
 

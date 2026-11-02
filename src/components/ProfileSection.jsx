@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import DOMPurify from 'dompurify';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import TranslatableText from './TranslatableText';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Label } from 'recharts';

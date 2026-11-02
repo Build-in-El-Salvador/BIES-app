@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move } from 'lucide-react';
+import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
+import { dateChip, editScope, fitRepeat, repeatChoiceLabel, repeatChoices, repeatLabel, scopeTitle } from '../utils/eventRepeat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
 import MemberSearchSelect from '../components/MemberSearchSelect';
 import PartnerPicker from '../components/events/PartnerPicker';
 import CoverPhoto from '../components/CoverPhoto';
 import { useCoverFramer } from '../components/CoverFramer';
+import DateScopeSheet from '../components/events/DateScopeSheet';
+import ShareCardPreview from '../components/events/ShareCardPreview';
+import { cardDate, SHARE_ASPECT, SHARE_SHADE, shareFormat } from '../utils/shareCard';
 import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFrame';
 
 /**
@@ -18,17 +22,24 @@ import { CARD_SHADE, COVER_ASPECT, focusOf, parseFrame } from '../utils/coverFra
  * it (me, or a business or farm I run or am on the team of: BIES's own
  * page makes it a BIES event), its cover and words, when (El Salvador
  * time) and where, the ticket link and price line (the app doesn't sell
- * tickets), co-hosts and sponsors, and who can see it.
+ * tickets), co-hosts and sponsors, and who can see it. It can repeat (every
+ * week, every other week, a weekday of every month), until a last day or
+ * for good: a new one's dates here are its first. Editing one, the form
+ * shows its next date as it is; saving a change to that date's time,
+ * title, words or place asks whether it's for that date only or for it and
+ * every date after (DateScopeSheet). How it repeats is for every date.
+ * Its link preview (what WhatsApp shows when it's shared) is shown as it
+ * will look, and its cover can be positioned for it.
  */
 
-const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'OTHER'];
+const KINDS = ['NETWORKING', 'MEETUP', 'WORKSHOP', 'CONFERENCE', 'HACKATHON', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER'];
 const VISIBILITIES = ['PUBLIC', 'PRIVATE', 'DRAFT'];
 // What only the host side changes (a co-host edits the rest): the server says the same.
 const HOST_ONLY = ['ticketUrl', 'bitcoinUrl', 'priceLabel', 'hostListingId', 'partners', 'guestList', 'visibility', 'isOnline', 'onlineUrl', 'cardImage', 'cardFrame'];
 
 const EMPTY = {
-    hostListingId: '', thumbnail: '', coverFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
-    startDate: '', startTime: '19:00', endDate: '', endTime: '',
+    hostListingId: '', thumbnail: '', coverFrame: '', shareFrame: '', cardImage: '', cardFrame: '', title: '', category: 'NETWORKING', description: '',
+    startDate: '', startTime: '19:00', endDate: '', endTime: '', repeat: '', repeatUntil: '',
     online: false, locationName: '', locationAddress: '', locationMapUrl: '', onlineUrl: '',
     ticketUrl: '', bitcoinUrl: '', priceLabel: '', visibility: 'PUBLIC',
 };
@@ -64,13 +75,30 @@ export default function EventForm() {
     const [importUrl, setImportUrl] = useState('');
     const [importing, setImporting] = useState(false);
     const [imported, setImported] = useState(false);
+    // Import from a link folds into one row until it's wanted.
+    const [importOpen, setImportOpen] = useState(false);
     const [otherVisibility, setOtherVisibility] = useState(''); // an older event's invite-only or limited setting
     const [hostSide, setHostSide] = useState(true); // false for a co-host editing
     const [savedHost, setSavedHost] = useState(null); // { id, isOfficial }: the business it's hosted as
+    const [proposal, setProposal] = useState(false); // a proposed meetup, which doesn't repeat
+    const [proposed, setProposed] = useState(null); // …and how many it needs, while it's still proposed
+    // A repeating event edited at its next date: that date's key, and the form as it loaded (to see what changed).
+    const [atDate, setAtDate] = useState(null); // { key, loaded }
+    const [asking, setAsking] = useState(null); // the payload waiting for "only this date, or every date after?"
 
     const set = (key) => (e) => {
         const value = e?.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
         setForm((f) => ({ ...f, [key]: value }));
+    };
+    // A new first date keeps how it repeats where that still fits (the last
+    // Saturday may become the fourth). Not when one date moves: how it
+    // repeats stays as it is, unless it's changed itself.
+    const setStart = (key) => (e) => {
+        const value = e.target.value;
+        setForm((f) => {
+            const next = { ...f, [key]: value };
+            return atDate ? next : { ...next, repeat: fitRepeat(next.repeat, fromFormFields(next.startDate, next.startTime)) };
+        });
     };
 
     useEffect(() => {
@@ -83,18 +111,29 @@ export default function EventForm() {
             if (!e.canEdit) { setNotYours(true); return; }
             setHostSide(!!e.canDelete);
             setSavedHost(e.hostListing ? { id: e.hostListing.id, isOfficial: !!e.hostListing.isOfficial } : null);
-            const start = toFormFields(e.startDate);
-            const end = toFormFields(e.endDate);
-            setForm({
-                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
+            setProposal(e.minAttendees != null);
+            setProposed(e.stage === 'proposed' ? { min: e.minAttendees } : null);
+            // A repeating event with dates ahead: at its next one, as it is
+            // (its own time, title and place, if it has them). One that's all
+            // over (the date it shows has passed, though later ones may be
+            // there, called off): from its first date.
+            const shownEnd = new Date(e.endDate || new Date(e.startDate).getTime() + 6 * 3600_000).getTime();
+            const next = !!(e.repeat && e.occurrence && e.upcomingDates?.length > 0) && shownEnd >= Date.now();
+            const start = toFormFields(next || !('firstStartDate' in e) ? e.startDate : e.firstStartDate);
+            const end = toFormFields(next || !('firstStartDate' in e) ? e.endDate : e.firstEndDate);
+            const loaded = {
+                hostListingId: e.hostListing?.id || '', thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '', shareFrame: e.shareFrame || '',
                 cardImage: e.cardImage || '', cardFrame: e.cardFrame || '', title: e.title || '',
                 category: e.category || 'NETWORKING', description: e.description || '',
                 startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
+                repeat: e.repeat || '', repeatUntil: e.repeatUntil ? toFormFields(e.repeatUntil).date : '',
                 online: !!e.isOnline, locationName: e.locationName || '', locationAddress: e.locationAddress || '',
                 locationMapUrl: e.locationMapUrl || '', onlineUrl: e.onlineUrl || '',
                 ticketUrl: e.ticketUrl || '', bitcoinUrl: e.bitcoinUrl || '', priceLabel: e.priceLabel || '',
                 visibility: VISIBILITIES.includes(e.visibility) ? e.visibility : 'PUBLIC',
-            });
+            };
+            setForm(loaded);
+            setAtDate(next ? { key: e.occurrence, loaded } : null);
             if (!VISIBILITIES.includes(e.visibility)) setOtherVisibility(e.visibility);
             setPartners(pickerValue(e.partners));
             setGuests((e.guestList || []).map((g) => ({ name: g.name, userId: g.userId })));
@@ -108,6 +147,14 @@ export default function EventForm() {
     const hostListing = hostChoices.find((l) => l.id === form.hostListingId);
     // Hosted as BIES's own page: a BIES event, with a highlight card its team sets up.
     const official = !!(hostListing?.isOfficial || (savedHost?.isOfficial && savedHost.id === form.hostListingId));
+    // How it can repeat, from its first date (none until there's one). Edited
+    // at a date, from that date as the rule makes it: moving one date to
+    // another day leaves how it repeats as it was.
+    const firstStart = fromFormFields(form.startDate, form.startTime);
+    const ruleDate = atDate ? atDate.key : firstStart;
+    const repeatOptions = repeatChoices(ruleDate);
+    const repeat = repeatOptions.includes(form.repeat) ? form.repeat : '';
+    const dateName = atDate ? dateChip(atDate.key, i18n.language) : '';
 
     const importFrom = async () => {
         if (!importUrl.trim()) return;
@@ -128,7 +175,7 @@ export default function EventForm() {
                 ...(data.isOnline !== undefined && { online: !!data.isOnline }),
                 ...(data.onlineUrl && { onlineUrl: data.onlineUrl }),
                 ticketUrl: data.ticketUrl || data.sourceUrl || f.ticketUrl,
-                ...(data.thumbnail && { thumbnail: data.thumbnail, coverFrame: '' }),
+                ...(data.thumbnail && { thumbnail: data.thumbnail, coverFrame: '', shareFrame: '' }),
             }));
             setImported(true);
             setImportUrl('');
@@ -146,8 +193,8 @@ export default function EventForm() {
         setError('');
         try {
             const res = await uploadApi.media(file);
-            // A card showing the cover starts centred on the new one.
-            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, cardFrame: f.cardImage ? f.cardFrame : '' }));
+            // A card showing the cover starts centred on the new one, and so does its link preview.
+            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, shareFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }));
         } catch (err) {
             setError(err?.message || t('events.form.failed'));
         } finally {
@@ -170,6 +217,14 @@ export default function EventForm() {
         }
     }, { title: t('events.form.cardTitle'), shade: CARD_SHADE });
 
+    // Its link preview: a BIES event's cover square, any other's the wide card's photo side.
+    const share = useCoverFramer(official ? SHARE_ASPECT.square : SHARE_ASPECT.wide, ({ frame }) => {
+        setForm((f) => ({ ...f, shareFrame: frame }));
+    }, { title: t('events.form.shareTitle'), shade: official ? undefined : SHARE_SHADE });
+    const shareStart = fromFormFields(form.startDate, form.startTime);
+    // In English, as the picture is (the server draws it).
+    const english = i18n.getFixedT('en');
+
     const submit = async (e) => {
         e.preventDefault();
         setError('');
@@ -178,6 +233,7 @@ export default function EventForm() {
         const description = (form.description || '').replace(/<p><br><\/p>/g, '').trim();
         if (!form.title.trim() || !description || !startDate) { setError(t('events.form.required')); return; }
         if (endDate && endDate < startDate) { setError(t('events.form.endBeforeStart')); return; }
+        if (repeat && form.repeatUntil && form.repeatUntil < form.startDate) { setError(t('events.form.reasons.repeat_until_before_start')); return; }
         const location = form.online ? '' : [form.locationName, form.locationAddress].map((s) => s.trim()).filter(Boolean).join(', ');
         const visibility = otherVisibility && form.visibility === 'PUBLIC' ? otherVisibility : form.visibility;
         const payload = {
@@ -187,6 +243,8 @@ export default function EventForm() {
             visibility,
             startDate,
             ...(endDate ? { endDate } : {}),
+            // The last day it may be on, as a day ("2026-12-19"): the server counts it to its end.
+            ...(proposal ? {} : { repeat, repeatUntil: repeat && form.repeatUntil ? form.repeatUntil : null }),
             isOnline: form.online,
             onlineUrl: form.online ? withHttps(form.onlineUrl) : '',
             location,
@@ -195,6 +253,7 @@ export default function EventForm() {
             locationMapUrl: form.online ? '' : withHttps(form.locationMapUrl),
             thumbnail: form.thumbnail,
             coverFrame: form.thumbnail ? form.coverFrame : '',
+            shareFrame: form.thumbnail ? form.shareFrame : '',
             ...(official ? { cardImage: form.cardImage, cardFrame: form.cardImage || form.thumbnail ? form.cardFrame : '' } : {}),
             ticketUrl: withHttps(form.ticketUrl),
             bitcoinUrl: withHttps(form.bitcoinUrl),
@@ -205,13 +264,23 @@ export default function EventForm() {
             ...(editing ? {} : { nostrPublish: 'bies' }),
         };
         if (!hostSide) for (const key of HOST_ONLY) delete payload[key];
+        // Edited at its next date: a change that date can have of its own asks which dates it's for.
+        if (atDate) {
+            payload.occurrence = atDate.key;
+            if (editScope(atDate.loaded, form) === 'ask') { setAsking(payload); return; }
+            payload.scope = 'series';
+        }
+        await save(payload);
+    };
+
+    const save = async (payload) => {
         setSaving(true);
         try {
             const saved = editing ? await eventsApi.update(id, payload) : await eventsApi.create(payload);
             navigate(`/events/${saved.id || id}`, { replace: editing });
         } catch (err) {
             const reason = err?.data?.reason;
-            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '' }))
+            setError((reason && t(`events.form.reasons.${reason}`, { defaultValue: '', count: err?.data?.max }))
                 || err?.data?.details?.map((d) => `${d.field}: ${d.message}`).join(', ')
                 || err?.message || t('events.form.failed'));
             setSaving(false);
@@ -236,17 +305,25 @@ export default function EventForm() {
             </div>
 
             {!editing && (
-                <section className="ef-group">
-                    <label className="ef-label" htmlFor="ef-import">{t('events.form.importLabel')}</label>
-                    <p className="ef-hint">{t('events.form.importHint')}</p>
-                    <div className="ef-inline">
-                        <span className="ef-input-icon"><Link2 size={16} aria-hidden="true" /></span>
-                        <input id="ef-import" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
-                        <button type="button" className="ef-small-btn" onClick={importFrom} disabled={importing || !importUrl.trim()}>
-                            {importing ? <Loader2 size={16} className="ef-spin" /> : t('events.form.importButton')}
-                        </button>
-                    </div>
-                    {imported && <p className="ef-ok">{t('events.form.imported')}</p>}
+                <section className={`ef-group ef-import${importOpen ? ' open' : ''}`}>
+                    <button type="button" className="ef-import-toggle" aria-expanded={importOpen} aria-controls="ef-import-body" onClick={() => setImportOpen((o) => !o)}>
+                        <Download size={18} aria-hidden="true" />
+                        <span>{t('events.form.importLabel')}</span>
+                        {importOpen ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+                    </button>
+                    {importOpen && (
+                        <div id="ef-import-body" className="ef-import-body">
+                            <p className="ef-hint">{t('events.form.importHint')}</p>
+                            <div className="ef-inline">
+                                <span className="ef-input-icon"><Link2 size={16} aria-hidden="true" /></span>
+                                <input id="ef-import" className="ef-input" inputMode="url" placeholder="https://lu.ma/…" aria-label={t('events.form.importLabel')} value={importUrl} onChange={(e) => setImportUrl(e.target.value)} />
+                                <button type="button" className="ef-small-btn" onClick={importFrom} disabled={importing || !importUrl.trim()}>
+                                    {importing ? <Loader2 size={16} className="ef-spin" /> : t('events.form.importButton')}
+                                </button>
+                            </div>
+                            {imported && <p className="ef-ok">{t('events.form.imported')}</p>}
+                        </div>
+                    )}
                 </section>
             )}
 
@@ -275,7 +352,7 @@ export default function EventForm() {
                                 <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
                             </button>
                             <label className="ef-small-btn">{t('events.form.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
-                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }))}>{t('events.form.removeCover')}</button>
+                            <button type="button" className="ef-small-btn quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', shareFrame: '', cardFrame: f.cardImage ? f.cardFrame : '' }))}>{t('events.form.removeCover')}</button>
                         </div>
                     </>
                 ) : (
@@ -294,6 +371,32 @@ export default function EventForm() {
                 </select>
                 <span className="ef-label">{t('events.form.description')}</span>
                 <RichTextEditor value={form.description} onChange={set('description')} placeholder={t('events.form.descriptionPlaceholder')} />
+            </section>
+
+            <section className="ef-group">
+                {/* What WhatsApp and the like show when it's shared (server/src/services/shareCard.service.ts) */}
+                <span className="ef-label">{t('events.form.share')}</span>
+                <p className="ef-hint">{official ? t('events.form.shareHintOfficial') : t('events.form.shareHint')}</p>
+                <div className={`ef-share${official ? ' sq' : ''}`}>
+                    <ShareCardPreview
+                        format={shareFormat(official)}
+                        label={official ? '' : proposed ? 'proposed' : 'community'}
+                        title={form.title.trim() || t('events.form.sharePlaceholder')}
+                        date={cardDate(shareStart)}
+                        venue={form.online ? 'Online' : form.locationName.trim()}
+                        extra={proposed ? `Goes ahead with ${proposed.min} people` : repeat ? repeatLabel(repeat, ruleDate, english, 'en') : ''}
+                        cover={form.thumbnail}
+                        frame={form.thumbnail ? form.shareFrame || form.coverFrame : ''}
+                    />
+                </div>
+                {form.thumbnail ? (
+                    <div className="ef-cover-tools">
+                        <button type="button" className="ef-small-btn quiet" onClick={() => share.adjust(form.thumbnail, form.shareFrame || form.coverFrame)} disabled={uploading}>
+                            <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
+                        </button>
+                    </div>
+                ) : <p className="ef-hint">{t('events.form.shareNoCover')}</p>}
+                {share.framer}
             </section>
 
             {official && hostSide && (
@@ -349,8 +452,8 @@ export default function EventForm() {
                     <div>
                         <label className="ef-label" htmlFor="ef-start">{t('events.form.starts')}</label>
                         <div className="ef-pair">
-                            <input id="ef-start" type="date" className="ef-input" value={form.startDate} onChange={set('startDate')} />
-                            <input type="time" className="ef-input" aria-label={t('events.form.starts')} value={form.startTime} onChange={set('startTime')} />
+                            <input id="ef-start" type="date" className="ef-input" value={form.startDate} onChange={setStart('startDate')} />
+                            <input type="time" className="ef-input" aria-label={t('events.form.starts')} value={form.startTime} onChange={setStart('startTime')} />
                         </div>
                     </div>
                     <div>
@@ -361,7 +464,22 @@ export default function EventForm() {
                         </div>
                     </div>
                 </div>
-                <p className="ef-hint">{t('events.form.timeHint')}</p>
+                <p className="ef-hint">{atDate ? t('events.form.timeHintDate', { date: dateName }) : repeat ? t('events.form.timeHintRepeat') : t('events.form.timeHint')}</p>
+                {!proposal && (
+                    <>
+                        <label className="ef-label" htmlFor="ef-repeat">{t('events.form.repeats')}</label>
+                        <select id="ef-repeat" className="ef-input" value={repeat} onChange={set('repeat')} disabled={repeatOptions.length < 2}>
+                            {repeatOptions.map((r) => <option key={r || 'none'} value={r}>{repeatChoiceLabel(r, ruleDate, t, i18n.language)}</option>)}
+                        </select>
+                        {repeat && (
+                            <>
+                                <label className="ef-label" htmlFor="ef-until">{t('events.form.until')}</label>
+                                <input id="ef-until" type="date" className="ef-input" value={form.repeatUntil} min={form.startDate || undefined} onChange={set('repeatUntil')} />
+                                <p className="ef-hint">{t('events.form.untilHint')}</p>
+                            </>
+                        )}
+                    </>
+                )}
             </section>
 
             <section className="ef-group">
@@ -435,6 +553,14 @@ export default function EventForm() {
             <button type="submit" className="ef-submit" disabled={saving || uploading}>
                 {saving ? <><Loader2 size={18} className="ef-spin" /> {t('events.form.saving')}</> : editing ? t('events.form.save') : t('events.form.create')}
             </button>
+            {asking && atDate && (
+                <DateScopeSheet
+                    title={scopeTitle(atDate.loaded.title, atDate.loaded.repeat, atDate.key, t, i18n.language)}
+                    date={dateName}
+                    onPick={(scope) => { const payload = { ...asking, scope }; setAsking(null); save(payload); }}
+                    onClose={() => setAsking(null)}
+                />
+            )}
 
             <style jsx>{`
                 .event-form { max-width: 640px; margin: 0 auto; padding-top: var(--page-top, 1.5rem); padding-bottom: 3rem; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
@@ -443,6 +569,15 @@ export default function EventForm() {
                 .ef-host-only { padding: 12px 14px; border-radius: 12px; background: var(--color-gray-100); }
                 .ef-group { background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
                 .ef-h { margin: 0; font-family: var(--font-display); font-size: 1.3rem; color: var(--color-gray-900); }
+                .ef-import { padding-top: 6px; padding-bottom: 6px; }
+                .ef-import.open { padding-bottom: 14px; }
+                .ef-import-toggle {
+                    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; cursor: pointer;
+                    font: inherit; font-size: 0.95rem; font-weight: 600; color: var(--color-primary); text-align: left;
+                }
+                .ef-import-toggle span { flex: 1; min-width: 0; }
+                .ef-import-toggle :global(svg:last-child) { color: var(--color-gray-400); }
+                .ef-import-body { display: flex; flex-direction: column; gap: 8px; }
                 .ef-label { font-size: 0.85rem; font-weight: 600; color: var(--color-gray-800); margin-top: 4px; }
                 .ef-hint { margin: -2px 0 0; font-size: 0.8rem; color: var(--color-gray-500); }
                 .ef-ok { margin: 0; font-size: 0.8rem; color: var(--color-success-text); font-weight: 600; }
@@ -463,13 +598,15 @@ export default function EventForm() {
                 }
                 .ef-small-btn.quiet { background: rgba(255, 255, 255, 0.92); color: var(--color-gray-900); }
                 .ef-small-btn:disabled { opacity: 0.5; cursor: default; }
-                .ef-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
-                .ef-card { position: relative; width: 100%; max-width: 280px; aspect-ratio: 4 / 5; border-radius: 20px; overflow: hidden; background: linear-gradient(135deg, var(--color-primary), #0A192F); }
+                .ef-cover { position: relative; border-radius: 14px; clip-path: inset(0 round 14px); overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .ef-card { position: relative; width: 100%; max-width: 280px; aspect-ratio: 4 / 5; border-radius: 20px; clip-path: inset(0 round 20px); overflow: hidden; background: linear-gradient(135deg, var(--color-primary), #0A192F); }
                 .ef-card-shade { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
                 .ef-card-words { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 4px; color: #FFFFFF; }
                 .ef-card-words small { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #FFD3BA; }
                 .ef-card-words b { font-family: var(--font-display); font-size: 1.45rem; line-height: 1.05; overflow-wrap: anywhere; }
                 .ef-card-empty { max-width: 280px; aspect-ratio: 4 / 5; }
+                .ef-share { width: 100%; max-width: 420px; }
+                .ef-share.sq { max-width: 320px; }
                 .ef-cover-busy { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
                 .ef-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
                 .ef-cover-tools .ef-small-btn.quiet { border: 1px solid var(--color-gray-300); background: var(--color-surface); }

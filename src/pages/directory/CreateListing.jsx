@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
 import {
     Loader2, AlertCircle, Camera, X, Plus, Trash2,
-    CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, ChevronDown, ChevronUp, Move,
+    CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, Briefcase, ChevronDown, ChevronUp, Move,
 } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { DIRECTORY_CATEGORIES } from '../../components/directory/categories';
+import { connectionFields, connectionOf } from '../../components/directory/listingRoles';
 import { nostrService } from '../../services/nostrService';
 import { nostrSigner } from '../../services/nostrSigner';
 import TagInput from '../../components/TagInput';
@@ -80,8 +81,11 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
     const initialType = typeProp || (searchParams.get('type') === 'provider' ? 'PROVIDER' : 'FARM');
     const [type, setType] = useState(initialType);
     // Whose listing it is: a customer recommending it (their review is their
-    // vouch) or the business or farm itself.
-    const [isOwnBusiness, setIsOwnBusiness] = useState(false);
+    // vouch: 'customer'), or the business or farm itself, added by the member
+    // who runs it ('owner') or by someone who works there ('staff', who goes
+    // on its team).
+    const [connection, setConnection] = useState('customer');
+    const isOwnBusiness = connection !== 'customer';
     // A recommendation stays one on edit (the business claims it instead).
     const [wasOwnBusiness, setWasOwnBusiness] = useState(false);
     const [photos, setPhotos] = useState([]); // gallery, up to MAX_PHOTOS
@@ -174,7 +178,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     mapUrl: listing.mapUrl || '',
                     review: '',
                 });
-                setIsOwnBusiness(!!listing.isOwnBusiness);
+                setConnection(connectionOf(listing));
                 setWasOwnBusiness(!!listing.isOwnBusiness);
                 setPhotos(Array.isArray(listing.photos) ? listing.photos.filter(Boolean) : []);
                 setLanguages(Array.isArray(listing.languages) ? listing.languages : []);
@@ -303,7 +307,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             photos,
             hours: form.hours.trim(),
             mapUrl: form.mapUrl.trim(),
-            isOwnBusiness,
+            ...connectionFields(connection),
             ...(!editMode && !isOwnBusiness ? { review: form.review.trim() } : {}),
             ...(!editMode && saidDifferent ? { notADuplicate: true } : {}),
         };
@@ -512,23 +516,26 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <div className="dir-error-banner"><AlertCircle size={16} /> {submitError}</div>
                     )}
 
-                    {/* Whose listing this is */}
-                    {(!editMode || isStaff || wasOwnBusiness) && (
+                    {/* Whose listing this is. Not for its creator once staff linked
+                        another member as the one who runs it: its team is theirs. */}
+                    {(!editMode || isStaff || (wasOwnBusiness && !(memberLink[0]?.userId && memberLink[0].userId !== user?.id))) && (
                     <div className="dir-form-card">
                         <h3 className="dir-card-heading">{t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}</h3>
                         <div className="dir-connection" role="radiogroup" aria-label={t('directory.connectionLabel', { context: isFarm ? 'farm' : undefined })}>
-                            <label className={`dir-connection-option${!isOwnBusiness ? ' active' : ''}`}>
-                                <input type="radio" name="connection" checked={!isOwnBusiness} onChange={() => setIsOwnBusiness(false)} />
-                                <ThumbsUp size={18} />
-                                <span>{t('directory.connectionCustomer', { context: isFarm ? 'farm' : undefined })}</span>
-                            </label>
-                            <label className={`dir-connection-option${isOwnBusiness ? ' active' : ''}`}>
-                                <input type="radio" name="connection" checked={isOwnBusiness} onChange={() => setIsOwnBusiness(true)} />
-                                <Store size={18} />
-                                <span>{t('directory.connectionOwner', { context: isFarm ? 'farm' : undefined })}</span>
-                            </label>
+                            {[
+                                { value: 'customer', Icon: ThumbsUp, label: 'directory.connectionCustomer' },
+                                { value: 'owner', Icon: Store, label: 'directory.connectionOwner' },
+                                { value: 'staff', Icon: Briefcase, label: 'directory.connectionStaff' },
+                            ].map(({ value, Icon, label }) => (
+                                <label key={value} className={`dir-connection-option${connection === value ? ' active' : ''}`}>
+                                    <input type="radio" name="connection" value={value} checked={connection === value} onChange={() => setConnection(value)} />
+                                    <Icon size={18} />
+                                    <span>{t(label, { context: isFarm ? 'farm' : undefined })}</span>
+                                </label>
+                            ))}
                         </div>
-                        {isOwnBusiness && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionOwnerHint')}</p>}
+                        {connection === 'owner' && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionOwnerHint')}</p>}
+                        {connection === 'staff' && <p className="dir-field-hint" style={{ marginBottom: 0 }}>{t('directory.connectionStaffHint')}</p>}
                     </div>
                     )}
 
@@ -555,7 +562,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 <div className="dir-matches" role="region" aria-labelledby="dir-matches-title" ref={matchesRef} tabIndex={-1}>
                                     <p className="dir-matches-title" id="dir-matches-title">{t('directory.similar.title')}</p>
                                     <p className="dir-matches-hint">
-                                        {fromEvent?.eventId ? t('directory.similar.hintMeetup') : checkFirst ? t('directory.similar.checkFirst') : isOwnBusiness ? t('directory.similar.hintOwn') : t('directory.similar.hint')}
+                                        {fromEvent?.eventId ? t('directory.similar.hintMeetup') : checkFirst ? t('directory.similar.checkFirst')
+                                            : connection === 'owner' ? t('directory.similar.hintOwn') : connection === 'staff' ? t('directory.similar.hintStaff') : t('directory.similar.hint')}
                                     </p>
                                     {matches.map((m) => {
                                         const farm = m.type === 'FARM';
@@ -679,7 +687,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                 onChange={handleChange}
                                 className="dir-input"
                                 maxLength={200}
-                                placeholder="El Zonte, La Libertad"
+                                placeholder="e.g. El Zonte, La Libertad"
                             />
                         </div>
                     </div>
@@ -791,7 +799,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     {form.logo && !uploading && (
                                         <button
                                             type="button"
-                                            className="dir-logo-remove"
+                                            className="dir-logo-remove x-remove"
                                             onClick={() => setForm((p) => ({ ...p, logo: '' }))}
                                             aria-label={t('directory.removeLogo')}
                                         >
@@ -809,7 +817,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                                     {photos.map((url) => (
                                         <div key={url} className="dir-gallery-thumb">
                                             <img src={getAssetUrl(url)} alt="" />
-                                            <button type="button" className="dir-gallery-remove" onClick={() => removePhoto(url)} aria-label={t('directory.removePhoto')} disabled={isBusy}>
+                                            <button type="button" className="dir-gallery-remove x-remove" onClick={() => removePhoto(url)} aria-label={t('directory.removePhoto')} disabled={isBusy}>
                                                 <X size={14} />
                                             </button>
                                         </div>
@@ -900,12 +908,12 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                 <div className="dir-form-group">
                                     <label className="dir-label" htmlFor="dir-instagram">{t('directory.instagramLabel')}</label>
-                                    <input type="text" id="dir-instagram" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder="@yourfarm" />
+                                    <input type="text" id="dir-instagram" name="instagram" value={form.instagram} onChange={handleChange} className="dir-input" placeholder={isFarm ? '@yourfarm' : '@yourbusiness'} />
                                 </div>
 
                                 <div className="dir-form-group">
                                     <label className="dir-label" htmlFor="dir-languages">{t('directory.languages')}</label>
-                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="Español, English…" />
+                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="e.g. Español, English…" />
                                 </div>
 
                                 <label className="dir-btc-toggle" style={{ marginBottom: 0 }}>
@@ -946,7 +954,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                     <div className="dir-form-group">
                                         <label className="dir-label" htmlFor="dir-skills">{t('directory.skillsLabel')}</label>
-                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="Solar, Permaculture…" />
+                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="e.g. Web design, Accounting…" />
                                     </div>
 
                                     <div className="dir-form-group">
@@ -984,8 +992,9 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                         <button type="button" onClick={() => handleSubmit()} disabled={isBusy} className="btn btn-primary">
                             {submitting && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', marginRight: 6, verticalAlign: '-3px' }} />}
                             {editMode ? t('directory.saveChanges')
-                                : isOwnBusiness ? t(isFarm ? 'directory.addMyFarm' : 'directory.addMyBusiness')
-                                    : t('directory.postRecommendation')}
+                                : connection === 'owner' ? t(isFarm ? 'directory.addMyFarm' : 'directory.addMyBusiness')
+                                    : connection === 'staff' ? t(isFarm ? 'directory.addTheFarm' : 'directory.addTheBusiness')
+                                        : t('directory.postRecommendation')}
                         </button>
                     </div>
                 </div>
@@ -1047,7 +1056,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                 .dir-connection {
                     display: grid;
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns: 1fr;
                     gap: 0.6rem;
                 }
                 .dir-connection-option {
@@ -1076,9 +1085,6 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     position: absolute;
                     opacity: 0;
                     pointer-events: none;
-                }
-                @media (max-width: 480px) {
-                    .dir-connection { grid-template-columns: 1fr; }
                 }
                 .dir-gallery-grid {
                     display: grid;
@@ -1152,7 +1158,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     position: relative;
                     aspect-ratio: 16 / 9;
                     overflow: hidden;
-                    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+                    border-radius: var(--radius-lg) var(--radius-lg) 0 0; clip-path: inset(0 round var(--radius-lg) var(--radius-lg) 0 0);
                     background-color: var(--color-blue-tint);
                     display: flex;
                     align-items: flex-end;

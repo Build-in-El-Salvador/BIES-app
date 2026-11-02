@@ -12,6 +12,8 @@ const env = vi.hoisted(() => {
     const dir = `${process.env.TMPDIR || '/tmp'}/bies-event-hosts-test-${process.pid}-${Date.now()}`;
     process.env.DATABASE_URL = `file:${dir}/test.db`;
     process.env.RELAY_WHITELIST_PATH = `${dir}/relay/whitelist.txt`;
+    // Event link cards, drawn when a card page (/og) is read, land here, not in the app's uploads.
+    process.env.UPLOAD_DIR = `${dir}/uploads`;
     process.env.CORS_ORIGIN = 'https://app.example.test';
     process.env.APP_PUBLIC_URL = 'https://app.example.test';
     process.env.TERMS_VERSION = '2026-10';
@@ -556,8 +558,9 @@ describe('a shared event, signed out', () => {
         expect(res.text).not.toMatch(/Calle La Reforma|Secret Goer|Daniela Owner/);
 
         const card = await call('GET', `/api/preview/events/${created.body.id}/og`);
-        expect(card.text).toContain('content="BIES Networking Night | BIES"');
-        expect(card.text).toContain('Sat 14 Nov · 7:00 PM · Rooftop venue');
+        // The day in its name (iMessage shows only that), the time and place under it.
+        expect(card.text).toContain('content="BIES Networking Night · Sat 14 Nov"');
+        expect(card.text).toContain('7:00 PM · Rooftop venue');
         expect(card.text).toContain('content="noindex"');
     });
 

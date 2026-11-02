@@ -8,6 +8,7 @@ import { eventsApi } from '../services/api';
 import { useApiQuery } from '../hooks/useApi';
 import { getAssetUrl } from '../utils/assets';
 import { publicUrl } from '../utils/publicUrl';
+import { RepeatLine } from '../components/events/EventBits';
 
 const VISIBILITY_CFG = {
     PUBLIC: { label: 'Public', color: 'var(--badge-success-text)', bg: 'var(--badge-success-bg)', icon: <Globe size={12} /> },
@@ -519,6 +520,7 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
                                             <VisibilityBadge visibility={event.visibility || 'DRAFT'} />
@@ -612,6 +614,7 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
                                             <span style={{
@@ -674,17 +677,30 @@ const MyEvents = () => {
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
                                             {formatDate(event.startDate)}
+                                            {event.repeat && <div><RepeatLine event={event} /></div>}
                                         </td>
                                         <td>
-                                            <span style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                                padding: '2px 8px', borderRadius: 99,
-                                                fontSize: '0.72rem', fontWeight: 700,
-                                                color: event.rsvpStatus === 'GOING' ? 'var(--badge-success-text)' : event.rsvpStatus === 'INVITED' ? 'var(--badge-info-text)' : 'var(--badge-warning-text)',
-                                                background: event.rsvpStatus === 'GOING' ? 'var(--badge-success-bg)' : event.rsvpStatus === 'INVITED' ? 'var(--badge-info-bg)' : 'var(--badge-warning-bg)',
-                                            }}>
-                                                {event.rsvpStatus === 'GOING' ? 'Going' : event.rsvpStatus === 'INVITED' ? 'Invited' : 'Interested'}
-                                            </span>
+                                            {/* A repeating event's date they answered for, called off since. */}
+                                            {event.calledOff ? (
+                                                <span data-testid="attending-called-off" style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                    padding: '2px 8px', borderRadius: 99,
+                                                    fontSize: '0.72rem', fontWeight: 700,
+                                                    color: 'var(--badge-error-text)', background: 'var(--badge-error-bg)',
+                                                }}>
+                                                    Called off
+                                                </span>
+                                            ) : (
+                                                <span style={{
+                                                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                                                    padding: '2px 8px', borderRadius: 99,
+                                                    fontSize: '0.72rem', fontWeight: 700,
+                                                    color: event.rsvpStatus === 'GOING' ? 'var(--badge-success-text)' : event.rsvpStatus === 'INVITED' ? 'var(--badge-info-text)' : 'var(--badge-warning-text)',
+                                                    background: event.rsvpStatus === 'GOING' ? 'var(--badge-success-bg)' : event.rsvpStatus === 'INVITED' ? 'var(--badge-info-bg)' : 'var(--badge-warning-bg)',
+                                                }}>
+                                                    {event.rsvpStatus === 'GOING' ? 'Going' : event.rsvpStatus === 'INVITED' ? 'Invited' : 'Interested'}
+                                                </span>
+                                            )}
                                         </td>
                                         <td style={{ color: 'var(--color-gray-500)', fontSize: '0.88rem' }}>
                                             {event.attendeeCount || 0}

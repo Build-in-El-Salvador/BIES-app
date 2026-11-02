@@ -76,12 +76,15 @@ function pinnedSafeLookup(
 /**
  * GET a URL with full SSRF protection: https only, every hop's addresses
  * checked and pinned, redirects re-validated, the body capped at `maxBytes`
- * and the whole request at `timeoutMs`. Resolves to the body and its type,
- * or null on any failure.
+ * and the whole request at `timeoutMs`. `allow`, when given, is asked about
+ * the link and every redirect too: false stops there. Resolves to the body
+ * and its type, or null on any failure.
  */
 export function safeGet(
     rawUrl: string,
-    { timeoutMs, maxBytes = MAX_BODY_BYTES, headers = {} }: { timeoutMs: number; maxBytes?: number; headers?: Record<string, string> },
+    { timeoutMs, maxBytes = MAX_BODY_BYTES, headers = {}, allow }: {
+        timeoutMs: number; maxBytes?: number; headers?: Record<string, string>; allow?: (url: URL) => boolean;
+    },
 ): Promise<{ body: Buffer; contentType: string } | null> {
     return new Promise((resolve) => {
         let settled = false;
@@ -105,6 +108,7 @@ export function safeGet(
                 return done(null);
             }
             if (url.protocol !== 'https:') return done(null); // https only — blocks http/file/gopher and downgrade redirects
+            if (allow && !allow(url)) return done(null);
             // Node doesn't call `lookup` for a host that is already an IP
             // address (the URL parser also turns 2130706433, 0x7f.1 and the
             // like into one), so check those here, on every hop.

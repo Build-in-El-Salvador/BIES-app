@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Check, MapPin } from 'lucide-react';
 import Avatar from '../Avatar';
+import InvitePill from './InvitePill';
 import { dayTile, hostOf, proposalNeeds, timeOf } from '../../utils/eventFormat';
 import { focusOf, parseFrame } from '../../utils/coverFrame';
 
@@ -9,9 +10,10 @@ import { focusOf, parseFrame } from '../../utils/coverFrame';
  * A meetup a member proposed, in the Events list: when and where, how many
  * are in of how many it needs, and "I'm in" ("Your meetup" for whoever
  * proposed it, who's in already; nothing to tap once it's too late). The
- * whole card opens it.
+ * whole card opens it. Invited to it, and not answered yet: "Edwin invited
+ * you" above its title (`invite`: the event's myInvite).
  */
-export default function ProposalCard({ event, lang, going, onGoing, busy = false, mine = false, closed = false }) {
+export default function ProposalCard({ event, lang, going, onGoing, busy = false, mine = false, closed = false, invite = null }) {
     const { t } = useTranslation();
     const tile = dayTile(event.startDate, lang);
     const host = hostOf(event);
@@ -30,6 +32,7 @@ export default function ProposalCard({ event, lang, going, onGoing, busy = false
             <div className="pc-top">
                 <span className="pc-cal" aria-hidden="true"><span>{tile.month}</span><b>{tile.day}</b></span>
                 <span className="pc-text">
+                    {invite?.by && !going && <InvitePill by={invite.by} />}
                     <span className="pc-title">{event.title}</span>
                     <span className="pc-line">{[tile.weekday, timeOf(event.startDate, lang)].join(' · ')}</span>
                     {place && <span className="pc-line pc-place"><MapPin size={13} aria-hidden="true" /> {place}</span>}
@@ -71,6 +74,7 @@ export default function ProposalCard({ event, lang, going, onGoing, busy = false
                 .pc-cal span { display: block; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-orange-text); padding: 3px 0 0; }
                 .pc-cal b { flex: 1; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 1.5rem; line-height: 1; color: var(--color-gray-900); }
                 .pc-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+                .pc-text :global(.ip) { margin-bottom: 3px; }
                 .pc-title { font-family: var(--font-display); font-size: 1.2rem; line-height: 1.1; color: var(--color-gray-900); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
                 .pc-line { font-size: 0.8rem; color: var(--color-gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 .pc-place { display: flex; align-items: center; gap: 4px; }

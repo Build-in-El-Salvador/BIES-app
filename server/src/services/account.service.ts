@@ -45,6 +45,7 @@ import { cache, cacheKey } from './redis.service';
 import { markVanished, removeFromRelayWhitelist, requestRelayPurge } from './relayWhitelist.service';
 import { revokeOtherSessions, revokeUserSessions } from './session.service';
 import { discardUploadNames, filesOfAccount } from './uploads.service';
+import { forgetCards } from './shareCard.service';
 
 // ─── Confirming with a signature ──────────────────────────────────────────────
 
@@ -210,6 +211,8 @@ export async function deleteAccount(
         console.error('[Account] Could not list the files:', errorText(err));
         return [] as string[];
     });
+    // The events they host go with the account; their link preview pictures go after.
+    const hostedEvents = await prisma.event.findMany({ where: { hostId: userId }, select: { id: true } }).catch(() => [] as { id: string }[]);
 
     // 2. Erase. Audit rows about the person keep what happened, but not their
     // name or pubkey (admin actions recorded both); rows kept for others lose
@@ -283,8 +286,9 @@ export async function deleteAccount(
         }
     }
 
-    // Their photos, videos and decks (discardUploadNames never throws).
+    // Their photos, videos and decks, and their events' link preview pictures (neither throws).
     await discardUploadNames(files, { includeShared: true });
+    await forgetCards(hostedEvents.map((e) => e.id));
 
     await Promise.all([
         cache.del(cacheKey.profileDetail(userId)),

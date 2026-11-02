@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban,
+    Flag, UserMinus, UserPlus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban, Repeat, Pencil, CalendarX, RotateCcw,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,8 @@ import { openExternal } from '../utils/openExternal';
 import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
-import { bothTicketLinks, fullDay, hostOf, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
+import { bothTicketLinks, firstNameOf, fullDay, hostOf, invitesOpen, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
+import { dateChangeNotice, dateChip, repeatLabel, shortTime } from '../utils/eventRepeat';
 import Avatar from '../components/Avatar';
 import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
@@ -23,6 +24,8 @@ import TicketPurchaseModal from '../components/TicketPurchaseModal';
 import ModerationSheet from '../components/moderation/ModerationSheet';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { BiesTag, PriceLine, TicketButton, namesText } from '../components/events/EventBits';
+import InvitePill from '../components/events/InvitePill';
+import InviteSheet from '../components/events/InviteSheet';
 import biesLogo from '../assets/logo-icon.svg';
 import '../components/moderation/Moderation.css';
 
@@ -33,7 +36,15 @@ import '../components/moderation/Moderation.css';
  * at the bottom; a free event with no ticket link has "I'm going" there.
  * A meetup a member proposed shows how many are in of how many it needs and
  * by when, with "I'm in" at the bottom, then "It's on" (or "Called off").
+ * Its proposer can invite members (the ⋯ menu); a member invited sees
+ * "Edwin invited you" until they answer. Only the proposer sees who's invited.
  * Where it is can be a business or farm on BIES: its card links to its page.
+ * A repeating event shows how it repeats, its next date and the three after
+ * it; "I'm going" is for its next date, and starts again after it. When the
+ * next date is different (its own time or place), a notice says how; a
+ * date called off shows crossed out. Its host side calls off one date (or
+ * brings it back) from the ⋯ menu. Once it's all over it shows as ended, at
+ * its last date, with nothing to answer.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
 
@@ -85,7 +96,7 @@ const EventDetail = () => {
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState(false);
     const [menu, setMenu] = useState(false);
-    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff'
+    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff' | 'invite' | 'callOffDate'
     const [notice, setNotice] = useState('');
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
@@ -143,8 +154,14 @@ const EventDetail = () => {
     const sections = (event.customSections || []).filter((s) => s && (s.body || s.content || s.imageUrl || s.images?.length));
     const isFull = 'canEdit' in event; // the card from the list is shown until the full event loads
     const hasTickets = !!(event.ticketUrl || event.bitcoinUrl);
+    // Repeating: shown at its next date, which "going" is for. Once it's all
+    // over (no dates ahead), at its last date, as ended: nothing to answer.
+    const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
+    // (It shows its next date while it has one, so the date it shows is over only then.)
+    const shownOver = new Date(event.endDate || new Date(event.startDate).getTime() + 6 * 3600_000).getTime() < Date.now();
+    const seriesOver = !!repeatText && shownOver;
     // With tickets sold elsewhere, members still say they're going here.
-    const rsvpRow = hasTickets && isFull;
+    const rsvpRow = hasTickets && isFull && !seriesOver;
 
     const rsvp = async (next) => {
         setGoing(next);
@@ -160,6 +177,20 @@ const EventDetail = () => {
             const reason = err?.data?.reason;
             if (event.stage) setNotice(t(`events.proposals.errors.${reason}`, { defaultValue: t('events.proposals.errors.generic') }));
             if (reason === 'called_off') load();
+        } finally {
+            setBusy(false);
+        }
+    };
+    // An invite to a meetup: "Can't make it". The answer stays, so the
+    // invite is closed and they aren't invited to it again.
+    const decline = async () => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await eventsApi.rsvp(event.id, 'NOT_GOING');
+            await load();
+        } catch (err) {
+            setNotice(t(`events.proposals.errors.${err?.data?.reason}`, { defaultValue: t('events.proposals.errors.generic') }));
         } finally {
             setBusy(false);
         }
@@ -194,6 +225,22 @@ const EventDetail = () => {
             setSheet(null);
         }
     };
+    // One date of a repeating event (its key), called off or brought back; the members going to it are told.
+    const setDateOff = async (key, off) => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await (off ? eventsApi.callOffDate(event.id, key) : eventsApi.restoreDate(event.id, key));
+            await load();
+            setGoing(null); // its next date may be another one now
+            setNotice(t(off ? 'events.dates.calledOffNotice' : 'events.dates.restoredNotice', { date: dateChip(key, lang) }));
+        } catch {
+            setNotice(t('events.dates.failed'));
+        } finally {
+            setBusy(false);
+            setSheet(null);
+        }
+    };
     const remove = async () => {
         setBusy(true);
         try {
@@ -212,6 +259,8 @@ const EventDetail = () => {
     const venue = event.venueListing || null;
     const mine = !!user && event.hostId === user.id;
     const closed = proposed && !!event.decideBy && new Date(event.decideBy).getTime() < Date.now();
+    // Invited and not answered (nor tapped here yet): who invited me.
+    const invitedBy = going === null && !isGoing && stage !== 'calledOff' ? event.myInvite?.by || null : null;
     // "You and Edwin Rivas are in": named as many as are shown.
     const inList = [...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))];
     const inLine = inList.length === 1 && isGoing ? t('events.proposals.firstIn')
@@ -219,6 +268,21 @@ const EventDetail = () => {
     // Called off by its proposer: once it was on, or before the deadline (the deadline itself is the other way).
     const byProposer = !!event.confirmedAt || (event.calledOffAt && event.decideBy && new Date(event.calledOffAt) < new Date(event.decideBy));
     const started = new Date(event.startDate).getTime() <= Date.now();
+    // Repeating: shown at its next date, which "going" is for (none once it's all over).
+    const nextDay = repeatText && !seriesOver ? dateChip(event.startDate, lang) : '';
+    // Its dates (a called-off one too, until it passes); just this one while the page loads.
+    const dates = !repeatText || seriesOver ? []
+        : event.upcomingDates?.length ? event.upcomingDates
+            : [{ key: event.occurrence || event.startDate, startDate: event.startDate, changed: !!event.dateChanged, calledOff: false }];
+    const nextIndex = dates.findIndex((d) => !d.calledOff);
+    const calledOff = dates.filter((d) => d.calledOff);
+    // A date is named by its usual day ("Sat 7 Nov"), even when it's moved.
+    const keyDay = repeatText && event.occurrence ? dateChip(event.occurrence, lang) : '';
+    // The When line is how it repeats, at its usual time: the next date's own time is in its notice.
+    const usualStart = keyDay ? event.occurrence : event.startDate;
+    const usualEnd = !keyDay ? event.endDate
+        : event.firstEndDate ? new Date(new Date(event.occurrence).getTime() + (new Date(event.firstEndDate) - new Date(event.firstStartDate))).toISOString() : null;
+    const changeNotice = keyDay ? dateChangeNotice(event.dateChange, t, lang) : null;
     const mapUrl = event.locationMapUrl || venue?.mapUrl || (event.locationAddress || event.locationName
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([event.locationName, event.locationAddress].filter(Boolean).join(', '))}`
         : '');
@@ -255,6 +319,21 @@ const EventDetail = () => {
                                         <Edit3 size={16} /> {t('events.detail.edit')}
                                     </button>
                                 )}
+                                {event.canDelete && keyDay && !started && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOffDate'); }}>
+                                        <CalendarX size={16} /> {t('events.dates.callOff', { date: keyDay })}
+                                    </button>
+                                )}
+                                {event.canDelete && calledOff.filter((d) => new Date(d.startDate).getTime() > Date.now()).map((d) => (
+                                    <button key={d.key} type="button" role="menuitem" disabled={busy} onClick={() => { closeMenu(); setDateOff(d.key, false); }}>
+                                        <RotateCcw size={16} /> {t('events.dates.restore', { date: dateChip(d.key, lang) })}
+                                    </button>
+                                ))}
+                                {mine && invitesOpen(event) && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('invite'); }}>
+                                        <UserPlus size={16} /> {t('events.proposals.inviteMembers')}
+                                    </button>
+                                )}
                                 {event.canDelete && (stage === 'proposed' || stage === 'on') && !started && (
                                     <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOff'); }}>
                                         <Ban size={16} /> {t('events.proposals.callOff')}
@@ -279,6 +358,12 @@ const EventDetail = () => {
 
             <div className="ev-body">
                 {notice && <p className="ev-notice" role="status">{notice}</p>}
+                {changeNotice && (
+                    <p className="ev-notice ev-date-notice">
+                        <Pencil size={15} aria-hidden="true" />
+                        <span>{changeNotice.lead}{changeNotice.usual && ` ${changeNotice.usual}`}</span>
+                    </p>
+                )}
                 {event.canEdit && (event.visibility === 'DRAFT' || event.visibility === 'PRIVATE') && (
                     <p className="ev-notice"><Lock size={15} aria-hidden="true" /> {event.visibility === 'DRAFT' ? t('events.detail.draft') : t('events.detail.private')}</p>
                 )}
@@ -294,7 +379,9 @@ const EventDetail = () => {
                         <span><b>{t('events.proposals.calledOff')}</b>{byProposer ? t('events.proposals.calledOffByHost') : t('events.proposals.calledOffHint', { when: whenShort(event.decideBy, lang) })}</span>
                     </div>
                 )}
-                <div>
+                <div className="ev-head">
+                    {/* Once it's on, there's no "Are you in?" to say it by. */}
+                    {invitedBy && !proposed && <InvitePill by={invitedBy} />}
                     {stage ? <p className="ev-kind">{t('events.proposals.kind')}</p> : kind && <p className="ev-kind">{kind}</p>}
                     <h1 className="ev-title">{event.title}</h1>
                 </div>
@@ -325,15 +412,36 @@ const EventDetail = () => {
                 )}
 
                 <div className="ev-facts">
-                    <div className="ev-fact">
-                        <span className="ev-fact-icon"><CalendarDays size={19} aria-hidden="true" /></span>
+                    <div className={`ev-fact${repeatText ? ' repeats' : ''}`}>
+                        <span className="ev-fact-icon">{repeatText ? <Repeat size={19} aria-hidden="true" /> : <CalendarDays size={19} aria-hidden="true" />}</span>
                         <span className="ev-fact-text">
-                            <b>{fullDay(event.startDate, lang)}</b>
-                            <span>{timeRange(event.startDate, event.endDate, lang)}</span>
+                            <b>{repeatText || fullDay(event.startDate, lang)}</b>
+                            <span>{timeRange(usualStart, usualEnd, lang)}</span>
                         </span>
                         <button type="button" className="ev-fact-link" onClick={() => addToCalendar(event)}>
                             <CalendarPlus size={15} aria-hidden="true" /> {t('events.detail.addToCalendar')}
                         </button>
+                        {dates.length > 0 && (
+                            // Its next date (with its own time when it has one), then the ones after it; one called off crossed out.
+                            <ul className="ev-dates">
+                                {dates.map((d, i) => (
+                                    <li key={d.key} className={i === nextIndex ? 'next' : d.calledOff ? 'off' : ''}>
+                                        {i === nextIndex
+                                            ? [t('events.repeat.next'), dateChip(d.startDate, lang), ...(d.changed ? [shortTime(d.startDate, lang)] : [])].join(' · ')
+                                            : dateChip(d.calledOff ? d.key : d.startDate, lang, { weekday: false })}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        {calledOff.map((d) => (
+                            <p key={d.key} className="ev-date-off">{t('events.dates.noEventOn', { title: event.title, date: dateChip(d.key, lang) })}</p>
+                        ))}
+                        {seriesOver && (
+                            // All over: its last date.
+                            <ul className="ev-dates">
+                                <li data-testid="series-ended">{`${t('events.repeat.ended')} · ${dateChip(event.startDate, lang)}`}</li>
+                            </ul>
+                        )}
                     </div>
                     {event.isOnline ? (
                         <div className="ev-fact">
@@ -443,11 +551,13 @@ const EventDetail = () => {
                         )}
                         {rsvpRow ? (
                             <span className="ev-going-text">
-                                <b>{isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk')}</b>
+                                <b>{nextDay
+                                    ? (isGoing ? t('events.detail.youreGoingOn', { date: nextDay }) : t('events.detail.rsvpAskOn', { date: nextDay }))
+                                    : (isGoing ? t('events.detail.youreGoing') : t('events.detail.rsvpAsk'))}</b>
                                 <small>{goingCount > 0 ? t('events.detail.going', { count: goingCount }) : t('events.detail.rsvpHint')}</small>
                             </span>
                         ) : (
-                            <span className="ev-going-text">{t('events.detail.going', { count: goingCount })}</span>
+                            <span className="ev-going-text">{nextDay ? t('events.detail.goingOn', { count: goingCount, date: nextDay }) : t('events.detail.going', { count: goingCount })}</span>
                         )}
                         {rsvpRow && (
                             <button type="button" className={`ev-going-btn${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy} onClick={() => rsvp(!isGoing)}>
@@ -458,19 +568,42 @@ const EventDetail = () => {
                 )}
             </div>
 
-            {stage !== 'calledOff' && (
+            {stage !== 'calledOff' && !seriesOver && (
             <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
                 {proposed ? (
                     <>
-                        <span className="ev-bar-text">
-                            <b>{mine ? t('events.proposals.youProposed') : isGoing ? t('events.proposals.youreIn') : closed ? t('events.proposals.joinClosed') : t('events.proposals.areYouIn')}</b>
-                            <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                        <span className="ev-bar-who">
+                            {invitedBy && !closed && (
+                                <span className="ev-bar-face" aria-hidden="true">
+                                    <Avatar src={invitedBy.avatar} size={36} fallback={<span className="ev-bar-initial">{(firstNameOf(invitedBy.name) || '?')[0].toUpperCase()}</span>} />
+                                </span>
+                            )}
+                            <span className="ev-bar-text">
+                                <b>
+                                    {mine ? t('events.proposals.youProposed') : isGoing ? t('events.proposals.youreIn') : closed ? t('events.proposals.joinClosed')
+                                        : invitedBy ? t('events.proposals.invitedYouAsk', { name: firstNameOf(invitedBy.name) || t('directory.ownership.aMember') })
+                                            : t('events.proposals.areYouIn')}
+                                </b>
+                                <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                                {invitedBy && !closed && (
+                                    <button type="button" className="ev-decline" onClick={decline} disabled={busy} data-testid="invite-decline">
+                                        {t('events.proposals.cantMakeIt')}
+                                    </button>
+                                )}
+                            </span>
                         </span>
                         {mine ? (
-                            // Whoever proposed it is in already: they bring people.
-                            <button type="button" className="ev-in on" onClick={share}>
-                                <Share size={16} aria-hidden="true" /> {t('events.proposals.invite')}
-                            </button>
+                            // Whoever proposed it is in already: they bring people, by
+                            // invite while it can still take them, else a shared link.
+                            invitesOpen(event) ? (
+                                <button type="button" className="ev-in on" onClick={() => setSheet('invite')}>
+                                    <UserPlus size={16} aria-hidden="true" /> {t('events.proposals.inviteMembers')}
+                                </button>
+                            ) : (
+                                <button type="button" className="ev-in on" onClick={share}>
+                                    <Share size={16} aria-hidden="true" /> {t('events.detail.share')}
+                                </button>
+                            )
                         ) : (
                             <button type="button" className={`ev-in${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy || !isFull || (closed && !isGoing)} onClick={() => rsvp(!isGoing)}>
                                 {isGoing && <Check size={16} aria-hidden="true" />} {isGoing ? t('events.proposals.in') : t('events.proposals.imIn')}
@@ -486,7 +619,11 @@ const EventDetail = () => {
                     </>
                 ) : (
                     <>
-                        <PriceLine event={event} />
+                        {/* A repeating free event: which date "I'm going" is for. */}
+                        <PriceLine
+                            event={event}
+                            note={nextDay && !hasTickets ? (isGoing ? t('events.detail.youreGoingOn', { date: nextDay }) : t('events.detail.rsvpAskOn', { date: nextDay })) : ''}
+                        />
                         <TicketButton event={event} size="lg" going={isGoing} onGoing={rsvp} busy={busy} />
                     </>
                 )}
@@ -501,6 +638,17 @@ const EventDetail = () => {
                     onPurchased={(tk) => { setTicket(tk); setBuying(false); setGoing(true); }}
                 />
             )}
+            {sheet === 'callOffDate' && (
+                <ModerationSheet title={t('events.dates.callOffTitle', { date: keyDay })} onClose={() => setSheet(null)}>
+                    <p className="mod-muted">{t('events.dates.callOffConfirm', { title: event.title, date: keyDay })}</p>
+                    <div className="mod-actions">
+                        <button type="button" className="mod-button secondary" onClick={() => setSheet(null)}>{t('events.dates.keep')}</button>
+                        <button type="button" className="mod-button danger" onClick={() => setDateOff(event.occurrence, true)} disabled={busy}>
+                            {busy && <Loader2 size={18} className="mod-spin" />} {t('events.dates.callOffYes')}
+                        </button>
+                    </div>
+                </ModerationSheet>
+            )}
             {sheet === 'callOff' && (
                 <ModerationSheet title={t('events.proposals.callOff')} onClose={() => setSheet(null)}>
                     <p className="mod-muted">{t('events.proposals.callOffConfirm')}</p>
@@ -511,6 +659,18 @@ const EventDetail = () => {
                         </button>
                     </div>
                 </ModerationSheet>
+            )}
+            {sheet === 'invite' && (
+                <InviteSheet
+                    event={event}
+                    me={user?.id}
+                    onClose={() => setSheet(null)}
+                    onSent={(count) => {
+                        setSheet(null);
+                        setNotice(count ? t('events.proposals.invitesSent', { count }) : t('events.proposals.invitesNone'));
+                        load();
+                    }}
+                />
             )}
             {sheet === 'delete' && (
                 <ModerationSheet title={t('events.detail.delete')} onClose={() => setSheet(null)}>
@@ -559,9 +719,17 @@ const EventDetail = () => {
                 .ev-venue-text b { font-family: var(--font-display); font-size: 1.2rem; line-height: 1.1; color: var(--color-gray-900); }
                 .ev-venue-text span { font-size: 0.82rem; color: var(--color-gray-500); }
                 .ev-not-bies { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--color-gray-500); }
+                .ev-head { display: flex; flex-direction: column; gap: 8px; }
+                .ev-head .ev-kind { margin-bottom: -4px; }
+                .ev-bar-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+                .ev-bar-face { width: 36px; height: 36px; border-radius: 50%; overflow: hidden; flex: none; background: var(--color-orange-tint); border: 1px solid rgba(255, 91, 0, 0.3); box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+                .ev-bar-face :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .ev-bar-initial { font-size: 0.85rem; font-weight: 700; color: var(--color-orange-text); }
                 .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
                 .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-decline { align-self: flex-start; margin-top: 2px; padding: 4px 0; min-height: 0; border: 0; background: none; font-size: 0.82rem; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+                .ev-decline:disabled { opacity: 0.6; }
                 .ev-in {
                     flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 24px; border-radius: var(--radius-full); cursor: pointer;
                     border: 1.5px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; font-size: 0.95rem; font-weight: 700;
@@ -598,6 +766,19 @@ const EventDetail = () => {
                 .ev-fact-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-fact-text span { font-size: 0.85rem; color: var(--color-gray-500); }
                 .ev-fact-link { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; cursor: pointer; color: var(--color-primary); font-weight: 600; font-size: 0.85rem; white-space: nowrap; padding: 6px 0; }
+                /* A repeating event's dates, under its time, lined up with the words. */
+                .ev-fact.repeats { flex-wrap: wrap; row-gap: 10px; }
+                .ev-dates { flex-basis: 100%; list-style: none; margin: 0; padding: 0 0 0 52px; display: flex; flex-wrap: wrap; gap: 6px; }
+                .ev-dates li {
+                    display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--radius-full);
+                    border: 1px solid var(--color-gray-200); background: var(--color-surface); color: var(--color-gray-700);
+                    font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+                }
+                .ev-dates li.next { border-color: var(--color-primary); background: var(--color-blue-tint); color: var(--color-primary); }
+                .ev-dates li.off { color: var(--color-gray-400); text-decoration: line-through; }
+                .ev-date-off { flex-basis: 100%; margin: -4px 0 0; padding-left: 52px; font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-date-notice { align-items: flex-start; line-height: 1.4; }
+                .ev-date-notice :global(svg) { flex: none; margin-top: 2px; }
                 .ev-h { margin: 0 0 8px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-gray-500); }
                 .ev-person-list { display: flex; flex-direction: column; gap: 8px; }
                 .ev-sponsors { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -638,7 +819,7 @@ const EventDetail = () => {
                 .ev-have { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--color-success-text); }
                 @media (min-width: 769px) {
                     .ev-hero-wrap { padding-top: 1.5rem; }
-                    .ev-hero { border-radius: 20px; }
+                    .ev-hero { border-radius: 20px; clip-path: inset(0 round 20px); }
                     .ev-bar { border: 1px solid var(--color-gray-200); border-radius: 16px 16px 0 0; }
                 }
             `}</style>

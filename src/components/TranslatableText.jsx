@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { translateText, translateHtml } from '../services/translationService';
 import { Globe, Loader2 } from 'lucide-react';
-import DOMPurify from 'dompurify';
+import { cleanMemberHtml } from '../utils/memberHtml';
 
 /**
  * TranslatableText — section wrapper with a globe translate icon in the top-right.
@@ -114,7 +114,7 @@ const TranslatableText = ({
                     className={className}
                     style={style}
                     dangerouslySetInnerHTML={{
-                        __html: DOMPurify.sanitize(displayText, { ADD_ATTR: ['style'] })
+                        __html: cleanMemberHtml(displayText)
                     }}
                 />
             ) : (

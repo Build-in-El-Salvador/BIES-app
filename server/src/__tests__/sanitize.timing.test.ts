@@ -37,6 +37,16 @@ const ATTACKS: Array<[string, string]> = [
     ['handler and spaces', ' onx=' + ' '.repeat(MB)],
     ['script link and spaces', 'javascript' + ' '.repeat(MB)],
     ['entities', '&#x' + '1'.repeat(MB)],
+    // Tags read as a browser reads them (keepAlignmentOnly).
+    ['quoted value with no closing quote', '<p title="' + 'a>'.repeat(MB / 2)],
+    ['many tags with an unclosed quote', '<p title="'.repeat(MB / 10)],
+    ['many style attributes', '<p style="color:red" '.repeat(MB / 21)],
+    ['one tag of many style attributes', '<p' + ' style=x'.repeat(MB / 8) + '>'],
+    ['many comments with no end', '<!--'.repeat(MB / 4)],
+    ['comment of near-miss ends', '<!--' + '--x'.repeat(MB / 3)],
+    ['many "<!" and no ">"', '<!'.repeat(MB / 2)],
+    ['many "<svg" with a "<" before each', '<<svg>'.repeat(MB / 6)],
+    ['many "</ " and no ">"', '</ '.repeat(MB / 3)],
 ];
 
 describe('the request sanitizer on big hostile text', () => {

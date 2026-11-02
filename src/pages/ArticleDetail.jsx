@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Calendar, User, Loader2 } from 'lucide-react';
-import DOMPurify from 'dompurify';
+import { cleanDocumentHtml } from '../utils/memberHtml';
 import { contentApi } from '../services/api';
 import { useTranslation } from 'react-i18next';
 import ZapButton from '../components/ZapButton';
@@ -94,7 +94,7 @@ const ArticleDetail = () => {
                         )}
                     </div>
 
-                    <div className="article-body" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content || article.body || '') }} />
+                    <div className="article-body" dangerouslySetInnerHTML={{ __html: cleanDocumentHtml(article.content || article.body || '') }} />
 
                     {(article.tags || []).length > 0 && (
                         <div className="article-tags">

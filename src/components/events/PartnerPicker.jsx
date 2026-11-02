@@ -87,7 +87,7 @@ export default function PartnerPicker({ value, onChange, exclude = {} }) {
                             <button type="button" className="pp-role" onClick={() => flip(i)}>
                                 {p.role === 'COHOST' ? t('events.form.cohost') : t('events.form.sponsor')}
                             </button>
-                            <button type="button" className="pp-x" onClick={() => remove(i)} aria-label={t('events.form.remove', { name: p.name })}><X size={16} /></button>
+                            <button type="button" className="pp-x x-remove" onClick={() => remove(i)} aria-label={t('events.form.remove', { name: p.name })}><X size={16} /></button>
                         </li>
                     ))}
                 </ul>
