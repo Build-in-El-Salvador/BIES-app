@@ -6,6 +6,7 @@ import { settingsApi, notificationsApi } from '../../services/api';
 import { nativePushPermission, enableNativePush, openNativeAppSettings, registerNativePushIfAllowed, PERMISSION_EVENT } from '../../services/pushService';
 import { requestNotificationPermission, subscribeToPush, getPushSubscriptionState } from '../../utils/notificationManager';
 import { isNativePlatform, getPlatform } from '../../utils/platform';
+import { ANDROID_PUSH_ENABLED } from '../../config/featureFlags';
 import { SettingsPage, SettingsGroup, SettingsRow, Switch } from '../../components/settings/SettingsUI';
 
 /**
@@ -120,12 +121,14 @@ const NotificationSettings = () => {
 
     const thisDevice = t(native ? 'notificationSettings.thisPhone' : 'notificationSettings.thisBrowser');
     const unavailableText = native && getPlatform() === 'android'
+    // The Android app has no push yet: no switch there that does nothing.
+    const pushHere = !(native && getPlatform() === 'android' && !ANDROID_PUSH_ENABLED);
         ? t('notificationSettings.unavailableAndroid')
         : t('notificationSettings.unavailable');
 
     return (
         <SettingsPage title={t('settings.notifications')} back="/settings">
-            <SettingsGroup>
+            {pushHere && <SettingsGroup>
                 <SettingsRow icon={Bell} label={t('notificationSettings.push')} desc={t('notificationSettings.pushDescAccount')}>
                     <Switch
                         checked={pushOn}
@@ -163,7 +166,7 @@ const NotificationSettings = () => {
                         </div>
                     </div>
                 )}
-            </SettingsGroup>
+            </SettingsGroup>}
             {error && <p className="set-error" role="alert">{error}</p>}
 
             {settings && (

@@ -22,6 +22,7 @@ import BackButtonListener from './components/BackButtonListener';
 import SystemBarsSync from './components/SystemBarsSync';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
+import { isNativePlatform } from './utils/platform';
 import { lazyPage } from './utils/lazyPage';
 import { rememberPage } from './utils/lastPage';
 import { Loader2 } from 'lucide-react';
@@ -205,6 +206,18 @@ const FeatureRoute = ({ flag, children }) => {
     return children;
 };
 
+/**
+ * A page the store app leaves out whatever the flags say: the 404 there, as
+ * FeatureRoute shows it. Relay-access vouchers are sold for bitcoin, and the
+ * invite page offers zaps and wallets; the website keeps both.
+ */
+const NotInStoreApp = ({ children }) => {
+    if (isNativePlatform()) {
+        return <ProtectedRoute><NotFound /></ProtectedRoute>;
+    }
+    return children;
+};
+
 /** An event's page, started afresh for each event (a link from one event to another). */
 const EventDetailById = () => {
     const { id } = useParams();
@@ -328,8 +341,8 @@ const AppContent = () => {
                     {/* NIP-55 Amber intent callback (public — used mid-login) */}
                     <Route path="/amber-callback" element={<AmberCallback />} />
                     {/* Relay-access voucher redemption + onboarding invite landing (public) */}
-                    <Route path="/access/:code" element={<VoucherRedeem />} />
-                    <Route path="/join/:code" element={<Join />} />
+                    <Route path="/access/:code" element={<NotInStoreApp><VoucherRedeem /></NotInStoreApp>} />
+                    <Route path="/join/:code" element={<NotInStoreApp><Join /></NotInStoreApp>} />
 
                     {/* Farm Directory and BIES Trusted: pages of their own, so members can put them in their bottom bar */}
                     <Route path="/farms" element={<FeatureRoute flag="directories"><ProtectedRoute><DirectoryList type="FARM" /></ProtectedRoute></FeatureRoute>} />
