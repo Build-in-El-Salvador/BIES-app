@@ -27,6 +27,7 @@ import '../components/feed/Feed.css';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { mute } from '../services/muteStore';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
+import { findObjectionable } from '../utils/contentFilter';
 
 const EXPLORE_ICONS = {
     trending_24h: TrendingUp,
@@ -208,6 +209,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const [replyTarget, setReplyTarget] = useState(null);
     const [replyText, setReplyText] = useState('');
     const [replyPosting, setReplyPosting] = useState(false);
+    const [replyError, setReplyError] = useState(null); // { postId, text }
     const [zapTarget, setZapTarget] = useState(null);
     const [myPubkey, setMyPubkey] = useState(null);
     const [repostMenu, setRepostMenu] = useState(null); // post.id or null — shows repost relay choice
@@ -834,6 +836,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             return;
         }
 
+        // The community rules' words, checked before anything is signed or
+        // sent (the BIES relay refuses them too: relay-proxy/noteFilter.js).
+        if (findObjectionable(composeText)) {
+            setPostError(t('moderation.objectionable'));
+            return;
+        }
+
         setPosting(true);
         setPostError('');
 
@@ -884,7 +893,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         } catch (err) {
             console.error('[Feed] Post failed:', err);
             const msg = err?.errors?.[0]?.message || err?.message || String(err);
-            setPostError(`Post failed: ${msg}`);
+            setPostError(/objectionable/i.test(msg) ? t('moderation.objectionable') : `Post failed: ${msg}`);
         } finally {
             setPosting(false);
             setUploading(false);
@@ -1041,7 +1050,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const handleReply = async (post) => {
         if (!replyText.trim() || replyPosting) return;
         if (!nostrSigner.hasKey && nostrSigner.mode !== 'extension' && !nostrSigner.storedMethod && !window.nostr) return;
+        if (findObjectionable(replyText)) {
+            setReplyError({ postId: post.id, text: t('moderation.objectionable') });
+            return;
+        }
 
+        setReplyError(null);
         setReplyPosting(true);
         try {
             const content = replyText.trim();
@@ -1100,6 +1114,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             }
         } catch (err) {
             console.error('[Feed] Reply failed:', err);
+            const msg = err?.errors?.[0]?.message || err?.message || String(err);
+            if (/objectionable/i.test(msg)) setReplyError({ postId: post.id, text: t('moderation.objectionable') });
         } finally {
             setReplyPosting(false);
         }
@@ -1915,6 +1931,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                         onChange={(e) => {
                                                             setReplyTarget({ id: post.id, pubkey: post.pubkey });
                                                             setReplyText(e.target.value);
+                                                            if (replyError) setReplyError(null);
                                                             handleMentionInput(e.target.value, e.target.selectionStart, 'reply');
                                                         }}
                                                         onFocus={() => setReplyTarget({ id: post.id, pubkey: post.pubkey })}
@@ -1963,6 +1980,10 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                     </button>
                                                 </div>
                                             </div>
+
+                                            {replyError?.postId === post.id && (
+                                                <div className="primal-compose-error" role="alert">{replyError.text}</div>
+                                            )}
 
                                             {/* Mention dropdown for replies */}
                                             {isReplying && mentionAnchor?.field === 'reply' && (mentionResults.length > 0 || mentionLoading) && (
