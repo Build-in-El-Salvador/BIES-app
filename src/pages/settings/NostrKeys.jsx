@@ -15,9 +15,10 @@ const EXTENSION_HINT = "This error is usually caused by a password manager brows
 const NO_PRF = "This device can't create passkeys (missing PRF support). Try a device with a fingerprint or face sensor.";
 
 /**
- * Settings → Nostr → Your key: the public key to copy, the secret key
- * (revealed on request, or where it's held: an extension, a signer, Amber,
- * or BIES for email accounts), and the passkey backup on the web.
+ * Settings → Nostr → Your key: the secret key (revealed on request, or
+ * where it's held: an extension, a signer, Amber, or BIES for email
+ * accounts, with Take your key), and the passkey backup on the web. The
+ * public key is on Settings → Nostr.
  */
 const NostrKeys = () => {
     const { t } = useTranslation();
@@ -191,17 +192,6 @@ const NostrKeys = () => {
                 </SettingsGroup>
             ) : (
                 <>
-                    <SettingsGroup title="Public key (npub)" footer="Your Nostr public identity. Anyone can see it.">
-                        <div className="set-pad">
-                            <div className="key-display">
-                                <code className="key-value">{npub}</code>
-                                <button onClick={() => copyToClipboard(npub, 'npub')} className="key-copy-btn">
-                                    {copiedKey === 'npub' ? <><CheckCircle size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
-                                </button>
-                            </div>
-                        </div>
-                    </SettingsGroup>
-
                     <SettingsGroup title="Secret key (nsec)">
                         <div className="set-pad">
                             {keyHeldElsewhere ? (

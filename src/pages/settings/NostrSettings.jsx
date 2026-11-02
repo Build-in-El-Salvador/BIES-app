@@ -21,6 +21,9 @@ const PARTS = ['name', 'picture', 'banner', 'about', 'website', 'lightning', 'ni
 
 // Signatures the log leaves out: one per relay connection, one per upload.
 const QUIET_KINDS = [22242, 24242];
+
+// npub1abcdefgh…wxyz: enough to recognise it, on one line.
+const shortNpub = (npub) => `${npub.slice(0, 12)}…${npub.slice(-6)}`;
 const KIND_LABELS = {
     0: 'profile', 1: 'post', 3: 'follows', 5: 'deletion', 6: 'repost', 7: 'reaction', 1984: 'report',
     9734: 'zap', 10002: 'relays', 27235: 'keyProof', 30402: 'listing', 31923: 'event', 31925: 'rsvp',
@@ -83,15 +86,17 @@ const NostrSettings = () => {
             <div className="nostr-settings">
                 <SettingsGroup title={t('nostrSettings.identity')} footer={t('nostrSettings.identityFooter')}>
                     <div className="set-pad">
+                        {/* Shortened to one line; Copy and the QR code copy or show all of it. */}
                         <div className="ns-key">
-                            <code className="ns-key-value" data-testid="nostr-npub">{npub}</code>
-                            <button type="button" onClick={copyNpub} className="ns-link-btn">
-                                {copied ? <><CheckCircle size={14} /> {t('nostrSettings.copied')}</> : <><Copy size={14} /> {t('nostrSettings.copy')}</>}
+                            <code className="ns-key-value" title={npub} data-testid="nostr-npub">{shortNpub(npub)}</code>
+                            <button type="button" onClick={copyNpub} className="ns-icon-btn" aria-label={copied ? t('nostrSettings.copied') : t('nostrSettings.copy')} title={t('nostrSettings.copy')}>
+                                {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
+                            </button>
+                            <button type="button" onClick={() => setShowQr((v) => !v)} className={`ns-icon-btn${showQr ? ' on' : ''}`} aria-expanded={showQr} aria-label={showQr ? t('nostrSettings.hideQr') : t('nostrSettings.showQr')} title={t('nostrSettings.showQr')}>
+                                <QrCode size={18} />
                             </button>
                         </div>
-                        <button type="button" className="ns-link-btn ns-start" onClick={() => setShowQr((v) => !v)} aria-expanded={showQr}>
-                            <QrCode size={14} /> {showQr ? t('nostrSettings.hideQr') : t('nostrSettings.showQr')}
-                        </button>
+                        {copied && <p className="ns-ok" role="status">{t('nostrSettings.copied')}</p>}
                         {showQr && <div className="ns-qr"><QRCodeSVG value={`nostr:${npub}`} size={184} /></div>}
                     </div>
                     <SettingsRow icon={Key} label={t('nostrSettings.yourKey')} desc={keyWhere} to="/settings/nostr/key" testId="nostr-your-key" />
@@ -118,8 +123,10 @@ const NostrSettings = () => {
                 )}
             </div>
             <style jsx>{`
-                .nostr-settings :global(.ns-key) { display: flex; align-items: center; gap: 0.5rem; background: var(--color-gray-50); border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 0.5rem 0.75rem; min-width: 0; }
-                .nostr-settings :global(.ns-key-value) { flex: 1; min-width: 0; font-size: 0.8rem; word-break: break-all; color: var(--color-gray-700); background: none; padding: 0; }
+                .nostr-settings :global(.ns-key) { display: flex; align-items: center; gap: 0.25rem; background: var(--color-gray-50); border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 0.25rem 0.35rem 0.25rem 0.75rem; min-width: 0; }
+                .nostr-settings :global(.ns-key-value) { flex: 1; min-width: 0; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-gray-700); background: none; padding: 0; }
+                .nostr-settings :global(.ns-icon-btn) { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: none; border-radius: 50%; background: none; color: var(--color-primary); cursor: pointer; }
+                .nostr-settings :global(.ns-icon-btn:active), .nostr-settings :global(.ns-icon-btn.on) { background: var(--color-gray-200); }
                 .nostr-settings :global(.ns-link-btn) { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; font-weight: 600; background: none; border: none; color: var(--color-primary); cursor: pointer; padding: 0.25rem 0; white-space: nowrap; }
                 .nostr-settings :global(.ns-start) { align-self: flex-start; }
                 .nostr-settings :global(.ns-qr) { align-self: center; background: #fff; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--color-gray-200); }
