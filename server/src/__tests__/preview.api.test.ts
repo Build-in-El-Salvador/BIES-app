@@ -11,6 +11,8 @@ const env = vi.hoisted(() => {
     const dir = `${process.env.TMPDIR || '/tmp'}/bies-preview-test-${process.pid}-${Date.now()}`;
     process.env.DATABASE_URL = `file:${dir}/test.db`;
     process.env.RELAY_WHITELIST_PATH = `${dir}/relay/whitelist.txt`;
+    // Event link cards, drawn when a card page (/og) is read, land here, not in the app's uploads.
+    process.env.UPLOAD_DIR = `${dir}/uploads`;
     process.env.APP_PUBLIC_URL = 'https://app.example.test';
     return { dir };
 });

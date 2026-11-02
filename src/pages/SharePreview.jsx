@@ -126,9 +126,9 @@ export default function SharePreview({ section }) {
                                 {isEvent && (
                                     <li><CalendarDays size={18} aria-hidden="true" /><span>{fullDay(found.startDate, i18n.language)}, {timeRange(found.startDate, found.endDate, i18n.language)}</span></li>
                                 )}
-                                {/* A repeating event: its next date above, how it repeats here. */}
+                                {/* A repeating event: its next date above, how it repeats here, from the date as its rule makes it (that one may be moved). */}
                                 {isEvent && found.repeat && (
-                                    <li><Repeat size={18} aria-hidden="true" /><span>{repeatLabel(found.repeat, found.startDate, t, i18n.language)}</span></li>
+                                    <li><Repeat size={18} aria-hidden="true" /><span>{repeatLabel(found.repeat, found.occurrence || found.startDate, t, i18n.language)}</span></li>
                                 )}
                                 {found.location && (
                                     <li>

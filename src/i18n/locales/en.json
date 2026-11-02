@@ -848,7 +848,13 @@
       "until": "Until (optional)",
       "untilHint": "After each date it moves on to the next one by itself.",
       "timeHintRepeat": "El Salvador time. Starts is its first date; it repeats from there.",
-      "timeHintDate": "El Salvador time. This is its next date, {{date}}."
+      "timeHintDate": "El Salvador time. This is its next date, {{date}}.",
+      "share": "Link preview",
+      "shareHint": "What WhatsApp and other apps show when someone shares this event. Position the cover for it.",
+      "shareHintOfficial": "A BIES event shares its cover as it is, square, like the event posters. Position it so the whole poster shows.",
+      "shareTitle": "Position for the link preview",
+      "sharePlaceholder": "Your event's name",
+      "shareNoCover": "Add a cover photo and it shows here too."
     },
     "kinds": {
       "NETWORKING": "Networking",

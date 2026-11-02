@@ -39,6 +39,15 @@
   font-display: swap;
 }
 
+/* The serif on BIES event posters, and on shared events' link cards (ShareCardPreview.jsx). OFL. */
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('./assets/fonts/DMSerifDisplay-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Brand Colors */
   --color-primary: #0047AB;

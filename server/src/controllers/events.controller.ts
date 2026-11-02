@@ -19,6 +19,7 @@ import {
 } from '../services/eventPeople.service';
 import { listingsActedFor, runByWhere, runsListing } from './listingTeam.controller';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import { forgetCards } from '../services/shareCard.service';
 import {
     MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
 } from '../services/eventProposals.service';
@@ -55,6 +56,8 @@ export const createEventSchema = z.object({
     // A BIES event's highlight card: another photo (optional) and its position.
     cardImage: z.string().max(2000).optional().or(z.literal('')),
     cardFrame: coverFrameSchema.optional(),
+    // The cover as a shared link's preview shows it (shareCard.service.ts).
+    shareFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
     maxAttendees: z.number().int().optional().nullable(),
@@ -183,7 +186,7 @@ const EVENT_FIELDS = [
     'title', 'description', 'category', 'visibility',
     'location', 'locationName', 'locationAddress', 'locationMapUrl',
     'isOnline', 'onlineUrl', 'startDate', 'endDate',
-    'thumbnail', 'coverFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
+    'thumbnail', 'coverFrame', 'shareFrame', 'cardImage', 'cardFrame', 'ticketUrl', 'bitcoinUrl', 'priceLabel', 'maxAttendees', 'tags',
     'priceSats', 'ticketCapacity', 'payoutLightningAddress',
     'endorsementRequested', 'guestList', 'customSections', 'nostrPublish',
     'minAttendees', 'decideBy', 'repeat', 'repeatUntil',
@@ -240,7 +243,7 @@ function venueData(venue: Venue, data: Record<string, any>, current?: { thumbnai
     const fromOld = (field: 'locationMapUrl' | 'thumbnail', oldValue?: string) => !!oldValue && (data[field] ?? current?.[field]) === oldValue;
     const mapUrl = /^https?:\/\//i.test(venue.mapUrl || '') ? venue.mapUrl : '';
     if (!(data.locationMapUrl ?? current?.locationMapUrl) || fromOld('locationMapUrl', old?.mapUrl)) data.locationMapUrl = mapUrl;
-    if (!(data.thumbnail ?? current?.thumbnail) || fromOld('thumbnail', old?.photo)) { data.thumbnail = venue.photo || ''; data.coverFrame = venue.photo ? (venue.coverFrame || '') : ''; }
+    if (!(data.thumbnail ?? current?.thumbnail) || fromOld('thumbnail', old?.photo)) { data.thumbnail = venue.photo || ''; data.coverFrame = venue.photo ? (venue.coverFrame || '') : ''; if (data.shareFrame === undefined) data.shareFrame = ''; }
 }
 
 const parseJson = (text: string | null | undefined) => { try { return JSON.parse(text || '[]'); } catch { return []; } };
@@ -276,7 +279,7 @@ function eventCard(e: any, hidden: Set<string>, now = new Date(), at: Date | nul
         repeat: e.repeat || '', repeatUntil: e.repeatUntil ?? null, firstStartDate: e.startDate, firstEndDate: e.endDate ?? null,
         ...(repeats(e) ? { occurrence: when.key, dateChanged: hasOverrides(when.change), calledOff: when.calledOff } : {}),
         location: day.location, locationName: day.locationName, isOnline: day.isOnline,
-        thumbnail: e.thumbnail, coverFrame: e.coverFrame,
+        thumbnail: e.thumbnail, coverFrame: e.coverFrame, shareFrame: e.shareFrame ?? '',
         // The highlight card, for BIES events (the list shows them as cards).
         ...(hostListing?.isOfficial ? { cardImage: e.cardImage, cardFrame: e.cardFrame } : {}),
         ticketUrl: e.ticketUrl, bitcoinUrl: e.bitcoinUrl, priceLabel: e.priceLabel, priceSats: e.priceSats,
@@ -1197,6 +1200,8 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             }
         }
         frameNewCover(data, 'thumbnail', existing.thumbnail);
+        // Its link preview's framing belongs to the old cover too.
+        if (data.thumbnail !== undefined && data.thumbnail !== (existing.thumbnail ?? '') && data.shareFrame === undefined) data.shareFrame = '';
         const nostrPublish: string = data.nostrPublish || 'none';
         if (data.visibility !== undefined) data.isPublished = visibilityToPublished(data.visibility);
 
@@ -1256,6 +1261,8 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             return updated;
         });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
+        // Its link preview's picture goes when it stops being shared, or shows a cover it no longer has.
+        if (!visibilityToPublished(event.visibility) || (event.thumbnail ?? '') !== (existing.thumbnail ?? '')) await forgetCards(existing.id);
         if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
         // A lower number may be met already.
         if (data.minAttendees !== undefined) await confirmIfReached(event.id).catch(() => false);
@@ -1466,6 +1473,7 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
 
         await prisma.event.delete({ where: { id: req.params.id } });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
+        await forgetCards(existing.id); // its link preview's picture
 
         res.json({ message: 'Event deleted' });
     } catch (error) {

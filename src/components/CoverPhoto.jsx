@@ -23,8 +23,9 @@ const BACKDROP = {
  * @param {string} [frame] - its stored position, "x,y,w,h"
  * @param {string} [alt]
  * @param {string} [focus] - without a position, the CSS object-position to crop around
+ * @param {number} [dim] - how bright the blurred fill is (a shared event's card has it darker)
  */
-export default function CoverPhoto({ src, frame, alt = '', focus }) {
+export default function CoverPhoto({ src, frame, alt = '', focus, dim }) {
     const parsed = parseFrame(frame);
     const framed = !!parsed;
     const boxRef = useRef(null);
@@ -51,7 +52,7 @@ export default function CoverPhoto({ src, frame, alt = '', focus }) {
     const place = parsed && box?.width && box?.height && known ? placeFrame(parsed, known, box) : null;
     return (
         <span ref={boxRef} style={FILL}>
-            {place && leavesSpace(place, box) && <img src={url} alt="" aria-hidden="true" style={BACKDROP} />}
+            {place && leavesSpace(place, box) && <img src={url} alt="" aria-hidden="true" style={dim ? { ...BACKDROP, filter: `blur(20px) brightness(${dim})` } : BACKDROP} />}
             <img
                 ref={sized}
                 src={url}
