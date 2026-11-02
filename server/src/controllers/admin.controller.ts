@@ -25,8 +25,8 @@ import {
 import { BADGES } from '../services/badges.catalog';
 import { publishProfileUpdate } from '../services/nostr.service';
 import { nostrProfileFor, privacyOf } from '../services/profilePrivacy';
-import { publicNostrOf } from '../services/publicNostrProfile';
-import { publishHostedPublicProfile } from './publicNostr.controller';
+import { recordReleasedNip05 } from '../services/releasedNip05';
+import { followPublicProfile } from './publicNostr.controller';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
@@ -262,8 +262,10 @@ export async function verifyUser(req: Request, res: Response): Promise<void> {
  * DELETE /admin/users/:id/nip05
  * Take away a member's BIES address (name@buildinelsalvador.com): one that
  * passes for someone else, or that BIES won't carry. Other Nostr apps stop
- * showing it as verified once nostr.json stops answering for it, and the
- * name is free to claim again. The member can claim another.
+ * showing it as verified once nostr.json stops answering for it. The name
+ * stays taken away from everyone, the member too, until an admin deletes
+ * its row in released_nip05 (services/releasedNip05.ts). The member can
+ * claim another.
  */
 export async function removeUserNip05(req: Request, res: Response): Promise<void> {
     try {
@@ -271,7 +273,12 @@ export async function removeUserNip05(req: Request, res: Response): Promise<void
         if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
         if (!profile.nip05Name) { res.json({ id: req.params.id, nip05Name: null }); return; }
 
-        const updated = await prisma.profile.update({ where: { userId: req.params.id }, data: { nip05Name: null } });
+        const owner = await prisma.user.findUnique({ where: { id: req.params.id }, select: { nostrPubkey: true } });
+        const updated = await prisma.$transaction(async (tx) => {
+            const changed = await tx.profile.update({ where: { userId: req.params.id }, data: { nip05Name: null, nip05ClaimedAt: null } });
+            await recordReleasedNip05(tx, profile.nip05Name!, owner?.nostrPubkey ?? null, { blocked: true });
+            return changed;
+        });
         await prisma.auditLog.create({
             data: {
                 userId: req.user!.id,
@@ -280,7 +287,6 @@ export async function removeUserNip05(req: Request, res: Response): Promise<void
                 metadata: JSON.stringify({ nip05Name: profile.nip05Name }),
             },
         });
-        const owner = await prisma.user.findUnique({ where: { id: req.params.id }, select: { nostrPubkey: true } });
         await Promise.all([
             cache.del(cacheKey.profileDetail(req.params.id)),
             cache.del(cacheKey.profileDetail(profile.id)),
@@ -289,13 +295,11 @@ export async function removeUserNip05(req: Request, res: Response): Promise<void
         ]);
 
         // Their Nostr profiles follow, for keys BIES holds (a key on the
-        // member's device updates when they next save their profile).
+        // member's device updates when they next save their profile): the
+        // public one with the parts last published, if it follows changes.
         publishProfileUpdate(req.params.id, nostrProfileFor(updated, privacyOf(updated.privacy)))
             .catch((err) => console.error('[Nostr] Profile sync failed:', err));
-        if (publicNostrOf(updated.publicNostr).publishedAt) {
-            publishHostedPublicProfile(req.params.id)
-                .catch((err) => console.error('[Nostr] Public profile sync failed:', err instanceof Error ? err.message : err));
-        }
+        followPublicProfile(req.params.id);
 
         res.json({ id: req.params.id, nip05Name: null });
     } catch (error) {

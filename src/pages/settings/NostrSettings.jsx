@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { profilesApi, settingsApi, signerApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
 import { nostrService } from '../../services/nostrService';
-import { publishPublicProfile } from '../../services/publicNostrProfile';
+import { followUpPublicProfile, publishPublicProfile } from '../../services/publicNostrProfile';
 import { isNativePlatform } from '../../utils/platform';
 import { SettingsPage, SettingsGroup, SettingsRow, Switch } from '../../components/settings/SettingsUI';
 
@@ -173,6 +173,7 @@ function nameProblem(t, name, check) {
     if (GIVEN_AT_SIGNUP.test(name)) return t('nostrSettings.nameReserved');
     if (check?.name !== name) return '';
     if (check.reason === 'reserved') return t('nostrSettings.nameReserved');
+    if (check.reason === 'held') return t('nostrSettings.nameHeld');
     if (check.available === false) return t('nostrSettings.nameTaken');
     return '';
 }
@@ -216,15 +217,16 @@ function BiesAddress({ state, native, onSaved }) {
             // The member's own key: the app updates their profile on BIES's
             // relay and, if they published one, on public Nostr, so neither
             // keeps an address that no longer works (the server does both for
-            // keys it holds). One signature after the other, and not where
-            // each is an app switch (Amber).
+            // keys it holds), the public one with the parts they published.
+            // One signature after the other, and not where each is an app
+            // switch (Amber).
             if (!state.hosted && nostrSigner.canSignSilently) {
                 const privacy = await settingsApi.getPrivacy().catch(() => null);
                 const nip05 = next && privacy?.links !== 'ONLY_ME' ? `${next}@${DOMAIN}` : '';
                 await nostrService.updateProfileToBiesRelay({ nip05 })
                     .catch((err) => console.error('Relay profile sync failed (non-blocking):', err));
                 if (saved?.publicNostrStale) {
-                    await publishPublicProfile().catch((err) => console.error('Public profile sync failed (non-blocking):', err));
+                    await followUpPublicProfile().catch((err) => console.error('Public profile sync failed (non-blocking):', err));
                 }
             }
             setEditing(false);
@@ -233,8 +235,9 @@ function BiesAddress({ state, native, onSaved }) {
             setDone(next ? t('nostrSettings.claimed', { address: `${next}@${DOMAIN}` }) : t('nostrSettings.removed'));
             onSaved();
         } catch (err) {
+            const reason = err?.data?.reason;
             setError(err?.status === 409
-                ? (err.data?.reason === 'reserved' ? t('nostrSettings.nameReserved') : t('nostrSettings.nameTaken'))
+                ? t(reason === 'reserved' ? 'nostrSettings.nameReserved' : reason === 'held' ? 'nostrSettings.nameHeld' : 'nostrSettings.nameTaken')
                 : t('nostrSettings.saveFailed'));
         } finally {
             setSaving(false);
@@ -362,7 +365,10 @@ const PUBLISH_ERRORS = {
     relays_refused: 'nostrSettings.relaysRefused',
 };
 
-/** The switch, the ticked parts, a preview, and Publish. */
+/**
+ * The switch, the ticked parts, a preview, and Publish. Parts Settings →
+ * Privacy hides can't be ticked; nothing can be changed while publishing.
+ */
 function PublicProfile({ state, setState, reload }) {
     const { t, i18n } = useTranslation();
     const [busy, setBusy] = useState(false);
@@ -418,6 +424,7 @@ function PublicProfile({ state, setState, reload }) {
     const when = state.publishedAt
         ? new Date(state.publishedAt).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' })
         : null;
+    const hiddenParts = state.hiddenParts || [];
 
     return (
         <>
@@ -426,30 +433,44 @@ function PublicProfile({ state, setState, reload }) {
                     <Switch
                         checked={state.on}
                         onChange={(on) => change({ on })}
+                        disabled={busy}
                         label={t('nostrSettings.publicSwitch')}
                         testId="nostr-public-switch"
                     />
                 </SettingsRow>
-                {state.on && PARTS.map((part) => (
-                    <SettingsRow
-                        key={part}
-                        label={t(`nostrSettings.parts.${part}`)}
-                        desc={part === 'nip05' && !state.verified ? t('nostrSettings.parts.nip05None') : undefined}
-                    >
-                        <Switch
-                            checked={state.parts.includes(part)}
-                            onChange={(on) => togglePart(part, on)}
+                {state.on && PARTS.map((part) => {
+                    const hidden = hiddenParts.includes(part);
+                    return (
+                        <SettingsRow
+                            key={part}
                             label={t(`nostrSettings.parts.${part}`)}
-                            testId={`nostr-part-${part}`}
-                        />
-                    </SettingsRow>
-                ))}
+                            desc={hidden
+                                ? t('nostrSettings.parts.hiddenByPrivacy')
+                                : part === 'nip05' && !state.verified ? t('nostrSettings.parts.nip05None') : undefined}
+                            disabled={hidden}
+                        >
+                            <Switch
+                                checked={!hidden && state.parts.includes(part)}
+                                onChange={(on) => togglePart(part, on)}
+                                disabled={hidden || busy}
+                                label={t(`nostrSettings.parts.${part}`)}
+                                testId={`nostr-part-${part}`}
+                            />
+                        </SettingsRow>
+                    );
+                })}
             </SettingsGroup>
 
             {state.on && (
                 <SettingsGroup title={t('nostrSettings.previewTitle')} footer={t('nostrSettings.previewFooter')}>
                     <div className="set-pad">
-                        {state.next ? (
+                        {state.reachable === false ? (
+                            // Too few public relays answered: what's there now is unknown.
+                            <>
+                                <p className="ns-muted" role="status">{t('nostrSettings.couldNotCheck')}</p>
+                                <button type="button" className="btn btn-outline btn-sm ns-start" onClick={reload} disabled={busy}>{t('nostrSettings.retry')}</button>
+                            </>
+                        ) : state.next ? (
                             <>
                                 <p className="ns-preview-label">{t('nostrSettings.afterPublishing')}</p>
                                 <ProfileCard profile={state.next} />

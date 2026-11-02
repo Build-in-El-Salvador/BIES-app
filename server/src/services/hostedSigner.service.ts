@@ -147,7 +147,8 @@ const MAX_CHALLENGE_LENGTH = 256;
 
 export type SignRefusal = 'kind_not_allowed' | 'bad_time' | 'too_large' | 'bad_relay' | 'bad_upload_token';
 
-function normalizeRelayUrl(url: string): string | null {
+/** A relay address as one form (ws or wss, no credentials, query or fragment, no trailing slash), or null. */
+export function normalizeRelayUrl(url: string): string | null {
     try {
         const u = new URL(url);
         if (u.protocol !== 'wss:' && u.protocol !== 'ws:') return null;

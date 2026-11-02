@@ -1,10 +1,15 @@
 // nostr-tools is ESM-only (@noble/curves has no CJS build);
 // use dynamic import() so the compiled CJS output doesn't call require().
 import type { Event as NostrEvent, EventTemplate } from 'nostr-tools/pure';
+import type { Filter } from 'nostr-tools/filter';
 import { randomUUID } from 'crypto';
+import { promises as dns } from 'dns';
+import net from 'net';
 import { config } from '../config';
 import prisma from '../lib/prisma';
-import { signAsHostedUser } from './hostedSigner.service';
+import { normalizeRelayUrl, signAsHostedUser } from './hostedSigner.service';
+import { isBlockedIp } from '../utils/safeFetch';
+import { NIP05_DOMAIN } from './nip05';
 
 let _pool: InstanceType<Awaited<typeof import('nostr-tools/pool')>['SimplePool']> | null = null;
 async function getPool() {
@@ -388,32 +393,157 @@ const QUERY_WAIT_MS = 4000;
 
 // ─── A member's profile on public Nostr (services/publicNostrProfile.ts) ─────
 
-/**
- * The newest profile (kind 0) a key has on the public relays, read from
- * those only, never from BIES's relay, which holds BIES's own copy. Null
- * when none was found.
- */
-export async function fetchPublicProfile(pubkey: string): Promise<{ content: Record<string, unknown>; createdAt: number } | null> {
+// A read counts when this many relays answered it in full (EOSE): fewer, and
+// "no profile found" may only mean the relays didn't answer.
+const RELAYS_ENOUGH = 2;
+// The member's own relays (their NIP-65 list) read as well, at most.
+const MEMBER_RELAYS_READ = 5;
+const MEMBER_RELAYS_WAIT_MS = 3000;
+const PROFILE_READ_TTL_MS = 60_000;
+const DNS_WAIT_MS = 2000;
+
+/** What the relays answered, and how many of them answered in full (EOSE). */
+async function readRelays(urls: string[], filter: Filter, waitMs = QUERY_WAIT_MS): Promise<{ events: NostrEvent[]; answered: number }> {
     const pool = await getPool();
-    const events = await pool.querySync(publicPublishRelays(), { kinds: [0], authors: [pubkey] }, { maxWait: QUERY_WAIT_MS });
-    const newest = events
-        .filter((e) => e.pubkey === pubkey && e.kind === 0)
-        .sort((a, b) => b.created_at - a.created_at)[0];
-    if (!newest) return null;
+    const events = new Map<string, NostrEvent>();
+    const deadline = Date.now() + waitMs;
+    let answered = 0;
+    await Promise.all(urls.map(async (url) => {
+        let relay: Awaited<ReturnType<typeof pool.ensureRelay>>;
+        try {
+            relay = await pool.ensureRelay(url, { connectionTimeout: waitMs });
+        } catch {
+            return;
+        }
+        await new Promise<void>((resolve) => {
+            let done = false;
+            let sub: { close: (reason?: string) => void } | null = null;
+            const finish = (eose: boolean) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                if (eose) answered++;
+                try { sub?.close(); } catch { /* already closed */ }
+                resolve();
+            };
+            const timer = setTimeout(() => finish(false), Math.max(0, deadline - Date.now()));
+            try {
+                sub = relay.subscribe([filter], {
+                    onevent: (event: NostrEvent) => { events.set(event.id, event); },
+                    oneose: () => finish(true),
+                    onclose: () => finish(false),
+                    // The relay's own EOSE timeout would pass for an answer: ours comes first.
+                    eoseTimeout: waitMs + 60_000,
+                });
+            } catch {
+                finish(false);
+            }
+            // Answered (or failed) before subscribe() returned: close it now.
+            if (done) {
+                try { sub?.close(); } catch { /* already closed */ }
+            }
+        });
+    }));
+    return { events: [...events.values()], answered };
+}
+
+const newestOf = (events: NostrEvent[], pubkey: string, kind: number): NostrEvent | undefined =>
+    events.filter((e) => e.pubkey === pubkey && e.kind === kind).sort((a, b) => b.created_at - a.created_at)[0];
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<null>((resolve) => { timer = setTimeout(resolve, ms, null); });
+    return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+// BIES's own relays, and anything on its domain: they hold BIES's
+// members-only copy of the profile, never to be taken for the public one.
+const hostOf = (url: string) => { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } };
+function isBiesRelayHost(host: string): boolean {
+    const own = [config.nostrPublicRelay, config.nostrPrivateRelay, config.appPublicUrl, ...config.signer.authRelays].map(hostOf);
+    return own.includes(host) || host === NIP05_DOMAIN || host.endsWith(`.${NIP05_DOMAIN}`);
+}
+
+/**
+ * A relay address from a member's relay list that BIES may connect to:
+ * wss only, a host name (no IP address, no local names, none of BIES's),
+ * and none of its addresses private or reserved. Null otherwise.
+ */
+async function safePublicRelay(raw: unknown): Promise<string | null> {
+    if (typeof raw !== 'string' || raw.length > 300) return null;
+    const url = normalizeRelayUrl(raw);
+    if (!url?.startsWith('wss://')) return null;
+    const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (net.isIP(host) || !host.includes('.') || host === 'localhost' || isBiesRelayHost(host)
+        || /\.(localhost|local|internal|lan|home|arpa|test|invalid)$/.test(host)) return null;
     try {
-        const content = JSON.parse(newest.content);
-        return content && typeof content === 'object' && !Array.isArray(content)
-            ? { content, createdAt: newest.created_at }
-            : null;
+        const addresses = await withTimeout(dns.lookup(host, { all: true }), DNS_WAIT_MS);
+        if (!addresses?.length || addresses.some((a) => isBlockedIp(a.address))) return null;
     } catch {
         return null;
     }
+    return url;
+}
+
+/** The relays a member writes to (their newest NIP-65 list), as far as BIES may read them. */
+async function memberWriteRelays(list: NostrEvent | undefined, skip: string[]): Promise<string[]> {
+    if (!list) return [];
+    const wanted = list.tags
+        .filter((t) => t[0] === 'r' && typeof t[1] === 'string' && (t.length === 2 || t[2] === 'write'))
+        .map((t) => t[1])
+        .slice(0, 20);
+    const safe = await Promise.all(wanted.map(safePublicRelay));
+    return [...new Set(safe.filter((u): u is string => !!u && !skip.includes(u)))].slice(0, MEMBER_RELAYS_READ);
+}
+
+export type PublicProfileRead = {
+    /** The newest profile found (the content of its kind 0), or null when none was. */
+    found: { content: Record<string, unknown>; createdAt: number } | null;
+    /** Whether enough relays answered for "none found" to mean there's none. */
+    reachable: boolean;
+};
+
+// Each member's profile as last read, for a minute (a publish clears it).
+const profileReads = new Map<string, { at: number; read: PublicProfileRead }>();
+
+/**
+ * The newest profile (kind 0) a key has on public Nostr: from the public
+ * relays BIES publishes to and up to five of the member's own (their NIP-65
+ * list), never from BIES's relay, which holds BIES's own copy. Remembered
+ * for a minute when enough relays answered.
+ */
+export async function fetchPublicProfile(pubkey: string): Promise<PublicProfileRead> {
+    const now = Date.now();
+    const cached = profileReads.get(pubkey);
+    if (cached && now - cached.at < PROFILE_READ_TTL_MS) return cached.read;
+
+    const relays = publicPublishRelays().filter((url) => !isBiesRelayHost(hostOf(url)));
+    const first = await readRelays(relays, { kinds: [0, 10002], authors: [pubkey] });
+    const theirs = await memberWriteRelays(newestOf(first.events, pubkey, 10002), relays);
+    const second = theirs.length ? await readRelays(theirs, { kinds: [0], authors: [pubkey] }, MEMBER_RELAYS_WAIT_MS) : { events: [], answered: 0 };
+    if (theirs.length) (await getPool()).close(theirs);
+
+    const newest = newestOf([...first.events, ...second.events], pubkey, 0);
+    let found: PublicProfileRead['found'] = null;
+    if (newest) {
+        try {
+            const content = JSON.parse(newest.content);
+            if (content && typeof content === 'object' && !Array.isArray(content)) found = { content, createdAt: newest.created_at };
+        } catch { /* not a profile */ }
+    }
+    const read = { found, reachable: first.answered + second.answered >= RELAYS_ENOUGH };
+    if (read.reachable) {
+        for (const [key, entry] of profileReads) if (now - entry.at >= PROFILE_READ_TTL_MS) profileReads.delete(key);
+        profileReads.set(pubkey, { at: now, read });
+    }
+    return read;
 }
 
 /** Send a signed event to the public relays (not BIES's). How many took it. */
 export async function publishToPublicRelays(event: NostrEvent): Promise<number> {
     const pool = await getPool();
     const results = await Promise.allSettled(pool.publish(publicPublishRelays(), event));
+    if (event.kind === 0) profileReads.delete(event.pubkey);
     return results.filter((r) => r.status === 'fulfilled').length;
 }
 

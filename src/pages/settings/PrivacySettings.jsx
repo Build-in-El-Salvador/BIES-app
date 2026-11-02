@@ -5,6 +5,7 @@ import { profilesApi, settingsApi } from '../../services/api';
 import { nostrSigner } from '../../services/nostrSigner';
 import { nostrService } from '../../services/nostrService';
 import { nostrLinkFields } from '../../services/nostrProfileLinks';
+import { followUpPublicProfile } from '../../services/publicNostrProfile';
 import { SettingsPage, SettingsGroup, SettingsRow, SettingsSelect, Switch } from '../../components/settings/SettingsUI';
 
 // Who can see each part of a profile (server: services/profilePrivacy.ts).
@@ -51,13 +52,20 @@ const PrivacySettings = () => {
                 saved = await settingsApi.getPrivacy().catch(() => null);
             }
             waiting.current -= 1;
-            if (saved && waiting.current === 0) setPrivacy(saved);
+            const { publicNostrStale, ...shown } = saved || {};
+            if (saved && waiting.current === 0) setPrivacy(shown);
             // With a key on this device, the app updates the Nostr profile on
             // the BIES relay (the server does it for keys BIES holds).
             if (ok && changes.links !== undefined && nostrSigner.signsOnDevice) {
                 profilesApi.me()
                     .then((me) => nostrService.updateProfileToBiesRelay(nostrLinkFields(me, { links: changes.links })))
                     .catch((err) => console.error('Relay profile sync failed (non-blocking):', err));
+            }
+            // Something now hidden comes off a public profile they published
+            // (Settings → Nostr): the app does it for a key on this device.
+            // Not where each signature is an app switch (Amber).
+            if (ok && publicNostrStale && nostrSigner.canSignSilently) {
+                followUpPublicProfile().catch((err) => console.error('Public profile sync failed (non-blocking):', err));
             }
         });
     };

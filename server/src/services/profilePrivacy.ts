@@ -85,11 +85,12 @@ export function canSeeNetwork(privacy: Privacy, viewer: Viewer): boolean {
  * A profile (parsed, as the profile routes send it) as this viewer may see
  * it. `networkHidden` tells the app the follower lists are private.
  * `verified`: the member claimed a BIES address (services/nip05.ts), shown
- * to everyone, even when the address itself is in their hidden links.
+ * to everyone, even when the address itself is in their hidden links (when
+ * they claimed it is theirs alone).
  */
 export function profileForViewer<T extends Record<string, any>>(profile: T, viewer: Viewer): Record<string, any> {
     const privacy = privacyOf(profile.privacy);
-    const verified = isClaimedNip05(profile.nip05Name);
+    const verified = isClaimedNip05(profile);
     if (viewer === 'self') return { ...profile, privacy, verified };
 
     if (viewer === 'public') {
@@ -104,6 +105,7 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
     const out: Record<string, any> = { ...profile, verified };
     delete out.privacy;
     delete out.publicNostr;
+    delete out.nip05ClaimedAt;
     for (const key of ['location', 'links', 'details'] as const) {
         if (privacy[key] === 'ONLY_ME') Object.assign(out, HIDDEN_AS[key]);
     }

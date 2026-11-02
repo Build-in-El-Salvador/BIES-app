@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { cache, cacheKey } from '../services/redis.service';
 import { nostrProfileFor, privacyOf, PRIVACY_CHOICES } from '../services/profilePrivacy';
 import { publishProfileUpdate } from '../services/nostr.service';
+import { hiddenByPrivacy, publicNostrOf } from '../services/publicNostrProfile';
+import { followPublicProfile, hideFromPublicProfile, isFollowing } from './publicNostr.controller';
 
 export const updateNotificationSettingsSchema = z.object({
     emailNotifications: z.boolean().optional(),
@@ -438,11 +440,12 @@ async function savePrivacy(req: Request, res: Response): Promise<void> {
         where: { userId },
         select: {
             id: true, privacy: true, name: true, bio: true, avatar: true, banner: true,
-            website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true,
+            website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true, publicNostr: true,
         },
     });
     if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
 
+    const before = privacyOf(profile.privacy);
     const privacy = privacyOf(profile.privacy);
     for (const key of Object.keys(PRIVACY_CHOICES) as (keyof typeof PRIVACY_CHOICES)[]) {
         if (body[key] !== undefined) (privacy as Record<string, string>)[key] = body[key]!;
@@ -460,7 +463,7 @@ async function savePrivacy(req: Request, res: Response): Promise<void> {
         });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { nostrPubkey: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { nostrPubkey: true, encryptedPrivkey: true } });
     await Promise.all([
         cache.del(cacheKey.profileDetail(userId)),
         cache.del(cacheKey.profileDetail(profile.id)),
@@ -478,5 +481,18 @@ async function savePrivacy(req: Request, res: Response): Promise<void> {
             .catch((err) => console.error('[Nostr] Profile sync failed:', err));
     }
 
-    res.json(await privacySettings(userId));
+    // Links or bio hidden: a public Nostr profile that follows changes
+    // (Settings → Nostr) loses what BIES published for them. BIES does it
+    // for keys it holds; for a key on the member's device the answer says
+    // so (`publicNostrStale`) and the app does it. Shown again, they come
+    // back only with the member's next Publish.
+    const newlyHidden = hiddenByPrivacy(privacy).filter((p) => !hiddenByPrivacy(before).includes(p));
+    let publicNostrStale = false;
+    if (newlyHidden.length && isFollowing(publicNostrOf(profile.publicNostr))
+        && await hideFromPublicProfile(userId, newlyHidden)) {
+        if (user?.encryptedPrivkey) followPublicProfile(userId);
+        else publicNostrStale = true;
+    }
+
+    res.json({ ...await privacySettings(userId), ...(publicNostrStale ? { publicNostrStale } : {}) });
 }

@@ -10,7 +10,7 @@ import { nostrLinkFields } from '../services/nostrProfileLinks';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { nostrService } from '../services/nostrService';
-import { keyIsMembers, publishPublicProfile } from '../services/publicNostrProfile';
+import { followUpPublicProfile, keyIsMembers } from '../services/publicNostrProfile';
 import { isNativePlatform } from '../utils/platform';
 import { Link, useNavigate } from 'react-router-dom';
 import NostrFeed from '../components/NostrFeed';
@@ -315,9 +315,10 @@ const ProfileEdit = () => {
                 }
                 // A public profile the member published (Settings → Nostr on
                 // the website) follows when something on it changed, from
-                // the app too. Not where each signature is an app switch (Amber).
+                // the app too, with the parts they published. Not where each
+                // signature is an app switch (Amber).
                 if (saved?.publicNostrStale && nostrSigner.canSignSilently) {
-                    publishPublicProfile()
+                    followUpPublicProfile()
                         .catch((err) => console.error('Public profile sync failed (non-blocking):', err));
                 }
             }
