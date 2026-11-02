@@ -830,7 +830,8 @@
         "date_not_found": "Esa fecha ya no es de este evento. Abre el evento de nuevo.",
         "date_not_next": "Solo su próxima fecha puede cambiar las siguientes.",
         "date_out_of_order": "Deja esa fecha después de la anterior y antes de la siguiente.",
-        "date_end_before_start": "El final es antes del inicio."
+        "date_end_before_start": "El final es antes del inicio.",
+        "too_many_repeating": "Puedes tener hasta {{count}} eventos que se repiten a la vez. Elimina uno que ya no necesites para agregar otro."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
       "card": "Tarjeta destacada",
@@ -874,7 +875,8 @@
         "3": "tercer",
         "4": "cuarto"
       },
-      "next": "Próximo"
+      "next": "Próximo",
+      "ended": "Terminó"
     },
     "dates": {
       "changedForDate": "Cambia en esta fecha",

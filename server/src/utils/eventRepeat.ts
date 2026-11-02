@@ -59,8 +59,12 @@ const WEEK = 7 * DAY;
 const SV_OFFSET = 6 * HOUR;
 /** An event with no end counts as on for 6 hours after it starts (as the event list has it). */
 export const SIX_HOURS = 6 * HOUR;
-/** The longest a repeating event's dates are apart: its dates are never longer than this. */
-export const LONGEST_GAP = 31 * DAY;
+/**
+ * Longer than a repeating event's dates are ever apart (a month's first
+ * Saturday to the next month's can be five weeks: 35 days), with a day to
+ * spare, and longer than any one date lasts.
+ */
+export const LONGEST_GAP = 36 * DAY;
 /**
  * How long after its last day a series may still be on: its last date may be
  * moved to just before the one after it would be, and last up to a month.

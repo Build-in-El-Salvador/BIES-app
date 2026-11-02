@@ -38,7 +38,7 @@ import profileRoutes from '../routes/profile.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { setFlags } from '../services/featureFlags.service';
-import { MAX_INVITES } from '../services/eventInvites.service';
+import { MAX_INVITES, MAX_INVITES_PER_DAY } from '../services/eventInvites.service';
 
 let server: http.Server;
 let base: string;
@@ -187,9 +187,9 @@ describe('inviting from its page', () => {
         const id = (await propose(host)).body.id;
         expect((await invite(other, id, [guest.id])).status).toBe(403);
         expect(await statusOf(id, guest.id)).toBeNull();
-        // An admin's invite is in the proposer's name.
+        // An admin's invite is in the admin's name: the proposer didn't send it.
         expect((await invite(admin, id, [guest.id])).body.invited).toBe(1);
-        expect((await invites(guest.id, id))[0].title).toMatch(/^Member \d+ invited you to/);
+        expect((await invites(guest.id, id))[0].title).toMatch(/^Admin invited you to/);
 
         const usual = await call('POST', '/api/events', { token: host.token, body: { title: 'Talk', description: 'Talk.', startDate: inDays(5) } });
         expect((await invite(host, usual.body.id, [guest.id])).body.reason).toBe('not_a_proposal');
@@ -388,5 +388,85 @@ describe('the single invite', () => {
         expect((await call('POST', `/api/events/${id}/invite`, { token: host.token, body: { userId: guest.id } })).status).toBe(201);
         expect((await invites(guest.id, id))[0].title).toBe('Edwin Rivas invited you to "Sunday hike"');
         expect((await call('POST', `/api/events/${id}/invite`, { token: host.token, body: { userId: guest.id } })).status).toBe(409);
+    });
+});
+
+describe('limits on invites (launch review)', () => {
+    it('tells a member about an invite to a meetup once, however often they are invited again', async () => {
+        const host = await member();
+        const ana = await member('Ana');
+        const id = (await propose(host)).body.id;
+        for (let round = 0; round < 4; round++) {
+            expect((await invite(host, id, [ana.id])).body.invited).toBe(1);
+            expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { inviteeIds: [] } })).status).toBe(200);
+        }
+        expect(await invites(ana.id, id)).toHaveLength(1);
+    });
+
+    it('keeps to 50 waiting when invites arrive at once', async () => {
+        const host = await member();
+        const id = (await propose(host)).body.id;
+        const batches = await Promise.all(Array.from({ length: 5 }, () => people(15)));
+        await Promise.all(batches.map((ids) => invite(host, id, ids)));
+        expect(await prisma.eventAttendee.count({ where: { eventId: id, status: 'INVITED' } })).toBeLessThanOrEqual(MAX_INVITES);
+    });
+
+    it('caps how many members one member invites in a day, across meetups', async () => {
+        const host = await member();
+        let sent = 0;
+        let refused: { status: number; body: any } | null = null;
+        for (let i = 0; i < 4 && !refused; i++) {
+            const id = (await propose(host)).body.id;
+            const res = await invite(host, id, await people(40));
+            if (res.status === 200) sent += res.body.invited;
+            else refused = res;
+        }
+        expect(sent).toBeLessThanOrEqual(MAX_INVITES_PER_DAY);
+        expect(refused?.status).toBe(400);
+        expect(refused?.body.reason).toBe('too_many_today');
+    });
+
+    it("an edit form opened before an invite was sent doesn't take it back", async () => {
+        const host = await member();
+        const [a, b] = [await member(), await member()];
+        const id = (await propose(host, { inviteeIds: [a.id] })).body.id;
+        // The form opened showing a; meanwhile b is invited from the page.
+        await invite(host, id, [b.id]);
+        const res = await call('PUT', `/api/events/${id}`, { token: host.token, body: { inviteeIds: [a.id], inviteeIdsShown: [a.id] } });
+        expect(res.status).toBe(200);
+        expect(await statusOf(id, b.id)).toBe('INVITED');
+    });
+
+    it("an admin's invite is in the admin's name", async () => {
+        const host = await member('Pat Proposer');
+        const admin = await member('Ada Admin', true);
+        const guest = await member();
+        const id = (await propose(host)).body.id;
+        expect((await invite(admin, id, [guest.id])).body.invited).toBe(1);
+        expect((await invites(guest.id, id))[0].title).toMatch(/^Ada Admin invited you/);
+    });
+
+    it("Can't make it closes the invite, and it isn't sent again", async () => {
+        const host = await member();
+        const guest = await member();
+        const id = (await propose(host, { inviteeIds: [guest.id] })).body.id;
+        expect((await call('POST', `/api/events/${id}/rsvp`, { token: guest.token, body: { status: 'NOT_GOING' } })).status).toBe(200);
+        expect(await statusOf(id, guest.id)).toBe('NOT_GOING');
+        expect((await invite(host, id, [guest.id])).body.invited).toBe(0);
+    });
+
+    it("invites from a host in a block, or to a called-off meetup, leave 'invited to'", async () => {
+        const host = await member();
+        const guest = await member();
+        const id = (await propose(host, { inviteeIds: [guest.id] })).body.id;
+        const attending = async () => (await call('GET', '/api/events/attending', { token: guest.token })).body.data.map((e: { id: string }) => e.id);
+        expect(await attending()).toContain(id);
+        await call('POST', `/api/events/${id}/call-off`, { token: host.token });
+        expect(await attending()).not.toContain(id);
+
+        const id2 = (await propose(host, { inviteeIds: [guest.id] })).body.id;
+        expect(await attending()).toContain(id2);
+        await prisma.block.create({ data: { blockerId: guest.id, blockedId: host.id } });
+        expect(await attending()).not.toContain(id2);
     });
 });
