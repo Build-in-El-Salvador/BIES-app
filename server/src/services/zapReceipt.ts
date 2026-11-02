@@ -22,7 +22,13 @@ import { cache } from './redis.service';
 import { safeGetJson } from '../utils/safeFetch';
 
 const LNURL_CACHE_TTL = 3600; // 1h
+// An address whose lookup failed isn't looked up again for this long.
+const LNURL_FAILURE_TTL = 300; // 5 min
 const LNURL_TIMEOUT_MS = 8000;
+// Lookups to members' Lightning providers at once; more wait their turn.
+const LNURL_MAX_CONCURRENT = 4;
+// The longest lnurl1… taken (LUD-01 puts no limit on bech32's usual 90).
+const LNURL_MAX_LENGTH = 2000;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,33 +63,90 @@ export interface VerifiedZap {
 // ─── LNURL metadata (cached) ─────────────────────────────────────────────────
 
 /**
- * Fetch and cache the LNURL-pay metadata for a lud16 address. The
- * `nostrPubkey` field is the trust anchor for receipt verification.
+ * Where a member's Lightning address is looked up: a name@domain address
+ * (LUD-16) or a bech32 lnurl1… (LUD-01), which is an https URL. null for
+ * anything else. Either way it is fetched through safeGetJson.
+ */
+export async function lnurlPayUrl(lightningAddress: string): Promise<string | null> {
+    const address = (lightningAddress || '').trim();
+    const match = /^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i.exec(address);
+    if (match) {
+        const [, name, domain] = match;
+        return `https://${domain}/.well-known/lnurlp/${encodeURIComponent(name)}`;
+    }
+
+    const lnurl = address.replace(/^lightning:/i, '');
+    if (!/^lnurl1[02-9ac-hj-np-z]+$/i.test(lnurl) || lnurl.length > LNURL_MAX_LENGTH) return null;
+    try {
+        const { bech32 } = await import('@scure/base');
+        const { prefix, words } = bech32.decode(lnurl.toLowerCase() as `lnurl1${string}`, LNURL_MAX_LENGTH);
+        if (prefix !== 'lnurl') return null;
+        const url = new URL(new TextDecoder('utf-8', { fatal: true }).decode(bech32.fromWords(words)));
+        if (url.protocol !== 'https:' || url.username || url.password) return null;
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
+
+// One lookup per address at a time (callers asking meanwhile share it), and
+// at most LNURL_MAX_CONCURRENT addresses at once.
+const lookupsInFlight = new Map<string, Promise<LnurlPayMetadata | null>>();
+let lookupsRunning = 0;
+const waitingForLookup: Array<() => void> = [];
+
+async function inLookupSlot<T>(lookup: () => Promise<T>): Promise<T> {
+    while (lookupsRunning >= LNURL_MAX_CONCURRENT) {
+        await new Promise<void>((resolve) => waitingForLookup.push(resolve));
+    }
+    lookupsRunning++;
+    try {
+        return await lookup();
+    } finally {
+        lookupsRunning--;
+        waitingForLookup.shift()?.();
+    }
+}
+
+/**
+ * Fetch and cache the LNURL-pay metadata for a member's Lightning address
+ * (lnurlPayUrl). The `nostrPubkey` field is the trust anchor for receipt
+ * verification. A lookup that fails is remembered for LNURL_FAILURE_TTL.
  */
 export async function getLnurlPayMetadata(
     lightningAddress: string
 ): Promise<LnurlPayMetadata | null> {
-    const match = /^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i.exec(
-        (lightningAddress || '').trim()
-    );
-    if (!match) return null;
-    const [, name, domain] = match;
+    const url = await lnurlPayUrl(lightningAddress);
+    if (!url) return null;
 
-    const cKey = `lnurlp:${name.toLowerCase()}@${domain.toLowerCase()}`;
+    // name@domain keeps the key it always had, so what's cached still counts.
+    const address = (lightningAddress || '').trim();
+    const cKey = address.includes('@') ? `lnurlp:${address.toLowerCase()}` : `lnurlp:${url}`;
     const cached = await cache.getJson<LnurlPayMetadata>(cKey);
     if (cached) return cached;
+    if (await cache.getJson<boolean>(`${cKey}:failed`)) return null;
 
+    let lookup = lookupsInFlight.get(cKey);
+    if (!lookup) {
+        lookup = inLookupSlot(() => fetchLnurlPayMetadata(url)).then(async (meta) => {
+            if (meta) await cache.setJson(cKey, meta, LNURL_CACHE_TTL);
+            else await cache.setJson(`${cKey}:failed`, true, LNURL_FAILURE_TTL);
+            return meta;
+        }).catch(() => null).finally(() => lookupsInFlight.delete(cKey));
+        lookupsInFlight.set(cKey, lookup);
+    }
+    return lookup;
+}
+
+async function fetchLnurlPayMetadata(url: string): Promise<LnurlPayMetadata | null> {
     try {
-        // SSRF-hardened: `domain` comes from a user-controlled lightningAddress,
+        // SSRF-hardened: the URL comes from a member's own Lightning address,
         // so this fetch validates every resolved IP against private/reserved
         // ranges and pins it to the socket (see safeGetJson). https-only.
-        const data: any = await safeGetJson(
-            `https://${domain}/.well-known/lnurlp/${encodeURIComponent(name)}`,
-            LNURL_TIMEOUT_MS
-        );
+        const data: any = await safeGetJson(url, LNURL_TIMEOUT_MS);
         if (!data?.callback) return null;
 
-        const meta: LnurlPayMetadata = {
+        return {
             callback: String(data.callback),
             allowsNostr: Boolean(data.allowsNostr),
             nostrPubkey:
@@ -93,8 +156,6 @@ export async function getLnurlPayMetadata(
             minSendable: Number(data.minSendable) || 1000,
             maxSendable: Number(data.maxSendable) || 100_000_000_000,
         };
-        await cache.setJson(cKey, meta, LNURL_CACHE_TTL);
-        return meta;
     } catch {
         return null;
     }
