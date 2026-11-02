@@ -10,8 +10,12 @@ import Avatar from './Avatar';
  *   value: Array<{ name: string, userId: string, avatar?: string }>
  *   onChange: (newList) => void
  *   placeholder?: string
+ *   taken?: { [userId]: label } members shown with that label instead, who
+ *     can't be picked ("You", "Invited")
+ *   inline?: results in the flow under the field, not floating over what's
+ *     below (in a sheet, which would clip them)
  */
-const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES members by name...' }) => {
+const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES members by name...', taken = {}, inline = false }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -54,8 +58,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
     const isSelected = (userId) => value.some(g => g.userId === userId);
 
     const handleAdd = (profile) => {
-        if (isSelected(profile.userId || profile.user?.id)) return;
         const userId = profile.userId || profile.user?.id || profile.id;
+        if (isSelected(userId) || taken[userId]) return;
         const name = profile.name || profile.user?.profile?.name || 'Unknown';
         const avatar = profile.avatar || profile.user?.profile?.avatar || '';
         onChange([...value, { name, userId, avatar }]);
@@ -114,20 +118,21 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
 
             {/* Dropdown results */}
             {open && (
-                <div ref={dropdownRef} className="results-dropdown">
+                <div ref={dropdownRef} className={`results-dropdown${inline ? ' inline' : ''}`}>
                     {results.map(profile => {
                         const userId = profile.userId || profile.user?.id || profile.id;
                         const name = profile.name || 'Unknown';
                         const avatar = profile.avatar || '';
                         const company = profile.company || profile.user?.profile?.company || '';
                         const selected = isSelected(userId);
+                        const takenLabel = taken[userId];
                         return (
                             <button
                                 key={userId}
                                 type="button"
-                                className={`result-item ${selected ? 'selected' : ''}`}
+                                className={`result-item ${selected || takenLabel ? 'selected' : ''}`}
                                 onClick={() => handleAdd(profile)}
-                                disabled={selected}
+                                disabled={selected || !!takenLabel}
                             >
                                 <div className="result-avatar">
                                     <Avatar src={avatar} alt={name} size={32} fallback={<span>{(name || '?')[0].toUpperCase()}</span>} />
@@ -136,7 +141,9 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                                     <span className="result-name">{name}</span>
                                     {company && <span className="result-company">{company}</span>}
                                 </div>
-                                {selected ? (
+                                {takenLabel ? (
+                                    <span className="result-taken">{takenLabel}</span>
+                                ) : selected ? (
                                     <span className="result-added">Added</span>
                                 ) : (
                                     <UserPlus size={14} className="result-add-icon" />
@@ -216,7 +223,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     align-items: center;
                 }
 
-                .search-icon {
+                /* The icon is lucide's own element, out of reach of a plain scoped class. */
+                .search-wrap :global(.search-icon) {
                     position: absolute;
                     left: 10px;
                     color: var(--color-gray-400);
@@ -260,6 +268,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     max-height: 240px;
                     overflow-y: auto;
                 }
+                .results-dropdown.inline { position: static; margin-top: 4px; box-shadow: none; }
 
                 .result-item {
                     display: flex;
@@ -303,6 +312,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                 .result-company { font-size: 0.75rem; color: var(--color-gray-500); }
 
                 .result-added { font-size: 0.75rem; color: #16a34a; font-weight: 600; }
+                .result-taken { font-size: 0.75rem; color: var(--color-gray-500); font-weight: 600; }
                 .result-add-icon { color: var(--color-secondary); flex-shrink: 0; }
             `}</style>
         </div>

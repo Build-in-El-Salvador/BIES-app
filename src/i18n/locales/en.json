@@ -848,13 +848,13 @@
       "needs_one": "needs {{count}} more",
       "needs_other": "needs {{count}} more",
       "imIn": "I'm in",
+      "cantMakeIt": "Can't make it",
       "in": "In",
       "youreIn": "You're in",
       "you": "You",
       "areYouIn": "Are you in?",
       "yours": "Your meetup",
       "youProposed": "You proposed it",
-      "invite": "Invite people",
       "joinClosed": "Too late to join",
       "goesAheadWhen_one": "It goes ahead when {{count}} more joins",
       "goesAheadWhen_other": "It goes ahead when {{count}} more join",
@@ -887,8 +887,21 @@
         "called_off": "This meetup was called off.",
         "full": "It's full.",
         "proposer_stays": "You proposed it, so you're in. To cancel it, use Call it off in the ⋯ menu.",
-        "generic": "Couldn't do that. Try again."
-      }
+        "generic": "Couldn't do that. Try again.",
+        "too_many_invites": "A meetup can have up to {{count}} members invited.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
+        "started": "It has started already."
+      },
+      "inviteMembers": "Invite members",
+      "inviteHint": "They get a notification. Only you see who you invited.",
+      "sendInvites": "Send invites",
+      "invitesSent_one": "Invite sent.",
+      "invitesSent_other": "{{count}} invites sent.",
+      "invitesNone": "They're invited already, or can't be invited.",
+      "invitedLabel": "Invited",
+      "inLabel": "In",
+      "invitedYou": "{{name}} invited you",
+      "invitedYouAsk": "{{name}} invited you. Are you in?"
     },
     "propose": {
       "newTitle": "Propose a meetup",
@@ -949,14 +962,21 @@
         "venue_not_found": "That business isn't on BIES any more.",
         "too_many_proposals": "You have {{count}} proposed meetups open. Wait until one is on or called off, or delete one.",
         "start_invalid": "Pick when it starts.",
-        "end_invalid": "Pick when it ends."
+        "end_invalid": "Pick when it ends.",
+        "too_many_invites": "You can invite up to {{count}} members to a meetup.",
+        "too_many_today": "You can invite up to {{count}} members a day. Try again tomorrow.",
+        "called_off": "It's too late to invite anyone: nobody can join any more.",
+        "started": "It has started, so it's too late to invite anyone."
       },
       "doneTitle": "Your meetup is posted",
       "doneHint": "Members see it in Events under Proposed by members, and can say they're in.",
       "addPlaceTitle": "Add {{name}} to Businesses?",
       "addPlaceHint": "Add it so members can find it. Your meetup will link to its page.",
       "addPlace": "Add it to Businesses",
-      "notNow": "No thanks"
+      "notNow": "No thanks",
+      "invite": "Invite members",
+      "inviteHint": "They get a notification. Only you see who you invited.",
+      "invitePlaceholder": "Search members by name"
     }
   },
   "projectDetails": {

@@ -511,6 +511,8 @@ export const eventsApi = {
     callOff: (id) => post(`/events/${id}/call-off`, {}),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
+    // A proposed meetup's proposer inviting members → { invited, skipped }
+    inviteMembers: (id, userIds) => post(`/events/${id}/invites`, { userIds }),
 
     importUrl: (url) => post('/events/import-url', { url }),
 

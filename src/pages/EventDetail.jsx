@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
-    Flag, UserMinus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban,
+    Flag, UserMinus, UserPlus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,7 @@ import { openExternal } from '../utils/openExternal';
 import { publicUrl } from '../utils/publicUrl';
 import { isNativePlatform } from '../utils/platform';
 import { isPlaceholderName } from '../utils/profileComplete';
-import { bothTicketLinks, fullDay, hostOf, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
+import { bothTicketLinks, firstNameOf, fullDay, hostOf, invitesOpen, listingPath, partnerPath, proposalNeeds, timeRange, whenShort } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import CoverPhoto from '../components/CoverPhoto';
 import BackButton from '../components/BackButton';
@@ -23,6 +23,8 @@ import TicketPurchaseModal from '../components/TicketPurchaseModal';
 import ModerationSheet from '../components/moderation/ModerationSheet';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { BiesTag, PriceLine, TicketButton, namesText } from '../components/events/EventBits';
+import InvitePill from '../components/events/InvitePill';
+import InviteSheet from '../components/events/InviteSheet';
 import biesLogo from '../assets/logo-icon.svg';
 import '../components/moderation/Moderation.css';
 
@@ -33,6 +35,8 @@ import '../components/moderation/Moderation.css';
  * at the bottom; a free event with no ticket link has "I'm going" there.
  * A meetup a member proposed shows how many are in of how many it needs and
  * by when, with "I'm in" at the bottom, then "It's on" (or "Called off").
+ * Its proposer can invite members (the ⋯ menu); a member invited sees
+ * "Edwin invited you" until they answer. Only the proposer sees who's invited.
  * Where it is can be a business or farm on BIES: its card links to its page.
  * Signed out, the route shows the shared preview instead (SharePreview).
  */
@@ -85,7 +89,7 @@ const EventDetail = () => {
     const [busy, setBusy] = useState(false);
     const [copied, setCopied] = useState(false);
     const [menu, setMenu] = useState(false);
-    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff'
+    const [sheet, setSheet] = useState(null); // 'delete' | 'callOff' | 'invite'
     const [notice, setNotice] = useState('');
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
@@ -164,6 +168,20 @@ const EventDetail = () => {
             setBusy(false);
         }
     };
+    // An invite to a meetup: "Can't make it". The answer stays, so the
+    // invite is closed and they aren't invited to it again.
+    const decline = async () => {
+        setBusy(true);
+        setNotice('');
+        try {
+            await eventsApi.rsvp(event.id, 'NOT_GOING');
+            await load();
+        } catch (err) {
+            setNotice(t(`events.proposals.errors.${err?.data?.reason}`, { defaultValue: t('events.proposals.errors.generic') }));
+        } finally {
+            setBusy(false);
+        }
+    };
     const share = async () => {
         const url = publicUrl(`/events/${event.id}`);
         try {
@@ -212,6 +230,8 @@ const EventDetail = () => {
     const venue = event.venueListing || null;
     const mine = !!user && event.hostId === user.id;
     const closed = proposed && !!event.decideBy && new Date(event.decideBy).getTime() < Date.now();
+    // Invited and not answered (nor tapped here yet): who invited me.
+    const invitedBy = going === null && !isGoing && stage !== 'calledOff' ? event.myInvite?.by || null : null;
     // "You and Edwin Rivas are in": named as many as are shown.
     const inList = [...(isGoing ? [t('events.proposals.you')] : []), ...goingPeople.map((p) => p.profile?.name).filter((n) => n && !isPlaceholderName(n))];
     const inLine = inList.length === 1 && isGoing ? t('events.proposals.firstIn')
@@ -255,6 +275,11 @@ const EventDetail = () => {
                                         <Edit3 size={16} /> {t('events.detail.edit')}
                                     </button>
                                 )}
+                                {mine && invitesOpen(event) && (
+                                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('invite'); }}>
+                                        <UserPlus size={16} /> {t('events.proposals.inviteMembers')}
+                                    </button>
+                                )}
                                 {event.canDelete && (stage === 'proposed' || stage === 'on') && !started && (
                                     <button type="button" role="menuitem" onClick={() => { closeMenu(); setSheet('callOff'); }}>
                                         <Ban size={16} /> {t('events.proposals.callOff')}
@@ -294,7 +319,9 @@ const EventDetail = () => {
                         <span><b>{t('events.proposals.calledOff')}</b>{byProposer ? t('events.proposals.calledOffByHost') : t('events.proposals.calledOffHint', { when: whenShort(event.decideBy, lang) })}</span>
                     </div>
                 )}
-                <div>
+                <div className="ev-head">
+                    {/* Once it's on, there's no "Are you in?" to say it by. */}
+                    {invitedBy && !proposed && <InvitePill by={invitedBy} />}
                     {stage ? <p className="ev-kind">{t('events.proposals.kind')}</p> : kind && <p className="ev-kind">{kind}</p>}
                     <h1 className="ev-title">{event.title}</h1>
                 </div>
@@ -462,15 +489,38 @@ const EventDetail = () => {
             <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
                 {proposed ? (
                     <>
-                        <span className="ev-bar-text">
-                            <b>{mine ? t('events.proposals.youProposed') : isGoing ? t('events.proposals.youreIn') : closed ? t('events.proposals.joinClosed') : t('events.proposals.areYouIn')}</b>
-                            <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                        <span className="ev-bar-who">
+                            {invitedBy && !closed && (
+                                <span className="ev-bar-face" aria-hidden="true">
+                                    <Avatar src={invitedBy.avatar} size={36} fallback={<span className="ev-bar-initial">{(firstNameOf(invitedBy.name) || '?')[0].toUpperCase()}</span>} />
+                                </span>
+                            )}
+                            <span className="ev-bar-text">
+                                <b>
+                                    {mine ? t('events.proposals.youProposed') : isGoing ? t('events.proposals.youreIn') : closed ? t('events.proposals.joinClosed')
+                                        : invitedBy ? t('events.proposals.invitedYouAsk', { name: firstNameOf(invitedBy.name) || t('directory.ownership.aMember') })
+                                            : t('events.proposals.areYouIn')}
+                                </b>
+                                <small>{t('events.proposals.goesAheadWhen', { count: needs })}</small>
+                                {invitedBy && !closed && (
+                                    <button type="button" className="ev-decline" onClick={decline} disabled={busy} data-testid="invite-decline">
+                                        {t('events.proposals.cantMakeIt')}
+                                    </button>
+                                )}
+                            </span>
                         </span>
                         {mine ? (
-                            // Whoever proposed it is in already: they bring people.
-                            <button type="button" className="ev-in on" onClick={share}>
-                                <Share size={16} aria-hidden="true" /> {t('events.proposals.invite')}
-                            </button>
+                            // Whoever proposed it is in already: they bring people, by
+                            // invite while it can still take them, else a shared link.
+                            invitesOpen(event) ? (
+                                <button type="button" className="ev-in on" onClick={() => setSheet('invite')}>
+                                    <UserPlus size={16} aria-hidden="true" /> {t('events.proposals.inviteMembers')}
+                                </button>
+                            ) : (
+                                <button type="button" className="ev-in on" onClick={share}>
+                                    <Share size={16} aria-hidden="true" /> {t('events.detail.share')}
+                                </button>
+                            )
                         ) : (
                             <button type="button" className={`ev-in${isGoing ? ' on' : ''}`} aria-pressed={isGoing} disabled={busy || !isFull || (closed && !isGoing)} onClick={() => rsvp(!isGoing)}>
                                 {isGoing && <Check size={16} aria-hidden="true" />} {isGoing ? t('events.proposals.in') : t('events.proposals.imIn')}
@@ -511,6 +561,18 @@ const EventDetail = () => {
                         </button>
                     </div>
                 </ModerationSheet>
+            )}
+            {sheet === 'invite' && (
+                <InviteSheet
+                    event={event}
+                    me={user?.id}
+                    onClose={() => setSheet(null)}
+                    onSent={(count) => {
+                        setSheet(null);
+                        setNotice(count ? t('events.proposals.invitesSent', { count }) : t('events.proposals.invitesNone'));
+                        load();
+                    }}
+                />
             )}
             {sheet === 'delete' && (
                 <ModerationSheet title={t('events.detail.delete')} onClose={() => setSheet(null)}>
@@ -559,9 +621,17 @@ const EventDetail = () => {
                 .ev-venue-text b { font-family: var(--font-display); font-size: 1.2rem; line-height: 1.1; color: var(--color-gray-900); }
                 .ev-venue-text span { font-size: 0.82rem; color: var(--color-gray-500); }
                 .ev-not-bies { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--color-gray-500); }
+                .ev-head { display: flex; flex-direction: column; gap: 8px; }
+                .ev-head .ev-kind { margin-bottom: -4px; }
+                .ev-bar-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+                .ev-bar-face { width: 36px; height: 36px; border-radius: 50%; overflow: hidden; flex: none; background: var(--color-orange-tint); border: 1px solid rgba(255, 91, 0, 0.3); box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+                .ev-bar-face :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+                .ev-bar-initial { font-size: 0.85rem; font-weight: 700; color: var(--color-orange-text); }
                 .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
                 .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
+                .ev-decline { align-self: flex-start; margin-top: 2px; padding: 4px 0; min-height: 0; border: 0; background: none; font-size: 0.82rem; font-weight: 600; color: var(--color-primary); cursor: pointer; }
+                .ev-decline:disabled { opacity: 0.6; }
                 .ev-in {
                     flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 24px; border-radius: var(--radius-full); cursor: pointer;
                     border: 1.5px solid var(--color-primary); background: var(--color-primary); color: #FFFFFF; font-size: 0.95rem; font-weight: 700;

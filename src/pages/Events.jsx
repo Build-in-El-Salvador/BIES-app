@@ -239,6 +239,8 @@ const Events = () => {
                                         busy={!!busy[e.id]}
                                         mine={!!user && e.hostId === user.id}
                                         closed={closed(e)}
+                                        // Until they tap: then it's their answer (once in, the server drops the invite).
+                                        invite={e.id in going ? null : e.myInvite}
                                     />
                                 </li>
                             ))}

@@ -3,10 +3,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Check, ImagePlus, Loader2, MapPin, Minus, Move, Pencil, Plus, Store, X } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
-import { defaultDecideBy, endAfterMidnight, fromFormFields, toFormFields } from '../utils/eventFormat';
+import { useAuth } from '../context/AuthContext';
+import { defaultDecideBy, endAfterMidnight, fromFormFields, invitesOpen, toFormFields } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
 import CoverPhoto from '../components/CoverPhoto';
+import MemberSearchSelect from '../components/MemberSearchSelect';
 import { useCoverFramer } from '../components/CoverFramer';
 import { COVER_ASPECT } from '../utils/coverFrame';
 
@@ -15,13 +17,15 @@ import { COVER_ASPECT } from '../utils/coverFrame';
  * page; /events/propose/:id to edit one). What the plan is, when, where (a
  * business or farm on BIES, tagged: its address, map link and photo fill
  * in; or a place typed in, with a Google Maps link and a cover photo), how
- * many members it needs by when, and the most it can take. A place typed in
- * can go into the Business Directory afterwards, if the member likes.
+ * many members it needs by when, and the most it can take, and members to
+ * invite (each is told; only the proposer sees who). A place typed in can go
+ * into the Business Directory afterwards, if the member likes.
  */
 
 const MIN = 2;
 const MAX = 50;
 const HOUR = 3600_000;
+const MAX_INVITES = 50; // as the server takes
 
 const EMPTY = {
     title: '', about: '', startDate: '', startTime: '13:00', endTime: '',
@@ -38,6 +42,7 @@ export default function ProposeForm() {
     const venueParam = params.get('venue');
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [form, setForm] = useState(EMPTY);
     const [venue, setVenue] = useState(null); // the business or farm on BIES it's at
     const [stage, setStage] = useState('proposed'); // editing one that's on: its number and deadline are settled
@@ -56,6 +61,13 @@ export default function ProposeForm() {
     const [matches, setMatches] = useState([]);
     const [suggesting, setSuggesting] = useState(false);
     const whereRef = useRef(null);
+    // Members to invite, as the picker's chips. Editing: who's invited and
+    // hasn't answered; one taken off has their invite taken back. Only while
+    // the meetup can still be joined.
+    const [invitees, setInvitees] = useState([]);
+    const invitedAtOpen = useRef([]);
+    const [canInvite, setCanInvite] = useState(!editing);
+    const [goingIds, setGoingIds] = useState([]); // editing: who's in already
 
     const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e?.target ? e.target.value : e }));
 
@@ -97,6 +109,10 @@ export default function ProposeForm() {
                 setVenue(e.venueListing || null);
                 setKept({ venueListingId: e.venueListingId || e.venueListing?.id || null, placeName: e.venueListing?.name || e.locationName || '' });
                 setStage(e.stage || 'proposed');
+                setInvitees((e.invited || []).map((p) => ({ userId: p.id, name: p.name, avatar: p.avatar })));
+                invitedAtOpen.current = (e.invited || []).map((p) => p.id);
+                setCanInvite(Array.isArray(e.invited) && invitesOpen(e));
+                setGoingIds((e.going || []).map((p) => p.id));
             }).catch((err) => (err?.status === 403 || err?.status === 404 ? setNotYours(true) : setLoadFailed(true)))
                 .finally(() => setLoading(false));
             return;
@@ -183,6 +199,10 @@ export default function ProposeForm() {
             ...(open ? { minAttendees: form.minAttendees, decideBy } : {}),
             maxAttendees: Number.isFinite(max) && max > 0 ? max : null,
             priceLabel: form.priceLabel.trim(),
+            // Everyone to invite (on an edit, everyone who should stay invited).
+            // With the invites the form opened with: only those can be taken
+            // back, not one sent from the meetup's page meanwhile.
+            ...(canInvite ? { inviteeIds: invitees.map((g) => g.userId), ...(editing ? { inviteeIdsShown: invitedAtOpen.current } : {}) } : {}),
         };
         setSaving(true);
         try {
@@ -431,6 +451,22 @@ export default function ProposeForm() {
                 <label className="pf-label" htmlFor="pf-about">{t('events.propose.about')} <span className="pf-optional">{t('events.propose.optional')}</span></label>
                 <textarea id="pf-about" className="pf-input pf-area" rows={4} maxLength={5000} placeholder={t('events.propose.aboutPlaceholder')} value={form.about} onChange={set('about')} />
             </section>
+
+            {canInvite && (
+                <section className="pf-group">
+                    <span className="pf-label">{t('events.propose.invite')} <span className="pf-optional">{t('events.propose.optional')}</span></span>
+                    <MemberSearchSelect
+                        value={invitees}
+                        onChange={(list) => setInvitees(list.slice(0, MAX_INVITES))}
+                        placeholder={t('events.propose.invitePlaceholder')}
+                        taken={{
+                            ...Object.fromEntries(goingIds.map((uid) => [uid, t('events.proposals.inLabel')])),
+                            ...(user?.id ? { [user.id]: t('events.proposals.you') } : {}),
+                        }}
+                    />
+                    <p className="pf-hint">{t('events.propose.inviteHint')}</p>
+                </section>
+            )}
 
             {error && <div className="pf-error" role="alert"><AlertCircle size={16} /> <span>{error}</span></div>}
             <button type="submit" className="pf-submit" disabled={saving || uploading}>
