@@ -19,6 +19,7 @@ import {
 } from '../services/eventPeople.service';
 import { listingsActedFor, runsListing } from './listingTeam.controller';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
+import { forgetCards } from '../services/shareCard.service';
 import {
     MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
 } from '../services/eventProposals.service';
@@ -1047,6 +1048,8 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             return updated;
         });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
+        // Its link preview's picture goes when it stops being shared, or shows a cover it no longer has.
+        if (!visibilityToPublished(event.visibility) || (event.thumbnail ?? '') !== (existing.thumbnail ?? '')) await forgetCards(existing.id);
         if (partners) await notifyNewPartners(me, event, hostNameOf(event), partners, existing.partners);
         // A lower number may be met already.
         if (data.minAttendees !== undefined) await confirmIfReached(event.id).catch(() => false);
@@ -1185,6 +1188,7 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
 
         await prisma.event.delete({ where: { id: req.params.id } });
         await Promise.all([cache.delPattern('events:'), cache.del(`preview:events:${existing.id}`)]);
+        await forgetCards(existing.id); // its link preview's picture
 
         res.json({ message: 'Event deleted' });
     } catch (error) {

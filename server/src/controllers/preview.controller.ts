@@ -8,7 +8,7 @@ import { isOpen } from './project.controller';
 import { isRepeat, repeatLabel, shownOccurrence } from '../utils/eventRepeat';
 import { dayView } from '../services/eventDates.service';
 import { proposalStage } from '../services/eventProposals.service';
-import { cardFile, cardKey, shareCardSpec, SQUARE, WIDE, type CardSpec } from '../services/shareCard.service';
+import { cardImage, cardKey, shareCardSpec, SQUARE, WIDE, type CardSpec } from '../services/shareCard.service';
 
 /**
  * Public previews of a shared page, for people who aren't signed in to BIES:
@@ -32,6 +32,9 @@ const SAFE_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const ACTIVE = { isBanned: false, deletedAt: null };
 const ACTIVE_FIELDS = { isBanned: true, deletedAt: true } as const;
 const SUMMARY_LENGTH = 240;
+
+/** The BIES icon a link card shows when it has no picture of its own (public/icons/icon-512.png). */
+const ICON_SIZE = { width: 512, height: 512 };
 
 const parseJson = <T>(value: string | null | undefined, fallback: T): T => {
     try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
@@ -216,6 +219,9 @@ async function eventTeaser(id: string) {
         startDate: when.startDate,
         endDate: when.endDate,
         repeat: isRepeat(event.repeat) ? event.repeat : '',
+        // The date as its rule makes it (startDate may be moved): what "Every
+        // Saturday" is said from.
+        occurrence: isRepeat(event.repeat) ? when.key : null,
         photo: event.thumbnail || '',
         coverFrame: event.coverFrame,
         // The cover as the link's picture shows it (shareCard.service.ts).
@@ -314,9 +320,15 @@ export function eventWhen(date: Date | string): string {
 type EventTeaser = NonNullable<Awaited<ReturnType<typeof eventTeaser>>>;
 const isEventTeaser = (found: Teaser): found is EventTeaser => found.section === 'events' && 'startDate' in found;
 
+/**
+ * How it repeats ("Every other Saturday"), said from the date as its rule
+ * makes it: a date moved to a Sunday is still one of the Saturdays.
+ */
+const repeatText = (found: EventTeaser) => (found.repeat ? repeatLabel(found.repeat, new Date(found.occurrence ?? found.startDate)) : '');
+
 /** What the picture of an event's link card shows. */
 export function eventCardSpec(found: EventTeaser): CardSpec {
-    return shareCardSpec({ ...found, repeatText: found.repeat ? repeatLabel(found.repeat, new Date(found.startDate)) : '' });
+    return shareCardSpec({ ...found, repeatText: repeatText(found) });
 }
 
 /** The link card's words: what it is and where, then its own words. */
@@ -327,7 +339,7 @@ export function cardText(found: Teaser): { title: string; description: string } 
         // "4:00 PM · Every other Saturday · Sports field — …".
         const lead = [
             eventTime(found.startDate),
-            found.repeat ? repeatLabel(found.repeat, new Date(found.startDate)) : '',
+            repeatText(found),
             found.stage === 'proposed' ? 'Proposed meetup' : '',
             found.location,
         ].filter(Boolean).join(' · ');
@@ -362,8 +374,9 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
     const page = `${base}/${section}/${id}`;
     let title = 'BIES | Build in El Salvador';
     let description = 'Trusted businesses and farms, opportunities and talent, recommended by members of Build in El Salvador.';
+    // The BIES icon, unless it has a picture of its own.
     let image = `${base}/icons/icon-512.png`;
-    let imageSize: { width: number; height: number } | null = null;
+    let imageSize: { width: number; height: number; type: string } | null = { ...ICON_SIZE, type: 'image/png' };
     try {
         const found = await teaser(section, id);
         if (found) {
@@ -372,9 +385,12 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
                 // An event's picture is drawn for it (getEventCard), named after what's on it.
                 const spec = eventCardSpec(found);
                 image = `${base}/api/preview/events/${id}/card.jpg?v=${cardKey(spec)}`;
-                imageSize = spec.format === 'square' ? SQUARE : WIDE;
+                imageSize = { ...(spec.format === 'square' ? SQUARE : WIDE), type: 'image/jpeg' };
+                // Drawn now, not waited for: it's ready by the time the crawler asks for it.
+                void cardImage(id, spec);
             } else if (found.photo) {
                 image = /^https?:\/\//i.test(found.photo) ? found.photo : `${base}${found.photo.startsWith('/') ? '' : '/'}${found.photo}`;
+                imageSize = null; // a member's photo: its size isn't known here
             }
         }
     } catch (error) {
@@ -383,7 +399,7 @@ export async function getPreviewOG(req: Request, res: Response): Promise<void> {
     const [t, d, i, u] = [title, description, image, page].map(escapeHtml);
     // Its size up front, so WhatsApp shows the picture before it has it.
     const sized = imageSize
-        ? `\n  <meta property="og:image:width" content="${imageSize.width}" />\n  <meta property="og:image:height" content="${imageSize.height}" />\n  <meta property="og:image:type" content="image/jpeg" />`
+        ? `\n  <meta property="og:image:width" content="${imageSize.width}" />\n  <meta property="og:image:height" content="${imageSize.height}" />\n  <meta property="og:image:type" content="${imageSize.type}" />`
         : '';
     res.set('Cache-Control', 'public, max-age=600');
     res.type('html').send(`<!DOCTYPE html>
@@ -423,15 +439,21 @@ export async function getEventCard(req: Request, res: Response): Promise<void> {
             return;
         }
         const spec = eventCardSpec(found);
-        const file = await cardFile(id, spec);
-        if (!file) {
+        const card = await cardImage(id, spec);
+        if (!card) {
             res.redirect(302, `${config.appPublicUrl}/icons/icon-512.png`);
+            return;
+        }
+        res.set('X-Content-Type-Options', 'nosniff');
+        if ('bytes' in card) {
+            // Drawn without its cover (it couldn't be had just now): not kept anywhere, so it's drawn again next time.
+            res.set('Cache-Control', 'no-store');
+            res.type('image/jpeg').send(card.bytes);
             return;
         }
         // The card page links it by what's on it (?v=), so that link can be kept a day.
         res.set('Cache-Control', `public, max-age=${req.query.v === cardKey(spec) ? 86400 : 300}`);
-        res.set('X-Content-Type-Options', 'nosniff');
-        res.type('image/jpeg').sendFile(file);
+        res.type('image/jpeg').sendFile(card.file);
     } catch (error) {
         console.error('Share card error:', error);
         res.status(500).end();

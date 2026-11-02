@@ -16,6 +16,7 @@ import { attachWebSocketServer } from './services/websocket.service';
 import { deleteOldSessions } from './services/session.service';
 import { deleteOldReports } from './services/moderation.service';
 import { startProposalSweep } from './services/eventProposals.service';
+import { startCardSweep } from './services/shareCard.service';
 import { startTwitterRefreshLoop } from './services/twitter.service';
 import { initWebPush, cleanupStaleSubscriptions } from './services/webpush.service';
 import { initApns } from './services/apns.service';
@@ -335,6 +336,9 @@ server.listen(config.port, () => {
 
     // Proposed meetups past their decide-by time without enough people: called off.
     startProposalSweep();
+
+    // Shared events' link preview pictures of events no longer shared, and half-written ones.
+    startCardSweep();
 
     // Points scorer (relay indexer) + monthly rollover loop — a scorer
     // failure must never take down the API.
