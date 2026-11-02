@@ -7,7 +7,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
 import { cache, cacheKey } from '../services/redis.service';
-import { notifyFeedInteraction } from '../services/notification.service';
+import { notFromHiddenMembers, notifyFeedInteraction } from '../services/notification.service';
+import { findObjectionable } from '../services/contentFilter';
 import { config } from '../config';
 import { isPushServiceEndpoint } from '../services/webpush.service';
 
@@ -37,7 +38,9 @@ export async function listNotifications(req: Request, res: Response): Promise<vo
         const skip = (page - 1) * limit;
         const unreadOnly = req.query.unread === 'true';
 
-        const where: any = { userId };
+        // Nothing from a member blocked either way, from before the block too.
+        const visible = await notFromHiddenMembers(userId);
+        const where: any = { userId, ...visible };
         if (unreadOnly) where.isRead = false;
 
         const [notifications, total, unreadCount] = await Promise.all([
@@ -48,7 +51,7 @@ export async function listNotifications(req: Request, res: Response): Promise<vo
                 take: limit,
             }),
             prisma.notification.count({ where }),
-            prisma.notification.count({ where: { userId, isRead: false } }),
+            prisma.notification.count({ where: { userId, isRead: false, ...visible } }),
         ]);
 
         const parsed = notifications.map((n) => ({
@@ -83,7 +86,7 @@ export async function getUnreadCount(req: Request, res: Response): Promise<void>
         }
 
         const count = await prisma.notification.count({
-            where: { userId, isRead: false },
+            where: { userId, isRead: false, ...(await notFromHiddenMembers(userId)) },
         });
 
         await cache.set(cKey, String(count), 30);
@@ -179,6 +182,23 @@ export async function deleteNotification(req: Request, res: Response): Promise<v
  */
 const VALID_FEED_TYPES = ['POST_COMMENT', 'POST_LIKE', 'COMMENT_LIKE', 'COMMENT_REPLY'] as const;
 const HEX_ID = /^[0-9a-f]{64}$/;
+// A comment's words in the notification (and on the lock screen): this many
+// characters at most, checked whole against the community rules first.
+const PREVIEW_LENGTH = 120;
+const MAX_PREVIEW_SCREENED = 8000;
+
+/**
+ * What a comment notification may quote: its first characters, or nothing
+ * when the text holds words the community rules don't allow
+ * (services/contentFilter.ts). The text comes from the commenter's app, so
+ * it's checked here as well as when the comment was written.
+ */
+export function previewToShow(contentPreview: unknown): string | undefined {
+    if (typeof contentPreview !== 'string') return undefined;
+    const text = contentPreview.slice(0, MAX_PREVIEW_SCREENED);
+    if (!text.trim() || findObjectionable(text)) return undefined;
+    return text.slice(0, PREVIEW_LENGTH);
+}
 
 export async function feedInteraction(req: Request, res: Response): Promise<void> {
     try {
@@ -217,7 +237,7 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             type,
             actorName: name,
             eventId,
-            contentPreview: typeof contentPreview === 'string' ? contentPreview.slice(0, 120) : undefined,
+            contentPreview: type === 'POST_LIKE' || type === 'COMMENT_LIKE' ? undefined : previewToShow(contentPreview),
         });
 
         res.json({ message: 'ok' });

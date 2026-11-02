@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { cache } from '../services/redis.service';
 import { publishAnnouncement, publishCalendarEvent, deleteCalendarEvent, publishRSVPEvent, validateCalendarEventData } from '../services/nostr.service';
 import { notifyEventRsvp, createNotification } from '../services/notification.service';
-import { hiddenFromIds, isStaffUser } from '../services/moderation.service';
+import { blockedEitherWay, hiddenFromIds, isStaffUser } from '../services/moderation.service';
 import {
     EVENT_PEOPLE, MAX_PARTNERS, PartnerError, actedForIds, canDeleteEvent, canEditEvent, checkPartners,
     hostNameOf, isLiveListing, notifyNewPartners, partnerSchema, partnersFor, samePartners,
@@ -906,6 +906,10 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         });
 
         if (!event || event.visibility === 'DRAFT') {
+            res.status(404).json({ error: 'Event not found' }); return;
+        }
+        // A host blocked either way: their event isn't there for this member.
+        if (event.hostId !== userId && await blockedEitherWay(userId, event.hostId)) {
             res.status(404).json({ error: 'Event not found' }); return;
         }
         // Private: its guests (and the host and admins) can say they're going.

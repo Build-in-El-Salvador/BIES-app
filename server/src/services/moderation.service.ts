@@ -4,9 +4,10 @@
  * any profile, listing or recommendation, reviewed within 24 hours; Block to
  * stop seeing someone.
  *
- * Reports go into the queue moderators work in Admin → Reports, and an email
- * goes to the moderation address: at most 20 emails a day, so a flood of
- * reports can't use up the email quota sign-in codes depend on. One open
+ * Reports go into the queue moderators work in Admin → Reports, every
+ * moderator and admin gets a notification, and an email goes to the
+ * moderation address: at most 20 emails a day, so a flood of reports can't
+ * use up the email quota sign-in codes depend on. One open
  * report per member per thing, at most 20 a day per member. A moderator
  * doesn't see reports about themselves; an admin does. Closed reports are
  * deleted after 12 months, as the privacy notice says.
@@ -20,7 +21,8 @@
 import prisma from '../lib/prisma';
 import { config } from '../config';
 import { sendEmail } from './email.service';
-import { cache } from './redis.service';
+import { cache, cacheKey } from './redis.service';
+import { createNotification } from './notification.service';
 import { nip19 } from 'nostr-tools';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools/pure';
 import { linksIn, uploadNameOf } from './uploads.service';
@@ -174,7 +176,49 @@ export async function createReport(reporterId: string, input: ReportInput): Prom
         emailModerators(report.id, reportsToday === MAX_MODERATION_EMAILS_PER_DAY).catch((err) =>
             console.error('[Moderation] Report email failed:', err instanceof Error ? err.message : err));
     }
+    // And every moderator and admin in the app, with no cap.
+    await alertStaff(report).catch((err) =>
+        console.error('[Moderation] Staff alert failed:', err instanceof Error ? err.message : err));
     return { ok: true, reportId: report.id, duplicate: false };
+}
+
+/** What was reported, in a notification: "A post was reported." */
+const TARGET_NOUNS: Record<ReportTarget, string> = {
+    user: 'profile',
+    listing: 'listing',
+    endorsement: 'recommendation',
+    event: 'event',
+    note: 'post',
+    album: 'photo album',
+    photo: 'photo',
+    talent: 'talent',
+    opportunity: 'opportunity',
+};
+
+/**
+ * A new report in every moderator's and admin's notifications, opening
+ * Admin → Reports: on their phone too, when they allow push (Settings →
+ * Notifications; createNotification checks). Not to whoever sent it, nor a
+ * moderator it's about (they don't see those, visibleTo). It names the
+ * reason and the kind of thing only: the reported words stay off lock
+ * screens.
+ */
+async function alertStaff(report: { id: string; reporterId: string | null; targetType: string; targetUserId: string | null; reason: string }): Promise<void> {
+    const staff = await prisma.user.findMany({
+        where: { OR: [{ isAdmin: true }, { role: 'MOD' }], isBanned: false, deletedAt: null, ...(report.reporterId ? { id: { not: report.reporterId } } : {}) },
+        select: { id: true, isAdmin: true },
+    });
+    const label = REASON_LABELS[report.reason as ReportReason] ?? report.reason;
+    const noun = TARGET_NOUNS[report.targetType as ReportTarget] ?? 'post';
+    await Promise.all(staff
+        .filter((s) => s.isAdmin || s.id !== report.targetUserId)
+        .map((s) => createNotification({
+            userId: s.id,
+            type: 'SYSTEM',
+            title: `New report: ${label}`,
+            body: `A ${noun} was reported. Please review it within 24 hours.`,
+            data: { link: '/admin/reports', reportId: report.id },
+        })));
 }
 
 /** Where a directory listing lives in the app. */
@@ -375,17 +419,20 @@ export async function blockMember(blockerId: string, blockedId: string): Promise
         }),
     ]);
     // The follower lists of both (follow.controller.ts busts the same keys).
+    // And both bells' counts: what came from the other no longer counts.
     await Promise.all([blockerId, blockedId].flatMap((id) => [
         cache.del(`followers:${id}`),
         cache.del(`following:${id}`),
         cache.delPattern(`followers:${id}:`),
         cache.delPattern(`following:${id}:`),
+        cache.del(cacheKey.notificationCount(id)),
     ])).catch(() => {});
     return 'ok';
 }
 
 export async function unblockMember(blockerId: string, blockedId: string): Promise<void> {
     await prisma.block.deleteMany({ where: { blockerId, blockedId } });
+    await Promise.all([blockerId, blockedId].map((id) => cache.del(cacheKey.notificationCount(id)))).catch(() => {});
 }
 
 /** The members this member blocked: their content is hidden from them. */
