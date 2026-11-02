@@ -50,6 +50,8 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=server-build /app/server/dist/ dist/
+# Fonts and the logo the shared events' link cards are drawn with (shareCard.service.ts).
+COPY server/assets/ dist/assets/
 COPY --from=server-build /app/server/prisma/ prisma/
 COPY --from=server-build /app/server/node_modules/.prisma/ node_modules/.prisma/
 COPY server/docker-entrypoint.sh docker-entrypoint.sh

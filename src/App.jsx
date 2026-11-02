@@ -57,6 +57,7 @@ const TakeYourKey = lazyPage(() => import('./pages/settings/TakeYourKey'));
 const BlockedMembers = lazyPage(() => import('./pages/settings/BlockedMembers'));
 const NotificationSettings = lazyPage(() => import('./pages/settings/NotificationSettings'));
 const NostrKeys = lazyPage(() => import('./pages/settings/NostrKeys'));
+const NostrSettings = lazyPage(() => import('./pages/settings/NostrSettings'));
 const PrivacySettings = lazyPage(() => import('./pages/settings/PrivacySettings'));
 const AlbumPage = lazyPage(() => import('./pages/AlbumPage'));
 const CustomizeNavbar = lazyPage(() => import('./pages/CustomizeNavbar'));
@@ -531,6 +532,11 @@ const AppContent = () => {
                         </ProtectedRoute>
                     } />
                     <Route path="/settings/nostr" element={
+                        <ProtectedRoute>
+                            <NostrSettings />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/settings/nostr/key" element={
                         <ProtectedRoute>
                             <NostrKeys />
                         </ProtectedRoute>

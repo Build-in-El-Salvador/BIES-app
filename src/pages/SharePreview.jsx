@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone } from 'lucide-react';
+import { MapPin, Globe, ThumbsUp, Bitcoin, Lock, CalendarClock, CheckCircle, XCircle, Building2, Leaf, Briefcase, Sparkles, Banknote, CalendarDays, Video, ExternalLink, Smartphone, Repeat } from 'lucide-react';
 import { previewApi } from '../services/api';
 import CoverPhoto from '../components/CoverPhoto';
 import CertifiedBadge from '../components/directory/CertifiedBadge';
 import { formatDay, isKindHidden } from '../components/opportunities/opportunityOptions';
 import logoIcon from '../assets/logo-icon-dark.svg';
 import { fullDay, ticketProvider, timeRange } from '../utils/eventFormat';
+import { repeatLabel } from '../utils/eventRepeat';
 import { openExternal } from '../utils/openExternal';
 import { isNativePlatform } from '../utils/platform';
 import { BiesTag, namesText } from '../components/events/EventBits';
@@ -126,6 +127,10 @@ export default function SharePreview({ section }) {
                                 {isEvent && (
                                     <li><CalendarDays size={18} aria-hidden="true" /><span>{fullDay(found.startDate, i18n.language)}, {timeRange(found.startDate, found.endDate, i18n.language)}</span></li>
                                 )}
+                                {/* A repeating event: its next date above, how it repeats here, from the date as its rule makes it (that one may be moved). */}
+                                {isEvent && found.repeat && (
+                                    <li><Repeat size={18} aria-hidden="true" /><span>{repeatLabel(found.repeat, found.occurrence || found.startDate, t, i18n.language)}</span></li>
+                                )}
                                 {found.location && (
                                     <li>
                                         {isEvent && found.isOnline ? <Video size={18} aria-hidden="true" /> : <MapPin size={18} aria-hidden="true" />}
@@ -219,7 +224,7 @@ export default function SharePreview({ section }) {
                 }
                 .sp-main { max-width: 560px; margin: 0 auto; padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 32px); }
                 .sp-cover {
-                    aspect-ratio: 16 / 10; border-radius: var(--radius-lg) var(--radius-lg) 0 0; overflow: hidden;
+                    aspect-ratio: 16 / 10; border-radius: var(--radius-lg) var(--radius-lg) 0 0; clip-path: inset(0 round var(--radius-lg) var(--radius-lg) 0 0); overflow: hidden;
                     background: var(--color-gray-100); display: flex; align-items: center; justify-content: center;
                     color: var(--color-gray-400);
                 }

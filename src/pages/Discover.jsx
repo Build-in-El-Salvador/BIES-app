@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { myFollowingIds } from '../utils/myFollowing';
 import { stripHtml } from '../utils/text';
 import { joinedDate } from '../utils/joinedDate';
+import VerifiedTick from '../components/VerifiedTick';
 
 // A member's headline: "Title at Company", or whichever they gave.
 const headline = (m) => (m.title && m.company ? `${m.title} at ${m.company}` : m.title || m.company || '');
@@ -352,7 +353,7 @@ const Discover = () => {
                                             {avatarContent}
                                         </div>
                                         <div className="builder-info-list" style={{ flex: 1, overflow: 'hidden' }}>
-                                            <h3 className="font-semibold text-lg builder-name-clamp">{builder.name}</h3>
+                                            <h3 className="font-semibold text-lg builder-name-clamp">{builder.name}{builder.verified && <VerifiedTick size={16} />}</h3>
                                             {(builder.company || builder.title || builder.role) && (
                                                 <p className="text-primary font-medium text-sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                     {headline(builder)}
@@ -399,7 +400,7 @@ const Discover = () => {
                                     <div className="mc-top">
                                         <div className="mc-photo">{avatarContent}</div>
                                         <div className="mc-id">
-                                            <h3 className="mc-name">{builder.name}</h3>
+                                            <h3 className="mc-name">{builder.name}{builder.verified && <VerifiedTick size={16} />}</h3>
                                             {(builder.company || builder.title) && <p className="mc-headline">{headline(builder)}</p>}
                                             <div className="mc-actions">
                                                 {user && targetUserId && user.id !== targetUserId && (

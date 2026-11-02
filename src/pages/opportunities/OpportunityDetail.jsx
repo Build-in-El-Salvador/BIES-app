@@ -20,6 +20,7 @@ import { useModerationDialogs } from '../../components/moderation/useModerationD
 import BackButton from '../../components/BackButton';
 import Avatar from '../../components/Avatar';
 import CoverPhoto from '../../components/CoverPhoto';
+import EmailSheet from '../../components/EmailSheet';
 import TypeBadge, { styleOf } from '../../components/opportunities/TypeBadge';
 import DeckPanel from '../../components/opportunities/DeckPanel';
 import { daysLeft, formatDay, fullDollars, hasField, industryOf, isKindHidden, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
@@ -58,6 +59,7 @@ const OpportunityDetail = () => {
     const [error, setError] = useState(null);
     const [blockedMember, setBlockedMember] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false); // the Email button's Copy / Open sheet
     const [linkCopied, setLinkCopied] = useState(false);
     const [saved, setSaved] = useState(() => !!shownAtOnce()?.saved);
     const [closing, setClosing] = useState(false);
@@ -234,7 +236,7 @@ const OpportunityDetail = () => {
     const actions = [
         o.websiteUrl && { key: 'website', Icon: Globe, label: applies ? t('opportunities.actions.apply') : t('opportunities.actions.website'), onClick: () => openExternal(o.websiteUrl) },
         waDigits && { key: 'whatsapp', Icon: MessageCircle, label: 'WhatsApp', onClick: () => openExternal(`https://wa.me/${waDigits}`) },
-        o.email && { key: 'email', Icon: Mail, label: t('opportunities.actions.email'), href: `mailto:${o.email}?subject=${encodeURIComponent(o.title)}` },
+        o.email && { key: 'email', Icon: Mail, label: t('opportunities.actions.email'), onClick: () => setEmailOpen(true) },
         { key: 'profile', Icon: User, label: t('opportunities.actions.profile'), to: profilePath },
         !isOwn && { key: 'save', Icon: saved ? BookmarkCheck : Bookmark, label: saved ? t('opportunities.actions.saved') : t('opportunities.actions.save'), onClick: toggleSave, pressed: saved },
         { key: 'share', Icon: linkCopied ? Check : Share, label: linkCopied ? t('opportunities.actions.copied') : t('opportunities.actions.share'), onClick: share },
@@ -772,10 +774,11 @@ const OpportunityDetail = () => {
                         padding-top: 1.5rem;
                     }
                     .od-hero {
-                        border-radius: var(--radius-lg);
+                        border-radius: var(--radius-lg); clip-path: inset(0 round var(--radius-lg));
                     }
                 }
             `}</style>
+            {emailOpen && <EmailSheet email={o.email} subject={o.title} onClose={() => setEmailOpen(false)} />}
         </div>
     );
 };

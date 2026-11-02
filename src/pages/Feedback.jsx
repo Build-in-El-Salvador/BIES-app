@@ -185,7 +185,7 @@ const Feedback = () => {
                     {screenshot ? (
                         <div className="feedback-shot">
                             {preview && <img src={preview} alt={t('feedback.screenshotAlt')} className="feedback-shot-img" />}
-                            <button type="button" className="feedback-shot-remove" onClick={() => setScreenshot(null)} aria-label={t('feedback.screenshotRemove')}>
+                            <button type="button" className="feedback-shot-remove x-remove" onClick={() => setScreenshot(null)} aria-label={t('feedback.screenshotRemove')}>
                                 <X size={16} />
                             </button>
                         </div>

@@ -110,23 +110,8 @@ function isBiesLoginRequest(tags: unknown): boolean {
     return origins.includes(url.origin) && url.pathname === `${basePath}/api/auth/nostr-login` && !url.search;
 }
 
-// ─── NIP-05 auto-generation ───
-
-async function generateNip05Name(baseName: string): Promise<string | null> {
-    let name = baseName.toLowerCase().replace(/[^a-z0-9._-]/g, '').substring(0, 30);
-    if (name.length < 3) name = `user${name}`;
-    if (name.length < 3) return null;
-
-    const existing = await prisma.profile.findFirst({ where: { nip05Name: name } });
-    if (!existing) return name;
-
-    for (let i = 1; i <= 99; i++) {
-        const candidate = `${name.substring(0, 27)}${i}`;
-        const taken = await prisma.profile.findFirst({ where: { nip05Name: candidate } });
-        if (!taken) return candidate;
-    }
-    return null;
-}
+// A BIES address (NIP-05) is not given at sign-up: a member claims one in
+// Settings → Nostr, and that is what makes them verified (services/nip05.ts).
 
 // ─── Controllers ───
 
@@ -266,17 +251,6 @@ export async function verifyEmailLogin(req: Request, res: Response): Promise<voi
             publishRelayList(user.id).catch((err) =>
                 console.error('[Nostr] Relay list publish failed:', err)
             );
-
-            // NIP-05 name from the pubkey, never from the email address,
-            // which would publish part of it. The user can pick a handle later.
-            const nip05Name = await generateNip05Name(`nostr-${user.nostrPubkey.substring(0, 8)}`);
-            if (nip05Name && user.profile) {
-                const updatedProfile = await prisma.profile.update({
-                    where: { id: user.profile.id },
-                    data: { nip05Name },
-                });
-                user = { ...user, profile: updatedProfile };
-            }
         }
 
         res.locals.auditUserId = user.id;
@@ -428,16 +402,6 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
             publishRelayList(user.id).catch((err) =>
                 console.error('[Nostr] Relay list publish failed:', err)
             );
-
-            // Auto-generate NIP-05 name for new Nostr users
-            const nip05Name = await generateNip05Name(`nostr-${pubkey.substring(0, 8)}`);
-            if (nip05Name && user.profile) {
-                const updatedProfile = await prisma.profile.update({
-                    where: { id: user.profile.id },
-                    data: { nip05Name },
-                });
-                user = { ...user, profile: updatedProfile };
-            }
 
         } else if (isEnvAdmin && !user.isAdmin) {
             // Grant admin flag without changing their existing role

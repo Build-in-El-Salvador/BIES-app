@@ -1,10 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Avatar from '../Avatar';
+import { RepeatLine } from './EventBits';
 import { dayTile, hostOf, isFree, timeOf } from '../../utils/eventFormat';
 import { focusOf, parseFrame } from '../../utils/coverFrame';
 
-/** An event in a list: a square calendar tile (month and day), words (and where a proposed meetup stands), small photo, top-aligned like other lists. */
+/**
+ * An event in a list: a square calendar tile (month and day; a repeating
+ * event's next date, and how it repeats), words (and where a proposed meetup
+ * stands), small photo, top-aligned like other lists.
+ */
 export default function EventRow({ event, lang }) {
     const { t } = useTranslation();
     const tile = dayTile(event.startDate, lang);
@@ -22,6 +27,7 @@ export default function EventRow({ event, lang }) {
             <span className="ev-row-text">
                 <span className="ev-row-title">{event.title}</span>
                 <span className="ev-row-line">{[tile.weekday, timeOf(event.startDate, lang), place].filter(Boolean).join(' · ')}</span>
+                <RepeatLine event={event} />
                 {(price || by) && <span className="ev-row-line">{[price, by && t('events.card.by', { names: by })].filter(Boolean).join(' · ')}</span>}
                 {event.stage === 'proposed' && <span className="ev-row-line ev-row-proposed">{t('events.proposals.line', { going: event.goingCount || 0, min: event.minAttendees })}</span>}
             </span>

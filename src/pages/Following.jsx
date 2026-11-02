@@ -231,7 +231,7 @@ const Following = () => {
                                     onChange={e => setSearchQuery(e.target.value)}
                                 />
                                 {searchQuery && (
-                                    <button className="clear-btn" onClick={() => setSearchQuery('')}>
+                                    <button className="clear-btn x-remove" onClick={() => setSearchQuery('')}>
                                         <X size={14} />
                                     </button>
                                 )}

@@ -1,17 +1,19 @@
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, Check, Bitcoin } from 'lucide-react';
+import { ExternalLink, Check, Bitcoin, Repeat, Pencil } from 'lucide-react';
 import Avatar from '../Avatar';
 import { openExternal } from '../../utils/openExternal';
 import { isNativePlatform } from '../../utils/platform';
 import { useFeature } from '../../context/FeatureFlagsContext';
 import { bothTicketLinks, hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
+import { repeatLabel } from '../../utils/eventRepeat';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import biesLogo from '../../assets/logo-icon.svg';
 
 /**
- * Small pieces an event shows wherever it's listed: the BIES tag, who's
- * behind it (faces and names), its price and where tickets are, and the
- * ticket button (or "I'm going" for a free event with no ticket link).
+ * Small pieces an event shows wherever it's listed: the BIES tag, how it
+ * repeats, who's behind it (faces and names), its price and where tickets
+ * are, and the ticket button (or "I'm going" for a free event with no
+ * ticket link).
  */
 
 export function BiesTag({ className = '' }) {
@@ -28,6 +30,31 @@ export function BiesTag({ className = '' }) {
                     font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em;
                 }
                 .ev-bies-tag img { width: 18px; height: 18px; }
+            `}</style>
+        </span>
+    );
+}
+
+/**
+ * How a repeating event repeats, under its next date: "↻ Every other
+ * Saturday". When that date is different from usual (its own time or
+ * place, shown above it), "✎ Changed for this date" instead. Nothing for a
+ * one-off. On a dark card, --ev-repeat-color and --ev-changed-color.
+ */
+export function RepeatLine({ event, className = '' }) {
+    const { t, i18n } = useTranslation();
+    const label = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, i18n.language);
+    if (!label) return null;
+    const changed = !!event.dateChanged;
+    return (
+        <span className={`ev-repeat${changed ? ' changed' : ''} ${className}`}>
+            {changed ? <Pencil size={13} aria-hidden="true" /> : <Repeat size={13} aria-hidden="true" />}
+            <span className="ev-repeat-text">{changed ? t('events.dates.changedForDate') : label}</span>
+            <style jsx>{`
+                .ev-repeat { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-size: 0.8rem; font-weight: 600; line-height: 1.3; color: var(--ev-repeat-color, var(--color-primary)); }
+                .ev-repeat.changed { color: var(--ev-changed-color, var(--color-orange-text)); }
+                .ev-repeat :global(svg) { flex-shrink: 0; }
+                .ev-repeat-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
             `}</style>
         </span>
     );
@@ -105,10 +132,11 @@ export function WhoLine({ event, className = '' }) {
 }
 
 /**
- * "From $25 / Tickets on Luma", "Free / RSVP in the app". A paid event with
- * no ticket link is paid for in the app with zaps on; otherwise at the event.
+ * "From $25 / Tickets on Luma", "Free / RSVP in the app"; `note` in place of
+ * the second line. A paid event with no ticket link is paid for in the app
+ * with zaps on; otherwise at the event.
  */
-export function PriceLine({ event, className = '' }) {
+export function PriceLine({ event, className = '', note = '' }) {
     const { t } = useTranslation();
     const zapsOn = useFeature('zaps');
     const label = (event.priceLabel || '').trim() || (isFree(event) ? t('events.card.free') : '');
@@ -118,7 +146,7 @@ export function PriceLine({ event, className = '' }) {
     return (
         <span className={`ev-price ${className}`}>
             {label && <b>{label}</b>}
-            <small>{where}</small>
+            <small>{note || where}</small>
             <style jsx>{`
                 .ev-price { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
                 .ev-price b { font-size: 0.9rem; font-weight: 700; color: var(--ev-price-color, var(--color-gray-900)); }

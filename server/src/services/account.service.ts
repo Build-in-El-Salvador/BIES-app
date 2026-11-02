@@ -45,6 +45,7 @@ import { cache, cacheKey } from './redis.service';
 import { markVanished, removeFromRelayWhitelist, requestRelayPurge } from './relayWhitelist.service';
 import { revokeOtherSessions, revokeUserSessions } from './session.service';
 import { discardUploadNames, filesOfAccount } from './uploads.service';
+import { forgetCards } from './shareCard.service';
 
 // ─── Confirming with a signature ──────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export async function deleteAccount(
 ): Promise<DeletionResult> {
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true, nostrPubkey: true, encryptedPrivkey: true, profile: { select: { id: true } } },
+        select: { email: true, nostrPubkey: true, encryptedPrivkey: true, profile: { select: { id: true, nip05Name: true } } },
     });
     if (!user) throw new Error(`No account ${userId}`);
     const pubkey = user.nostrPubkey;
@@ -210,11 +211,15 @@ export async function deleteAccount(
         console.error('[Account] Could not list the files:', errorText(err));
         return [] as string[];
     });
+    // The events they host go with the account; their link preview pictures go after.
+    const hostedEvents = await prisma.event.findMany({ where: { hostId: userId }, select: { id: true } }).catch(() => [] as { id: string }[]);
 
     // 2. Erase. Audit rows about the person keep what happened, but not their
     // name or pubkey (admin actions recorded both); rows kept for others lose
     // the account's IP addresses; other members' notifications about them
-    // ("followed you", a message preview) go.
+    // ("followed you", a message preview) go. Their BIES address is held a
+    // while, so it can't pass at once to someone else, without their key:
+    // names they gave up before lose it too.
     const aboutThem = await prisma.auditLog.findMany({
         where: {
             OR: [
@@ -239,6 +244,12 @@ export async function deleteAccount(
         prisma.notification.deleteMany({
             where: { OR: [{ data: { contains: userId } }, { data: { contains: pubkey } }] },
         }),
+        prisma.releasedNip05.updateMany({ where: { pubkey }, data: { pubkey: null } }),
+        ...(user.profile?.nip05Name ? [prisma.releasedNip05.upsert({
+            where: { name: user.profile.nip05Name },
+            create: { name: user.profile.nip05Name, pubkey: null, releasedAt: new Date() },
+            update: { pubkey: null, releasedAt: new Date() },
+        })] : []),
         prisma.user.delete({ where: { id: userId } }),
         // The record that it was done, with nothing that identifies the person.
         prisma.auditLog.create({
@@ -275,8 +286,9 @@ export async function deleteAccount(
         }
     }
 
-    // Their photos, videos and decks (discardUploadNames never throws).
+    // Their photos, videos and decks, and their events' link preview pictures (neither throws).
     await discardUploadNames(files, { includeShared: true });
+    await forgetCards(hostedEvents.map((e) => e.id));
 
     await Promise.all([
         cache.del(cacheKey.profileDetail(userId)),

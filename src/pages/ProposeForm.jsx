@@ -3,29 +3,35 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Check, ImagePlus, Loader2, MapPin, Minus, Move, Pencil, Plus, Store, X } from 'lucide-react';
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
-import { defaultDecideBy, endAfterMidnight, fromFormFields, toFormFields } from '../utils/eventFormat';
+import { useAuth } from '../context/AuthContext';
+import { defaultDecideBy, endAfterMidnight, fromFormFields, invitesOpen, toFormFields } from '../utils/eventFormat';
 import Avatar from '../components/Avatar';
 import BackButton from '../components/BackButton';
 import CoverPhoto from '../components/CoverPhoto';
+import MemberSearchSelect from '../components/MemberSearchSelect';
 import { useCoverFramer } from '../components/CoverFramer';
 import { COVER_ASPECT } from '../utils/coverFrame';
+import ShareCardPreview from '../components/events/ShareCardPreview';
+import { cardDate, SHARE_ASPECT, SHARE_SHADE } from '../utils/shareCard';
 
 /**
  * Proposing a meetup (/events/propose, ?venue=<listing> from a business's
  * page; /events/propose/:id to edit one). What the plan is, when, where (a
  * business or farm on BIES, tagged: its address, map link and photo fill
  * in; or a place typed in, with a Google Maps link and a cover photo), how
- * many members it needs by when, and the most it can take. A place typed in
- * can go into the Business Directory afterwards, if the member likes.
+ * many members it needs by when, and the most it can take, and members to
+ * invite (each is told; only the proposer sees who). A place typed in can go
+ * into the Business Directory afterwards, if the member likes.
  */
 
 const MIN = 2;
 const MAX = 50;
 const HOUR = 3600_000;
+const MAX_INVITES = 50; // as the server takes
 
 const EMPTY = {
     title: '', about: '', startDate: '', startTime: '13:00', endTime: '',
-    placeName: '', mapUrl: '', thumbnail: '', coverFrame: '',
+    placeName: '', mapUrl: '', thumbnail: '', coverFrame: '', shareFrame: '',
     minAttendees: 3, decideDate: '', decideTime: '12:00', maxAttendees: '', priceLabel: '',
 };
 
@@ -38,6 +44,7 @@ export default function ProposeForm() {
     const venueParam = params.get('venue');
     const { t } = useTranslation();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [form, setForm] = useState(EMPTY);
     const [venue, setVenue] = useState(null); // the business or farm on BIES it's at
     const [stage, setStage] = useState('proposed'); // editing one that's on: its number and deadline are settled
@@ -56,6 +63,13 @@ export default function ProposeForm() {
     const [matches, setMatches] = useState([]);
     const [suggesting, setSuggesting] = useState(false);
     const whereRef = useRef(null);
+    // Members to invite, as the picker's chips. Editing: who's invited and
+    // hasn't answered; one taken off has their invite taken back. Only while
+    // the meetup can still be joined.
+    const [invitees, setInvitees] = useState([]);
+    const invitedAtOpen = useRef([]);
+    const [canInvite, setCanInvite] = useState(!editing);
+    const [goingIds, setGoingIds] = useState([]); // editing: who's in already
 
     const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e?.target ? e.target.value : e }));
 
@@ -70,12 +84,13 @@ export default function ProposeForm() {
             mapUrl: listing.mapUrl || '',
             thumbnail: listing.photo || '',
             coverFrame: listing.photo ? (listing.coverFrame || '') : '',
+            shareFrame: '',
         }));
     };
     const untag = () => {
         setVenue(null);
         setKept(null); // a place the member is changing
-        setForm((f) => ({ ...f, mapUrl: '', thumbnail: '', coverFrame: '' }));
+        setForm((f) => ({ ...f, mapUrl: '', thumbnail: '', coverFrame: '', shareFrame: '' }));
         requestAnimationFrame(() => whereRef.current?.focus());
     };
 
@@ -90,13 +105,17 @@ export default function ProposeForm() {
                     title: e.title || '', about: e.description || '',
                     startDate: start.date, startTime: start.time, endTime: end.time,
                     placeName: e.venueListing?.name || e.locationName || '', mapUrl: e.locationMapUrl || '',
-                    thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '',
+                    thumbnail: e.thumbnail || '', coverFrame: e.coverFrame || '', shareFrame: e.shareFrame || '',
                     minAttendees: e.minAttendees || 3, decideDate: decide.date, decideTime: decide.time || '12:00',
                     maxAttendees: e.maxAttendees ? String(e.maxAttendees) : '', priceLabel: e.priceLabel || '',
                 });
                 setVenue(e.venueListing || null);
                 setKept({ venueListingId: e.venueListingId || e.venueListing?.id || null, placeName: e.venueListing?.name || e.locationName || '' });
                 setStage(e.stage || 'proposed');
+                setInvitees((e.invited || []).map((p) => ({ userId: p.id, name: p.name, avatar: p.avatar })));
+                invitedAtOpen.current = (e.invited || []).map((p) => p.id);
+                setCanInvite(Array.isArray(e.invited) && invitesOpen(e));
+                setGoingIds((e.going || []).map((p) => p.id));
             }).catch((err) => (err?.status === 403 || err?.status === 404 ? setNotYours(true) : setLoadFailed(true)))
                 .finally(() => setLoading(false));
             return;
@@ -140,13 +159,17 @@ export default function ProposeForm() {
         setError('');
         try {
             const res = await uploadApi.media(file);
-            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame }));
+            setForm((f) => ({ ...f, thumbnail: res.url, coverFrame: frame, shareFrame: '' }));
         } catch (err) {
             setError(err?.message || t('events.propose.failed'));
         } finally {
             setUploading(false);
         }
     });
+
+    // Its link preview (what WhatsApp shows when it's shared): the wide card's photo side.
+    const share = useCoverFramer(SHARE_ASPECT.wide, ({ frame }) => setForm((f) => ({ ...f, shareFrame: frame })),
+        { title: t('events.form.shareTitle'), shade: SHARE_SHADE });
 
     const submit = async (e) => {
         e.preventDefault();
@@ -180,9 +203,14 @@ export default function ProposeForm() {
             locationMapUrl: withHttps(form.mapUrl),
             thumbnail: form.thumbnail,
             coverFrame: form.thumbnail ? form.coverFrame : '',
+            shareFrame: form.thumbnail ? form.shareFrame : '',
             ...(open ? { minAttendees: form.minAttendees, decideBy } : {}),
             maxAttendees: Number.isFinite(max) && max > 0 ? max : null,
             priceLabel: form.priceLabel.trim(),
+            // Everyone to invite (on an edit, everyone who should stay invited).
+            // With the invites the form opened with: only those can be taken
+            // back, not one sent from the meetup's page meanwhile.
+            ...(canInvite ? { inviteeIds: invitees.map((g) => g.userId), ...(editing ? { inviteeIdsShown: invitedAtOpen.current } : {}) } : {}),
         };
         setSaving(true);
         try {
@@ -380,7 +408,7 @@ export default function ProposeForm() {
                                 <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
                             </button>
                             <label className="pf-small">{t('events.propose.changeCover')}<input type="file" accept="image/*" hidden onChange={cover.choose} disabled={uploading} /></label>
-                            <button type="button" className="pf-small quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '' }))} disabled={uploading}>{t('events.propose.removeCover')}</button>
+                            <button type="button" className="pf-small quiet" onClick={() => setForm((f) => ({ ...f, thumbnail: '', coverFrame: '', shareFrame: '' }))} disabled={uploading}>{t('events.propose.removeCover')}</button>
                         </div>
                     </>
                 ) : (
@@ -391,6 +419,32 @@ export default function ProposeForm() {
                     </label>
                 )}
                 {cover.framer}
+            </section>
+
+            <section className="pf-group">
+                {/* What WhatsApp and the like show when it's shared (server/src/services/shareCard.service.ts) */}
+                <span className="pf-label">{t('events.form.share')}</span>
+                <p className="pf-hint">{t('events.form.shareHint')}</p>
+                <div className="pf-share">
+                    <ShareCardPreview
+                        format="wide"
+                        label={stage === 'proposed' ? 'proposed' : 'community'}
+                        title={form.title.trim() || t('events.form.sharePlaceholder')}
+                        date={form.startTime ? cardDate(fromFormFields(form.startDate, form.startTime)) : ''}
+                        venue={typed}
+                        extra={stage === 'proposed' ? `Goes ahead with ${form.minAttendees} people` : ''}
+                        cover={form.thumbnail}
+                        frame={form.thumbnail ? form.shareFrame || form.coverFrame : ''}
+                    />
+                </div>
+                {form.thumbnail ? (
+                    <div className="pf-cover-tools">
+                        <button type="button" className="pf-small quiet" onClick={() => share.adjust(form.thumbnail, form.shareFrame || form.coverFrame)} disabled={uploading}>
+                            <Move size={14} aria-hidden="true" /> {t('coverPhoto.position')}
+                        </button>
+                    </div>
+                ) : <p className="pf-hint">{t('events.form.shareNoCover')}</p>}
+                {share.framer}
             </section>
 
             <section className="pf-group">
@@ -431,6 +485,22 @@ export default function ProposeForm() {
                 <label className="pf-label" htmlFor="pf-about">{t('events.propose.about')} <span className="pf-optional">{t('events.propose.optional')}</span></label>
                 <textarea id="pf-about" className="pf-input pf-area" rows={4} maxLength={5000} placeholder={t('events.propose.aboutPlaceholder')} value={form.about} onChange={set('about')} />
             </section>
+
+            {canInvite && (
+                <section className="pf-group">
+                    <span className="pf-label">{t('events.propose.invite')} <span className="pf-optional">{t('events.propose.optional')}</span></span>
+                    <MemberSearchSelect
+                        value={invitees}
+                        onChange={(list) => setInvitees(list.slice(0, MAX_INVITES))}
+                        placeholder={t('events.propose.invitePlaceholder')}
+                        taken={{
+                            ...Object.fromEntries(goingIds.map((uid) => [uid, t('events.proposals.inLabel')])),
+                            ...(user?.id ? { [user.id]: t('events.proposals.you') } : {}),
+                        }}
+                    />
+                    <p className="pf-hint">{t('events.propose.inviteHint')}</p>
+                </section>
+            )}
 
             {error && <div className="pf-error" role="alert"><AlertCircle size={16} /> <span>{error}</span></div>}
             <button type="submit" className="pf-submit" disabled={saving || uploading}>
@@ -477,7 +547,8 @@ export default function ProposeForm() {
                 .pf-venue-text b { font-size: 1rem; color: var(--color-gray-900); }
                 .pf-venue-text span { font-size: 0.82rem; color: var(--color-gray-500); }
                 .pf-venue-x { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--color-gray-100); color: var(--color-gray-700); display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
-                .pf-cover { position: relative; border-radius: 14px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .pf-cover { position: relative; border-radius: 14px; clip-path: inset(0 round 14px); overflow: hidden; aspect-ratio: 16 / 10; background: var(--color-gray-100); }
+                .pf-share { width: 100%; max-width: 420px; }
                 .pf-cover-busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.6); }
                 .pf-cover-tools { display: flex; flex-wrap: wrap; gap: 8px; }
                 .pf-small {

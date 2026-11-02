@@ -1749,8 +1749,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                         ) : (
                                             <video src={item.previewUrl} muted />
                                         )}
-                                        <button className="primal-compose-media-remove" onClick={() => removeAttachment(i)}>
-                                            <X size={10} />
+                                        <button className="primal-compose-media-remove x-remove" onClick={() => removeAttachment(i)} aria-label={t('feed.removeAttachment', 'Remove')}>
+                                            <X size={14} />
                                         </button>
                                     </div>
                                 ))}

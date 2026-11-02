@@ -90,7 +90,7 @@ test.describe('keytr PRF passkey', () => {
         whitelistPubkey(pubkey);
 
         // Register the PRF passkey from Settings (publishes the kind:31777 v=1 event)
-        await page.goto('/settings/nostr');
+        await page.goto('/settings/nostr/key');
         const saveBtn = page.locator('button:has-text("Save to Passkey")');
         await expect(saveBtn).toBeVisible();
         await saveBtn.click();
@@ -127,7 +127,7 @@ test.describe('keytr PRF passkey', () => {
         await signupWithNewKeys(page, context);
         // No whitelist needed — publish should never be reached.
 
-        await page.goto('/settings/nostr');
+        await page.goto('/settings/nostr/key');
         const saveBtn = page.locator('button:has-text("Save to Passkey")');
         // Two correct outcomes:
         //  - getClientCapabilities reported no PRF → button gated off, or

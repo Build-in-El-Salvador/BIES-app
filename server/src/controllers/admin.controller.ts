@@ -23,6 +23,10 @@ import {
     isUniqueViolation,
 } from '../services/points.service';
 import { BADGES } from '../services/badges.catalog';
+import { publishProfileUpdate } from '../services/nostr.service';
+import { nostrProfileFor, privacyOf } from '../services/profilePrivacy';
+import { recordReleasedNip05 } from '../services/releasedNip05';
+import { followPublicProfile } from './publicNostr.controller';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
@@ -62,7 +66,7 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
                 select: {
                     id: true, email: true, nostrPubkey: true, role: true, isAdmin: true,
                     isVerified: true, isBanned: true, createdAt: true,
-                    profile: { select: { name: true, avatar: true, company: true } },
+                    profile: { select: { name: true, avatar: true, company: true, nip05Name: true } },
                     _count: { select: { projects: true, investments: true } },
                 },
             }),
@@ -251,6 +255,56 @@ export async function verifyUser(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Verify user error:', error);
         res.status(500).json({ error: 'Failed to verify user' });
+    }
+}
+
+/**
+ * DELETE /admin/users/:id/nip05
+ * Take away a member's BIES address (name@buildinelsalvador.com): one that
+ * passes for someone else, or that BIES won't carry. Other Nostr apps stop
+ * showing it as verified once nostr.json stops answering for it. The name
+ * stays taken away from everyone, the member too, until an admin deletes
+ * its row in released_nip05 (services/releasedNip05.ts). The member can
+ * claim another.
+ */
+export async function removeUserNip05(req: Request, res: Response): Promise<void> {
+    try {
+        const profile = await prisma.profile.findUnique({ where: { userId: req.params.id } });
+        if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }
+        if (!profile.nip05Name) { res.json({ id: req.params.id, nip05Name: null }); return; }
+
+        const owner = await prisma.user.findUnique({ where: { id: req.params.id }, select: { nostrPubkey: true } });
+        const updated = await prisma.$transaction(async (tx) => {
+            const changed = await tx.profile.update({ where: { userId: req.params.id }, data: { nip05Name: null, nip05ClaimedAt: null } });
+            await recordReleasedNip05(tx, profile.nip05Name!, owner?.nostrPubkey ?? null, { blocked: true });
+            return changed;
+        });
+        await prisma.auditLog.create({
+            data: {
+                userId: req.user!.id,
+                action: 'USER_NIP05_REMOVED',
+                resource: `user:${req.params.id}`,
+                metadata: JSON.stringify({ nip05Name: profile.nip05Name }),
+            },
+        });
+        await Promise.all([
+            cache.del(cacheKey.profileDetail(req.params.id)),
+            cache.del(cacheKey.profileDetail(profile.id)),
+            owner?.nostrPubkey ? cache.del(cacheKey.profileDetail(owner.nostrPubkey)) : Promise.resolve(),
+            cache.delPattern('profiles:'),
+        ]);
+
+        // Their Nostr profiles follow, for keys BIES holds (a key on the
+        // member's device updates when they next save their profile): the
+        // public one with the parts last published, if it follows changes.
+        publishProfileUpdate(req.params.id, nostrProfileFor(updated, privacyOf(updated.privacy)))
+            .catch((err) => console.error('[Nostr] Profile sync failed:', err));
+        followPublicProfile(req.params.id);
+
+        res.json({ id: req.params.id, nip05Name: null });
+    } catch (error) {
+        console.error('Remove BIES address error:', error);
+        res.status(500).json({ error: 'Failed to remove the BIES address' });
     }
 }
 

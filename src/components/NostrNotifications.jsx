@@ -12,23 +12,27 @@ import { nip19 } from 'nostr-tools';
 
 // The app's own notices that belong in the bell beside the Feed activity:
 // a listing approved or taken down, a request to hand a listing over, a new
-// follower, a profile view (Settings → Notifications: "everything also shows
-// under the bell").
+// follower, a profile view, an invite to a meetup (Settings → Notifications:
+// "everything also shows under the bell").
 const APP_TYPES = new Set(['SYSTEM', 'FOLLOW', 'PROFILE_VIEW']);
 const appData = (n) => {
     if (n.data && typeof n.data === 'object') return n.data;
     try { return JSON.parse(n.data || '{}'); } catch { return {}; }
 };
-// The member a follow or a profile view is about.
+const isInvite = (n) => n.type === 'EVENT_RSVP' && appData(n).status === 'INVITED';
+const inBell = (n) => APP_TYPES.has(n.type) || isInvite(n);
+// The member a follow, a profile view or an invite is from.
 const appActor = (n) => {
-    const { followerId, viewerId } = appData(n);
-    const id = followerId || viewerId;
+    const { followerId, viewerId, inviterId } = appData(n);
+    const id = followerId || viewerId || inviterId;
     return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
 };
-// Only links inside the app; a follow or a view opens that member's profile.
+// Only links inside the app; an invite opens its event, a follow or a view
+// that member's profile.
 const appLink = (n) => {
-    const link = appData(n).link;
+    const { link, eventId } = appData(n);
     if (typeof link === 'string' && /^\/(?![\/\\])/.test(link)) return link;
+    if (isInvite(n) && typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId)) return `/events/${eventId}`;
     const actor = appActor(n);
     return actor ? `/builder/${actor}` : null;
 };
@@ -64,7 +68,7 @@ const NostrNotifications = ({ mobile = false }) => {
     const muted = useMuted();
     const hiddenActor = (pubkey) => blocks.pubkeys.has(pubkey) || muted.has(pubkey);
     const appItems = (appNotifications || [])
-        .filter((n) => APP_TYPES.has(n.type) && !(appActor(n) && blocks.ids.has(appActor(n))))
+        .filter((n) => inBell(n) && !(appActor(n) && blocks.ids.has(appActor(n))))
         .map((n) => ({ id: `app:${n.id}`, app: n, createdAt: Math.floor(new Date(n.createdAt).getTime() / 1000) }));
     const items = [...notifications.filter((n) => !hiddenActor(n.actorPubkey)), ...appItems].sort((a, b) => b.createdAt - a.createdAt);
     const isUnread = (item) => (item.app ? !item.app.isRead : !readIds.has(item.id));

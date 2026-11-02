@@ -14,32 +14,30 @@
  *      is the amount credited — the client-supplied `amount` tag is ignored
  *   4. the request targets this course's addressable coordinate
  *
- * Sum of verified receipts >= priceSats → CoursePurchase + Enrollment in
- * one transaction. Unique constraints make claims idempotent.
+ * Sum of verified receipts (each payment once) >= priceSats → CoursePurchase
+ * + Enrollment in one transaction. Unique constraints make claims idempotent.
  */
 
-import { createHash } from 'crypto';
-import { decode as decodeBolt11 } from 'light-bolt11-decoder';
 import type { Event } from 'nostr-tools/pure';
 import type { Filter } from 'nostr-tools/filter';
 import prisma from '../lib/prisma';
 import { config } from '../config';
-import { cache } from './redis.service';
 import { createNotification } from './notification.service';
-import { safeGetJson } from '../utils/safeFetch';
+import { decodeInvoice, firstTag, getLnurlPayMetadata, verifyZapReceipt, type DecodedInvoice } from './zapReceipt';
+import { coalesced } from '../utils/coalesce';
 
-const LNURL_CACHE_TTL = 3600; // 1h
+// Where they live now; imported from here before.
+export { decodeInvoice, getLnurlPayMetadata } from './zapReceipt';
+export type { DecodedInvoice, LnurlPayMetadata } from './zapReceipt';
+
 const RELAY_QUERY_TIMEOUT_MS = 8000;
+// Course zaps from one buyer arriving within this long make one check.
+const AUTO_CLAIM_DELAY_MS = 5000;
+// Checks (each a relay query) at once, and buyers waiting for one at most.
+const AUTO_CLAIM_MAX_CONCURRENT = 2;
+const AUTO_CLAIM_MAX_WAITING = 200;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-
-export interface LnurlPayMetadata {
-    callback: string;
-    allowsNostr: boolean;
-    nostrPubkey: string | null;
-    minSendable: number;
-    maxSendable: number;
-}
 
 export interface ReceiptVerifyContext {
     /** Course author's Nostr pubkey (the zap recipient). */
@@ -52,13 +50,6 @@ export interface ReceiptVerifyContext {
     coordinates: Set<string>;
 }
 
-/** Decoded bolt11 fields relevant to zap verification. */
-export interface DecodedInvoice {
-    amountMsats: bigint;
-    /** hex sha256 the invoice commits to (description_hash), or null. */
-    descriptionHashHex: string | null;
-}
-
 export interface ClaimResult {
     purchased: boolean;
     verifiedSats: number;
@@ -66,79 +57,7 @@ export interface ClaimResult {
     receiptsChecked: number;
 }
 
-// ─── LNURL metadata (cached) ─────────────────────────────────────────────────
-
-/**
- * Fetch and cache the LNURL-pay metadata for a lud16 address. The
- * `nostrPubkey` field is the trust anchor for receipt verification.
- */
-export async function getLnurlPayMetadata(
-    lightningAddress: string
-): Promise<LnurlPayMetadata | null> {
-    const match = /^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i.exec(
-        (lightningAddress || '').trim()
-    );
-    if (!match) return null;
-    const [, name, domain] = match;
-
-    const cKey = `lnurlp:${name.toLowerCase()}@${domain.toLowerCase()}`;
-    const cached = await cache.getJson<LnurlPayMetadata>(cKey);
-    if (cached) return cached;
-
-    try {
-        // SSRF-hardened: `domain` comes from a user-controlled lightningAddress,
-        // so this fetch validates every resolved IP against private/reserved
-        // ranges and pins it to the socket (see safeGetJson). https-only.
-        const data: any = await safeGetJson(
-            `https://${domain}/.well-known/lnurlp/${encodeURIComponent(name)}`,
-            RELAY_QUERY_TIMEOUT_MS
-        );
-        if (!data?.callback) return null;
-
-        const meta: LnurlPayMetadata = {
-            callback: String(data.callback),
-            allowsNostr: Boolean(data.allowsNostr),
-            nostrPubkey:
-                typeof data.nostrPubkey === 'string' && /^[0-9a-f]{64}$/i.test(data.nostrPubkey)
-                    ? data.nostrPubkey.toLowerCase()
-                    : null,
-            minSendable: Number(data.minSendable) || 1000,
-            maxSendable: Number(data.maxSendable) || 100_000_000_000,
-        };
-        await cache.setJson(cKey, meta, LNURL_CACHE_TTL);
-        return meta;
-    } catch {
-        return null;
-    }
-}
-
-// ─── Invoice decoding ────────────────────────────────────────────────────────
-
-/** Decode a bolt11 invoice's amount + description_hash (null on failure). */
-export function decodeInvoice(bolt11: string): DecodedInvoice | null {
-    try {
-        const decoded = decodeBolt11(bolt11);
-        let amountMsats = 0n;
-        let descriptionHashHex: string | null = null;
-        // The lib's d.ts section union omits description_hash; the JS emits it.
-        for (const section of (decoded.sections ?? []) as Array<{ name: string; value?: unknown }>) {
-            if (section.name === 'amount') amountMsats = BigInt(String(section.value));
-            if (section.name === 'description_hash' && section.value) {
-                descriptionHashHex = String(section.value).toLowerCase();
-            }
-        }
-        return { amountMsats, descriptionHashHex };
-    } catch {
-        return null;
-    }
-}
-
 // ─── Receipt verification (pure-ish core, decode injectable for tests) ──────
-
-function firstTag(event: Event, name: string): string | null {
-    const tag = event.tags.find((t) => t[0] === name);
-    return tag?.[1] ?? null;
-}
 
 /**
  * Verify one kind-9735 receipt against the claim context. Returns the
@@ -149,55 +68,30 @@ export async function verifyZapReceiptForPurchase(
     ctx: ReceiptVerifyContext,
     decode: (bolt11: string) => DecodedInvoice | null = decodeInvoice
 ): Promise<number> {
+    return (await verifiedPurchasePayment(receipt, ctx, decode))?.sats ?? 0;
+}
+
+/** As verifyZapReceiptForPurchase, with the payment's hash; null if it fails. */
+async function verifiedPurchasePayment(
+    receipt: Event,
+    ctx: ReceiptVerifyContext,
+    decode: (bolt11: string) => DecodedInvoice | null = decodeInvoice
+): Promise<{ sats: number; paymentHash: string } | null> {
     try {
-        // Plain-JSON clone: strips nostr-tools' cached-verification symbol so
-        // signature checks below are always real, regardless of the source.
-        receipt = JSON.parse(JSON.stringify(receipt)) as Event;
-        if (receipt.kind !== 9735) return 0;
+        // 1–3 (zapReceipt.ts): the zapper's signature, the request's, the invoice binding.
+        const zap = await verifyZapReceipt(receipt, { zapperPubkey: ctx.zapperPubkey, recipientPubkey: ctx.authorPubkey }, decode);
+        if (!zap) return null;
 
-        // 1. Receipt must be signed by the LNURL provider's zapper key.
-        if (receipt.pubkey.toLowerCase() !== ctx.zapperPubkey.toLowerCase()) return 0;
-        const { verifyEvent } = await import('nostr-tools/pure');
-        if (!verifyEvent(receipt)) return 0;
+        // The request was signed by the claiming buyer…
+        if (zap.request.pubkey.toLowerCase() !== ctx.buyerPubkey.toLowerCase()) return null;
+        // …and targets this course's coordinate.
+        const coordinate = firstTag(zap.request, 'a') ?? firstTag(receipt, 'a');
+        if (!coordinate || !ctx.coordinates.has(coordinate)) return null;
 
-        // Recipient must be the course author.
-        if (firstTag(receipt, 'p') !== ctx.authorPubkey) return 0;
-
-        // 2. Embedded zap request: valid signature, signed by the buyer.
-        const description = firstTag(receipt, 'description');
-        if (!description) return 0;
-        let request: Event;
-        try {
-            request = JSON.parse(description) as Event;
-        } catch {
-            return 0;
-        }
-        if (request.kind !== 9734) return 0;
-        if (request.pubkey.toLowerCase() !== ctx.buyerPubkey.toLowerCase()) return 0;
-        if (!verifyEvent(request)) return 0;
-
-        // Request must target the author and this course's coordinate.
-        if (firstTag(request, 'p') !== ctx.authorPubkey) return 0;
-        const coordinate = firstTag(request, 'a') ?? firstTag(receipt, 'a');
-        if (!coordinate || !ctx.coordinates.has(coordinate)) return 0;
-
-        // 3. bolt11 binding: description_hash commits to this exact request,
-        //    amount comes from the invoice — never from client-supplied tags.
-        const bolt11 = firstTag(receipt, 'bolt11');
-        if (!bolt11) return 0;
-        const decoded = decode(bolt11);
-        if (!decoded || decoded.amountMsats <= 0n) return 0;
-        if (!decoded.descriptionHashHex) return 0;
-        const expectedHash = createHash('sha256').update(description).digest('hex');
-        if (decoded.descriptionHashHex !== expectedHash) return 0;
-
-        // Cross-check the request's declared amount when present.
-        const requestAmount = firstTag(request, 'amount');
-        if (requestAmount && BigInt(requestAmount) !== decoded.amountMsats) return 0;
-
-        return Number(decoded.amountMsats / 1000n);
+        const sats = Number(zap.amountMsats / 1000n);
+        return sats > 0 ? { sats, paymentHash: zap.paymentHash } : null;
     } catch {
-        return 0;
+        return null;
     }
 }
 
@@ -347,10 +241,13 @@ export async function claimZapPurchase(userId: string, courseId: string): Promis
 
     let verifiedSats = 0;
     const usedReceiptIds: string[] = [];
+    const paymentsCounted = new Set<string>();
     for (const receipt of candidates) {
-        const sats = await verifyZapReceiptForPurchase(receipt, ctx);
-        if (sats > 0) {
-            verifiedSats += sats;
+        const payment = await verifiedPurchasePayment(receipt, ctx);
+        // A payment counts once, whatever number of receipts carry it.
+        if (payment && !paymentsCounted.has(payment.paymentHash)) {
+            paymentsCounted.add(payment.paymentHash);
+            verifiedSats += payment.sats;
             usedReceiptIds.push(receipt.id);
         }
     }
@@ -409,10 +306,24 @@ export async function claimZapPurchase(userId: string, courseId: string): Promis
     };
 }
 
+const autoClaims = coalesced(
+    ({ senderPubkey, courseId }: { senderPubkey: string; courseId: string }) => attemptAutoClaim(senderPubkey, courseId),
+    { delayMs: AUTO_CLAIM_DELAY_MS, maxConcurrent: AUTO_CLAIM_MAX_CONCURRENT, maxWaiting: AUTO_CLAIM_MAX_WAITING },
+);
+
 /**
- * Fire-and-forget hook for the zap indexer: when a receipt matched to a
- * course arrives from a known user without a purchase, try to auto-claim so
- * external-wallet payers unlock without pressing a button. Never throws.
+ * Hook for the zap indexer: a receipt matched to a course from a known user
+ * without a purchase leads to an auto-claim (attemptAutoClaim). Receipts from
+ * the same buyer for the same course arriving together make one claim, and
+ * so one relay query; a few claims run at once. Never throws.
+ */
+export function scheduleAutoClaim(senderPubkey: string, courseId: string): void {
+    autoClaims(`${senderPubkey}:${courseId}`, { senderPubkey, courseId });
+}
+
+/**
+ * Try to auto-claim a course purchase so external-wallet payers unlock
+ * without pressing a button (through scheduleAutoClaim). Never throws.
  */
 export async function attemptAutoClaim(senderPubkey: string, courseId: string): Promise<void> {
     try {

@@ -15,6 +15,7 @@ import { nostrService } from '../services/nostrService';
 import ZapButton from '../components/ZapButton';
 import TranslatableText from '../components/TranslatableText';
 import ProfileView from '../components/profile/ProfileView';
+import { RepeatLine } from '../components/events/EventBits';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { unblock } from '../services/blockStore';
 import '../components/moderation/Moderation.css';
@@ -499,6 +500,7 @@ const PublicProfile = ({ type }) => {
                                             <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</div>
                                             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
                                                 <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                <RepeatLine event={event} />
                                                 {event.attendeeCount > 0 && (
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--color-gray-500)' }}>
                                                         <Users size={12} /> {event.attendeeCount}
@@ -559,7 +561,7 @@ const PublicProfile = ({ type }) => {
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ fontWeight: 600, color: 'var(--color-gray-900)', fontSize: '0.95rem', fontFamily: 'var(--font-display)' }}>{rsvp.event.title}</div>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                                <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                <span style={{ color: 'var(--color-primary)', fontWeight: 500 }}>{new Date(rsvp.occurrenceStart || rsvp.event.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 <span style={{
                                                     padding: '0.15rem 0.5rem',
                                                     borderRadius: '999px',

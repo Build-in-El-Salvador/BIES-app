@@ -214,7 +214,8 @@ export const moderationApi = {
 
 export const signerApi = {
     sign: (event) => post('/signer/sign', { event }).then((data) => data.event),
-    log: (limit) => get('/signer/log', { limit }),
+    // hide: kinds to leave out, e.g. [22242, 24242]
+    log: (limit, hide = [], before = null) => get('/signer/log', { limit, ...(hide.length ? { hide: hide.join(',') } : {}), ...(before ? { before } : {}) }),
 };
 
 // ─── Profiles ────────────────────────────────────────────────────────────────
@@ -273,7 +274,8 @@ export const projectsApi = {
 
 export const directoryApi = {
     list: (params = {}) => get('/directory', params),
-    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved }
+    // params: { type, search, certified, btc, language, sort, page, limit, ownerId, saved, runBy, worksAt }
+    // runBy / worksAt: a member's "Runs" and "Works at" (their profile).
 
     // The businesses and farms a member recommends, newest first (their profile).
     recommendedBy: (userId, params = {}) => get(`/directory/recommended-by/${encodeURIComponent(userId)}`, params),
@@ -508,8 +510,13 @@ export const eventsApi = {
     removePartner: (id, partnerId) => del(`/events/${id}/partners/${partnerId}`),
     // A proposed meetup's proposer calling it off (everyone in is told)
     callOff: (id) => post(`/events/${id}/call-off`, {}),
+    // One date of a repeating event (its key), called off or brought back (its host side)
+    callOffDate: (id, occurrence) => post(`/events/${id}/dates/call-off`, { occurrence }),
+    restoreDate: (id, occurrence) => post(`/events/${id}/dates/restore`, { occurrence }),
 
     invite: (id, userId) => post(`/events/${id}/invite`, { userId }),
+    // A proposed meetup's proposer inviting members → { invited, skipped }
+    inviteMembers: (id, userIds) => post(`/events/${id}/invites`, { userIds }),
 
     importUrl: (url) => post('/events/import-url', { url }),
 
@@ -616,6 +623,7 @@ export const adminApi = {
     setRole: (id, role) => put(`/admin/users/${id}/role`, { role }),
     setAdmin: (id, isAdmin) => put(`/admin/users/${id}/admin`, { isAdmin }),
     verifyUser: (id) => put(`/admin/users/${id}/verify`, {}),
+    removeNip05: (id) => del(`/admin/users/${id}/nip05`),
     featureProject: (id, featured) => put(`/admin/projects/${id}/feature`, { featured }),
     deleteProject: (id) => del(`/admin/projects/${id}`),
     changeProjectOwner: (id, newOwnerId) => put(`/admin/projects/${id}/owner`, { newOwnerId }),
@@ -776,6 +784,10 @@ export const settingsApi = {
     updateNotifications: (data) => put('/settings/notifications', data),
     getPrivacy: () => get('/settings/privacy'),
     updatePrivacy: (data) => put('/settings/privacy', data),
+    // Settings → Nostr: the public Nostr profile (server: controllers/publicNostr.controller.ts)
+    getNostr: (params = {}) => get('/settings/nostr', params), // { preview: 0 } skips reading public relays
+    updateNostr: (data) => put('/settings/nostr', data), // { on, parts }
+    publishNostr: (body = {}) => post('/settings/nostr/publish', body), // { seenAt, event }
 };
 
 // BIES Talents: what members offer to do, with their proof of work (members only).

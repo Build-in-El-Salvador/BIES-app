@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Ban, ExternalLink, Loader2, Search, Shield, Trash2, RefreshCw, X, RotateCcw, AlertTriangle, UserX } from 'lucide-react';
+import { BadgeCheck, Ban, ExternalLink, Loader2, Search, Trash2, RefreshCw, X, RotateCcw, AlertTriangle, UserX } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
+
+// Addresses sign-up used to hand out: they work but aren't verified (server: services/nip05.ts).
+const GIVEN_AT_SIGNUP = /^nostr-[0-9a-f]{8}\d*$/;
 
 const ROLE_OPTIONS = ['', 'MEMBER', 'BUILDER', 'INVESTOR', 'EVENT_HOST', 'EDUCATOR', 'MOD', 'ADMIN'];
 
@@ -415,13 +418,14 @@ const AdminUsers = () => {
         }
     };
 
-    const handleVerify = async (id) => {
+    const handleRemoveNip05 = async (id, address, name) => {
+        if (!window.confirm(`Remove ${address}@buildinelsalvador.com from ${name || 'this member'}?\n\nThey lose the verified tick, other Nostr apps stop showing the address, and the name becomes free to claim. They can claim another.`)) return;
         setActionLoading(id);
         try {
-            await adminApi.verifyUser(id);
+            await adminApi.removeNip05(id);
             fetchUsers(pagination.page);
         } catch (err) {
-            alert('Failed to verify user');
+            alert('Failed to remove the BIES address');
         } finally {
             setActionLoading(null);
         }
@@ -566,7 +570,7 @@ const AdminUsers = () => {
                                         <th>Npub</th>
                                         <th>Role</th>
                                         <th>Projects</th>
-                                        <th>Verified</th>
+                                        <th>BIES address</th>
                                         <th>Status</th>
                                         <th>Joined</th>
                                         <th>Actions</th>
@@ -609,19 +613,24 @@ const AdminUsers = () => {
                                                 </select>
                                             </td>
                                             <td data-label="Projects" className="mobile-hide">{u._count?.projects || 0}</td>
-                                            <td data-label="Verified" className="mobile-hide">
-                                                {u.isVerified ? (
-                                                    <CheckCircle size={16} style={{ color: '#16a34a' }} />
-                                                ) : (
-                                                    <button
-                                                        className="icon-btn approve"
-                                                        onClick={() => handleVerify(u.id)}
-                                                        title="Verify user"
-                                                        disabled={actionLoading === u.id}
-                                                    >
-                                                        <Shield size={16} />
-                                                    </button>
-                                                )}
+                                            {/* A claimed BIES address is what "verified" means (Settings → Nostr). */}
+                                            <td data-label="BIES address" className="mobile-hide">
+                                                {u.profile?.nip05Name ? (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.85rem', color: GIVEN_AT_SIGNUP.test(u.profile.nip05Name) ? 'var(--color-gray-500)' : undefined }}>
+                                                        {!GIVEN_AT_SIGNUP.test(u.profile.nip05Name) && <BadgeCheck size={14} style={{ color: 'var(--color-primary)' }} aria-label="Verified" />}
+                                                        {u.profile.nip05Name}
+                                                        {isAdmin && (
+                                                            <button
+                                                                className="icon-btn delete"
+                                                                onClick={() => handleRemoveNip05(u.id, u.profile.nip05Name, u.profile?.name)}
+                                                                title="Remove this BIES address"
+                                                                disabled={actionLoading === u.id}
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        )}
+                                                    </span>
+                                                ) : <span style={{ color: 'var(--color-gray-400)' }}>—</span>}
                                             </td>
                                             <td data-label="Status">
                                                 <span className={`status-badge ${u.isBanned ? 'banned' : 'active'}`}>

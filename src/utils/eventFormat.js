@@ -167,3 +167,24 @@ export function defaultDecideBy(date, time, now = new Date()) {
     else if (Math.ceil(pick / QUARTER) * QUARTER <= latest) pick = Math.ceil(pick / QUARTER) * QUARTER;
     return toFormFields(new Date(pick).toISOString());
 }
+
+/**
+ * A member's first name, for "Edwin invited you": the first word of their
+ * name, or '' for a placeholder one ("nostr:1a2b3c4d"; the caller says
+ * "A member").
+ */
+export function firstNameOf(name) {
+    if (isPlaceholderName(name)) return '';
+    return name.trim().split(/\s+/)[0];
+}
+
+/**
+ * Whether a proposed meetup takes invites now, as the server checks: people
+ * can still join (not called off, not past its decide-by time while it's
+ * still proposed) and it hasn't started.
+ */
+export function invitesOpen(event, now = Date.now()) {
+    if (!event || (event.stage !== 'proposed' && event.stage !== 'on')) return false;
+    if (event.stage === 'proposed' && event.decideBy && new Date(event.decideBy).getTime() < now) return false;
+    return new Date(event.startDate).getTime() > now;
+}

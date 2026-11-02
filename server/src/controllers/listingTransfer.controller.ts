@@ -4,6 +4,7 @@ import { recomputeListingScore } from '../services/directoryReputation.service';
 import { createNotification } from '../services/notification.service';
 import { blockedEitherWay, moderatorsOwn } from '../services/moderation.service';
 import { mirrorToNostr } from './directory.controller';
+import { ADDED_AS_STAFF, runnerId } from './listingTeam.controller';
 import { z } from 'zod';
 
 /**
@@ -16,7 +17,9 @@ import { z } from 'zod';
  * - staff move it outright (POST /admin/directory/:id/owner).
  *
  * Once moved, it's the new owner's own business: they can edit it, and
- * their own review of it goes, since it can't count.
+ * their own review of it goes, since it can't count. Its team starts again
+ * with them: when nobody ran it, only the member who added it as someone
+ * who works there stays on it (and the new owner is told).
  */
 
 export const claimSchema = z.object({
@@ -55,30 +58,58 @@ const activeMember = (userId: string) =>
 /**
  * Give the listing to `toUserId`: it's their own business from now on. Any
  * other open request on it closes; `transferId` is the one this grants.
+ *
+ * Its team: the member who ran it keeps theirs when it's them taking it
+ * over; a new runner starts with none (the old one's people go with it).
+ * When nobody ran it, only the member who added it as someone who works
+ * there stays (they said so themselves), and the new owner hears about it.
  */
 async function moveListing(listingId: string, toUserId: string, decidedById: string, transferId?: string): Promise<void> {
     const now = new Date();
-    await prisma.$transaction([
-        prisma.directoryListing.update({
+    const kept = await prisma.$transaction(async (tx) => {
+        const before = await tx.directoryListing.findUnique({
             where: { id: listingId },
-            data: { ownerId: toUserId, isOwnBusiness: true, memberUserId: null },
-        }),
-        prisma.directoryEndorsement.deleteMany({ where: { listingId, userId: toUserId } }),
-        // A new runner starts with no team: the old one's people go with it.
-        prisma.listingTeamMember.deleteMany({ where: { listingId } }),
-        prisma.listingTransfer.updateMany({
+            select: { ownerId: true, memberUserId: true, isOwnBusiness: true, addedAs: true },
+        });
+        const oldRunner = before ? runnerId(before) : null;
+        const adder = before && !oldRunner && before.addedAs === ADDED_AS_STAFF && before.ownerId !== toUserId ? before.ownerId : null;
+        const stays = adder
+            ? await tx.listingTeamMember.findUnique({ where: { listingId_userId: { listingId, userId: adder } }, select: { userId: true } })
+            : null;
+        await tx.directoryListing.update({
+            where: { id: listingId },
+            data: { ownerId: toUserId, isOwnBusiness: true, addedAs: '', memberUserId: null },
+        });
+        await tx.directoryEndorsement.deleteMany({ where: { listingId, userId: toUserId } });
+        await tx.listingTeamMember.deleteMany({
+            where: oldRunner && oldRunner === toUserId ? { listingId, userId: toUserId }
+                : stays ? { listingId, userId: { not: stays.userId } }
+                    : { listingId },
+        });
+        await tx.listingTransfer.updateMany({
             where: { listingId, status: 'pending', ...(transferId ? { id: { not: transferId } } : {}) },
             data: { status: 'cancelled', decidedById, decidedAt: now },
-        }),
-        ...(transferId
-            ? [prisma.listingTransfer.update({ where: { id: transferId }, data: { status: 'accepted', decidedById, decidedAt: now } })]
-            : []),
-    ]);
+        });
+        if (transferId) {
+            await tx.listingTransfer.update({ where: { id: transferId }, data: { status: 'accepted', decidedById, decidedAt: now } });
+        }
+        return stays?.userId ?? null;
+    });
     await recomputeListingScore(listingId).catch((err) =>
         console.error('[Directory] Score recompute failed:', err)
     );
     const listing = await prisma.directoryListing.findUnique({ where: { id: listingId } });
     if (listing) mirrorToNostr(listing);
+    if (listing && kept) {
+        const name = await nameOf(kept);
+        await createNotification({
+            userId: toUserId,
+            type: 'SYSTEM',
+            title: `${name} is on ${listing.name}'s team`,
+            body: `They added it as someone who works there, so they can host events as ${listing.name}. You can take them off its team from its page.`,
+            data: { link: listingLink(listing), listingId: listing.id, actorId: kept },
+        }).catch((err) => console.error('[Directory] Team notification failed:', err));
+    }
 }
 
 /** Staff who should hear about claims (not the two members involved). */

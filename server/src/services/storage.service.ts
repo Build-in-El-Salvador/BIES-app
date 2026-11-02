@@ -43,9 +43,11 @@ const PRIVATE_DIR = path.join(UPLOAD_DIR, 'private');
  * uploads volume, as /tmp in the container is memory. Never served.
  */
 export const PROCESSING_DIR = path.join(UPLOAD_DIR, 'processing');
+/** Shared events' link-preview pictures (shareCard.service.ts): drawn again whenever they'd change, so never needed back. Served by its own route only. */
+export const CARD_DIR = path.join(UPLOAD_DIR, 'cards');
 
 // Ensure upload directories exist
-[PUBLIC_DIR, THUMB_DIR, PRIVATE_DIR, PROCESSING_DIR].forEach((dir) => {
+[PUBLIC_DIR, THUMB_DIR, PRIVATE_DIR, PROCESSING_DIR, CARD_DIR].forEach((dir) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }

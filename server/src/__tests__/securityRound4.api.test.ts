@@ -190,7 +190,7 @@ describe('who is listed by account role', () => {
 describe('NIP-05 names', () => {
     it('staff-sounding names are kept for staff', async () => {
         for (const name of ['admin', 'support', 'bies', 'bies.support', 'admin_mike', 'official-news']) expect(isReservedNip05(name), name).toBe(true);
-        for (const name of ['mike', 'ana.lopez', 'adminton', 'biesta']) expect(isReservedNip05(name), name).toBe(false);
+        for (const name of ['ana', 'ana.lopez', 'adminton', 'biesta']) expect(isReservedNip05(name), name).toBe(false);
 
         const m = await member('Wants Support');
         const res = await call('PUT', '/api/profiles/me', { token: m.token, body: { nip05Name: 'support' } });
