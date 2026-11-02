@@ -831,6 +831,9 @@
         "date_not_next": "Solo su próxima fecha puede cambiar las siguientes.",
         "date_out_of_order": "Deja esa fecha después de la anterior y antes de la siguiente.",
         "date_end_before_start": "El final es antes del inicio.",
+        "date_overlaps": "Esa fecha tiene que terminar antes de que empiece la siguiente, y empezar después de que termine la anterior.",
+        "date_too_far": "Una fecha se puede cambiar hasta con un año de anticipación.",
+        "too_many_date_changes": "Un evento puede tener hasta {{count}} fechas cambiadas o canceladas por delante.",
         "too_many_repeating": "Puedes tener hasta {{count}} eventos que se repiten a la vez. Elimina uno que ya no necesites para agregar otro."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",

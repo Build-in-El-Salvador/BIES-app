@@ -213,6 +213,11 @@ export function lastOccurrence(s: Series): Occurrence | null {
         last = o;
         if (!o.calledOff) lastOn = o;
     }
+    // Its last dates all called off: back to the last one that wasn't.
+    for (let k = k0 - 1; !lastOn && last && k >= 0 && k > k0 - MAX_STEPS; k--) {
+        const o = occurrenceAt(s, s.repeat, k, length, changes);
+        if (!o.calledOff) lastOn = o;
+    }
     return lastOn ?? last ?? onlyDate(s);
 }
 
@@ -240,24 +245,50 @@ export function occurrenceFor(s: Series, key: Date): Occurrence | null {
     return k === null ? null : occurrenceAt(s, s.repeat, k, lengthOf(s), changesOf(s));
 }
 
+/** Which of a series' dates a key is (0 for the first), or null when it isn't one of them. */
+export function dateIndex(s: Series, key: Date): number | null {
+    if (!isRepeat(s.repeat) || (s.repeatUntil && key.getTime() > s.repeatUntil.getTime())) return null;
+    return indexOf(s, s.repeat, key);
+}
+
+/** The key of a series' k-th date (0 for the first), or null when there's none: before its first, or after its last day. */
+export function keyAt(s: Series, k: number): Date | null {
+    if (!isRepeat(s.repeat) || k < 0) return null;
+    const key = startOf(s.startDate, s.repeat, k);
+    return s.repeatUntil && key.getTime() > s.repeatUntil.getTime() ? null : key;
+}
+
+/**
+ * How far ahead one date can be changed or called off: a year. Further on,
+ * it's for the event as a whole (and a date there isn't loaded with it).
+ */
+export const DATES_AHEAD = 366 * DAY;
+
 /** The most a date may last, so it ends before the next one starts. */
 const MAX_LENGTH: Record<Repeat, number> = { WEEKLY: WEEK, BIWEEKLY: 2 * WEEK, MONTHLY_NTH: 28 * DAY, MONTHLY_LAST: 28 * DAY };
 
 /**
  * Why one date's own times don't work, if they don't: it must be a date of
- * the series, start after the date before it would be and before the date
- * after it would be (so the dates keep their order), and end after it
- * starts, before the next one would.
+ * the series, start after the date before it and before the date after it,
+ * as those are (moved, if they were; as the rule makes them, where there's
+ * none), so the dates keep their order, start after the one before has
+ * ended, and end after it starts and before the next one starts.
  */
 export function dateChangeProblem(s: Series, key: Date, start: Date, end: Date | null): string | null {
     if (!isRepeat(s.repeat)) return 'date_not_found';
     const k = s.repeatUntil && key.getTime() > s.repeatUntil.getTime() ? null : indexOf(s, s.repeat, key);
     if (k === null) return 'date_not_found';
-    const before = startOf(s.startDate, s.repeat, k - 1).getTime();
-    const after = startOf(s.startDate, s.repeat, k + 1).getTime();
+    const length = lengthOf(s);
+    const changes = changesOf(s);
+    const prev = k > 0 ? occurrenceAt(s, s.repeat, k - 1, length, changes) : null;
+    const nextKey = startOf(s.startDate, s.repeat, k + 1);
+    const next = s.repeatUntil && nextKey.getTime() > s.repeatUntil.getTime() ? null : occurrenceAt(s, s.repeat, k + 1, length, changes);
+    const before = (prev?.startDate ?? startOf(s.startDate, s.repeat, k - 1)).getTime();
+    const after = (next?.startDate ?? nextKey).getTime();
     if (start.getTime() <= before || start.getTime() >= after) return 'date_out_of_order';
     if (end && end.getTime() <= start.getTime()) return 'date_end_before_start';
     if (end && end.getTime() - start.getTime() >= MAX_LENGTH[s.repeat]) return 'repeat_too_long';
+    if ((end && end.getTime() >= after) || (prev?.endDate && prev.endDate.getTime() >= start.getTime())) return 'date_overlaps';
     return null;
 }
 

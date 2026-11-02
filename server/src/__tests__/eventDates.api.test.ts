@@ -249,9 +249,10 @@ describe('one date only', () => {
         const rule = await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { repeat: 'BIWEEKLY', locationName: 'Beach field' }, 'date') });
         expect(rule.status).toBe(200);
         const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: true } }))!;
-        // Every other week from the next date; its dates are other dates now, so none has a change.
+        // Every other week from the next date: that date is still one of its
+        // dates, so it keeps its own place (the form sent it as it showed it).
         expect(series).toMatchObject({ repeat: 'BIWEEKLY', startDate: e.next });
-        expect(series.dateChanges).toEqual([]);
+        expect(series.dateChanges.map((c) => [iso(c.occurrenceStart), c.locationName])).toEqual([[iso(e.next), 'Beach field']]);
     });
 });
 
@@ -269,8 +270,8 @@ describe('this date and every date after', () => {
         });
         expect(res.status).toBe(200);
         const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: { orderBy: { occurrenceStart: 'asc' } } } }))!;
-        // The next date is its first now, at the usual time and place: what was that date's own stays its own.
-        expect(series).toMatchObject({ title: 'BIES Football', startDate: e.next, endDate: svAt(3, '18:00'), locationName: 'Usual field', location: 'Usual field, San Benito' });
+        // Its dates don't move (its first date stays), at the usual time and place: what was that date's own stays its own.
+        expect(series).toMatchObject({ title: 'BIES Football', startDate: svAt(-11, '16:00'), endDate: svAt(-11, '18:00'), locationName: 'Usual field', location: 'Usual field, San Benito' });
         expect(series.dateChanges.map((c) => [iso(c.occurrenceStart), c.locationName, c.startDate && iso(c.startDate)])).toEqual([
             [iso(e.next), 'Beach field', iso(svAt(3, '10:00'))],
             [iso(e.after), 'Park', null],
@@ -290,7 +291,7 @@ describe('this date and every date after', () => {
         expect((await prisma.event.findUnique({ where: { id: e.id } }))!.title).toBe('BIES Football');
     });
 
-    it('a new time makes them other dates: their changes go, and the next date\'s answers move with it', async () => {
+    it('a new time moves every date: their changes and call-offs move with them, the next date\'s answers too, and who\'s going is told', async () => {
         const host = await member();
         const [guest, earlier] = [await member(), await member()];
         const e = await soccer(host);
@@ -306,16 +307,27 @@ describe('this date and every date after', () => {
             token: host.token, body: formBody(e, e.next, { startDate: iso(svAt(3, '17:00')), endDate: iso(svAt(3, '19:00')) }, 'series'),
         });
         expect(res.status).toBe(200);
-        const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: true } }))!;
+        const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: { orderBy: { occurrenceStart: 'asc' } } } }))!;
         expect(series).toMatchObject({ startDate: svAt(3, '17:00'), endDate: svAt(3, '19:00') });
-        expect(series.dateChanges.map((c) => iso(c.occurrenceStart))).toEqual([iso(e.before)]);
+        // The date after keeps its own place, the third stays called off, each at the new time; the one that's over stays.
+        expect(series.dateChanges.map((c) => [iso(c.occurrenceStart), c.locationName, !!c.calledOffAt])).toEqual([
+            [iso(e.before), 'Old field', false],
+            [iso(svAt(10, '17:00')), 'Park', false],
+            [iso(svAt(17, '17:00')), null, true],
+        ]);
         expect((await prisma.eventAttendee.findFirst({ where: { eventId: e.id, userId: guest.id } }))!.occurrenceStart).toEqual(svAt(3, '17:00'));
         expect((await prisma.eventAttendee.findFirst({ where: { eventId: e.id, userId: earlier.id } }))!.occurrenceStart).toEqual(e.before);
         const seen = await page(guest, e.id);
         expect(seen).toMatchObject({ startDate: iso(svAt(3, '17:00')), occurrence: iso(svAt(3, '17:00')), goingCount: 1, rsvpStatus: 'GOING' });
-        expect(seen.upcomingDates.every((d: any) => !d.changed && !d.calledOff)).toBe(true);
-        // A series edit tells no one.
-        expect(await notes(guest.id, e.id)).toHaveLength(0);
+        expect(seen.upcomingDates.slice(0, 3).map((d: any) => [d.key, d.changed, d.calledOff])).toEqual([
+            [iso(svAt(3, '17:00')), false, false],
+            [iso(svAt(10, '17:00')), true, false],
+            [iso(svAt(17, '17:00')), false, true],
+        ]);
+        // Who's going to the next date hears its new time; no one else.
+        expect((await notes(guest.id, e.id)).map((n) => [n.title, n.body])).toEqual([[`${e.title}: ${dayName(e.next)} changed`, 'Now 5:00 PM (was 4:00 PM)']]);
+        expect(await notes(earlier.id, e.id)).toHaveLength(0);
+        expect(await notes(host.id, e.id)).toHaveLength(0);
     });
 
     it('with no scope, as before: the dates as a whole', async () => {
@@ -422,5 +434,237 @@ describe('lists and previews', () => {
         const og = (await call('GET', `/api/preview/events/${e.id}/og`)).text;
         expect(og).toContain('10:00 AM');
         expect(og).toContain('Beach field');
+    });
+});
+
+describe('when every date moves, what each date had moves with it', () => {
+    it('a new time at the next date keeps that date\'s own place, at the new time', async () => {
+        const host = await member();
+        const e = await soccer(host);
+        await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { locationName: 'Beach field', location: 'Beach field, San Benito' }, 'date') });
+        // The form shows the next date at the beach; 5 PM for it and every date after.
+        const res = await call('PUT', `/api/events/${e.id}`, {
+            token: host.token,
+            body: formBody(e, e.next, { startDate: iso(svAt(3, '17:00')), endDate: iso(svAt(3, '19:00')), locationName: 'Beach field', location: 'Beach field, San Benito' }, 'series'),
+        });
+        expect(res.status).toBe(200);
+        const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: true } }))!;
+        expect(series).toMatchObject({ startDate: svAt(3, '17:00'), locationName: 'Usual field' });
+        expect(series.dateChanges.map((c) => [iso(c.occurrenceStart), c.locationName, c.startDate])).toEqual([[iso(svAt(3, '17:00')), 'Beach field', null]]);
+        expect(await page(host, e.id)).toMatchObject({ startDate: iso(svAt(3, '17:00')), locationName: 'Beach field' });
+    });
+
+    it('edited as a whole from its first date, a call-off stays on its date at the new time', async () => {
+        const host = await member();
+        const e = await soccer(host);
+        await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.after) } });
+        // A form for the whole event: its first date, an hour later.
+        const res = await call('PUT', `/api/events/${e.id}`, { token: host.token, body: { startDate: iso(svAt(-11, '17:00')), endDate: iso(svAt(-11, '19:00')) } });
+        expect(res.status).toBe(200);
+        const rows = await prisma.eventDateChange.findMany({ where: { eventId: e.id } });
+        expect(rows.map((c) => [iso(c.occurrenceStart), !!c.calledOffAt])).toEqual([[iso(svAt(10, '17:00')), true]]);
+        const seen = await page(host, e.id);
+        expect(seen.startDate).toBe(iso(svAt(3, '17:00')));
+        expect(seen.upcomingDates.slice(0, 2).map((d: any) => [d.key, d.calledOff])).toEqual([[iso(svAt(3, '17:00')), false], [iso(svAt(10, '17:00')), true]]);
+    });
+
+    it('with another rule, a date that\'s still one of its dates keeps what it had; the others go', async () => {
+        const host = await member();
+        const e = await soccer(host);
+        await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.after, { locationName: 'Park' }, 'date') });
+        await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.third) } });
+        // Every other week from the next date: the third date (two weeks on) is still one, the one after the next isn't.
+        const res = await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { repeat: 'BIWEEKLY' }, 'series') });
+        expect(res.status).toBe(200);
+        const rows = await prisma.eventDateChange.findMany({ where: { eventId: e.id } });
+        expect(rows.map((c) => [iso(c.occurrenceStart), c.locationName, !!c.calledOffAt])).toEqual([[iso(e.third), null, true]]);
+        expect((await page(host, e.id)).upcomingDates.slice(0, 2).map((d: any) => [d.key, d.calledOff])).toEqual([[iso(e.next), false], [iso(e.third), true]]);
+    });
+});
+
+describe('an app that edits the whole event (iOS up to 17, Android up to 8)', () => {
+    /** What that app's form sends: the event as its page showed it (the next date, as it is), no date named. */
+    const oldAppBody = (seen: any, changes: Record<string, unknown> = {}) => ({
+        title: seen.title, description: seen.description, category: seen.category, visibility: seen.visibility,
+        startDate: seen.startDate, endDate: seen.endDate, isOnline: seen.isOnline, onlineUrl: seen.onlineUrl || '',
+        location: [seen.locationName, seen.locationAddress].filter(Boolean).join(', '),
+        locationName: seen.locationName, locationAddress: seen.locationAddress, locationMapUrl: seen.locationMapUrl || '',
+        thumbnail: seen.thumbnail || '', ticketUrl: '', bitcoinUrl: '', priceLabel: '', partners: [],
+        ...changes,
+    });
+
+    it('keeps the next date\'s own time and place its own, its first date, and every call-off', async () => {
+        const host = await member();
+        const e = await soccer(host);
+        await call('PUT', `/api/events/${e.id}`, {
+            token: host.token,
+            body: formBody(e, e.next, { startDate: iso(svAt(3, '10:00')), endDate: iso(svAt(3, '12:00')), locationName: 'Beach field', location: 'Beach field, San Benito' }, 'date'),
+        });
+        await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.third) } });
+        const seen = await page(host, e.id);
+        expect(seen).toMatchObject({ startDate: iso(svAt(3, '10:00')), locationName: 'Beach field' });
+
+        // A new photo and a new title, from the old form.
+        const res = await call('PUT', `/api/events/${e.id}`, { token: host.token, body: oldAppBody(seen, { thumbnail: '/uploads/new.jpg', title: 'BIES Football' }) });
+        expect(res.status).toBe(200);
+        const series = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: { orderBy: { occurrenceStart: 'asc' } } } }))!;
+        expect(series).toMatchObject({
+            title: 'BIES Football', thumbnail: '/uploads/new.jpg', startDate: svAt(-11, '16:00'), endDate: svAt(-11, '18:00'),
+            locationName: 'Usual field', location: 'Usual field, San Benito',
+        });
+        expect(series.dateChanges.map((c) => [iso(c.occurrenceStart), c.locationName, c.startDate && iso(c.startDate), !!c.calledOffAt])).toEqual([
+            [iso(e.next), 'Beach field', iso(svAt(3, '10:00')), false],
+            [iso(e.third), null, null, true],
+        ]);
+    });
+
+    it('a new time from it is a new time for the next date and every date after', async () => {
+        const host = await member();
+        const guest = await member();
+        const e = await soccer(host);
+        await go(guest, e.id);
+        await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.third) } });
+        const seen = await page(host, e.id);
+        const res = await call('PUT', `/api/events/${e.id}`, { token: host.token, body: oldAppBody(seen, { startDate: iso(svAt(3, '17:00')), endDate: iso(svAt(3, '19:00')) }) });
+        expect(res.status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id: e.id } }))!.startDate).toEqual(svAt(3, '17:00'));
+        expect((await prisma.eventDateChange.findMany({ where: { eventId: e.id } })).map((c) => [iso(c.occurrenceStart), !!c.calledOffAt])).toEqual([[iso(svAt(17, '17:00')), true]]);
+        expect(await page(guest, e.id)).toMatchObject({ startDate: iso(svAt(3, '17:00')), rsvpStatus: 'GOING' });
+        expect((await notes(guest.id, e.id)).map((n) => n.body)).toEqual(['Now 5:00 PM (was 4:00 PM)']);
+    });
+});
+
+describe('made a one-off at a changed date', () => {
+    it('is that date as it is: its own time and place', async () => {
+        const host = await member();
+        const guest = await member();
+        const e = await soccer(host);
+        await go(guest, e.id);
+        await call('PUT', `/api/events/${e.id}`, {
+            token: host.token,
+            body: formBody(e, e.next, { startDate: iso(svAt(3, '10:00')), endDate: iso(svAt(3, '12:00')), locationName: 'Beach field', location: 'Beach field, San Benito' }, 'date'),
+        });
+        // "Doesn't repeat", from the form as it shows the next date.
+        const res = await call('PUT', `/api/events/${e.id}`, {
+            token: host.token,
+            body: formBody(e, e.next, { repeat: '', startDate: iso(svAt(3, '10:00')), endDate: iso(svAt(3, '12:00')), locationName: 'Beach field', location: 'Beach field, San Benito' }, 'series'),
+        });
+        expect(res.status).toBe(200);
+        const event = (await prisma.event.findUnique({ where: { id: e.id }, include: { dateChanges: true } }))!;
+        expect(event).toMatchObject({
+            repeat: '', startDate: svAt(3, '10:00'), endDate: svAt(3, '12:00'),
+            locationName: 'Beach field', locationAddress: 'San Benito', location: 'Beach field, San Benito',
+        });
+        expect(event.dateChanges).toEqual([]);
+        expect(await page(guest, e.id)).toMatchObject({ rsvpStatus: 'GOING', goingCount: 1, startDate: iso(svAt(3, '10:00')) });
+    });
+});
+
+describe('what a member answered for, in their events', () => {
+    const attending = async (who: Member, id: string) => (await call('GET', '/api/events/attending', { token: who.token })).body.data.find((x: any) => x.id === id);
+
+    it('an edit that moves no dates leaves the first date as it is, and an earlier answer shows its own date', async () => {
+        const host = await member();
+        const earlier = await member();
+        const e = await soccer(host);
+        await go(earlier, e.id);
+        await prisma.eventAttendee.updateMany({ where: { eventId: e.id, userId: earlier.id }, data: { occurrenceStart: e.before } });
+        // A new photo, at the next date, for every date.
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { thumbnail: '/uploads/new.jpg' }, 'series') })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id: e.id } }))!.startDate).toEqual(svAt(-11, '16:00'));
+        expect(await attending(earlier, e.id)).toMatchObject({ startDate: iso(e.before), occurrence: iso(e.before), calledOff: false });
+        // A new time makes the next date the first: the earlier answer still shows its own date.
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { startDate: iso(svAt(3, '17:00')), endDate: iso(svAt(3, '19:00')) }, 'series') })).status).toBe(200);
+        expect(await attending(earlier, e.id)).toMatchObject({ startDate: iso(e.before), endDate: iso(svAt(-4, '18:00')), occurrence: iso(e.before) });
+    });
+
+    it('a date called off shows as called off, not going', async () => {
+        const host = await member();
+        const guest = await member();
+        const e = await soccer(host);
+        await go(guest, e.id);
+        await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.next) } });
+        expect(await attending(guest, e.id)).toMatchObject({ startDate: iso(e.next), occurrence: iso(e.next), calledOff: true, rsvpStatus: 'GOING' });
+    });
+
+    it('an answer for a date older than lists load shows that date as it was', async () => {
+        const host = await member();
+        const guest = await member();
+        const e = await soccer(host, { startDate: iso(svAt(-200, '16:00')), endDate: iso(svAt(-200, '18:00')) });
+        const old = svAt(-81, '16:00'); // its 17th date
+        await prisma.eventDateChange.create({ data: { eventId: e.id, occurrenceStart: old, locationName: 'Old beach' } });
+        await prisma.eventAttendee.create({ data: { eventId: e.id, userId: guest.id, status: 'GOING', occurrenceStart: old } });
+        expect(await attending(guest, e.id)).toMatchObject({ startDate: iso(old), locationName: 'Old beach' });
+    });
+});
+
+describe('how many date changes, and how far ahead', () => {
+    it('one date can be changed or called off up to a year ahead', async () => {
+        const host = await member();
+        const e = await soccer(host);
+        const far = svAt(3 + 7 * 60, '16:00');
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, far, { title: 'Far', startDate: iso(far), endDate: iso(new Date(far.getTime() + 2 * 3600_000)) }, 'date') })).body.reason).toBe('date_too_far');
+        expect((await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(far) } })).body.reason).toBe('date_too_far');
+        const nearYear = svAt(3 + 7 * 50, '16:00');
+        expect((await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(nearYear) } })).status).toBe(200);
+        expect(await prisma.eventDateChange.count({ where: { eventId: e.id } })).toBe(1);
+    });
+
+    it(`an event has at most ${60} changed or called-off dates ahead`, async () => {
+        const host = await member();
+        const e = await soccer(host);
+        // 60 dates ahead with a change already (from the one after the next on).
+        await prisma.eventDateChange.createMany({
+            data: Array.from({ length: 60 }, (_, k) => ({ eventId: e.id, occurrenceStart: svAt(10 + 7 * k, '16:00'), title: `Week ${k}` })),
+        });
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { title: 'One more' }, 'date') })).body)
+            .toMatchObject({ reason: 'too_many_date_changes', max: 60 });
+        expect((await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.next) } })).body.reason).toBe('too_many_date_changes');
+        // A date that has a change already can still change, or be called off.
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.after, { title: 'Still fine' }, 'date') })).status).toBe(200);
+        expect((await call('POST', `/api/events/${e.id}/dates/call-off`, { token: host.token, body: { occurrence: iso(e.after) } })).status).toBe(200);
+    });
+
+    it('a series that\'s long over shows its last date as it was, in Past', async () => {
+        const host = await member();
+        const tag = `longover${Date.now()}`;
+        // Every week from 300 days ago until 150 days ago; its last date moved to the beach, the one before it too.
+        const first = svAt(-300, '16:00');
+        const res = await call('POST', '/api/events', {
+            token: host.token,
+            body: { title: `${tag} soccer`, description: 'Five-a-side.', startDate: iso(first), endDate: iso(svAt(-300, '18:00')), repeat: 'WEEKLY', repeatUntil: new Date(Date.now() - 6 * 3600_000 - 150 * DAY).toISOString().slice(0, 10) },
+        });
+        expect(res.status).toBe(201);
+        const last = new Date(res.body.startDate);
+        await prisma.eventDateChange.create({ data: { eventId: res.body.id, occurrenceStart: last, locationName: 'Final field' } });
+        const past = (await call('GET', `/api/events?past=true&search=${tag}`, { token: host.token })).body;
+        expect(past.data[0]).toMatchObject({ id: res.body.id, startDate: iso(last), locationName: 'Final field' });
+        // Its last date called off: it ended on the one before.
+        await prisma.eventDateChange.update({ where: { eventId_occurrenceStart: { eventId: res.body.id, occurrenceStart: last } }, data: { calledOffAt: new Date() } });
+        const before = new Date(last.getTime() - 7 * DAY);
+        expect((await call('GET', `/api/events/${res.body.id}`, { token: host.token })).body).toMatchObject({ startDate: iso(before), occurrence: iso(before) });
+    });
+});
+
+describe('a co-host and where people join online', () => {
+    it('can\'t change it for one date, nor for every date from one', async () => {
+        const host = await member();
+        const cohost = await member();
+        const e = await soccer(host);
+        await prisma.eventPartner.create({ data: { eventId: e.id, role: 'COHOST', userId: cohost.id } });
+        // The host makes the next date online.
+        expect((await call('PUT', `/api/events/${e.id}`, { token: host.token, body: formBody(e, e.next, { isOnline: true, onlineUrl: 'https://meet.example.test/soccer' }, 'date') })).status).toBe(200);
+        const atNext = (changes: Record<string, unknown>, scope: 'date' | 'series') => {
+            const body = formBody(e, e.next, changes, scope) as Record<string, unknown>;
+            delete body.visibility;
+            return call('PUT', `/api/events/${e.id}`, { token: cohost.token, body });
+        };
+        // Back to in person, for that date or from it on: the host's.
+        expect((await atNext({ isOnline: false, onlineUrl: '' }, 'date')).body).toMatchObject({ reason: 'host_only', field: 'isOnline' });
+        expect((await atNext({ isOnline: false, onlineUrl: '' }, 'series')).body).toMatchObject({ reason: 'host_only', field: 'isOnline' });
+        // Sent as the date has it, with a change of their own: fine, and the date stays online.
+        expect((await atNext({ isOnline: true, onlineUrl: 'https://meet.example.test/soccer', title: 'Soccer online' }, 'date')).status).toBe(200);
+        const row = await prisma.eventDateChange.findUnique({ where: { eventId_occurrenceStart: { eventId: e.id, occurrenceStart: e.next } } });
+        expect(row).toMatchObject({ isOnline: true, onlineUrl: 'https://meet.example.test/soccer', title: 'Soccer online' });
     });
 });

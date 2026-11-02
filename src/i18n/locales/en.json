@@ -832,6 +832,9 @@
         "date_not_next": "Only its next date can change the dates after it.",
         "date_out_of_order": "Keep that date after the one before it and before the next one.",
         "date_end_before_start": "The end is before the start.",
+        "date_overlaps": "That date has to end before the next one starts, and start after the one before ends.",
+        "date_too_far": "One date can be changed up to a year ahead.",
+        "too_many_date_changes": "An event can have up to {{count}} changed or called-off dates ahead.",
         "too_many_repeating": "You can have up to {{count}} repeating events at a time. Delete one you no longer need to add another."
       },
       "hostOnly": "As a co-host you edit the event's details. Tickets, the online link, co-hosts, sponsors and who can see it stay with the host.",
