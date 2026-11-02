@@ -17,6 +17,7 @@ import { CUSTOM_BOTTOM_NAV_ENABLED } from '../config/featureFlags';
 import { legalPage, SUPPORT_EMAIL } from '../config/legal';
 import { getAssetUrl } from '../utils/assets';
 import { isPlaceholderName } from '../utils/profileComplete';
+import { appVersionInfo } from '../utils/deviceInfo';
 
 /**
  * Settings, as one list: you at the top (to Edit profile), then Account,
@@ -35,6 +36,13 @@ const Settings = () => {
     const zapsOn = useFeature('zaps');
     const eventsOn = useFeature('events');
     const mediaOn = useFeature('media');
+    // The store app shows its store version and build ("1.0 (17)"); the site its own.
+    const [version, setVersion] = useState(() => (typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : ''));
+    useEffect(() => {
+        let alive = true;
+        appVersionInfo().then(({ version: v, build }) => { if (alive && v) setVersion(build ? `${v} (${build})` : v); });
+        return () => { alive = false; };
+    }, []);
 
     const [views, setViews] = useState(() => ({
         projectsView: localStorage.getItem('bies_projects_view') || defaultView || 'list',
@@ -168,7 +176,7 @@ const Settings = () => {
                 <SettingsRow icon={LogOut} label={t('settings.logOut')} onClick={signOut} danger center testId="settings-log-out" />
             </SettingsGroup>
 
-            <p className="set-version">BIES v{__APP_VERSION__}</p>
+            <p className="set-version">BIES v{version}</p>
         </SettingsPage>
     );
 };
