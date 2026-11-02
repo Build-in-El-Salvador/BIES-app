@@ -165,7 +165,7 @@ export default function SharePreview({ section }) {
                                     )}
                                     {found.bitcoinUrl && (
                                         <button type="button" className="sp-tickets sp-btc" onClick={() => openExternal(found.bitcoinUrl)}>
-                                            <Bitcoin size={19} aria-hidden="true" /> {t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
+                                            <Bitcoin size={19} aria-hidden="true" /> {native ? t('events.card.ticketsBitcoin') : t('sharePreview.payWithBitcoin')}{!found.ticketUrl && found.priceLabel ? ` · ${found.priceLabel}` : ''}
                                         </button>
                                     )}
                                     <p className="sp-note">{t('sharePreview.ticketsOn', { provider: ticketProvider(found.ticketUrl || found.bitcoinUrl) })}</p>

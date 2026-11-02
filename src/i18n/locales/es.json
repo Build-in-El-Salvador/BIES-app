@@ -684,9 +684,11 @@
       "more": "{{a}} y {{count}} más",
       "ticketsOn": "Entradas en {{provider}}",
       "inTheApp": "En la app",
+      "payAtEvent": "Pago en el evento",
       "rsvpInApp": "Confirma en la app",
       "getTickets": "Comprar entradas",
       "payWithBitcoin": "Pagar con Bitcoin",
+      "ticketsBitcoin": "Entradas (bitcoin)",
       "imGoing": "Voy a ir",
       "going": "Voy",
       "free": "Gratis",
@@ -3397,6 +3399,7 @@
       "bio": "Biografía",
       "location": "Ubicación",
       "links": "Enlaces y Lightning",
+      "linksOnly": "Enlaces",
       "details": "Detalles y experiencia",
       "network": "Red"
     },
@@ -3404,6 +3407,7 @@
       "bio": "Sobre usted, bajo su nombre",
       "location": "Dónde está",
       "links": "Sitio web, X, LinkedIn y dirección Lightning",
+      "linksOnly": "Sitio web, X y LinkedIn",
       "details": "Experiencia, secciones e intereses",
       "network": "Sus seguidores y a quién sigue"
     },

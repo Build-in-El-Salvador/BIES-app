@@ -6,6 +6,7 @@ import { nostrSigner } from '../../services/nostrSigner';
 import { nostrService } from '../../services/nostrService';
 import { nostrLinkFields } from '../../services/nostrProfileLinks';
 import { SettingsPage, SettingsGroup, SettingsRow, SettingsSelect, Switch } from '../../components/settings/SettingsUI';
+import { useFeature } from '../../context/FeatureFlagsContext';
 
 // Who can see each part of a profile (server: services/profilePrivacy.ts).
 const AUDIENCE_ROWS = [
@@ -26,6 +27,9 @@ const PrivacySettings = () => {
     const { t } = useTranslation();
     const [privacy, setPrivacy] = useState(null);
     const [error, setError] = useState('');
+    // Without zaps (the store app), links are just links: no Lightning address.
+    const zapsOn = useFeature('zaps');
+    const partKey = (key) => (key === 'links' && !zapsOn ? 'linksOnly' : key);
 
     useEffect(() => {
         settingsApi.getPrivacy().then(setPrivacy).catch(() => setError(t('privacySettings.loadFailed')));
@@ -69,9 +73,9 @@ const PrivacySettings = () => {
                 <>
                     <SettingsGroup title={t('privacySettings.whoSees')} footer={t('privacySettings.whoSeesFooter')}>
                         {AUDIENCE_ROWS.map(({ key, Icon, choices }) => (
-                            <SettingsRow key={key} icon={Icon} label={t(`privacySettings.parts.${key}`)} desc={t(`privacySettings.partsDesc.${key}`)}>
+                            <SettingsRow key={key} icon={Icon} label={t(`privacySettings.parts.${partKey(key)}`)} desc={t(`privacySettings.partsDesc.${partKey(key)}`)}>
                                 <SettingsSelect
-                                    label={t(`privacySettings.parts.${key}`)}
+                                    label={t(`privacySettings.parts.${partKey(key)}`)}
                                     value={privacy[key]}
                                     onChange={(value) => save({ [key]: value })}
                                     options={choices.map((c) => ({ value: c, label: t(`privacySettings.audiences.${c}`) }))}

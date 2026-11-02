@@ -685,9 +685,11 @@
       "more": "{{a}} and {{count}} more",
       "ticketsOn": "Tickets on {{provider}}",
       "inTheApp": "In the app",
+      "payAtEvent": "Pay at the event",
       "rsvpInApp": "RSVP in the app",
       "getTickets": "Get tickets",
       "payWithBitcoin": "Pay with Bitcoin",
+      "ticketsBitcoin": "Tickets (bitcoin)",
       "imGoing": "I'm going",
       "going": "Going",
       "free": "Free",
@@ -3519,6 +3521,7 @@
       "bio": "Bio",
       "location": "Location",
       "links": "Links and Lightning",
+      "linksOnly": "Links",
       "details": "Details and experience",
       "network": "Network"
     },
@@ -3526,6 +3529,7 @@
       "bio": "About you, under your name",
       "location": "Where you're based",
       "links": "Website, X, LinkedIn and Lightning address",
+      "linksOnly": "Website, X and LinkedIn",
       "details": "Experience, sections and interests",
       "network": "Your followers and who you follow"
     },

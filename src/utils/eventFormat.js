@@ -124,8 +124,9 @@ export function partnerPath(p) {
     return '';
 }
 
-/** Whether an event is free to go to, as its host put it. */
-export const isFree = (event) => /^(free|gratis)$/i.test((event.priceLabel || '').trim()) || (!event.priceLabel && !event.ticketUrl && !event.bitcoinUrl);
+/** Whether an event is free to go to, as its host put it: a price in sats isn't free. */
+export const isFree = (event) => /^(free|gratis)$/i.test((event.priceLabel || '').trim())
+    || (!event.priceLabel && !event.ticketUrl && !event.bitcoinUrl && !(event.priceSats > 0));
 
 /** A ticket link and a bitcoin one: the two buttons sit side by side under the price. */
 export const bothTicketLinks = (event) => !!(event.ticketUrl && event.bitcoinUrl);

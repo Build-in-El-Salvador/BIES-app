@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { ExternalLink, Check, Bitcoin } from 'lucide-react';
 import Avatar from '../Avatar';
 import { openExternal } from '../../utils/openExternal';
+import { isNativePlatform } from '../../utils/platform';
+import { useFeature } from '../../context/FeatureFlagsContext';
 import { bothTicketLinks, hostOf, isFree, ticketProvider } from '../../utils/eventFormat';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import biesLogo from '../../assets/logo-icon.svg';
@@ -102,13 +104,17 @@ export function WhoLine({ event, className = '' }) {
     );
 }
 
-/** "From $25 / Tickets on Luma", "Free / In the app". */
+/**
+ * "From $25 / Tickets on Luma", "Free / RSVP in the app". A paid event with
+ * no ticket link is paid for in the app with zaps on; otherwise at the event.
+ */
 export function PriceLine({ event, className = '' }) {
     const { t } = useTranslation();
+    const zapsOn = useFeature('zaps');
     const label = (event.priceLabel || '').trim() || (isFree(event) ? t('events.card.free') : '');
     const link = event.ticketUrl || event.bitcoinUrl;
     const where = link ? t('events.card.ticketsOn', { provider: ticketProvider(link) })
-        : isFree(event) ? t('events.card.rsvpInApp') : t('events.card.inTheApp');
+        : isFree(event) ? t('events.card.rsvpInApp') : zapsOn ? t('events.card.inTheApp') : t('events.card.payAtEvent');
     return (
         <span className={`ev-price ${className}`}>
             {label && <b>{label}</b>}
@@ -125,8 +131,9 @@ export function PriceLine({ event, className = '' }) {
 /**
  * The ticket buttons: "Get tickets" opens the host's ticket page in the
  * browser, and "Pay with Bitcoin" beside it their bitcoin page when they
- * gave one (until the app takes payments itself). With neither, "I'm going"
- * (onGoing toggles it).
+ * gave one (until the app takes payments itself); in the store app it's
+ * "Tickets (bitcoin)", tickets on the host's page like the other. With
+ * neither, "I'm going" (onGoing toggles it).
  */
 export function TicketButton({ event, going, onGoing, busy = false, size = 'md' }) {
     const { t } = useTranslation();
@@ -152,7 +159,7 @@ export function TicketButton({ event, going, onGoing, busy = false, size = 'md' 
             )}
             {event.bitcoinUrl && (
                 <button type="button" className={`ev-tix btc ${size}`} onClick={open(event.bitcoinUrl)}>
-                    <Bitcoin size={icon + 2} aria-hidden="true" /> {t('events.card.payWithBitcoin')}
+                    <Bitcoin size={icon + 2} aria-hidden="true" /> {isNativePlatform() ? t('events.card.ticketsBitcoin') : t('events.card.payWithBitcoin')}
                 </button>
             )}
             {!tickets && (
