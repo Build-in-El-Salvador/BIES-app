@@ -2279,7 +2279,7 @@
       "title": "Did you mean…?",
       "hint": "Already on BIES: recommend it instead of adding it again.",
       "hintOwn": "Already on BIES? If it's yours, open it to claim it instead of adding it again.",
-      "hintStaff": "Already on BIES? Open it instead of adding it again.",
+      "hintStaff": "Already on BIES? Ask its owner to add you to its Team instead of adding it again.",
       "checkFirst": "Before adding it: is it one of these? Recommend it instead of adding it again.",
       "hintMeetup": "Is your meetup at one of these? Tap it and your meetup is tagged there.",
       "useForMeetup": "It's here",
