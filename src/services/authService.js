@@ -12,6 +12,7 @@
  */
 
 import { authApi } from './api.js';
+import { forgetInvite, inviteStorage } from '../utils/inviteCode.js';
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { nostrSigner } from './nostrSigner.js';
@@ -442,6 +443,19 @@ export const authService = {
         return { user, isNewUser };
     },
 
+    /**
+     * A new account while sign-up is invite-only, after the email code was
+     * right but no invite code that works came with it.
+     */
+    signUpWithInvite: async (email, signupTicket, inviteCode) => {
+        const session = await authApi.emailSignupWithInvite(email, signupTicket, inviteCode);
+        const { user, isNewUser } = session;
+        authService.setSession(session);
+        authService.setCachedUser(user);
+        if (user.hostedKey) nostrSigner.setHostedMode(user.nostrPubkey);
+        return { user, isNewUser };
+    },
+
     // ─── Logout ─────────────────────────────────────────────────────────────
 
     /**
@@ -462,6 +476,8 @@ export const authService = {
      */
     clearLocalSecrets: () => {
         nostrSigner.clear();
+        // An invite code this device was signing up with.
+        forgetInvite(inviteStorage());
         // Clear the NWC wallet connection — the spend-capable secret in
         // localStorage must never survive logout (or leak to the next user
         // on a shared browser).

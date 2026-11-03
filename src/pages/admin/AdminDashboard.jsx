@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Navigate, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Folder, Calendar, Users, Trophy, FileText, Newspaper, MessageSquare, ShieldCheck, Store, GraduationCap, Ticket, Target, SlidersHorizontal, LogOut, Flag } from 'lucide-react';
+import { LayoutDashboard, Folder, Calendar, Users, Trophy, FileText, Newspaper, MessageSquare, ShieldCheck, Store, GraduationCap, Ticket, Target, SlidersHorizontal, LogOut, Flag, UserPlus } from 'lucide-react';
+import { isNativePlatform } from '../../utils/platform';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -25,6 +26,8 @@ const AdminDashboard = () => {
 
   const allTabs = [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
+    // Invite-only sign-up: made in the phone app only (Mike, 2026-11-03).
+    ...(isNativePlatform() ? [{ to: '/admin/invites', label: t('admin.invites.nav'), icon: UserPlus }] : []),
     { to: '/admin/reports', label: 'Reports', icon: Flag },
     // Testers' reports and members' feedback (Report / Feedback), near the
     // front so it shows without scrolling the tabs on a phone.

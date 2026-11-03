@@ -17,6 +17,10 @@ import EmailSignIn from '../components/EmailSignIn';
 import { readKeyInput, unlockBackup } from '../services/accountKey';
 import { declineSave, getSavedKey, rememberSaved, saveKey, savedKeyAvailable, shouldOfferToSave } from '../services/savedKey';
 import BackButton from '../components/BackButton';
+import { useInviteOnly } from '../hooks/useInviteOnly';
+
+// A new Nostr key while sign-up is invite-only: the way on is an invite code.
+const INVITE_REASONS = ['invite_required', 'invite_invalid'];
 
 /**
  * Sign-in, on two screens: /login is email, and /login/nostr (`nostr`) holds
@@ -28,6 +32,9 @@ const Login = ({ nostr = false }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const [error, setError] = useState('');
+    // The error the "Enter your invite code" button goes with (a new key, invite-only sign-up).
+    const [inviteError, setInviteError] = useState(null);
+    const inviteOnly = useInviteOnly();
     const [loading, setLoading] = useState(false);
     const [nsecInput, setNsecInput] = useState('');
     const [seedInput, setSeedInput] = useState('');
@@ -114,7 +121,9 @@ const Login = ({ nostr = false }) => {
             // In place of the sign-in page, so back doesn't return to it.
             navigate(afterSignIn, { replace: true });
         } else {
-            setError(result.error || 'Login failed. Please try again.');
+            const message = result.error || 'Login failed. Please try again.';
+            setError(message);
+            setInviteError(INVITE_REASONS.includes(result.reason) ? message : null);
         }
     };
 
@@ -411,7 +420,14 @@ const Login = ({ nostr = false }) => {
                 </>)}
 
                 {!nostr && (<>
-                <EmailSignIn onSuccess={handleResult} />
+                <EmailSignIn
+                    onSuccess={handleResult}
+                    newHere={inviteOnly ? (
+                        <button type="button" className="login-link-btn" style={{ fontSize: '0.875rem' }} onClick={() => navigate('/invite')}>
+                            {t('invite.newHereLink')}
+                        </button>
+                    ) : undefined}
+                />
 
                 <div className="divider"><span>{t('common.or')}</span></div>
 
@@ -431,6 +447,11 @@ const Login = ({ nostr = false }) => {
                         <AlertCircle size={16} />
                         <span>{error}</span>
                     </div>
+                )}
+                {error && error === inviteError && (
+                    <button type="button" className="w-full btn-login" style={{ marginBottom: '1rem' }} onClick={() => navigate('/invite')}>
+                        {t('invite.enterCode')}
+                    </button>
                 )}
 
                 {/* In the app: a key kept in the phone's password manager */}

@@ -49,6 +49,16 @@ import {
     deleteAdminCourse,
 } from '../controllers/admin.controller';
 import { updateFeatureFlags, updateFlagsSchema } from '../controllers/featureFlags.controller';
+import {
+    adminCreateInvite,
+    adminListInvites,
+    adminRevokeInvite,
+    adminSetInviteNote,
+    adminSetInviteOnly,
+    createInviteSchema,
+    inviteNoteSchema,
+    inviteOnlySchema,
+} from '../controllers/invite.controller';
 import { listOpenTransfers, staffMoveListing, staffMoveSchema } from '../controllers/listingTransfer.controller';
 import { officialSchema, setListingOfficial } from '../controllers/listingTeam.controller';
 import {
@@ -133,6 +143,13 @@ router.post('/cache/clear', adminOnly, clearCache);
 // router-level MOD gate above but are rejected by this ADMIN gate. Never
 // feature-gated itself, so a disabled feature can always be re-enabled.
 router.put('/flags', requireRole('ADMIN'), validate(updateFlagsSchema), updateFeatureFlags);
+
+// Invites (invite-only sign-up): admins only, never moderators.
+router.get('/invites', adminOnly, adminListInvites);
+router.post('/invites', adminOnly, validate(createInviteSchema), adminCreateInvite);
+router.put('/invites/settings', adminOnly, validate(inviteOnlySchema), adminSetInviteOnly);
+router.put('/invites/:id/note', adminOnly, validate(inviteNoteSchema), adminSetInviteNote);
+router.post('/invites/:id/revoke', adminOnly, adminRevokeInvite);
 
 // Feedback
 router.use('/feedback', adminOnly, adminFeedbackRouter);

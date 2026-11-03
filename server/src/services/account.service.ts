@@ -245,6 +245,9 @@ export async function deleteAccount(
             where: { OR: [{ data: { contains: userId } }, { data: { contains: pubkey } }] },
         }),
         prisma.releasedNip05.updateMany({ where: { pubkey }, data: { pubkey: null } }),
+        // The invite they joined with keeps that it was used, but not an
+        // admin's note about who it was for (deleting the account unlinks it).
+        prisma.inviteCode.updateMany({ where: { usedById: userId }, data: { note: '' } }),
         ...(user.profile?.nip05Name ? [prisma.releasedNip05.upsert({
             where: { name: user.profile.nip05Name },
             create: { name: user.profile.nip05Name, pubkey: null, releasedAt: new Date() },

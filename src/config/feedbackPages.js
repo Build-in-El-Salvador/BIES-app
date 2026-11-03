@@ -18,7 +18,7 @@ export const FEEDBACK_PAGES = [
     { id: 'messages', paths: ['/messages'], flag: 'messages' },
     { id: 'notifications', paths: ['/notifications'] },
     { id: 'settings', paths: ['/settings'] },
-    { id: 'signin', paths: ['/login', '/signup', '/join', '/access'] },
+    { id: 'signin', paths: ['/login', '/signup', '/invite', '/join', '/access'] },
     { id: 'other', paths: [] },
 ];
 

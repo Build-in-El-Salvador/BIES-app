@@ -29,6 +29,12 @@ export async function forgetOldAuditIps(): Promise<number> {
 
 // Map of route patterns → action names
 const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
+    // Before the general admin entries: the first match wins. Paths carry an
+    // invite's id, never its code.
+    { method: 'POST', pattern: /^\/api\/admin\/invites$/, action: 'INVITE_CREATE' },
+    { method: 'POST', pattern: /^\/api\/admin\/invites\/[^/]+\/revoke$/, action: 'INVITE_REVOKE' },
+    { method: 'PUT',  pattern: /^\/api\/admin\/invites\/settings$/, action: 'INVITE_ONLY_CHANGED' },
+    { method: 'PUT',  pattern: /^\/api\/admin\/invites\/[^/]+\/note$/, action: 'INVITE_NOTE' },
     { method: 'POST', pattern: /^\/api\/auth\/email\/verify/, action: 'AUTH_EMAIL_LOGIN' },
     { method: 'POST', pattern: /^\/api\/auth\/nostr-login/, action: 'AUTH_NOSTR_LOGIN' },
     { method: 'PUT',  pattern: /^\/api\/auth\/role/, action: 'AUTH_ROLE_CHANGED' },
@@ -94,7 +100,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
         // Include non-sensitive body keys for context
         if (req.body) {
-            const safeKeys = ['role', 'category', 'stage', 'status', 'type'];
+            const safeKeys = ['role', 'category', 'stage', 'status', 'type', 'inviteOnly'];
             for (const key of safeKeys) {
                 if (req.body[key] !== undefined) metadata[key] = req.body[key];
             }
