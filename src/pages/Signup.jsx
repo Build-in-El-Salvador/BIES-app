@@ -3,13 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { getPublicKey, nip19 } from 'nostr-tools';
 import { generateSeedWords, privateKeyFromSeedWords } from 'nostr-tools/nip06';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { Copy, CheckCircle, ShieldAlert, ArrowRight, AlertCircle, KeyRound, Loader2, ChevronUp, ChevronDown, AtSign, X } from 'lucide-react';
 import { COINOS_SIGNUP_WALLET } from '../config/featureFlags';
 import { walletApi, profilesApi } from '../services/api';
 import EmailSignIn from '../components/EmailSignIn';
 import { saveKey, savedKeyAvailable } from '../services/savedKey';
 import { copyText } from '../utils/clipboard';
+import { useInviteOnly } from '../hooks/useInviteOnly';
+import { inviteStorage, rememberedInvite } from '../utils/inviteCode';
 
 const Signup = () => {
     const { t } = useTranslation();
@@ -17,6 +19,9 @@ const Signup = () => {
     const navigate = useNavigate();
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    // Invite-only sign-up: the code checked on /invite, sent with sign-up (services/api.js).
+    const inviteOnly = useInviteOnly();
+    const [invite] = useState(() => rememberedInvite(inviteStorage()));
 
     // Steps: 0 = Intro, 1 = Key Gen, 2 = Backup, 3 = Profile
     const [step, setStep] = useState(0);
@@ -140,6 +145,11 @@ const Signup = () => {
         }
     };
 
+    // While sign-up is invite-only, the invite code comes first.
+    if (step === 0 && !invite && inviteOnly !== false) {
+        return inviteOnly ? <Navigate to="/invite" replace /> : null;
+    }
+
     return (
         <div className="signup-container">
             <div className="signup-card">
@@ -156,6 +166,13 @@ const Signup = () => {
 
                 {step === 0 && (
                     <div className="text-center w-full">
+                        {invite && (
+                            <div className="signup-invite" role="status">
+                                <CheckCircle size={16} />
+                                <span>{t('invite.added')}</span>
+                                <code>{invite.code}</code>
+                            </div>
+                        )}
                         <h2 className="text-2xl font-bold mb-2">{t('emailSignIn.joinHeading')}</h2>
                         <p className="text-gray-500 mb-6">{t('emailSignIn.joinSubtext')}</p>
                         <EmailSignIn onSuccess={() => navigate('/home')} />
@@ -415,6 +432,13 @@ const Signup = () => {
                     align-items: center;
                     border: 1px solid var(--color-gray-200);
                 }
+                .signup-invite {
+                    display: flex; align-items: center; justify-content: center; gap: 0.4rem; flex-wrap: wrap;
+                    background: var(--color-green-tint); color: var(--color-success-text);
+                    border: 1px solid #BBF7D0; border-radius: 0.75rem; padding: 0.55rem 0.75rem;
+                    font-size: 0.85rem; font-weight: 600; margin-bottom: 1.25rem;
+                }
+                .signup-invite code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 700; letter-spacing: 0.04em; }
                 .signup-divider {
                     width: 100%;
                     display: flex;

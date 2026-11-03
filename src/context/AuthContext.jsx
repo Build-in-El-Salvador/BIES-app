@@ -262,7 +262,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, reason: error.data?.reason, error: error.message };
         }
     };
 
@@ -295,6 +295,21 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    /**
+     * Invite-only sign-up: the email code was right, but a new account needs
+     * an invite code. `signupTicket` came with that answer.
+     */
+    const signUpWithInvite = async (email, signupTicket, inviteCode) => {
+        try {
+            const { user, isNewUser } = await authService.signUpWithInvite(email, signupTicket, inviteCode);
+            setUser(user);
+            initWebSocket(user);
+            return { success: true, user, isNewUser };
+        } catch (error) {
+            return { success: false, ...(error.data || {}), error: error.message };
+        }
+    };
+
     const loginWithNsec = async (nsec) => {
         try {
             const user = await authService.loginWithNsec(nsec);
@@ -302,7 +317,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, reason: error.data?.reason, error: error.message };
         }
     };
 
@@ -313,7 +328,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: error.message };
+            return { success: false, reason: error.data?.reason, error: error.message };
         }
     };
 
@@ -326,7 +341,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: signerErrorText(error) };
+            return { success: false, reason: error.data?.reason, error: signerErrorText(error) };
         }
     };
 
@@ -353,7 +368,7 @@ export const AuthProvider = ({ children }) => {
             initWebSocket(user);
             return { success: true, user };
         } catch (error) {
-            return { success: false, error: signerErrorText(error) };
+            return { success: false, reason: error.data?.reason, error: signerErrorText(error) };
         }
     };
 
@@ -366,7 +381,7 @@ export const AuthProvider = ({ children }) => {
             return { success: true, user };
         } catch (error) {
             if (error.cancelled) return { success: false, cancelled: true };
-            return { success: false, error: error.message };
+            return { success: false, reason: error.data?.reason, error: error.message };
         }
     };
 
@@ -428,6 +443,7 @@ export const AuthProvider = ({ children }) => {
             loginWithPasskey,
             requestEmailCode,
             loginWithEmailCode,
+            signUpWithInvite,
             logout,
             updateRole,
             refreshUser,

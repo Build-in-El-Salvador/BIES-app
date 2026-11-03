@@ -23,6 +23,7 @@ import SystemBarsSync from './components/SystemBarsSync';
 import BootSplash from './components/BootSplash';
 import { hideLaunchScreen } from './utils/launchScreen';
 import { isNativePlatform } from './utils/platform';
+import { useInviteOnly } from './hooks/useInviteOnly';
 import { lazyPage } from './utils/lazyPage';
 import { rememberPage } from './utils/lastPage';
 import { Loader2 } from 'lucide-react';
@@ -73,6 +74,7 @@ const Signup = lazyPage(() => import('./pages/Signup'));
 const AmberCallback = lazyPage(() => import('./pages/AmberCallback'));
 const VoucherRedeem = lazyPage(() => import('./pages/VoucherRedeem'));
 const Join = lazyPage(() => import('./pages/Join'));
+const Invite = lazyPage(() => import('./pages/Invite'));
 const Dashboard = lazyPage(() => import('./pages/Dashboard'));
 const Leaderboard = lazyPage(() => import('./pages/Leaderboard'));
 const Overview = lazyPage(() => import('./pages/Overview'));
@@ -116,6 +118,7 @@ const AdminAuditLog = lazyPage(() => import('./pages/admin/AdminAuditLog'));
 const AdminNewsSettings = lazyPage(() => import('./pages/admin/AdminNewsSettings'));
 const AdminInvestorVetting = lazyPage(() => import('./pages/admin/AdminInvestorVetting'));
 const AdminVouchers = lazyPage(() => import('./pages/admin/AdminVouchers'));
+const AdminInvites = lazyPage(() => import('./pages/admin/AdminInvites'));
 const AdminFeedback = lazyPage(() => import('./pages/admin/AdminFeedback'));
 const AdminReports = lazyPage(() => import('./pages/admin/AdminReports'));
 const AdminCourses = lazyPage(() => import('./pages/admin/AdminCourses'));
@@ -218,6 +221,19 @@ const NotInStoreApp = ({ children }) => {
     }
     return children;
 };
+
+/**
+ * Where a signed-out visit starts: the invite screen while sign-up is
+ * invite-only (Admin Panel → Invites), the sign-in screen otherwise.
+ */
+const SignedOutStart = () => {
+    const inviteOnly = useInviteOnly();
+    if (inviteOnly === null) return <PageLoading />;
+    return <Navigate to={inviteOnly ? '/invite' : '/login'} replace />;
+};
+
+/** Invites are made in the phone app's Admin Panel only (Mike, 2026-11-03). */
+const AdminInvitesInApp = () => (isNativePlatform() ? <AdminInvites /> : <Navigate to="/admin" replace />);
 
 /** An event's page, started afresh for each event (a link from one event to another). */
 const EventDetailById = () => {
@@ -329,7 +345,7 @@ const AppContent = () => {
                 <Suspense fallback={<PageLoading />}>
                 <Routes>
                     {/* Public Routes */}
-                    <Route path="/" element={user ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />} />
+                    <Route path="/" element={user ? <Navigate to="/home" replace /> : <SignedOutStart />} />
                     <Route path="/home" element={
                         <ProtectedRoute><Home /></ProtectedRoute>
                     } />
@@ -339,6 +355,8 @@ const AppContent = () => {
                     <Route path="/login" element={<Login />} />
                     <Route path="/login/nostr" element={<Login nostr />} />
                     <Route path="/signup" element={<Signup />} />
+                    {/* Invite-only sign-up: enter a code, or land from an invite link (the code after #) */}
+                    <Route path="/invite" element={<Invite />} />
                     {/* NIP-55 Amber intent callback (public — used mid-login) */}
                     <Route path="/amber-callback" element={<AmberCallback />} />
                     {/* Relay-access voucher redemption + onboarding invite landing (public) */}
@@ -481,6 +499,7 @@ const AppContent = () => {
                         <Route path="news-settings" element={<AdminNewsSettings />} />
                         <Route path="investor-vetting" element={<AdminInvestorVetting />} />
                         <Route path="vouchers" element={<AdminVouchers />} />
+                        <Route path="invites" element={<AdminInvitesInApp />} />
                         <Route path="reports" element={<AdminReports />} />
                         <Route path="feedback" element={<AdminFeedback />} />
                         <Route path="features" element={<AdminFeatures />} />

@@ -9,7 +9,8 @@
           { "/": "/talents/*", "comment": "talents" },
           { "/": "/opportunities/*", "comment": "opportunities and projects" },
           { "/": "/events/*", "comment": "events and proposed meetups" },
-          { "/": "/feed", "?": { "post": "?*" }, "comment": "a shared post" }
+          { "/": "/feed", "?": { "post": "?*" }, "comment": "a shared post" },
+          { "/": "/invite", "comment": "invite links (the code is after #, never sent to a server)" }
         ]
       }
     ]

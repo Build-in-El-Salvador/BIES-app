@@ -31,6 +31,18 @@ import {
 import { z } from 'zod';
 import crypto from 'crypto';
 import { allowNewAccount } from '../services/signupLimit.service';
+import {
+    InviteRejected,
+    checkInvite,
+    createAccount,
+    giveBackInviteTry,
+    isInviteOnly,
+    issueSignupTicket,
+    recordInviteFailure,
+    signupTicketValid,
+    takeInviteTry,
+} from '../services/invite.service';
+import { isReviewAddress, normalizeEmail } from '../services/emailCode.service';
 
 /**
  * Strip encrypted wallet credentials (the Coinos JWT) from a
@@ -74,9 +86,13 @@ export const emailStartSchema = z.object({
 
 export const emailVerifySchema = z.object({
     email: emailField,
-    code: z.string().trim().regex(/^\d{6}$/, 'The code is 6 digits'),
+    // The 6-digit email code, or, coming back with an invite code, the
+    // signup ticket the first answer gave (inviteRequired below).
+    code: z.string().trim().regex(/^\d{6}$/, 'The code is 6 digits').optional(),
+    signupTicket: z.string().max(128).optional(),
+    inviteCode: z.string().max(64).optional(),
     voucherCode: z.string().max(64).optional(),
-});
+}).refine((b) => !!b.code !== !!b.signupTicket, { message: 'The code is 6 digits', path: ['code'] });
 
 export const nostrLoginSchema = z.object({
     pubkey: z.string().min(64).max(64),
@@ -113,6 +129,43 @@ function isBiesLoginRequest(tags: unknown): boolean {
 // A BIES address (NIP-05) is not given at sign-up: a member claims one in
 // Settings → Nostr, and that is what makes them verified (services/nip05.ts).
 
+// ─── Invite-only sign-up (services/invite.service.ts) ───
+
+const INVITE_MESSAGES = {
+    invite_required: 'BIES is invite-only for now. Enter your invite code to create an account.',
+    invite_invalid: "That code didn't work. It may have been used or expired. Ask the person who invited you for a new one.",
+    invite_rate_limited: 'Too many codes tried. Please wait a while before trying again.',
+} as const;
+
+type InviteRefusal = keyof typeof INVITE_MESSAGES;
+
+/**
+ * Whether a new account may be made here and now: null if so, or why not.
+ * With the switch off, nothing is needed (a code given is still used, to
+ * record who invited whom). With it on, a code that works. Every try counts
+ * toward the guessing limit before the code is looked at (a right one is
+ * given back); past the limit, the code isn't looked at.
+ */
+async function inviteRefusal(req: Request, inviteCode: unknown): Promise<{ reason: InviteRefusal; retryAfterSeconds?: number } | null> {
+    if (!(await isInviteOnly())) return null;
+    if (inviteCode === undefined || inviteCode === null || inviteCode === '') return { reason: 'invite_required' };
+    const wait = takeInviteTry(req.ip);
+    if (wait > 0) return { reason: 'invite_rate_limited', retryAfterSeconds: wait };
+    if (!(await checkInvite(inviteCode)).ok) return { reason: 'invite_invalid' };
+    giveBackInviteTry(req.ip);
+    return null;
+}
+
+function refuseNewAccount(res: Response, refusal: { reason: InviteRefusal; retryAfterSeconds?: number }, extra: Record<string, unknown> = {}): void {
+    if (refusal.retryAfterSeconds) res.setHeader('Retry-After', String(refusal.retryAfterSeconds));
+    res.status(refusal.reason === 'invite_rate_limited' ? 429 : 403).json({
+        error: INVITE_MESSAGES[refusal.reason],
+        reason: refusal.reason,
+        ...(refusal.retryAfterSeconds ? { retryAfterSeconds: refusal.retryAfterSeconds } : {}),
+        ...extra,
+    });
+}
+
 // ─── Controllers ───
 
 /**
@@ -120,7 +173,7 @@ function isBiesLoginRequest(tags: unknown): boolean {
  * itself with a code. The key is generated and encrypted here and never sent
  * to the client.
  */
-async function createHostedUser(email: string) {
+async function createHostedUser(email: string, invite: { code?: unknown; required: boolean }) {
     const { generateSecretKey, getPublicKey } = await import('nostr-tools/pure');
     const secretKey = generateSecretKey();
     const nostrPubkey = getPublicKey(secretKey);
@@ -128,7 +181,8 @@ async function createHostedUser(email: string) {
     secretKey.fill(0);
 
     try {
-        const user = await prisma.user.create({
+        // The account and the invite code it used, in one transaction.
+        const user = await createAccount((tx) => tx.user.create({
             data: {
                 email,
                 nostrPubkey,
@@ -138,11 +192,11 @@ async function createHostedUser(email: string) {
                 profile: { create: { name: '' } },
             },
             include: { profile: true },
-        });
+        }), invite);
         return { user, created: true };
     } catch (err) {
         // Two codes for a new address verified at the same moment: the other
-        // request created the account first.
+        // request created the account first (and used the invite, if any).
         if ((err as { code?: string }).code === 'P2002') {
             const existing = await prisma.user.findUnique({ where: { email }, include: { profile: true } });
             if (existing) return { user: existing, created: false };
@@ -187,11 +241,35 @@ export async function startEmailLogin(req: Request, res: Response): Promise<void
  * POST /auth/email/verify
  * Check the code. Signs in the account with this address, or creates one
  * (with a key BIES holds) the first time.
+ *
+ * While sign-up is invite-only, a new address also needs `inviteCode`.
+ * Without one that works, no account is made: the answer is 403
+ * invite_required / invite_invalid with a `signupTicket`, and the app comes
+ * back with { email, signupTicket, inviteCode } instead of a second email
+ * code. A ticket only ever makes a new account; it never signs in one.
  */
 export async function verifyEmailLogin(req: Request, res: Response): Promise<void> {
     try {
-        const { email, code, voucherCode } = req.body as z.infer<typeof emailVerifySchema>;
-        const result = await verifyEmailCode(email, 'login', code);
+        const { email, code, voucherCode, inviteCode, signupTicket } = req.body as z.infer<typeof emailVerifySchema>;
+
+        if (signupTicket) {
+            const address = normalizeEmail(email);
+            const valid = signupTicketValid(address, signupTicket);
+            const taken = valid && await prisma.user.findUnique({ where: { email: address }, select: { id: true } });
+            if (!valid || taken) {
+                res.status(400).json({ error: 'This step timed out. Please ask for a new email code.', reason: 'ticket_expired' });
+                return;
+            }
+            const refusal = await inviteRefusal(req, inviteCode);
+            if (refusal) {
+                refuseNewAccount(res, refusal, { signupTicket });
+                return;
+            }
+            await finishEmailSignup(req, res, address, inviteCode, voucherCode, signupTicket);
+            return;
+        }
+
+        const result = await verifyEmailCode(email, 'login', code ?? '');
 
         if (!result.ok) {
             if (result.reason === 'invalid') {
@@ -208,58 +286,91 @@ export async function verifyEmailLogin(req: Request, res: Response): Promise<voi
             return;
         }
 
-        let user = await prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { email: result.email },
             include: { profile: true },
         });
-        let isNewUser = false;
 
         if (!user) {
-            const created = await createHostedUser(result.email);
-            user = created.user;
-            isNewUser = created.created;
-        }
-
-        if (user.deletedAt) {
-            res.status(403).json({ error: 'This account has been deleted', reason: 'deleted' });
-            return;
-        }
-        if (user.isBanned) {
-            res.status(403).json({ error: 'Your account has been suspended', reason: 'suspended' });
-            return;
-        }
-        // The member took their key: BIES can't sign for this account any
-        // more, so a session from an email code would be one that can't act.
-        if (!user.encryptedPrivkey) {
-            res.status(403).json({
-                error: 'This account signs in with Nostr now. Use "Sign in with Nostr" with your key.',
-                reason: 'nostr_account',
-            });
+            // App Review's address (REVIEW_LOGIN_EMAIL, server config) never needs a code.
+            const refusal = isReviewAddress(result.email) ? null : await inviteRefusal(req, inviteCode);
+            if (refusal) {
+                // The address is proven: no second email code to come back with.
+                refuseNewAccount(res, refusal, { signupTicket: issueSignupTicket(result.email) });
+                return;
+            }
+            await finishEmailSignup(req, res, result.email, inviteCode, voucherCode, null);
             return;
         }
 
-        // Relay access, re-granted on every sign-in as Nostr login does.
-        addToRelayWhitelist(user.nostrPubkey, { proven: true });
-
-        if (isNewUser) {
-            // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
-            recordOnboardingRedemption(voucherCode, user.id, req.ip || null).catch((err) =>
-                console.error('[Voucher] Onboarding attribution failed:', err)
-            );
-
-            // Publish NIP-65 relay list for the new custodial user
-            publishRelayList(user.id).catch((err) =>
-                console.error('[Nostr] Relay list publish failed:', err)
-            );
-        }
-
-        res.locals.auditUserId = user.id;
-        const session = await startSession(req, res, user);
-        res.status(isNewUser ? 201 : 200).json({ user: publicUser(user), ...session, isNewUser });
+        await completeEmailSignIn(req, res, user, false, voucherCode);
     } catch (error) {
         console.error('Email sign-in verify error:', error);
         res.status(500).json({ error: 'Sign-in failed' });
     }
+}
+
+/** A new account for a proven address, using the invite code if there is one. */
+async function finishEmailSignup(
+    req: Request, res: Response, email: string, inviteCode: unknown, voucherCode: string | undefined, signupTicket: string | null,
+): Promise<void> {
+    let created;
+    try {
+        created = await createHostedUser(email, { code: inviteCode, required: !isReviewAddress(email) && await isInviteOnly() });
+    } catch (err) {
+        if (!(err instanceof InviteRejected)) throw err;
+        // Used up or revoked between the check and now.
+        recordInviteFailure(req.ip);
+        refuseNewAccount(res, { reason: 'invite_invalid' }, { signupTicket: signupTicket ?? issueSignupTicket(email) });
+        return;
+    }
+    // Made by another request at the same moment: a ticket never signs in an
+    // account that already existed, only the one it makes.
+    if (signupTicket && !created.created) {
+        res.status(400).json({ error: 'This step timed out. Please ask for a new email code.', reason: 'ticket_expired' });
+        return;
+    }
+    await completeEmailSignIn(req, res, created.user, created.created, voucherCode);
+}
+
+/** Sign in an account found or just made for a proven address. */
+async function completeEmailSignIn(req: Request, res: Response, user: any, isNewUser: boolean, voucherCode: string | undefined): Promise<void> {
+    if (user.deletedAt) {
+        res.status(403).json({ error: 'This account has been deleted', reason: 'deleted' });
+        return;
+    }
+    if (user.isBanned) {
+        res.status(403).json({ error: 'Your account has been suspended', reason: 'suspended' });
+        return;
+    }
+    // The member took their key: BIES can't sign for this account any
+    // more, so a session from an email code would be one that can't act.
+    if (!user.encryptedPrivkey) {
+        res.status(403).json({
+            error: 'This account signs in with Nostr now. Use "Sign in with Nostr" with your key.',
+            reason: 'nostr_account',
+        });
+        return;
+    }
+
+    // Relay access, re-granted on every sign-in as Nostr login does.
+    addToRelayWhitelist(user.nostrPubkey, { proven: true });
+
+    if (isNewUser) {
+        // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
+        recordOnboardingRedemption(voucherCode, user.id, req.ip || null).catch((err) =>
+            console.error('[Voucher] Onboarding attribution failed:', err)
+        );
+
+        // Publish NIP-65 relay list for the new custodial user
+        publishRelayList(user.id).catch((err) =>
+            console.error('[Nostr] Relay list publish failed:', err)
+        );
+    }
+
+    res.locals.auditUserId = user.id;
+    const session = await startSession(req, res, user);
+    res.status(isNewUser ? 201 : 200).json({ user: publicUser(user), ...session, isNewUser });
 }
 
 /**
@@ -298,7 +409,7 @@ export async function getNostrChallenge(req: Request, res: Response): Promise<vo
  */
 export async function nostrLogin(req: Request, res: Response): Promise<void> {
     try {
-        const { pubkey, signedEvent, voucherCode } = req.body;
+        const { pubkey, signedEvent, voucherCode, inviteCode } = req.body;
 
         if (!pubkey || !HEX_PUBKEY_RE.test(pubkey)) {
             res.status(400).json({ error: 'Valid hex pubkey required' });
@@ -373,25 +484,41 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
         const isEnvAdmin = isAdminPubkey(pubkey);
 
         if (!user) {
+            // Invite-only sign-up: a new key needs an invite code that works.
+            // Nothing is made without one, and the key isn't let onto the
+            // relay. The admins in ADMIN_PUBKEYS never need one.
+            const refusal = isEnvAdmin ? null : await inviteRefusal(req, inviteCode);
+            if (refusal) {
+                refuseNewAccount(res, refusal);
+                return;
+            }
             // A new account: a few a day from one address (signupLimit.service.ts).
             if (!allowNewAccount(req.ip)) {
                 res.status(429).json({ error: 'Too many new accounts from this network today. Try again tomorrow, or sign up with your email.', reason: 'too_many_new_accounts' });
                 return;
             }
-            // Auto-create user for Nostr login (no custodial key needed — they manage their own)
-            user = await prisma.user.create({
-                data: {
-                    nostrPubkey: pubkey,
-                    role: 'MEMBER',
-                    isAdmin: isEnvAdmin,
-                    profile: {
-                        create: {
-                            name: `nostr:${pubkey.substring(0, 8)}`,
+            // Auto-create user for Nostr login (no custodial key needed — they
+            // manage their own), with the invite code in the same transaction.
+            try {
+                user = await createAccount((tx) => tx.user.create({
+                    data: {
+                        nostrPubkey: pubkey,
+                        role: 'MEMBER',
+                        isAdmin: isEnvAdmin,
+                        profile: {
+                            create: {
+                                name: `nostr:${pubkey.substring(0, 8)}`,
+                            },
                         },
                     },
-                },
-                include: { profile: true },
-            });
+                    include: { profile: true },
+                }), { code: inviteCode, required: !isEnvAdmin && await isInviteOnly() });
+            } catch (err) {
+                if (!(err instanceof InviteRejected)) throw err;
+                recordInviteFailure(req.ip);
+                refuseNewAccount(res, { reason: 'invite_invalid' });
+                return;
+            }
 
             // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks login)
             recordOnboardingRedemption(voucherCode, user.id, req.ip || null).catch((err) =>

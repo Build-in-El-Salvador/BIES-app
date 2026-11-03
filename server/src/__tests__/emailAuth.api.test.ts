@@ -165,9 +165,16 @@ const db = vi.hoisted(() => {
     return { state, emailCode, user, profile, session, reset };
 });
 
-vi.mock('../lib/prisma', () => ({
-    default: { emailCode: db.emailCode, user: db.user, profile: db.profile, session: db.session },
-}));
+vi.mock('../lib/prisma', () => {
+    // Invite-only sign-up stays off here (inviteSignup.api.test.ts covers it
+    // against a real database), and an account is made in a transaction.
+    const client: Record<string, unknown> = {
+        emailCode: db.emailCode, user: db.user, profile: db.profile, session: db.session,
+        siteSettings: { findUnique: vi.fn(async () => null) },
+    };
+    client.$transaction = vi.fn(async (work: (tx: unknown) => unknown) => work(client));
+    return { default: client };
+});
 vi.mock('../services/email.service', () => ({ sendEmail: vi.fn() }));
 vi.mock('../services/nostr.service', () => ({ publishRelayList: vi.fn().mockResolvedValue(null) }));
 vi.mock('../services/voucher.service', () => ({ recordOnboardingRedemption: vi.fn().mockResolvedValue(undefined) }));

@@ -21,6 +21,7 @@ import {
     waitForLogout,
 } from './session.js';
 import { isNativePlatform } from '../utils/platform.js';
+import { forgetInvite, inviteStorage, rememberedInvite } from '../utils/inviteCode.js';
 
 // The phone app sends API calls through its own networking (nativeHttp.js:
 // no CORS check before each new address), loaded only there.
@@ -159,21 +160,41 @@ const clearVoucherCode = (data) => {
     return data;
 };
 
+// Invite-only sign-up: the invite code this device checked (Invite.jsx) goes
+// with every sign-in that could make an account. The server uses it only if
+// it does make one; once signed in, the device forgets it.
+const withInviteCode = (body) => {
+    const kept = rememberedInvite(inviteStorage());
+    return kept && !body.inviteCode ? { ...body, inviteCode: kept.code } : body;
+};
+
+const signedIn = (data) => {
+    clearVoucherCode(data);
+    forgetInvite(inviteStorage());
+    return data;
+};
+
 export const authApi = {
     // Email sign-in: a 6-digit code by email, then a session. The first
     // sign-in creates the account, with a key BIES holds.
     emailStart: (email, lang) => post('/auth/email/start', { email, lang }),
 
     emailVerify: (email, code) =>
-        post('/auth/email/verify', withVoucherCode({ email, code }))
-            .then(clearVoucherCode),
+        post('/auth/email/verify', withInviteCode(withVoucherCode({ email, code })))
+            .then(signedIn),
+
+    // A new account while sign-up is invite-only: the signup ticket the
+    // email code earned (no second email code), and an invite code.
+    emailSignupWithInvite: (email, signupTicket, inviteCode) =>
+        post('/auth/email/verify', withVoucherCode({ email, signupTicket, inviteCode }))
+            .then(signedIn),
 
     nostrChallenge: (pubkey) =>
         get('/auth/nostr-challenge', { pubkey }),
 
     nostrLogin: (pubkey, signedEvent) =>
-        post('/auth/nostr-login', withVoucherCode({ pubkey, signedEvent }))
-            .then(clearVoucherCode),
+        post('/auth/nostr-login', withInviteCode(withVoucherCode({ pubkey, signedEvent })))
+            .then(signedIn),
 
     me: () => get('/auth/me'),
 
@@ -617,7 +638,21 @@ export const searchApi = {
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
+// Invite-only sign-up. Codes go in request bodies, never in a path.
+export const inviteApi = {
+    // { inviteOnly }: whether new accounts need a code.
+    status: () => get('/invites/status'),
+    // { valid, expiresAt }; a code that doesn't work rejects (400, or 429 after too many).
+    check: (code) => post('/invites/check', { code }),
+};
+
 export const adminApi = {
+    // Admin Panel → Invites (admins only)
+    listInvites: () => get('/admin/invites'),
+    createInvite: (note) => post('/admin/invites', note ? { note } : {}),
+    revokeInvite: (id) => post(`/admin/invites/${id}/revoke`, {}),
+    setInviteNote: (id, note) => put(`/admin/invites/${id}/note`, { note }),
+    setInviteOnly: (inviteOnly) => put('/admin/invites/settings', { inviteOnly }),
     users: (params = {}) => get('/admin/users', params),
     banUser: (id, banned) => put(`/admin/users/${id}/ban`, { banned }),
     setRole: (id, role) => put(`/admin/users/${id}/role`, { role }),

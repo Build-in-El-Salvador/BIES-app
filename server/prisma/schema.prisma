@@ -85,6 +85,8 @@ model User {
   reportsHandled        Report[]               @relation("ReportsHandled")
   blocksMade            Block[]                @relation("BlocksMade")
   blocksReceived        Block[]                @relation("BlocksReceived")
+  invitesCreated        InviteCode[]           @relation("InvitesCreated")
+  inviteUsed            InviteCode?            @relation("InviteUsed")
 
   @@map("users")
 }
@@ -858,9 +860,41 @@ model SiteSettings {
   livestreamUrl    String   @default("") @map("livestream_url")
   livestreamActive Boolean  @default(false) @map("livestream_active")
   featureFlags     String   @default("{}") @map("feature_flags") // JSON: { [featureSlug]: boolean } — missing slugs default enabled
+  // Invite-only sign-up (Admin Panel → Invites): new accounts need an invite
+  // code while this is on. Off until an admin turns it on.
+  inviteOnly          Boolean   @default(false) @map("invite_only")
+  inviteOnlyChangedAt DateTime? @map("invite_only_changed_at")
+  inviteOnlyChangedBy String?   @map("invite_only_changed_by") // the admin's user id
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("site_settings")
+}
+
+// An invite code an admin made for one new member (services/invite.service.ts).
+// The code itself is never stored: `codeHash` is an HMAC of it under a key the
+// database doesn't hold, so a copy of the table can't be turned back into
+// codes, even by trying every one. `codeSealed` is the code encrypted, so
+// admins can share it again while it's open, and is wiped once it's used,
+// revoked or expired. Nothing about the person it was for is kept, beyond an
+// admin's optional note.
+model InviteCode {
+  id          String    @id @default(cuid())
+  codeHash    String    @unique @map("code_hash")
+  codeSealed  String?   @map("code_sealed")
+  note        String    @default("")
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  usedById    String?   @unique @map("used_by_id")
+  revokedAt   DateTime? @map("revoked_at")
+
+  createdBy User  @relation("InvitesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  usedBy    User? @relation("InviteUsed", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@map("invite_codes")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

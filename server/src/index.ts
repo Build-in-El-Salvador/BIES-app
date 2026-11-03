@@ -62,6 +62,7 @@ import talentRoutes from './routes/talent.routes';
 import albumRoutes from './routes/album.routes';
 import coursesRoutes from './routes/courses.routes';
 import voucherRoutes from './routes/voucher.routes';
+import inviteRoutes from './routes/invite.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
 import bountyRoutes from './routes/bounty.routes';
 import previewRoutes from './routes/preview.routes';
@@ -263,6 +264,7 @@ app.use('/api/talent', featureGate('talent'), talentRoutes);
 app.use('/api/albums', albumRoutes);
 app.use('/api/courses', featureGate('courses'), coursesRoutes);
 app.use('/api/vouchers', voucherRoutes);
+app.use('/api/invites', inviteRoutes);
 app.use('/api/marketplace', featureGate('marketplace'), marketplaceRoutes);
 app.use('/api/bounties', featureGate('bounties'), bountyRoutes);
 // Shared pages for people not signed in (each checks its own feature flag).

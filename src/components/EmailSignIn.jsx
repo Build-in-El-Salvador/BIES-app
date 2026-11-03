@@ -4,6 +4,7 @@ import { Mail, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { openExternal } from '../utils/openExternal';
 import { LEGAL_PAGES } from '../config/legal';
+import { formatAsTyped, normalizeInviteCode } from '../utils/inviteCode';
 
 const CODE_LENGTH = 6;
 
@@ -12,12 +13,19 @@ const CODE_LENGTH = 6;
  * creates the account, with a Nostr key BIES holds for the member. Used by
  * both Login and Signup.
  *
+ * While sign-up is invite-only, a new address gets one more step after the
+ * code: an invite code (no second email code; the server's signup ticket
+ * stands for it). Nothing is made until a code that works is entered.
+ *
  * @param {(result: { user, isNewUser }) => void} onSuccess
+ * @param {import('react').ReactNode} [newHere] - in place of the "New to BIES?" line
  */
-const EmailSignIn = ({ onSuccess }) => {
+const EmailSignIn = ({ onSuccess, newHere }) => {
     const { t, i18n } = useTranslation();
-    const { requestEmailCode, loginWithEmailCode } = useAuth();
-    const [step, setStep] = useState('email'); // 'email' | 'code'
+    const { requestEmailCode, loginWithEmailCode, signUpWithInvite } = useAuth();
+    const [step, setStep] = useState('email'); // 'email' | 'code' | 'invite'
+    const [ticket, setTicket] = useState(null);
+    const [invite, setInvite] = useState('');
     const [email, setEmail] = useState('');
     const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
@@ -63,6 +71,12 @@ const EmailSignIn = ({ onSuccess }) => {
                 return t('emailSignIn.errors.deleted');
             case 'nostr_account':
                 return t('emailSignIn.errors.nostrAccount');
+            case 'invite_invalid':
+                return t('invite.errors.invalid');
+            case 'invite_rate_limited':
+                return t('invite.errors.tooMany');
+            case 'ticket_expired':
+                return t('invite.errors.ticketExpired');
             default:
                 return result.error || t('emailSignIn.errors.generic');
         }
@@ -95,9 +109,40 @@ const EmailSignIn = ({ onSuccess }) => {
         setBusy(false);
         if (result.success) {
             onSuccess(result);
+        } else if (result.signupTicket) {
+            // A new address, and sign-up is invite-only.
+            setTicket(result.signupTicket);
+            setStep('invite');
+            setError(result.reason === 'invite_required' ? '' : explain(result));
         } else {
             setError(explain(result));
             setCode('');
+        }
+    };
+
+    const backToEmail = () => {
+        setStep('email');
+        setError('');
+        setCode('');
+        setTicket(null);
+        setInvite('');
+    };
+
+    const submitInvite = async (e) => {
+        e.preventDefault();
+        if (busy || !normalizeInviteCode(invite)) return;
+        setBusy(true);
+        setError('');
+        const result = await signUpWithInvite(email.trim(), ticket, invite);
+        setBusy(false);
+        if (result.success) {
+            onSuccess(result);
+        } else if (result.reason === 'ticket_expired') {
+            backToEmail();
+            setError(explain(result));
+        } else {
+            if (result.signupTicket) setTicket(result.signupTicket);
+            setError(explain(result));
         }
     };
 
@@ -147,7 +192,7 @@ const EmailSignIn = ({ onSuccess }) => {
                         {busy ? <Loader2 size={18} className="email-signin-spin" /> : null}
                         <span>{busy ? t('emailSignIn.sending') : t('emailSignIn.sendCode')}</span>
                     </button>
-                    <p className="email-signin-hint">{t('emailSignIn.newHere')}</p>
+                    {newHere ?? <p className="email-signin-hint">{t('emailSignIn.newHere')}</p>}
                     <p className="email-signin-legal">
                         {t('emailSignIn.consentBefore')}
                         <a href={LEGAL_PAGES[lang].terms} onClick={(e) => openLegal(e, 'terms')}>{t('emailSignIn.terms')}</a>
@@ -155,6 +200,36 @@ const EmailSignIn = ({ onSuccess }) => {
                         <a href={LEGAL_PAGES[lang].privacy} onClick={(e) => openLegal(e, 'privacy')}>{t('emailSignIn.privacy')}</a>
                         {t('emailSignIn.consentAfter')}
                     </p>
+                </form>
+            ) : step === 'invite' ? (
+                <form onSubmit={submitInvite} className="email-signin-form">
+                    <p className="email-signin-sent">{t('invite.noAccountYet', { email: email.trim() })}</p>
+                    <label htmlFor="email-signin-invite" className="email-signin-label">
+                        {t('invite.codeLabel')}
+                    </label>
+                    <input
+                        id="email-signin-invite"
+                        className="email-signin-invite"
+                        type="text"
+                        autoComplete="off"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        maxLength={20}
+                        placeholder="BIES-XXXX-XXXX"
+                        value={invite}
+                        onChange={(e) => setInvite(formatAsTyped(e.target.value))}
+                        autoFocus
+                    />
+                    <button type="submit" className="email-signin-button" disabled={busy || !normalizeInviteCode(invite)}>
+                        {busy ? <Loader2 size={18} className="email-signin-spin" /> : null}
+                        <span>{t('invite.createAccount')}</span>
+                    </button>
+                    <div className="email-signin-actions">
+                        <button type="button" onClick={backToEmail} disabled={busy}>
+                            {t('emailSignIn.changeEmail')}
+                        </button>
+                    </div>
                 </form>
             ) : (
                 <form onSubmit={(e) => { e.preventDefault(); verify(); }} className="email-signin-form">
@@ -212,6 +287,13 @@ const EmailSignIn = ({ onSuccess }) => {
                     background: var(--color-surface); color: var(--color-text, inherit);
                 }
                 .email-signin-code:focus { border-color: var(--color-primary); }
+                .email-signin-invite {
+                    width: 100%; box-sizing: border-box; text-align: center; font-size: 1.15rem; font-weight: 700;
+                    font-family: ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.08em; padding: 0.85rem 1rem;
+                    border: 1px solid var(--color-gray-200); border-radius: 1rem; outline: none;
+                    background: var(--color-surface); color: var(--color-text, inherit);
+                }
+                .email-signin-invite:focus { border-color: var(--color-primary); }
                 .email-signin-button {
                     display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%;
                     padding: 0.85rem 1.5rem; border: none; border-radius: 9999px; cursor: pointer;
