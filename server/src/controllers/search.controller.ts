@@ -136,7 +136,7 @@ export async function search(req: Request, res: Response): Promise<void> {
                 take: 200,
                 orderBy: { viewCount: 'desc' },
                 include: {
-                    user: { select: { id: true, role: true, nostrPubkey: true } },
+                    user: { select: { id: true, nostrPubkey: true } },
                 },
             });
             const profileTotal = profiles.length;

@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
+import { handOverListingEvents } from '../services/listingEvents.service';
 import { cache, cacheKey, invalidateLeaderboardCache } from '../services/redis.service';
 import { broadcast } from '../services/websocket.service';
 import { removeFromRelayWhitelist, addToRelayWhitelist } from '../services/relayWhitelist.service';
@@ -112,6 +113,8 @@ export async function banUser(req: Request, res: Response): Promise<void> {
             removeFromRelayWhitelist(user.nostrPubkey);
             await revokeUserSessions(user.id, 'suspended');
             await removePushTargets(user.id);
+            // Events they host as a business stay up, with whoever answers for it.
+            await handOverListingEvents(user.id).catch((err) => console.error('[Admin] Listing events hand-over failed:', err));
         } else {
             addToRelayWhitelist(user.nostrPubkey);
         }

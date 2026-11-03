@@ -28,6 +28,7 @@ const db = vi.hoisted(() => {
     // Just enough of Prisma's `where` semantics for the queries under test.
     function matches(row: Row, where: Row): boolean {
         return Object.entries(where).every(([key, cond]) => {
+            if (key === 'OR') return (cond as Row[]).some((w) => matches(row, w));
             const value = row[key];
             if (cond === null) return value === null || value === undefined;
             if (typeof cond !== 'object' || cond instanceof Date) return value === cond;
@@ -191,7 +192,7 @@ import { publishRelayList } from '../services/nostr.service';
 import { recordOnboardingRedemption } from '../services/voucher.service';
 import { addToRelayWhitelist } from '../services/relayWhitelist.service';
 import { decryptPrivateKey } from '../services/crypto.service';
-import { issueEmailCode, renderCodeEmail } from '../services/emailCode.service';
+import { issueEmailCode, renderCodeEmail, verifyEmailCode } from '../services/emailCode.service';
 
 const mockedSend = sendEmail as ReturnType<typeof vi.fn>;
 
@@ -394,19 +395,21 @@ describe('POST /api/auth/email/start', () => {
                 expect(wrong.body.reason, email).toBe('invalid_code');
             }
 
-            // Sign-ins stop at 9 of the 10, for everyone alike…
+            // Sign-ins stop at 9 of the 10 for new addresses…
             await requestCode('member.b@example.com');
             await requestCode('member.c@example.com');
             expect(mockedSend).toHaveBeenCalledTimes(9);
-            for (const email of ['member.d@example.com', 'n8@example.com']) {
-                const full = await post('/email/start', { email });
-                expect(full.status, email).toBe(429);
-                expect(full.body.reason, email).toBe('busy');
-            }
-
-            // …so deleting an account still gets its email.
-            expect(await issueEmailCode('member.d@example.com', 'delete_account')).toEqual({ ok: true });
+            const full = await post('/email/start', { email: 'n8@example.com' });
+            expect(full.status).toBe(429);
+            expect(full.body.reason).toBe('busy');
+            // …while a member's address still gets a couple a day past it, so a
+            // few addresses using up the day can't stop everyone else.
+            await requestCode('member.d@example.com');
             expect(mockedSend).toHaveBeenCalledTimes(10);
+
+            // Deleting an account still gets its email.
+            expect(await issueEmailCode('member.c@example.com', 'delete_account')).toEqual({ ok: true });
+            expect(mockedSend).toHaveBeenCalledTimes(11);
 
             expect((await post('/email/start', { email: 'review@bies.test' })).status).toBe(200);
         } finally {
@@ -518,13 +521,14 @@ describe('POST /api/auth/email/verify', () => {
         expect(created.profile.nip05Name ?? null).toBeNull();
         expect(created.profile.name).toBe('');
 
-        expect(addToRelayWhitelist).toHaveBeenCalledWith(created.nostrPubkey, { proven: true });
+        // The members' relay waits for the terms of use (acceptTerms).
+        expect(addToRelayWhitelist).not.toHaveBeenCalled();
         expect(publishRelayList).toHaveBeenCalledWith(created.id);
         expect(recordOnboardingRedemption).toHaveBeenCalledWith('LAUNCH', created.id, expect.any(String));
     });
 
     it('signs in an existing account without creating another', async () => {
-        await db.user.create({ data: { email: 'member@example.com', nostrPubkey: 'b'.repeat(64), encryptedPrivkey: 'x', role: 'BUILDER', profile: { create: { name: 'M' } } } });
+        await db.user.create({ data: { email: 'member@example.com', nostrPubkey: 'b'.repeat(64), encryptedPrivkey: 'x', role: 'BUILDER', termsAcceptedAt: new Date(), profile: { create: { name: 'M' } } } });
         db.user.create.mockClear();
         const code = await requestCode('member@example.com');
 
@@ -619,6 +623,29 @@ describe('POST /api/auth/email/verify', () => {
 });
 
 // ─── App Review address ──────────────────────────────────────────────────────
+
+describe('codes that delete an account or show its key', () => {
+    it('stop for the week after 15 wrong tries, while sign-in codes go on', async () => {
+        const email = 'weekly.cap@example.com';
+        db.state.users.push({ id: 'weekly-cap', email, createdAt: new Date(Date.now() - 2 * 86_400_000), profile: null });
+        try {
+            // Three codes of five wrong tries each, a day apart.
+            for (let day = 0; day < 3; day++) {
+                expect(await issueEmailCode(email, 'export_key')).toEqual({ ok: true });
+                for (let i = 0; i < 5; i++) await verifyEmailCode(email, 'export_key', '000000');
+                advance(25 * 3600_000);
+            }
+            const refused = await issueEmailCode(email, 'export_key');
+            expect(refused).toMatchObject({ ok: false, reason: 'rate_limited' });
+            expect(await issueEmailCode(email, 'login')).toEqual({ ok: true });
+            // A week after the first, codes come again.
+            advance(5 * 86_400_000);
+            expect(await issueEmailCode(email, 'export_key')).toEqual({ ok: true });
+        } finally {
+            db.state.users = db.state.users.filter((u) => u.id !== 'weekly-cap');
+        }
+    });
+});
 
 describe('App Review sign-in', () => {
     it('uses the fixed code from the environment and sends no email', async () => {

@@ -171,8 +171,17 @@ export async function checkPartners(
             if (p.userId !== me && await blockedEitherWay(me, p.userId)) throw new PartnerError('You can\'t add this member', 'blocked');
         } else if (p.listingId) {
             if (p.listingId === opts.hostListingId) continue; // it's the host already
-            const listing = await prisma.directoryListing.findFirst({ where: { id: p.listingId, ...LIVE }, select: { id: true, isOfficial: true } });
+            const listing = await prisma.directoryListing.findFirst({
+                where: { id: p.listingId, ...LIVE },
+                select: { id: true, isOfficial: true, ownerId: true, memberUserId: true, isOwnBusiness: true },
+            });
             if (!listing) throw new PartnerError('Business not found', 'no_listing');
+            // Not a business whose runner is in a block with this member:
+            // they'd never hear their business was named (not said which).
+            const runner = listing.memberUserId ?? (listing.isOwnBusiness ? listing.ownerId : null);
+            if (runner && runner !== me && !keptListings.has(`${p.role}|${listing.id}`) && await blockedEitherWay(me, runner)) {
+                throw new PartnerError('Business not found', 'no_listing');
+            }
             // BIES's own page is named on an event by BIES (its people or an admin) only.
             if (listing.isOfficial && !keptListings.has(`${p.role}|${listing.id}`) && !opts.isAdmin
                 && !(opts.acted ?? await actedForIds(me)).includes(listing.id)) {

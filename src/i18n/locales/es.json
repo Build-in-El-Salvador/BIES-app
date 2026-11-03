@@ -55,7 +55,37 @@
     "encrypting": "Encriptando...",
     "saving": "Guardando...",
     "connecting": "Conectando...",
-    "searchPlaceholder": "Buscar proyectos, constructores..."
+    "searchPlaceholder": "Buscar proyectos, constructores...",
+    "fieldNames": {
+      "name": "el nombre",
+      "title": "el título",
+      "phone": "el teléfono",
+      "whatsapp": "el número de WhatsApp",
+      "email": "el correo",
+      "website": "el sitio web",
+      "instagram": "el Instagram",
+      "location": "el lugar",
+      "locationAddress": "la dirección",
+      "locationName": "el nombre del lugar",
+      "hours": "el horario",
+      "about": "la descripción",
+      "bio": "la biografía",
+      "company": "la empresa",
+      "links": "los enlaces",
+      "pricing": "los precios",
+      "category": "la categoría",
+      "languages": "los idiomas",
+      "products": "los productos",
+      "skills": "las habilidades",
+      "onlineUrl": "el enlace en línea",
+      "description": "la descripción",
+      "link": "el enlace",
+      "year": "el año",
+      "something": "un campo"
+    },
+    "checkFields": "Revisa {{fields}} e inténtalo de nuevo.",
+    "checkTheForm": "Revisa el formulario e inténtalo de nuevo.",
+    "and": "y"
   },
   "nav": {
     "discover": "Descubrir",
@@ -1070,7 +1100,11 @@
     "searching": "Buscando...",
     "deleteReply": "Eliminar",
     "deleteReplyConfirm": "¿Eliminar esta respuesta?",
-    "removeAttachment": "Quitar"
+    "removeAttachment": "Quitar",
+    "postFailed": "No se pudo publicar. Revisa tu conexión e inténtalo de nuevo.",
+    "replyFailed": "No se pudo enviar tu respuesta. Inténtalo de nuevo.",
+    "unreachableTitle": "No se puede cargar el feed",
+    "unreachableText": "Lo intentamos de nuevo. Revisa tu conexión."
   },
   "nostrFeed": {
     "publicTab": "Publico",

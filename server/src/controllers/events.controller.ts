@@ -46,7 +46,7 @@ export const createEventSchema = z.object({
     description: z.string().max(20_000),
     category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER']).default('NETWORKING'),
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
-    location: z.string().max(200).optional(),
+    location: z.string().max(800).optional(), // "name, address": both fields fit
     isOnline: z.boolean().default(false),
     onlineUrl: webLink.optional(),
     startDate: z.string().max(40), // More lenient, parse in controller
@@ -60,9 +60,9 @@ export const createEventSchema = z.object({
     shareFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
-    maxAttendees: z.number().int().optional().nullable(),
-    priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
-    ticketCapacity: z.number().int().positive().optional().nullable(),
+    maxAttendees: z.number().int().min(1).max(100_000).optional().nullable(),
+    priceSats: z.number().int().min(0).max(100_000_000).optional().nullable(), // null/0 = free (RSVP-only)
+    ticketCapacity: z.number().int().positive().max(100_000).optional().nullable(),
     payoutLightningAddress: z.string().max(320).optional(),
     tags: z.array(z.string().max(60)).max(30).optional(),
     isOfficial: z.boolean().optional(),
@@ -1608,6 +1608,11 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         const stage = proposalStage(event);
         if (stage === 'calledOff' || (stage === 'proposed' && event.decideBy && event.decideBy.getTime() < Date.now())) {
             res.status(409).json({ error: 'This meetup was called off', reason: 'called_off' }); return;
+        }
+        // A one-off event that's over takes no more answers (a repeating
+        // one answers for its next date).
+        if (!repeats(event) && status !== 'NOT_GOING' && hasEnded(event, new Date())) {
+            res.status(409).json({ error: 'This event is over', reason: 'event_over' }); return;
         }
         // Whoever proposed it counts towards it: they call it off instead.
         if (stage === 'proposed' && event.hostId === userId && status !== 'GOING') {

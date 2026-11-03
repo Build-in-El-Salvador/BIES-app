@@ -200,6 +200,8 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     }, [feedMode]);
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState('');
+    // The relay closed before the feed loaded: say so, not "No posts yet".
+    const [relayTrouble, setRelayTrouble] = useState(false);
     const [attachedFiles, setAttachedFiles] = useState([]); // { file, previewUrl, type, dimensions }
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef(null);
@@ -506,6 +508,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                             setOlderDone(false);
                         }
                         reconnectAttempts.current = 0; // Reset backoff on success
+                        setRelayTrouble(false);
                         setLoading(false);
                         setReadyKey(key);
                         if (author) setAuthorLoadedAt(Date.now());
@@ -539,6 +542,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         // Auto-reconnect with exponential backoff
                         // (nginx timeout, mobile network switch, cell handoff).
                         if (!cancelled) {
+                            setRelayTrouble(true);
                             const attempt = reconnectAttempts.current;
                             const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
                             reconnectAttempts.current = attempt + 1;
@@ -896,7 +900,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         } catch (err) {
             console.error('[Feed] Post failed:', err);
             const msg = err?.errors?.[0]?.message || err?.message || String(err);
-            setPostError(/objectionable/i.test(msg) ? t('moderation.objectionable') : `Post failed: ${msg}`);
+            setPostError(/objectionable/i.test(msg) ? t('moderation.objectionable') : t('feed.postFailed'));
         } finally {
             setPosting(false);
             setUploading(false);
@@ -1069,12 +1073,15 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         setReplyPosting(true);
         try {
             const content = replyText.trim();
+            // A reply to a comment names it (NIP-10), so its author is told.
+            const toComment = replyTarget?.id === post.id && replyTarget.commentId ? replyTarget : null;
             const unsigned = {
                 kind: 1,
                 created_at: Math.floor(Date.now() / 1000),
                 tags: [
                     ['e', post.id, '', 'root'],
                     ['p', post.pubkey],
+                    ...(toComment ? [['e', toComment.commentId, '', 'reply'], ...(toComment.pubkey !== post.pubkey ? [['p', toComment.pubkey]] : [])] : []),
                 ],
                 content,
             };
@@ -1111,13 +1118,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     eventId: post.id,
                     contentPreview: content,
                 });
-                // If replying to a specific comment, also notify the comment author
-                if (replyTarget?.pubkey && replyTarget.pubkey !== post.pubkey) {
+                // Replying to someone's comment: they're told too (about their comment).
+                if (toComment && toComment.pubkey !== post.pubkey && toComment.pubkey !== myPubkey) {
                     notificationsApi.feedInteraction({
                         type: 'COMMENT_REPLY',
-                        targetPubkey: replyTarget.pubkey,
+                        targetPubkey: toComment.pubkey,
                         actorName,
-                        eventId: post.id,
+                        eventId: toComment.commentId,
                         contentPreview: content,
                     });
                 }
@@ -1125,7 +1132,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         } catch (err) {
             console.error('[Feed] Reply failed:', err);
             const msg = err?.errors?.[0]?.message || err?.message || String(err);
-            if (/objectionable/i.test(msg)) setReplyError({ postId: post.id, text: t('moderation.objectionable') });
+            setReplyError({ postId: post.id, text: /objectionable/i.test(msg) ? t('moderation.objectionable') : t('feed.replyFailed') });
         } finally {
             setReplyPosting(false);
         }
@@ -1179,7 +1186,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
     const handleCommentReply = (postId, comment) => {
         const npub = nip19.npubEncode(comment.pubkey);
         const mention = `nostr:${npub} `;
-        setReplyTarget({ id: postId, pubkey: comment.pubkey });
+        setReplyTarget({ id: postId, pubkey: comment.pubkey, commentId: comment.id });
         setReplyText(mention);
         // Focus the textarea for this post
         setTimeout(() => {
@@ -1849,6 +1856,12 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 {/* Feed content */}
                 {loading && rootPosts.length === 0 ? (
                     <FeedSkeleton count={embedded ? 2 : 5} />
+                ) : rootPosts.length === 0 && relayTrouble ? (
+                    <div className="primal-feed-empty" data-testid="feed-unreachable">
+                        <NostrIcon size={40} />
+                        <h3>{t('feed.unreachableTitle')}</h3>
+                        <p>{t('feed.unreachableText')}</p>
+                    </div>
                 ) : rootPosts.length === 0 ? (
                     <div className="primal-feed-empty" data-testid="feed-empty">
                         <NostrIcon size={40} />
@@ -1944,12 +1957,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                         placeholder={t('feed.replyTo', { name: getDisplayName(post.pubkey) })}
                                                         value={isReplying ? replyText : ''}
                                                         onChange={(e) => {
-                                                            setReplyTarget({ id: post.id, pubkey: post.pubkey });
+                                                            // Typing keeps a reply to a comment as one.
+                                                            setReplyTarget((prev) => (prev?.id === post.id ? prev : { id: post.id, pubkey: post.pubkey }));
                                                             setReplyText(e.target.value);
                                                             if (replyError) setReplyError(null);
                                                             handleMentionInput(e.target.value, e.target.selectionStart, 'reply');
                                                         }}
-                                                        onFocus={() => setReplyTarget({ id: post.id, pubkey: post.pubkey })}
+                                                        onFocus={() => setReplyTarget((prev) => (prev?.id === post.id ? prev : { id: post.id, pubkey: post.pubkey }))}
                                                         onBlur={() => setTimeout(() => setMentionAnchor(null), 150)}
                                                         onKeyDown={(e) => {
                                                             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleReply(post); }

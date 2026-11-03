@@ -55,7 +55,37 @@
     "encrypting": "Encrypting...",
     "saving": "Saving...",
     "connecting": "Connecting...",
-    "searchPlaceholder": "Search projects, builders..."
+    "searchPlaceholder": "Search projects, builders...",
+    "fieldNames": {
+      "name": "the name",
+      "title": "the title",
+      "phone": "the phone number",
+      "whatsapp": "the WhatsApp number",
+      "email": "the email address",
+      "website": "the website",
+      "instagram": "the Instagram",
+      "location": "the place",
+      "locationAddress": "the address",
+      "locationName": "the place’s name",
+      "hours": "the hours",
+      "about": "the description",
+      "bio": "the bio",
+      "company": "the company",
+      "links": "the links",
+      "pricing": "the prices",
+      "category": "the category",
+      "languages": "the languages",
+      "products": "the products",
+      "skills": "the skills",
+      "onlineUrl": "the online link",
+      "description": "the description",
+      "link": "the link",
+      "year": "the year",
+      "something": "a field"
+    },
+    "checkFields": "Check {{fields}}, then try again.",
+    "checkTheForm": "Check the form, then try again.",
+    "and": "and"
   },
   "nav": {
     "discover": "Discover",
@@ -1252,7 +1282,11 @@
     "searching": "Searching...",
     "deleteReply": "Delete",
     "deleteReplyConfirm": "Delete this reply?",
-    "removeAttachment": "Remove"
+    "removeAttachment": "Remove",
+    "postFailed": "Couldn’t post. Check your connection and try again.",
+    "replyFailed": "Couldn’t send your reply. Try again.",
+    "unreachableTitle": "Can’t reach the feed",
+    "unreachableText": "Trying again. Check your connection."
   },
   "nostrFeed": {
     "publicTab": "Public",

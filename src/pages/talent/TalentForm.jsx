@@ -8,6 +8,7 @@ import { talentApi, uploadApi } from '../../services/api';
 import { mediaService } from '../../services/mediaService';
 import { useAuth } from '../../context/AuthContext';
 import { objectionableMessage } from '../../components/moderation/objectionable';
+import { fieldErrorText } from '../../utils/fieldErrors';
 import TagInput from '../../components/TagInput';
 import CoverPhoto from '../../components/CoverPhoto';
 import { useCoverFramer } from '../../components/CoverFramer';
@@ -305,7 +306,7 @@ const TalentForm = ({ editMode = false }) => {
             if (objectionableMessage(t, err)) showError(objectionableMessage(t, err));
             else if (reason === 'too_many') showError(t('talent.form.tooMany', { max: err.data.max || MAX_TALENTS }));
             else if (reason === 'not_your_photo') showError(t('talent.form.notYourPhoto'));
-            else if (err.data?.details) showError(`${err.message}: ${err.data.details.map((d) => `${d.field}: ${d.message}`).join(', ')}`);
+            else if (err.data?.details) showError(fieldErrorText(t, err.data.details));
             else showError(err.message || t('talent.form.saveFailed'));
         } finally {
             setSubmitting(false);

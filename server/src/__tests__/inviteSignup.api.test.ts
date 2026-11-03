@@ -278,7 +278,8 @@ describe('with the switch on', () => {
         expect(row!.usedById).toBe(user!.id);
         expect(row!.usedAt).toBeTruthy();
         expect(row!.codeSealed).toBeNull();
-        expect(relayAllows(user!.nostrPubkey)).toBe(true);
+        // The members' relay comes with the terms of use, accepted next.
+        expect(relayAllows(user!.nostrPubkey)).toBe(false);
 
         // The ticket never signs in an account, even the one it made.
         const again = await call('POST', '/api/auth/email/verify', { body: { email, signupTicket: first.body.signupTicket, inviteCode: code } });
@@ -381,7 +382,8 @@ describe('with the switch on', () => {
         expect(ok.status).toBe(200);
         const user = await prisma.user.findUnique({ where: { nostrPubkey: pubkey } });
         expect((await inviteRow(id))!.usedById).toBe(user!.id);
-        expect(relayAllows(pubkey)).toBe(true);
+        // The members' relay comes with the terms of use, accepted next.
+        expect(relayAllows(pubkey)).toBe(false);
         // From then on, no code.
         expect((await nostrSignIn(secret)).status).toBe(200);
     });

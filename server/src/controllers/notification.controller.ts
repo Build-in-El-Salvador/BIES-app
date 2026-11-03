@@ -11,6 +11,7 @@ import { notFromHiddenMembers, notifyFeedInteraction } from '../services/notific
 import { findObjectionable } from '../services/contentFilter';
 import { config } from '../config';
 import { isPushServiceEndpoint } from '../services/webpush.service';
+import { checkFeedInteraction } from '../services/feedInteraction.service';
 
 /**
  * Native push device token registration. APNs (and FCM) device tokens are
@@ -220,8 +221,16 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             res.status(400).json({ error: 'eventId is required' });
             return;
         }
-        const text = typeof contentPreview === 'string' && type !== 'POST_LIKE' && type !== 'COMMENT_LIKE'
-            ? crypto.createHash('sha256').update(contentPreview).digest('hex').slice(0, 16)
+        // Only what's true: the post or comment is the told member's, and the
+        // actor's like or reply is on BIES's relay; a reply's words are its own.
+        const checked = await checkFeedInteraction({
+            type, actorPubkey, targetPubkey, eventId,
+            claimedText: typeof contentPreview === 'string' ? contentPreview : undefined,
+        });
+        if (!checked) { res.json({ message: 'ok' }); return; }
+
+        const text = checked.text !== undefined
+            ? crypto.createHash('sha256').update(checked.text).digest('hex').slice(0, 16)
             : '';
         const once = `feedInteraction:${req.user!.id}:${targetPubkey}:${type}:${eventId}:${text}`;
         if (await cache.get(once)) { res.json({ message: 'ok' }); return; }
@@ -237,7 +246,7 @@ export async function feedInteraction(req: Request, res: Response): Promise<void
             type,
             actorName: name,
             eventId,
-            contentPreview: type === 'POST_LIKE' || type === 'COMMENT_LIKE' ? undefined : previewToShow(contentPreview),
+            contentPreview: type === 'POST_LIKE' || type === 'COMMENT_LIKE' ? undefined : previewToShow(checked.text),
         });
 
         res.json({ message: 'ok' });

@@ -156,10 +156,16 @@ async function aMinuteLater() {
     await prisma.emailCode.updateMany({ data: { createdAt: new Date(Date.now() - 2 * 60 * 1000) } });
 }
 
+/** Signed in, and the terms accepted, as the app does next (relay access comes with them). */
+async function acceptTerms(token: string) {
+    expect((await call('POST', '/api/account/terms', { token, body: { version: process.env.TERMS_VERSION || '2026-10' } })).status).toBe(200);
+}
+
 async function signInByEmail(email: string) {
     expect((await call('POST', '/api/auth/email/start', { body: { email } })).status).toBe(200);
     const r = await call('POST', '/api/auth/email/verify', { body: { email, code: lastCode(email) } });
     expect([200, 201]).toContain(r.status);
+    await acceptTerms(r.body.token);
     return r.body as { token: string; user: { id: string; nostrPubkey: string; hostedKey: boolean } };
 }
 
@@ -168,6 +174,7 @@ async function signInByNostr(secretKey: Uint8Array) {
     const { body } = await call('GET', `/api/auth/nostr-challenge?pubkey=${pubkey}`);
     const signedEvent = finalizeEvent({ kind: 27235, created_at: now(), tags: [['u', `${process.env.APP_PUBLIC_URL || 'https://app.buildinelsalvador.com'}/api/auth/nostr-login`], ['method', 'POST']], content: body.challenge }, secretKey);
     const r = await call('POST', '/api/auth/nostr-login', { body: { pubkey, signedEvent } });
+    if (r.status === 200) await acceptTerms(r.body.token);
     return r as { status: number; body: { token: string; user: { id: string; nostrPubkey: string; hostedKey: boolean } } };
 }
 

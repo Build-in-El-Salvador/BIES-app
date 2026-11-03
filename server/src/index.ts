@@ -45,7 +45,6 @@ import analyticsRoutes from './routes/analytics.routes';
 import searchRoutes from './routes/search.routes';
 import adminRoutes from './routes/admin.routes';
 import investorRoutes from './routes/investor.routes';
-import contactRoutes from './routes/contact.routes';
 import statsRoutes from './routes/stats.routes';
 import settingsRoutes from './routes/settings.routes';
 import accountRoutes from './routes/account.routes';
@@ -191,19 +190,10 @@ const searchLimiter = rateLimit({
     keyGenerator: rateLimitKey,
 });
 
-// Contact form: 5 per hour per account (per IP signed out)
-const contactLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 5,
-    message: { error: 'Too many contact submissions. Please try again later.' },
-    skip: (req) => req.method === 'OPTIONS',
-    keyGenerator: rateLimitKey,
-});
 
 app.use('/api/', generalLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/search', searchLimiter);
-app.use('/api/contact', contactLimiter);
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 // After the limiters, so a request over its limit is turned away before its
@@ -256,7 +246,6 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/investors', featureGate('investors'), investorRoutes);
-app.use('/api/contact', contactRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/account', accountRoutes);
@@ -313,7 +302,7 @@ server.listen(config.port, () => {
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Routes: auth | profiles | projects | upload | messages          ║
 ║          watchlist | investments | notifications | events        ║
-║          analytics | search | admin | contact | stats            ║
+║          analytics | search | admin | stats                      ║
 ║          settings | content | news | match | websocket           ║
 ╚══════════════════════════════════════════════════════════════════╝
   `);

@@ -36,6 +36,7 @@
 import crypto from 'crypto';
 import type { Event as NostrEvent } from 'nostr-tools/pure';
 import prisma from '../lib/prisma';
+import { handOverListingEvents } from './listingEvents.service';
 import { config } from '../config';
 import { sendEmail, type OutgoingEmail } from './email.service';
 import type { EmailLang } from './emailCode.service';
@@ -211,7 +212,10 @@ export async function deleteAccount(
         console.error('[Account] Could not list the files:', errorText(err));
         return [] as string[];
     });
-    // The events they host go with the account; their link preview pictures go after.
+    // Events they hosted as a business or farm stay with it (whoever answers
+    // for it now); the events they host as themselves go with the account,
+    // and their link preview pictures after.
+    await handOverListingEvents(userId).catch((err) => console.error('[Account] Could not hand over listing events:', errorText(err)));
     const hostedEvents = await prisma.event.findMany({ where: { hostId: userId }, select: { id: true } }).catch(() => [] as { id: string }[]);
 
     // 2. Erase. Audit rows about the person keep what happened, but not their

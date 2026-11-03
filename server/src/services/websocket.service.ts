@@ -53,6 +53,7 @@ const pending = new Set<AuthenticatedWebSocket>();
 export const WS_PROTOCOL = 'bies.v1';
 
 // Close codes the app acts on: refresh the token and reconnect, or sign out.
+const MAX_SOCKETS_PER_MEMBER = 12;
 const CLOSE_REFRESH = 4001;
 const CLOSE_SESSION_ENDED = 4003;
 
@@ -151,9 +152,18 @@ export function attachWebSocketServer(httpServer: Server): void {
         ws.sessionId = sessionId;
         ws.isAlive = true;
 
-        // Track connection
+        // Track connection. A member's tabs and devices, a dozen at most: the
+        // oldest goes to make room, so nobody holds hundreds open.
         if (!connections.has(userId)) connections.set(userId, new Set());
-        connections.get(userId)!.add(ws);
+        const theirs = connections.get(userId)!;
+        if (theirs.size >= MAX_SOCKETS_PER_MEMBER) {
+            const oldest = theirs.values().next().value;
+            if (oldest) {
+                theirs.delete(oldest);
+                oldest.close(1008, 'Too many connections');
+            }
+        }
+        theirs.add(ws);
 
         console.log(`[WS] User ${userId} connected (total: ${countConnections()})`);
 

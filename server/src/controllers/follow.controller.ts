@@ -162,7 +162,7 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
                 include: {
                     follower: {
                         select: {
-                            id: true, nostrPubkey: true, role: true, isVerified: true,
+                            id: true, nostrPubkey: true, isVerified: true,
                             profile: { select: { name: true, avatar: true, bio: true, company: true } },
                         },
                     },
@@ -225,7 +225,7 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
                 include: {
                     following: {
                         select: {
-                            id: true, nostrPubkey: true, role: true, isVerified: true,
+                            id: true, nostrPubkey: true, isVerified: true,
                             profile: { select: { name: true, avatar: true, bio: true, company: true } },
                         },
                     },

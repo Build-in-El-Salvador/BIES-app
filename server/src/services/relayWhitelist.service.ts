@@ -20,6 +20,9 @@ export const WHITELIST_PATH = process.env.RELAY_WHITELIST_PATH || '/app/relay-wh
 export const PURGE_DIR = path.join(path.dirname(WHITELIST_PATH), 'purge');
 
 export const VANISHED_PATH = path.join(path.dirname(WHITELIST_PATH), 'vanished.txt');
+// Posts moderators removed, one id a line: the relay's auth proxy refuses
+// them, and reposts of them, if anyone sends them again (relay-proxy/writeRules.js).
+export const REMOVED_PATH = path.join(path.dirname(WHITELIST_PATH), 'removed.txt');
 
 function readLines(file: string): string[] {
     return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '') : [];
@@ -148,6 +151,8 @@ export function requestEventRemoval(eventId: string): boolean {
         const tmp = path.join(PURGE_DIR, `.event-${eventId}.tmp`);
         fs.writeFileSync(tmp, `${new Date().toISOString()}\n`);
         fs.renameSync(tmp, path.join(PURGE_DIR, `event-${eventId}`));
+        // Kept out for good: the proxy refuses it, and reposts of it.
+        if (!readLines(REMOVED_PATH).includes(eventId)) fs.appendFileSync(REMOVED_PATH, eventId + '\n');
         console.log(`[Relay] Removal requested for event ${eventId.substring(0, 8)}...`);
         return true;
     } catch (err) {

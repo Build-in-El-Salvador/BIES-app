@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { objectionableMessage } from '../../components/moderation/objectionable';
+import { fieldErrorText } from '../../utils/fieldErrors';
 import {
     Loader2, AlertCircle, Camera, X, Plus, Trash2,
     CheckCircle, Bitcoin, Leaf, Building2, ImagePlus, ThumbsUp, Store, Briefcase, ChevronDown, ChevronUp, Move,
@@ -429,7 +430,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
             if (objectionableMessage(t, err)) {
                 setSubmitError(objectionableMessage(t, err));
             } else if (err.data?.details) {
-                setSubmitError(`${err.message}: ${err.data.details.map((d) => `${d.field}: ${d.message}`).join(', ')}`);
+                setSubmitError(fieldErrorText(t, err.data.details));
             } else {
                 setSubmitError(err.message || 'Failed to save listing');
             }

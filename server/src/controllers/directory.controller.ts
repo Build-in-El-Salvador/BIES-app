@@ -16,7 +16,8 @@ import { ADDED_AS_STAFF, runByWhere, runnerId, worksAtWhere } from './listingTea
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-const phoneRegex = /^[+0-9\s()-]*$/;
+// Digits and what people write between them, several numbers too ("7000-0000 / 2222-3333").
+const phoneRegex = /^[+0-9\s()\-/,.]*$/;
 
 /** Kinds of business in BIES Trusted (labels: directory.categories.* in the app). */
 export const DIRECTORY_CATEGORIES = [
@@ -98,9 +99,10 @@ const isStaff = (req: Request) => !!req.user && (req.user.isAdmin || req.user.ro
 
 const JSON_ARRAY_FIELDS = ['photos', 'languages', 'products', 'practices', 'skills'] as const;
 
+// Not their role: who is staff isn't for every member to read.
 const ownerSelect = {
     select: {
-        id: true, nostrPubkey: true, role: true,
+        id: true, nostrPubkey: true,
         profile: { select: { name: true, avatar: true } },
     },
 };
@@ -109,7 +111,7 @@ const ownerSelect = {
 // ZapButton passes as lud16/bolt12Offer (same shape Discover's cards use).
 const memberUserSelect = {
     select: {
-        id: true, nostrPubkey: true, role: true,
+        id: true, nostrPubkey: true,
         profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true, privacy: true } },
     },
 };

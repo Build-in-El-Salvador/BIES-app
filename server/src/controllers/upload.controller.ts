@@ -75,6 +75,18 @@ const RECEIVING_AT_ONCE = 20;
 const receivingOf = new Map<string, number>();
 let receivingInAll = 0;
 
+// What one member may store in a day: hundreds of photos, or a dozen long
+// videos. Past it, the disk the box shares with every service is safe.
+const DAILY_STORAGE_BYTES = 500 * 1024 * 1024;
+
+async function overDailyStorage(userId: string, adding: number): Promise<boolean> {
+    const stored = await prisma.upload.aggregate({
+        where: { userId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        _sum: { size: true },
+    });
+    return (stored._sum.size ?? 0) + adding > DAILY_STORAGE_BYTES;
+}
+
 export function uploadSlot(req: Request, res: Response, next: NextFunction): void {
     const userId = req.user!.id;
     const mine = receivingOf.get(userId) ?? 0;
@@ -146,6 +158,10 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         const allowedMedia = MEDIA_TYPES;
         if (!allowedMedia.includes(req.file.mimetype)) {
             res.status(400).json({ error: 'Only images and videos are allowed for media upload' });
+            return;
+        }
+        if (await overDailyStorage(req.user!.id, req.file.size)) {
+            res.status(429).json({ error: 'You\'ve added a lot of photos and videos today. Try again tomorrow.', reason: 'daily_storage' });
             return;
         }
 

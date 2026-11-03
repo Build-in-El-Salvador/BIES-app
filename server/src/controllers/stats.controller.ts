@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { cache, cacheKey, TTL } from '../services/redis.service';
+import { isEnabled } from '../services/featureFlags.service';
 
 /**
  * GET /stats
@@ -33,12 +34,13 @@ export async function getPublicStats(req: Request, res: Response): Promise<void>
             prisma.project.count({ where: { isFeatured: true, isPublished: true } }),
         ]);
 
+        // Investors and what they put in only while Investors is on.
+        const investorsOn = await isEnabled('investors');
         const result = {
             activeBuilders: totalBuilders,
-            activeInvestors: totalInvestors,
+            ...(investorsOn ? { activeInvestors: totalInvestors, totalInvestment: totalFunded._sum.amount || 0 } : {}),
             publishedProjects,
             verifiedProjects,
-            totalInvestment: totalFunded._sum.amount || 0,
             upcomingEvents: totalEvents,
             featuredProjects,
         };

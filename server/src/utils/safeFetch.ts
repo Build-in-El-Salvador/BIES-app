@@ -108,6 +108,9 @@ export function safeGet(
                 return done(null);
             }
             if (url.protocol !== 'https:') return done(null); // https only — blocks http/file/gopher and downgrade redirects
+            // The usual https port only: nothing else a host runs (on its
+            // own address or another's) is reached through a member's link.
+            if (url.port && url.port !== '443') return done(null);
             if (allow && !allow(url)) return done(null);
             // Node doesn't call `lookup` for a host that is already an IP
             // address (the URL parser also turns 2130706433, 0x7f.1 and the
