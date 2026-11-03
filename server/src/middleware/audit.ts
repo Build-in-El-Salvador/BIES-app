@@ -48,6 +48,7 @@ const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
     { method: 'POST', pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
     { method: 'PUT',  pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
     { method: 'DELETE', pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
+    { method: 'POST', pattern: /^\/api\/auth\/end-other-sessions/, action: 'AUTH_LOGOUT_OTHERS' },
     { method: 'POST', pattern: /^\/api\/auth\/logout/, action: 'AUTH_LOGOUT' },
     { method: 'POST', pattern: /^\/api\/projects\/.*\/deck\/request/, action: 'DECK_REQUEST' },
     { method: 'PUT',  pattern: /^\/api\/projects\/.*\/deck\/requests\//, action: 'DECK_REVIEW' },

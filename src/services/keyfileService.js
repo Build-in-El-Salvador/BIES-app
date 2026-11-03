@@ -14,6 +14,7 @@
 
 import { encrypt as nip49Encrypt, decrypt as nip49Decrypt } from 'nostr-tools/nip49';
 import { nip19, getPublicKey } from 'nostr-tools';
+import { decodeNsec } from '../utils/secretKey.js';
 
 const APP_CLIENT = 'BIES v1.0';
 
@@ -137,9 +138,7 @@ export const keyfileService = {
      * @returns {{ npub: string, filename: string }}
      */
     encryptAndDownload(nsecString, password, logn = 16) {
-        const decoded = nip19.decode(nsecString.trim());
-        if (decoded.type !== 'nsec') throw new Error('Invalid nsec key.');
-        const sk = decoded.data;
+        const sk = decodeNsec(nsecString);
 
         const { json, filename, npub } = this.buildKeyfile(sk, password, logn);
         this.triggerDownload(json, filename);

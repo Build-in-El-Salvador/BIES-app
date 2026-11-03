@@ -89,7 +89,9 @@ async function member(name: string, { role = 'MEMBER', isAdmin = false, nip05Nam
     const user = await prisma.user.create({
         data: {
             nostrPubkey: pubkey, role, isAdmin,
-            termsVersion: '2026-10', termsAcceptedAt: new Date(), profile: { create: { name, nip05Name } },
+            termsVersion: '2026-10', termsAcceptedAt: new Date(),
+            // A BIES address the member claimed (Settings → Nostr).
+            profile: { create: { name, nip05Name, ...(nip05Name ? { nip05ClaimedAt: new Date() } : {}) } },
         },
     });
     const session = await createSession(user.id, 'native');

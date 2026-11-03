@@ -12,6 +12,7 @@ import * as voucherService from '../services/voucher.service';
 import * as coinosService from '../services/coinos.service';
 import { isUniqueViolation } from '../services/points.service';
 import { isVanished } from '../services/relayWhitelist.service';
+import { isInviteOnly } from '../services/invite.service';
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -283,6 +284,12 @@ export async function redeemVoucher(req: Request, res: Response): Promise<void> 
 
         if (!valid) {
             res.status(400).json({ error: `Voucher is ${reason}`, reason }); return;
+        }
+        // While sign-up takes an invite, the members-only relay does too: a
+        // voucher would let a key on with no account and no invite.
+        if (await isInviteOnly()) {
+            res.status(403).json({ error: 'BIES is invite-only right now. Ask a member for an invite to join.', reason: 'invite_only' });
+            return;
         }
 
         if (voucher.priceSats > 0) {

@@ -37,6 +37,19 @@ export const staffMoveSchema = z.object({
 
 const isStaff = (req: Request) => !!req.user && (req.user.isAdmin || req.user.role === 'MOD');
 
+/**
+ * BIES's own page (its events are BIES events) and a listing an admin runs
+ * change hands, or go, only through an admin: a moderator, or a member who
+ * was given BIES's page, can't pass them on.
+ */
+export async function adminsOnlyListing(listing: { isOfficial: boolean; ownerId: string }, req: Request): Promise<boolean> {
+    if (req.user?.isAdmin) return false;
+    if (listing.isOfficial) return true;
+    const owner = await prisma.user.findUnique({ where: { id: listing.ownerId }, select: { isAdmin: true } });
+    return !!owner?.isAdmin;
+}
+const ADMINS_ONLY = { error: 'Only an admin can hand over or remove this listing', reason: 'admins_only' };
+
 const personSelect = {
     select: { id: true, nostrPubkey: true, profile: { select: { name: true, avatar: true } } },
 };
@@ -210,10 +223,14 @@ export async function offerListing(req: Request, res: Response): Promise<void> {
         const { toUserId } = req.body;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, name: true, type: true, ownerId: true },
+            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, isOfficial: true },
         });
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
-        if (listing.ownerId !== me) { res.status(403).json({ error: 'Only the listing\'s owner can hand it over' }); return; }
+        // Not once staff linked the member who runs it: it's theirs to answer for.
+        if (listing.ownerId !== me || (listing.memberUserId && listing.memberUserId !== me)) {
+            res.status(403).json({ error: 'Only the listing\'s owner can hand it over' }); return;
+        }
+        if (await adminsOnlyListing(listing, req)) { res.status(403).json(ADMINS_ONLY); return; }
         if (toUserId === me) { res.status(400).json({ error: 'This listing is already yours', reason: 'already_owner' }); return; }
         if (!(await activeMember(toUserId))) { res.status(400).json({ error: 'Member not found', reason: 'no_member' }); return; }
         if (await blockedEitherWay(me, toUserId)) { res.status(403).json({ error: 'You can\'t hand it to this member', reason: 'blocked' }); return; }
@@ -266,7 +283,7 @@ export async function offerListing(req: Request, res: Response): Promise<void> {
 async function openTransfer(req: Request, res: Response) {
     const transfer = await prisma.listingTransfer.findUnique({
         where: { id: req.params.transferId },
-        include: { listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true } } },
+        include: { listing: { select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, isOfficial: true } } },
     });
     if (!transfer) { res.status(404).json({ error: 'Request not found' }); return null; }
     if (transfer.status !== 'pending') {
@@ -301,6 +318,7 @@ export async function acceptTransfer(req: Request, res: Response): Promise<void>
         const byRecipient = transfer.kind === 'offer' && transfer.toUserId === me;
         if (!byOwner && !byStaff && !byRecipient) { res.status(403).json({ error: 'Not your request to answer' }); return; }
         if (byStaff && moderatorsOwn(req.user, listing.ownerId, listing.memberUserId, transfer.toUserId)) { res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' }); return; }
+        if (!byRecipient && await adminsOnlyListing(listing, req)) { res.status(403).json(ADMINS_ONLY); return; }
         if (!(await activeMember(transfer.toUserId))) { res.status(400).json({ error: 'Member not found', reason: 'no_member' }); return; }
 
         await moveListing(listing.id, transfer.toUserId, me, transfer.id);
@@ -470,10 +488,11 @@ export async function staffMoveListing(req: Request, res: Response): Promise<voi
         const { userId } = req.body;
         const listing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true },
+            select: { id: true, name: true, type: true, ownerId: true, memberUserId: true, isOfficial: true },
         });
         if (!listing) { res.status(404).json({ error: 'Listing not found' }); return; }
         if (moderatorsOwn(req.user, listing.ownerId, listing.memberUserId, userId)) { res.status(403).json({ error: 'Another moderator or an admin has to decide on your own listing', reason: 'own_listing' }); return; }
+        if (await adminsOnlyListing(listing, req)) { res.status(403).json(ADMINS_ONLY); return; }
         if (listing.ownerId === userId) { res.status(400).json({ error: 'They already own it', reason: 'already_owner' }); return; }
         if (!(await activeMember(userId))) { res.status(400).json({ error: 'Member not found', reason: 'no_member' }); return; }
 

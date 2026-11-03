@@ -3,7 +3,7 @@
  * made of unclosed tags can't hold the server up.
  */
 import { describe, it, expect } from 'vitest';
-import { jsonLdBlocks } from '../controllers/eventImport.controller';
+import { jsonLdBlocks, extractOgTags } from '../controllers/eventImport.controller';
 
 describe('jsonLdBlocks', () => {
     it('finds the JSON-LD blocks of a normal page', () => {
@@ -23,5 +23,19 @@ describe('jsonLdBlocks', () => {
             jsonLdBlocks(page);
             expect(Date.now() - started, piece).toBeLessThan(5000);
         }
+    });
+});
+
+describe('extractOgTags', () => {
+    it('reads meta tags in either attribute order, any quotes and case', () => {
+        const page = '<html><head><META property="og:title" content="Launch &amp; Party">'
+            + "<meta content='https://x.example/a.jpg' property='og:image' />"
+            + '<meta name="description" data-x="1" content="About it">'
+            + '<metadata name="nope" content="no"><meta charset="utf-8"></head></html>';
+        expect(extractOgTags(page)).toEqual({
+            'og:title': 'Launch & Party',
+            'og:image': 'https://x.example/a.jpg',
+            description: 'About it',
+        });
     });
 });

@@ -151,8 +151,9 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 const result = await directoryApi.get(id);
                 const listing = result?.data || result;
                 if (cancelled) return;
-                // The API only saves the creator's or an admin's changes.
-                if (!isAdmin && listing.ownerId !== user?.id) {
+                // The API only saves the changes of its creator, the member
+                // staff linked to it, or an admin.
+                if (!isAdmin && listing.ownerId !== user?.id && listing.memberUserId !== user?.id) {
                     setNotYours(true);
                     setLoadError(t('directory.notYoursToEdit'));
                     return;

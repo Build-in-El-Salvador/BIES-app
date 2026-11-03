@@ -30,6 +30,7 @@ import { followPublicProfile } from './publicNostr.controller';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
+import { adminsOnlyListing } from './listingTransfer.controller';
 import { filesOf } from './talent.controller';
 import { discardOpportunityFiles, opportunityFileNames } from './project.controller';
 import { uploadNameOf } from '../services/uploads.service';
@@ -1728,9 +1729,14 @@ export async function recomputeDirectoryScores(req: Request, res: Response): Pro
  */
 export async function deleteDirectoryListing(req: Request, res: Response): Promise<void> {
     try {
-        const exists = await prisma.directoryListing.count({ where: { id: req.params.id } });
-        if (!exists) {
+        const listing = await prisma.directoryListing.findUnique({ where: { id: req.params.id }, select: { ownerId: true, isOfficial: true } });
+        if (!listing) {
             res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        // BIES's own page, or an admin's listing: an admin removes those.
+        if (await adminsOnlyListing(listing, req)) {
+            res.status(403).json({ error: 'Only an admin can remove this listing', reason: 'admins_only' });
             return;
         }
         await deleteListingAndFiles(req.params.id, req.user!.id);

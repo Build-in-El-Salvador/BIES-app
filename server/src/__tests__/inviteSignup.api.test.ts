@@ -46,6 +46,7 @@ import prisma from '../lib/prisma';
 import authRoutes from '../routes/auth.routes';
 import inviteRoutes from '../routes/invite.routes';
 import adminRoutes from '../routes/admin.routes';
+import voucherRoutes from '../routes/voucher.routes';
 import { auditLog } from '../middleware/audit';
 import { createSession, signAccessToken } from '../services/session.service';
 import { encryptPrivateKey } from '../services/crypto.service';
@@ -75,6 +76,7 @@ beforeAll(async () => {
     app.use('/api/auth', authRoutes);
     app.use('/api/invites', inviteRoutes);
     app.use('/api/admin', adminRoutes);
+    app.use('/api/vouchers', voucherRoutes);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -386,6 +388,21 @@ describe('with the switch on', () => {
 
     it('Nostr: the admins in ADMIN_PUBKEYS never need a code', async () => {
         expect((await nostrSignIn(env.adminSecret)).status).toBe(200);
+    });
+
+    it('a relay voucher puts no key on the relay: the relay takes an invite too', async () => {
+        const voucher = await prisma.voucher.create({ data: { code: `relay-${Date.now()}`, createdById: mike.id, maxUses: 0 } });
+        const pubkey = getPublicKey(generateSecretKey());
+        const res = await call('POST', `/api/vouchers/code/${voucher.code}/redeem`, { body: { pubkey } });
+        expect(res.status).toBe(403);
+        expect(res.body.reason).toBe('invite_only');
+        expect(relayAllows(pubkey)).toBe(false);
+        await setInviteOnly(false);
+        try {
+            expect((await call('POST', `/api/vouchers/code/${voucher.code}/redeem`, { body: { pubkey } })).body.status).toBe('completed');
+        } finally {
+            await setInviteOnly(true);
+        }
     });
 
     it("App Review's address never needs a code", async () => {

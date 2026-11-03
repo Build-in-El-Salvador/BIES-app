@@ -23,9 +23,20 @@ export function feedPostOf(event) {
     }
     if (event.kind !== 1) return null;
     const c = (event.content || '').trimStart();
-    if (c.startsWith('{') || c.startsWith('xitchat-') || c.startsWith('[')) return null;
+    if (c.startsWith('xitchat-') || machineJson(c)) return null;
     if (event.tags.some(t => t[0] === 'e')) return null;
     return event;
+}
+
+/** Text that is JSON some app wrote, not words: a post like "[ES/EN] Reunión…" is a post. */
+function machineJson(text) {
+    if (!text.startsWith('{') && !text.startsWith('[')) return false;
+    try {
+        const value = JSON.parse(text);
+        return value !== null && typeof value === 'object';
+    } catch {
+        return false;
+    }
 }
 
 /**

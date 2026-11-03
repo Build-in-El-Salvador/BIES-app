@@ -104,6 +104,11 @@ services:
     environment:
       LT_LOAD_ONLY: "en,es"
       LT_DISABLE_WEB_UI: "true"
+      # Reached only through nginx's members-only /translate/translate; these
+      # bound what one request can cost (a long event description fits).
+      LT_CHAR_LIMIT: "10000"
+      LT_BATCH_LIMIT: "1"
+      LT_DISABLE_FILES_TRANSLATION: "true"
     networks:
       - bies-net
     deploy:

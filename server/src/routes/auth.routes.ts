@@ -13,6 +13,7 @@ import {
     getMe,
     refresh,
     logout,
+    logoutOthers,
 } from '../controllers/auth.controller';
 
 const router = Router();
@@ -35,5 +36,7 @@ router.post('/logout', requireKnownOrigin, logout);
 
 // Protected routes
 router.get('/me', authenticate, getMe);
+// Sign out every other device (a lost phone, a shared computer): this one stays.
+router.post('/end-other-sessions', requireKnownOrigin, authenticate, logoutOthers);
 
 export default router;

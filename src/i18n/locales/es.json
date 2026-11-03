@@ -149,7 +149,14 @@
     "layoutCards": "Tarjetas",
     "layoutIcons": "Iconos",
     "logOut": "Cerrar sesión",
-    "privacy": "Privacidad"
+    "privacy": "Privacidad",
+    "signOutOthers": "Cerrar sesión en otros dispositivos",
+    "signOutOthersDesc": "Teléfonos y computadoras donde iniciaste sesión antes",
+    "signOutOthersConfirm": "¿Cerrar tu sesión de BIES en todos los demás lugares? Aquí sigues con la sesión iniciada.",
+    "signOutOthersDone_one": "Sesión cerrada en {{count}} dispositivo más",
+    "signOutOthersDone_other": "Sesión cerrada en {{count}} dispositivos más",
+    "signOutOthersNone": "No tenías la sesión iniciada en ningún otro lugar",
+    "signOutOthersFailed": "No se pudo cerrar la sesión en tus otros dispositivos. Inténtalo de nuevo."
   },
   "landing": {
     "forInvestors": "Para Inversionistas Globales",
@@ -2337,7 +2344,10 @@
       "unmark": "No es la página propia de BIES",
       "badge": "Página propia de BIES",
       "events": "Eventos"
-    }
+    },
+    "deleteListing": "Eliminar listado",
+    "deleteConfirm": "¿Eliminar este listado? Sus fotos, reseñas y equipo se eliminan con él. No se puede deshacer.",
+    "deleteFailed": "No se pudo eliminar el listado. Inténtalo de nuevo."
   },
   "talent": {
     "search": "Buscar habilidades o personas",

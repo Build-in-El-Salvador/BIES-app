@@ -37,8 +37,8 @@ const Invite = () => {
     const inviteOnly = useInviteOnly();
     const native = isNativePlatform();
 
-    // Read once: the code is taken out of the address straight after.
-    const [fromLink] = useState(() => inviteCodeFromHash(location.hash));
+    // The link's code: taken out of the address straight after it's read.
+    const [fromLink, setFromLink] = useState(() => inviteCodeFromHash(location.hash));
     const [kept] = useState(() => rememberedInvite(inviteStorage()));
     const [code, setCode] = useState(() => fromLink || kept?.code || '');
     const [state, setState] = useState(() => (fromLink ? 'checking' : kept ? 'valid' : 'idle')); // idle | checking | valid | invalid
@@ -77,10 +77,20 @@ const Invite = () => {
 
     // The code comes out of the address at once. It's checked (and kept)
     // only for someone signed out: a member opening a link keeps nothing.
-    useEffect(() => {
-        if (location.hash) navigate(location.pathname, { replace: true });
-    }, []);
+    // A link opened while this screen is already up (the app was open on it)
+    // brings its code in the same way.
     const [checked, setChecked] = useState(false);
+    useEffect(() => {
+        if (!location.hash) return;
+        const linked = inviteCodeFromHash(location.hash);
+        navigate(location.pathname, { replace: true });
+        if (!linked || linked === fromLink) return;
+        setFromLink(linked);
+        setCode(linked);
+        setExpiresAt(null);
+        setState('checking');
+        setChecked(false);
+    }, [location.hash]);
     useEffect(() => {
         if (loading || checked) return;
         setChecked(true);

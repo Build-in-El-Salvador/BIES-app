@@ -135,7 +135,8 @@ export async function tellGoingTo(eventId: string, key: Date, note: { title: str
         type: 'EVENT_RSVP',
         title: note.title,
         body: note.body,
-        data: { eventId, status: note.status, occurrence: key.toISOString() },
+        // Whoever changed it is the actor: a member who blocked them isn't told.
+        data: { eventId, status: note.status, occurrence: key.toISOString(), ...(except ? { actorId: except } : {}) },
     }).catch((err) => console.error('[Events] Date notification failed:', err))));
     return people.length;
 }

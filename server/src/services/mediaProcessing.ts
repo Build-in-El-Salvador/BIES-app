@@ -198,10 +198,28 @@ async function readMetadata(input: Buffer) {
     }
 }
 
+/**
+ * Whether the bytes start as a JPEG, PNG or WebP does. sharp reads many more
+ * formats (SVG among them, which can take seconds of CPU to draw), and the
+ * type an upload says it is comes from the phone, so it's the bytes that
+ * count. Any of the three, whatever it says: a PNG saved as .jpg is still a photo.
+ */
+function looksLikePhoto(input: Buffer): boolean {
+    const jpeg = input.length > 3 && input[0] === 0xff && input[1] === 0xd8 && input[2] === 0xff;
+    const png = input.length > 8 && input.readUInt32BE(0) === 0x89504e47 && input.readUInt32BE(4) === 0x0d0a1a0a;
+    const webp = input.length > 12 && input.toString('latin1', 0, 4) === 'RIFF' && input.toString('latin1', 8, 12) === 'WEBP';
+    return jpeg || png || webp;
+}
+
+// The most one photo may take to make: a real one takes well under a second.
+const PHOTO_SECONDS = 20;
+
 async function preparePhoto(input: Buffer, mimeType: string): Promise<PreparedMedia> {
+    if (!looksLikePhoto(input)) throw new UnreadableMediaError();
     // An animated WebP keeps its frames. 'error' rather than sharp's stricter
     // 'warning': phones write JPEGs that libjpeg warns about but reads fine.
     let pipeline = sharp(input, { autoOrient: true, animated: mimeType === 'image/webp', failOn: 'error', limitInputPixels: MAX_INPUT_PIXELS })
+        .timeout({ seconds: PHOTO_SECONDS })
         .resize({ width: MAX_SIDE, height: MAX_SIDE, fit: 'inside', withoutEnlargement: true });
     // Without withMetadata(), sharp writes no metadata and converts to sRGB.
     if (mimeType === 'image/png') pipeline = pipeline.png({ compressionLevel: 9 });

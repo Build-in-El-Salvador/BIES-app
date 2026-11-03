@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, optionalAuth } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { requireTerms, screenContent } from '../middleware/contentRules';
 import { validate } from '../middleware/validate';
 import {
@@ -38,14 +38,16 @@ const router = Router();
 
 const LISTING_TEXT = ['name', 'hours', 'about', 'location', 'instagram', 'website', 'languages', 'products', 'skills', 'bestFor', 'pricing', 'comment', 'review'];
 
-// Public routes
-router.get('/', optionalAuth, listListings);
+// Members only, like the rest of the app: a listing's phone, WhatsApp and
+// the members behind it aren't for anyone signed out. Signed out, a shared
+// listing's teaser comes from /api/preview.
+router.get('/', authenticate, listListings);
 // What a member recommends (their profile): members only, like the reviews.
 router.get('/recommended-by/:userId', authenticate, listRecommendedBy);
 router.get('/similar', authenticate, listSimilar);
 // The businesses and farms I can act for (host events as).
 router.get('/represented', authenticate, listRepresented);
-router.get('/:id', optionalAuth, getListing);
+router.get('/:id', authenticate, getListing);
 
 // Handing a listing to the member who runs it
 router.post('/transfers/:transferId/accept', authenticate, acceptTransfer);

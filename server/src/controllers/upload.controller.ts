@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -65,6 +65,38 @@ const upload = multer({
 });
 
 export const uploadMiddleware = upload.single('file');
+
+// Uploads being received and made, counted before multer reads them: a photo
+// or deck is held whole in memory (up to 50 MB) until it's done, so as many
+// as arrive at once could take the server past its memory. A post's worth
+// per member, and a score in all; more are turned away until those are done.
+const RECEIVING_PER_MEMBER = 6;
+const RECEIVING_AT_ONCE = 20;
+const receivingOf = new Map<string, number>();
+let receivingInAll = 0;
+
+export function uploadSlot(req: Request, res: Response, next: NextFunction): void {
+    const userId = req.user!.id;
+    const mine = receivingOf.get(userId) ?? 0;
+    if (mine >= RECEIVING_PER_MEMBER || receivingInAll >= RECEIVING_AT_ONCE) {
+        res.status(429).json({ error: 'Too many uploads at once. Try again in a moment.', reason: 'busy' });
+        return;
+    }
+    receivingOf.set(userId, mine + 1);
+    receivingInAll += 1;
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        const left = (receivingOf.get(userId) ?? 1) - 1;
+        if (left > 0) receivingOf.set(userId, left);
+        else receivingOf.delete(userId);
+        receivingInAll = Math.max(0, receivingInAll - 1);
+    };
+    res.on('finish', release);
+    res.on('close', release);
+    next();
+}
 
 // Videos wait for their turn (mediaProcessing.ts makes one at a time): as
 // many of one member's as a post has attachments, and a dozen in all, so one
@@ -268,6 +300,10 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Upload deck error:', error);
         res.status(500).json({ error: 'Failed to upload deck' });
+    } finally {
+        // A file sent as a video went to disk (onDisk above) and is refused
+        // here: it goes now, not at the next restart.
+        if (req.file?.path) await fs.promises.rm(req.file.path, { force: true }).catch(() => {});
     }
 }
 

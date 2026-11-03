@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     Bell, Moon, Globe, Smartphone, Users, Play, CalendarDays, Mail, AtSign, Key, Lock, Trash2, LogOut,
-    Wallet, FileText, Shield, LifeBuoy, User, ChevronRight,
+    Wallet, FileText, Shield, LifeBuoy, User, ChevronRight, MonitorSmartphone,
 } from 'lucide-react';
 import WalletConnect from '../components/WalletConnect';
 import { SettingsPage, SettingsGroup, SettingsRow, SettingsSelect } from '../components/settings/SettingsUI';
@@ -12,7 +12,7 @@ import { useViewPreference } from '../context/ViewContext';
 import { useAuth } from '../context/AuthContext';
 import { useUserMode } from '../context/UserModeContext';
 import { useFeature } from '../context/FeatureFlagsContext';
-import { preferencesApi } from '../services/api';
+import { authApi, preferencesApi } from '../services/api';
 import { CUSTOM_BOTTOM_NAV_ENABLED } from '../config/featureFlags';
 import { legalPage, SUPPORT_EMAIL } from '../config/legal';
 import { getAssetUrl } from '../utils/assets';
@@ -89,6 +89,21 @@ const Settings = () => {
         logout();
         clearMode();
         navigate('/');
+    };
+    // A lost phone or a shared computer: end the sessions there, keep this one.
+    const [othersNote, setOthersNote] = useState('');
+    const [signingOutOthers, setSigningOutOthers] = useState(false);
+    const signOutOthers = async () => {
+        if (signingOutOthers || !window.confirm(t('settings.signOutOthersConfirm'))) return;
+        setSigningOutOthers(true);
+        try {
+            const { ended = 0 } = (await authApi.logoutOthers()) || {};
+            setOthersNote(ended ? t('settings.signOutOthersDone', { count: ended }) : t('settings.signOutOthersNone'));
+        } catch {
+            setOthersNote(t('settings.signOutOthersFailed'));
+        } finally {
+            setSigningOutOthers(false);
+        }
     };
 
     const name = user?.profile?.name && !isPlaceholderName(user.profile.name) ? user.profile.name : t('settings.yourProfile');
@@ -171,6 +186,17 @@ const Settings = () => {
                 <SettingsRow icon={Mail} label={t('moderation.settings.email')} desc={SUPPORT_EMAIL} href={`mailto:${SUPPORT_EMAIL}`} />
                 <SettingsRow icon={FileText} label={t('moderation.settings.terms')} href={legalPage(i18n.language, 'terms')} external />
                 <SettingsRow icon={Shield} label={t('moderation.settings.privacy')} href={legalPage(i18n.language, 'privacy')} external />
+            </SettingsGroup>
+
+            <SettingsGroup>
+                <SettingsRow
+                    icon={MonitorSmartphone}
+                    label={t('settings.signOutOthers')}
+                    desc={othersNote || t('settings.signOutOthersDesc')}
+                    onClick={signOutOthers}
+                    disabled={signingOutOthers}
+                    testId="settings-sign-out-others"
+                />
             </SettingsGroup>
 
             <SettingsGroup>

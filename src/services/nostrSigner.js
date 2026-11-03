@@ -19,6 +19,7 @@
 
 import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
 import * as nip44 from 'nostr-tools/nip44';
+import { decodeNsec } from '../utils/secretKey.js';
 import { secureGet, secureRemove, secureSet } from './secureStore.js';
 
 const LOGIN_METHOD_KEY = 'bies_login_method'; // 'extension' | 'nsec' | 'bunker' | 'amber' | 'hosted'
@@ -98,9 +99,7 @@ class NostrSigner {
      */
     setNsec(nsecOrSk) {
         if (typeof nsecOrSk === 'string') {
-            const decoded = nip19.decode(nsecOrSk.trim());
-            if (decoded.type !== 'nsec') throw new Error('Invalid nsec');
-            this._sk = decoded.data;
+            this._sk = decodeNsec(nsecOrSk);
         } else {
             this._sk = nsecOrSk;
         }

@@ -10,7 +10,7 @@ import { primalService, EXPLORE_VIEWS } from '../services/primalService';
 import { nostrSigner } from '../services/nostrSigner';
 import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
-import { notificationsApi, profilesApi, uploadApi } from '../services/api';
+import { notificationsApi, profilesApi, searchApi, uploadApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
 import Avatar from '../components/Avatar';
 import NostrIcon from '../components/NostrIcon';
@@ -1031,9 +1031,16 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     ['e', post.id, ''],
                     ['p', post.pubkey],
                 ],
-                content: JSON.stringify(post),
+                // The note as it was signed, without what the feed added to it
+                // (who reposted it here, and the like).
+                content: JSON.stringify({
+                    id: post.id, pubkey: post.pubkey, created_at: post.created_at, kind: post.kind,
+                    tags: post.tags, content: post.content, sig: post.sig,
+                }),
             };
-            if (relay === 'private') {
+            // A members-only post stays on BIES's relay: only a post from the
+            // open network (Explore) can be reposted there.
+            if (relay === 'private' || feedMode !== 'explore') {
                 await nostrService.publishToBiesRelay(event);
             } else {
                 await nostrService.publishEvent(event);
@@ -1318,7 +1325,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                 setMentionResults([]);
                 mentionSearchTimer.current = setTimeout(async () => {
                     try {
-                        const results = await nostrService.searchProfiles(query, 6);
+                        // Members-only posts mention BIES members, found through
+                        // BIES; only Explore (the open network) searches Nostr.
+                        const results = feedMode === 'explore'
+                            ? await nostrService.searchProfiles(query, 6)
+                            : ((await searchApi.search(query, 'profiles', 1, 6))?.profiles || [])
+                                .filter((m) => m.user?.nostrPubkey)
+                                .map((m) => ({ pubkey: m.user.nostrPubkey, name: m.name || '', picture: m.avatar || '' }));
                         setMentionResults(results);
                     } catch {
                         setMentionResults([]);
@@ -1335,7 +1348,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
             setMentionResults([]);
             setMentionLoading(false);
         }
-    }, []);
+    }, [feedMode]);
 
     const handleMentionSelect = (profile) => {
         if (!mentionAnchor) return;
@@ -1886,7 +1899,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                         setRepostMenu(repostMenu === post.id ? null : post.id);
                                     }}
                                     onRepost={(relay) => handleRepost(post, relay)}
-                                    allowPublicRepost={exploreAllowed}
+                                    allowPublicRepost={exploreAllowed && feedMode === 'explore'}
                                     onZap={zapsOn ? () => setZapTarget({
                                         pubkey: post.pubkey,
                                         name: getDisplayName(post.pubkey),

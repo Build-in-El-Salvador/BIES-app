@@ -222,6 +222,14 @@ app.use('/.well-known', nip05Routes);
 // ─── Static files (local upload fallback) ────────────────────────────────────
 app.use('/uploads', servableUploadsOnly, express.static(path.join(__dirname, '..', 'uploads')));
 
+// ─── Signed-in answers stay out of caches ─────────────────────────────────────
+// What a member sees is theirs: the browser mustn't keep it on disk for the
+// next person on a shared computer. A route can still set its own header.
+app.use('/api', (req, res, next) => {
+    if (req.headers.authorization) res.setHeader('Cache-Control', 'private, no-store');
+    next();
+});
+
 // ─── Audit logging (runs after auth middleware attaches req.user) ─────────────
 app.use(auditLog);
 
@@ -230,8 +238,8 @@ app.use(auditLog);
 // flag is off. Core prefixes (auth, profiles, admin, flags, …) are never
 // gated — admins must always be able to re-enable a feature. `/api/news` is
 // gated per-endpoint inside its router because the Media page and the admin
-// panel depend on `/api/news/settings`. Watchlist and matches belong to
-// projects, and articles (`/api/content`) to news.
+// panel depend on `/api/news/settings`. The watchlist belongs to projects,
+// matches to investors, and articles (`/api/content`) to news.
 app.use('/api/flags', flagsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/signer', signerRoutes);
@@ -255,7 +263,8 @@ app.use('/api/account', accountRoutes);
 app.use('/api/content', featureGate('news'), contentRoutes);
 app.use('/api/news', newsRoutes);
 app.use('/api/media', featureGate('media'), mediaRoutes);
-app.use('/api/match', featureGate('projects'), matchRoutes);
+// Investors matched to projects, and projects to investors: an investors feature.
+app.use('/api/match', featureGate('investors'), matchRoutes);
 app.use('/api/wallet', featureGate('zaps'), walletRoutes);
 app.use('/api/feedback', featureGate('feedback'), feedbackRoutes);
 app.use('/api/points', featureGate('points'), pointsRoutes);

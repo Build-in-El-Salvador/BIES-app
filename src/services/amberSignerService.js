@@ -48,7 +48,7 @@ const POLL_INTERVAL_MS = 1_000;         // belt-and-braces polling
  * BIES is what stops another page getting one signed.
  */
 export const AMBER_PERMISSIONS = [
-    ...[0, 1, 3, 5, 6, 7, 13, 1984, 9734, 10002, 22242, 24242, 30402, 31777, 31923, 31925]
+    ...[0, 1, 3, 5, 6, 7, 13, 1063, 1984, 9734, 10002, 22242, 24242, 30402, 31777, 31923, 31925]
         .map(kind => ({ type: 'sign_event', kind })),
     { type: 'nip44_encrypt' },
     { type: 'nip44_decrypt' },

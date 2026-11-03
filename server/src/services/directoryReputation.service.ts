@@ -34,9 +34,10 @@ export async function recomputeListingScore(listingId: string): Promise<void> {
     const itsOwn = new Set([
         listing.memberUserId, listing.isOwnBusiness ? listing.ownerId : null, ...listing.team.map((m) => m.userId),
     ].filter(Boolean));
-    const counted = listing.endorsements.filter((e) => !itsOwn.has(e.userId));
-    const vouchCount = counted.filter((e) => e.vote > 0).length;
-    const downvoteCount = counted.filter((e) => e.vote < 0).length;
+    // Its own people can't vouch for it. Their downvotes still count: adding
+    // a critic to the team mustn't make their downvote go away.
+    const vouchCount = listing.endorsements.filter((e) => e.vote > 0 && !itsOwn.has(e.userId)).length;
+    const downvoteCount = listing.endorsements.filter((e) => e.vote < 0).length;
     const score = vouchCount - downvoteCount;
 
     const isCertified = listing.status === 'active' && score >= TRUSTED_THRESHOLD;

@@ -17,6 +17,7 @@ import {
     deliverSession,
     refreshSession,
     refreshTokenFromRequest,
+    revokeOtherSessions,
     revokeSession,
     sessionFromRefreshToken,
     startSession,
@@ -624,6 +625,21 @@ export async function refresh(req: Request, res: Response): Promise<void> {
  * phone's push registration, removed so it stops getting the account's
  * notifications.
  */
+/**
+ * POST /auth/end-other-sessions
+ * End every other session of this member, at once: their next request or
+ * refresh fails and their sockets close. This device stays signed in.
+ */
+export async function logoutOthers(req: Request, res: Response): Promise<void> {
+    try {
+        const ended = await revokeOtherSessions(req.user!.id, req.sessionId!, 'logout_others');
+        res.json({ ended });
+    } catch (error) {
+        console.error('Logout others error:', error);
+        res.status(500).json({ error: 'Failed to sign out your other devices' });
+    }
+}
+
 export async function logout(req: Request, res: Response): Promise<void> {
     let ended: { sessionId: string; userId: string } | null = null;
     const authHeader = req.headers.authorization;

@@ -54,7 +54,7 @@ export const NIP46_RELAYS =
  * user key, so they're absent.)
  */
 export const NIP46_PERMS = [
-    ...[0, 1, 3, 5, 6, 7, 13, 1984, 9734, 10002, 22242, 24242, 30402, 31777, 31923, 31925]
+    ...[0, 1, 3, 5, 6, 7, 13, 1063, 1984, 9734, 10002, 22242, 24242, 30402, 31777, 31923, 31925]
         .map(kind => `sign_event:${kind}`),
     'nip44_encrypt',
     'nip44_decrypt',

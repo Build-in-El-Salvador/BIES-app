@@ -198,6 +198,9 @@ export const authApi = {
 
     me: () => get('/auth/me'),
 
+    // Sign out every other device; this one stays signed in. Resolves { ended }.
+    logoutOthers: () => post('/auth/end-other-sessions', {}),
+
     updateRole: (role) => put('/auth/role', { role }),
 };
 

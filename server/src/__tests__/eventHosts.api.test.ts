@@ -530,6 +530,33 @@ describe('the events list and page', () => {
         expect((await call('GET', `/api/events/${created.body.id}`, { token: other.token })).status).toBe(404);
         expect((await call('POST', `/api/events/${created.body.id}/rsvp`, { token: other.token, body: { status: 'GOING' } })).status).toBe(404);
     });
+
+    it('an end time can be taken off on an edit, and can\'t come before the start', async () => {
+        const host = await member();
+        const created = await event(host, { startDate: inDays(5), endDate: inDays(5.1) });
+        const id = created.body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(5), endDate: null } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.endDate).toBeNull();
+        const backwards = await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(5), endDate: inDays(4) } });
+        expect(backwards.status).toBe(400);
+        expect(backwards.body.reason).toBe('date_end_before_start');
+        expect((await event(host, { startDate: inDays(5), endDate: inDays(4) })).body.reason).toBe('date_end_before_start');
+    });
+
+    it('a guest taken off a private event\'s list loses it, even after answering', async () => {
+        const host = await member();
+        const stays = await member();
+        const goes = await member();
+        const created = await event(host, { visibility: 'PRIVATE', guestList: [{ name: 'Stays', userId: stays.id }, { name: 'Goes', userId: goes.id }] });
+        const id = created.body.id;
+        for (const m of [stays, goes]) expect((await call('POST', `/api/events/${id}/rsvp`, { token: m.token, body: { status: 'GOING' } })).status).toBe(200);
+
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { guestList: [{ name: 'Stays', userId: stays.id }] } })).status).toBe(200);
+        expect((await call('GET', `/api/events/${id}`, { token: goes.token })).status).toBe(404);
+        expect((await call('POST', `/api/events/${id}/rsvp`, { token: goes.token, body: { status: 'GOING' } })).status).toBe(404);
+        expect((await call('GET', `/api/events/${id}`, { token: stays.token })).status).toBe(200);
+        expect(await prisma.eventAttendee.count({ where: { eventId: id, userId: stays.id } })).toBe(1);
+    });
 });
 
 describe('a shared event, signed out', () => {

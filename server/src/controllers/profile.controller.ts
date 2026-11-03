@@ -594,6 +594,8 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         await Promise.all([
             cache.del(cacheKey.profileDetail(req.user!.id)),
             cache.del(cacheKey.profileDetail(profile.id)),
+            // A profile is looked up by its Nostr key too.
+            cache.del(cacheKey.profileDetail(profile.user.nostrPubkey)),
             cache.delPattern('profiles:'),
         ]);
 

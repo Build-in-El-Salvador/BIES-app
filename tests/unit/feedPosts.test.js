@@ -25,7 +25,13 @@ test('a root note shows; replies, machine-generated notes and other kinds do not
     assert.equal(feedPostOf(root), root);
     assert.equal(feedPostOf(note(bob, T + 1, 'a reply', [['e', root.id, '', 'root']])), null);
     assert.equal(feedPostOf(note(bob, T + 2, '{"name":"metadata"}')), null);
+    assert.equal(feedPostOf(note(bob, T + 2, '[1,2,3]')), null);
     assert.equal(feedPostOf(like(bob, root)), null);
+    // Words that only start with a bracket are a post.
+    for (const words of ['[ES/EN] Reunión el jueves', '{BIES} meetup tonight', '[1] first, [2] second']) {
+        const post = note(bob, T + 3, words);
+        assert.equal(feedPostOf(post), post, words);
+    }
 });
 
 test('a repost shows as the post it shares, with who reposted it; a forged one does not', () => {

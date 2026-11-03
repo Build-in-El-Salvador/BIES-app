@@ -638,6 +638,12 @@ describe('App Review sign-in', () => {
         expect((await post('/email/verify', { email: 'review@bies.test', code: '424242' })).status).toBe(400);
     });
 
+    it('can ask for its code again at once: its reviewers sign out and back in', async () => {
+        for (let i = 0; i < 3; i++) expect((await post('/email/start', { email: 'review@bies.test' })).status).toBe(200);
+        const res = await post('/email/verify', { email: 'review@bies.test', code: '424242' });
+        expect(res.status).toBeLessThan(300);
+    });
+
     it('is the only address the fixed code works for', async () => {
         await requestCode('mallory@example.com');
         const res = await post('/email/verify', { email: 'mallory@example.com', code: '424242' });

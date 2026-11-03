@@ -102,9 +102,14 @@ function waitForAddressLimits(
     sent: { at: number; purpose: string }[],
     purpose: EmailCodePurpose,
     now: number,
+    review = false,
 ): number {
     let wait = 0;
     for (const { windowMs, max, samePurposeOnly } of PER_EMAIL_LIMITS) {
+        // App Review's address gets no email, so no wait between codes: its
+        // reviewers sign out and in again at once. The hourly and daily
+        // limits still hold, since its code doesn't change.
+        if (review && samePurposeOnly) continue;
         const inWindow = sent
             .filter((s) => s.at > now - windowMs && (!samePurposeOnly || s.purpose === purpose))
             .map((s) => s.at);
@@ -235,6 +240,7 @@ async function reserveCode(
         recent.map((r) => ({ at: r.createdAt.getTime(), purpose: r.purpose })),
         purpose,
         now,
+        review,
     );
     if (wait > 0) {
         return { ok: false, reason: 'rate_limited', retryAfterSeconds: Math.ceil(wait / 1000) };

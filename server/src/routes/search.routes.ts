@@ -1,10 +1,12 @@
 import { Router } from 'express';
-import { optionalAuth } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { search, getSuggestions } from '../controllers/search.controller';
 
 const router = Router();
 
-router.get('/', optionalAuth, search);
-router.get('/suggestions', optionalAuth, getSuggestions);
+// Members only: results carry members' names, events' addresses and the
+// like. The app searches only when signed in.
+router.get('/', authenticate, search);
+router.get('/suggestions', authenticate, getSuggestions);
 
 export default router;

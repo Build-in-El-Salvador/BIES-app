@@ -1,7 +1,11 @@
 /**
  * Translation service: BIES's own LibreTranslate (nginx /translate/). Nothing
- * goes to outside services: members' posts stay on BIES.
+ * goes to outside services: members' posts stay on BIES. For members only:
+ * nginx checks the sign-in sent with each request.
  */
+
+import { freshAccessToken } from './session.js';
+import { isNativePlatform } from '../utils/platform.js';
 
 const cache = new Map();
 
@@ -9,12 +13,18 @@ const cache = new Map();
 const LIBRE_URL = `${(import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '')}/translate/translate`;
 
 async function callTranslateApi(text, source, target, format = 'text') {
-    const res = await fetch(LIBRE_URL, {
+    const token = await freshAccessToken();
+    if (!token) throw new Error('Sign in to translate');
+    const request = {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ q: text, source, target, format }),
-        signal: AbortSignal.timeout(8000),
-    });
+    };
+    // In the phone app through its own networking, like the API calls
+    // (nativeHttp.js): from the web view it would be cross-origin.
+    const res = isNativePlatform()
+        ? await (await import('./nativeHttp.js')).nativeFetch(LIBRE_URL, { ...request, timeoutMs: 8000 })
+        : await fetch(LIBRE_URL, { ...request, signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error(`Translation failed (${res.status})`);
     const data = await res.json();
     if (!data.translatedText) throw new Error('Translation failed');

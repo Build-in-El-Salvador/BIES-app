@@ -20,6 +20,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
 import { config } from '../config';
 import { checkSession, onSessionsEnded, verifyAccessToken } from './session.service';
+import { isEnabled } from './featureFlags.service';
+import { blockedEitherWay } from './moderation.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -214,12 +216,15 @@ function handleClientMessage(
 
         case 'typing_start':
         case 'typing_stop':
-            // Relay typing indicator to recipient
-            if (msg.recipientId && typeof msg.recipientId === 'string') {
-                sendToUser(msg.recipientId as string, {
-                    type: msg.type,
-                    fromUserId: userId,
-                });
+            // "Typing…" in a conversation: only while Messages is on, and
+            // never between members in a block either way.
+            if (msg.recipientId && typeof msg.recipientId === 'string' && msg.recipientId !== userId) {
+                const recipientId = msg.recipientId;
+                const type = msg.type;
+                void (async () => {
+                    if (!(await isEnabled('messages')) || await blockedEitherWay(userId, recipientId)) return;
+                    sendToUser(recipientId, { type, fromUserId: userId });
+                })().catch(() => { /* not sent */ });
             }
             break;
 

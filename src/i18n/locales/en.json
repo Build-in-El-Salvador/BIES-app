@@ -149,7 +149,14 @@
     "layoutCards": "Cards",
     "layoutIcons": "Icons",
     "logOut": "Log out",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "signOutOthers": "Sign out of other devices",
+    "signOutOthersDesc": "Phones and computers you were signed in on before",
+    "signOutOthersConfirm": "Sign out of BIES everywhere else? You stay signed in here.",
+    "signOutOthersDone_one": "Signed out of {{count}} other device",
+    "signOutOthersDone_other": "Signed out of {{count}} other devices",
+    "signOutOthersNone": "You weren’t signed in anywhere else",
+    "signOutOthersFailed": "Couldn’t sign out your other devices. Try again."
   },
   "landing": {
     "forInvestors": "For Global Investors",
@@ -2478,7 +2485,10 @@
       "unmark": "Not BIES's own page",
       "badge": "BIES's own page",
       "events": "Events"
-    }
+    },
+    "deleteListing": "Delete listing",
+    "deleteConfirm": "Delete this listing? Its photos, reviews and team go with it. This can’t be undone.",
+    "deleteFailed": "Couldn’t delete the listing. Try again."
   },
   "talent": {
     "search": "Search skills or people",

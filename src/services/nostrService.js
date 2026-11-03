@@ -2,6 +2,7 @@ import { SimplePool, nip19, finalizeEvent, generateSecretKey, getPublicKey } fro
 import * as nip44 from 'nostr-tools/nip44';
 import { nostrSigner } from './nostrSigner.js';
 import { buildListingTags, parseListingEvent, dedupeListings, listingNaddr } from '../utils/nip99.js';
+import { isNativePlatform } from '../utils/platform.js';
 
 // ─── Persistent profile cache (localStorage) ────────────────────────────────
 
@@ -43,6 +44,10 @@ export const profileCache = {
             if (store.profiles[pk].ts < cutoff) delete store.profiles[pk];
         }
         try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(store)); } catch { /* quota */ }
+    },
+    /** At sign-out: members' profiles are members-only. */
+    clear() {
+        try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch { /* unavailable */ }
     },
 };
 
@@ -110,6 +115,10 @@ class NostrService {
         this.relays = NOSTR_RELAYS;
         this.biesRelay = BIES_RELAY;
         this.publicRelays = PUBLIC_RELAYS;
+        // Where a profile not on BIES's relay is looked for. None in the store
+        // app: it talks to BIES only, so no relay run by someone else sees a
+        // member's address and the members they look at.
+        this.fallbackRelays = isNativePlatform() ? [] : PUBLIC_RELAYS;
         this.dmRelays = DM_RELAYS;
 
         // Enable NIP-42 automatic auth for the BIES private relay.
@@ -213,10 +222,10 @@ class NostrService {
 
             // Phase 3: fallback to public relays for any still-missing profiles
             // (skip if caller explicitly provided relays)
-            if (!relays) {
+            if (!relays && this.fallbackRelays.length) {
                 const stillMissing = missing.filter(pk => !fetched.has(pk));
                 if (stillMissing.length > 0) {
-                    const fallbackEvents = await this.pool.querySync(this.publicRelays, { kinds: [0], authors: stillMissing });
+                    const fallbackEvents = await this.pool.querySync(this.fallbackRelays, { kinds: [0], authors: stillMissing });
                     const fallbackFetched = this._mergeProfileEvents(fallbackEvents);
                     for (const [pk, p] of fallbackFetched) {
                         fetched.set(pk, p);
@@ -274,8 +283,8 @@ class NostrService {
 
             // Fallback to public relays if nothing found on primary
             // (skip if caller explicitly provided relays)
-            if ((!events || events.length === 0) && !relays) {
-                events = await this.pool.querySync(this.publicRelays, filter);
+            if ((!events || events.length === 0) && !relays && this.fallbackRelays.length) {
+                events = await this.pool.querySync(this.fallbackRelays, filter);
             }
 
             if (!events || events.length === 0) return null;
@@ -503,6 +512,11 @@ class NostrService {
         });
         await this.publishSigned(deletion, { biesOnly });
         return true;
+    }
+
+    /** At sign-out: drop the connection to BIES's relay, signed in as that member. */
+    closeBiesRelay() {
+        try { this.pool.close([this.biesRelay]); } catch { /* not open */ }
     }
 
     /**
