@@ -779,7 +779,8 @@
       "rsvpAskOn": "Going on {{date}}?",
       "youreGoingOn": "You're going on {{date}}",
       "goingOn_one": "{{count}} member is going on {{date}}",
-      "goingOn_other": "{{count}} members are going on {{date}}"
+      "goingOn_other": "{{count}} members are going on {{date}}",
+      "rsvpFailed": "Couldn't save your answer. Try again."
     },
     "form": {
       "newTitle": "New event",

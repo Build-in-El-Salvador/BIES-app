@@ -778,7 +778,8 @@
       "rsvpAskOn": "¿Vas el {{date}}?",
       "youreGoingOn": "Vas el {{date}}",
       "goingOn_one": "{{count}} miembro va el {{date}}",
-      "goingOn_other": "{{count}} miembros van el {{date}}"
+      "goingOn_other": "{{count}} miembros van el {{date}}",
+      "rsvpFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo."
     },
     "form": {
       "newTitle": "Nuevo evento",

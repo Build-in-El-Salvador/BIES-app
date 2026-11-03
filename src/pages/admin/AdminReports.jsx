@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Flag, ExternalLink, Trash2, UserX, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { Loader2, Flag, ExternalLink, Trash2, UserX, CheckCircle, XCircle, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { nip19 } from 'nostr-tools';
 import { adminApi, albumsApi, eventsApi, projectsApi, talentApi } from '../../services/api';
+import { nostrService } from '../../services/nostrService';
+import { nostrSigner } from '../../services/nostrSigner';
 import { useAuth } from '../../context/AuthContext';
 import { openExternal } from '../../utils/openExternal';
+import { parseNoteContent } from '../../utils/noteUtils';
+import { safeHref } from '../../utils/safeUrl';
 
 const STATUS_TABS = [
     { value: 'OPEN', label: 'Open' },
@@ -36,6 +41,122 @@ const formatAge = (d) => {
     return `${Math.floor(hours / 24)}d ago`;
 };
 
+// A reported Feed post is read here, from BIES's relay: public Nostr viewers
+// (njump.me) can't read that relay, it's members only.
+const isNoteId = (id) => typeof id === 'string' && /^[0-9a-f]{64}$/i.test(id);
+const NOTE_WAIT_MS = 8000;
+
+// The relay asks who's reading (NIP-42); never with a signer that needs a tap
+// (Amber), as nostrService's handleRelayAuth.
+const relayAuth = async (evt) => {
+    if (!nostrSigner.canSignSilently) return undefined;
+    try { return await nostrSigner.signEvent(evt); } catch { return undefined; }
+};
+
+/**
+ * The post from BIES's relay: the event, or null when the relay says it
+ * hasn't got it (removed already). Rejects when the relay doesn't answer
+ * within 8 s, or the connection or its sign-in fails.
+ */
+function fetchReportedNote(id) {
+    return new Promise((resolve, reject) => {
+        let done = false;
+        let sub = null;
+        const finish = (settle) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            sub?.close();
+            settle();
+        };
+        const timer = setTimeout(() => finish(() => reject(new Error('no answer'))), NOTE_WAIT_MS);
+        sub = nostrService.pool.subscribeMany([nostrService.biesRelay], { ids: [id], limit: 1 }, {
+            onevent: (event) => {
+                if (event.id === id && event.kind === 1) finish(() => resolve(event));
+            },
+            // A connection that fails is "end of stored events" and then a
+            // close, at once: the close says which.
+            oneose: () => queueMicrotask(() => finish(() => resolve(null))),
+            onclose: () => finish(() => reject(new Error('closed'))),
+            onauth: relayAuth,
+            // The pool's own "no answer" comes after ours.
+            maxWait: NOTE_WAIT_MS + 2000,
+        });
+        if (done) sub.close();
+    });
+}
+
+/** Its photos and videos: links in its text, and its imeta tags. */
+function mediaOf(event) {
+    const { images, otherMedia } = parseNoteContent(event.content);
+    const tagged = (event.tags || [])
+        .filter((tag) => tag[0] === 'imeta')
+        .flatMap((tag) => tag.slice(1).filter((part) => typeof part === 'string' && part.startsWith('url ')).map((part) => part.slice(4).trim()));
+    return [...new Set([...images, ...otherMedia.map((m) => m.url), ...tagged])].filter((url) => safeHref(url));
+}
+
+/**
+ * A reported Feed post, opened under its report: who wrote it, when, its
+ * text (as text, never as HTML) and links to its photos (not shown here).
+ */
+function ReportedNote({ report }) {
+    const [state, setState] = useState({ status: 'loading', event: null });
+    const [attempt, setAttempt] = useState(0);
+    useEffect(() => {
+        let cancelled = false;
+        setState({ status: 'loading', event: null });
+        fetchReportedNote(report.targetId)
+            .then((event) => { if (!cancelled) setState({ status: event ? 'found' : 'missing', event }); })
+            .catch(() => { if (!cancelled) setState({ status: 'noAnswer', event: null }); });
+        return () => { cancelled = true; };
+    }, [report.targetId, attempt]);
+
+    if (state.status === 'loading') {
+        return <div className="rep-post muted" role="status"><Loader2 size={16} className="rep-spin" /> Looking for it on BIES's relay…</div>;
+    }
+    if (state.status === 'missing') {
+        return <div className="rep-post muted" role="status">This post isn't on BIES's relay: it may have been removed already.</div>;
+    }
+    if (state.status === 'noAnswer') {
+        return (
+            <div className="rep-post muted" role="status">
+                BIES's relay didn't answer, so the post can't be shown.
+                <button type="button" className="rep-btn rep-retry" onClick={() => setAttempt((n) => n + 1)}>
+                    <RotateCcw size={14} /> Try again
+                </button>
+            </div>
+        );
+    }
+    const { event } = state;
+    const member = report.targetUser && report.targetUser.nostrPubkey === event.pubkey ? report.targetUser : null;
+    const author = member ? (member.name || 'A member') : report.targetUser?.deleted ? 'A deleted account' : 'Not a BIES member';
+    let npub = '';
+    try { npub = `${nip19.npubEncode(event.pubkey).slice(0, 16)}…`; } catch { /* not a key */ }
+    const text = parseNoteContent(event.content).text;
+    const media = mediaOf(event);
+    return (
+        <div className="rep-post">
+            <p className="rep-post-meta">
+                <b>{author}</b>
+                {npub && <span className="rep-post-key">{npub}</span>}
+                <span>· {new Date(event.created_at * 1000).toLocaleString()}</span>
+            </p>
+            {text ? <p className="rep-post-text">{text}</p> : <p className="rep-post-text muted">(No text)</p>}
+            {media.length > 0 && (
+                <ul className="rep-post-media">
+                    {media.map((url) => (
+                        <li key={url}>
+                            <a href={safeHref(url)} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); openExternal(url); }}>
+                                {url} <ExternalLink size={12} />
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
 /**
  * Admin → Reports: what members reported (server/src/services/moderation.service.ts).
  * Look at it, act (remove the listing or recommendation, suspend the member),
@@ -50,6 +171,7 @@ const AdminReports = () => {
     const [error, setError] = useState('');
     const [notes, setNotes] = useState({});
     const [busy, setBusy] = useState(null);
+    const [openPost, setOpenPost] = useState(null); // the report whose Feed post is open
 
     const fetchReports = useCallback(async () => {
         setLoading(true);
@@ -150,6 +272,9 @@ const AdminReports = () => {
                         const removable = REMOVE[r.targetType] && (r.targetType === 'note' || r.link);
                         const canSuspend = isAdmin && r.targetUser && !r.targetUser.isBanned && !r.targetUser.deleted;
                         const working = busy === r.id;
+                        // A Feed post opens here, read from BIES's relay (not njump.me).
+                        const isNote = r.targetType === 'note' && isNoteId(r.targetId);
+                        const postOpen = isNote && openPost === r.id;
                         return (
                             <div key={r.id} className={`rep-card ${late ? 'late' : ''}`}>
                                 <div className="rep-top">
@@ -163,10 +288,15 @@ const AdminReports = () => {
 
                                 <p className="rep-target">
                                     {r.target}
-                                    {r.link && (r.link.startsWith('/')
+                                    {isNote ? (
+                                        <button type="button" className="rep-view" aria-expanded={postOpen} onClick={() => setOpenPost(postOpen ? null : r.id)}>
+                                            {postOpen ? 'Hide post' : 'View post'} {postOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                        </button>
+                                    ) : r.link && (r.link.startsWith('/')
                                         ? <Link to={r.link} className="rep-view"> View <ExternalLink size={12} /></Link>
                                         : <a href={r.link} className="rep-view" onClick={(e) => { e.preventDefault(); openExternal(r.link); }}> View <ExternalLink size={12} /></a>)}
                                 </p>
+                                {postOpen && <ReportedNote report={r} />}
                                 {r.details && <p className="rep-details">“{r.details}”</p>}
                                 <p className="rep-meta">
                                     Reported by {r.reporter ? (r.reporter.name || 'a member') : 'a deleted account'}
@@ -251,6 +381,17 @@ const AdminReports = () => {
                 .rep-age.late { color: #b91c1c; font-weight: 700; }
                 .rep-target { margin: 0; font-size: 0.95rem; overflow-wrap: anywhere; }
                 .rep-view { display: inline-flex; align-items: center; gap: 0.2rem; font-weight: 600; font-size: 0.85rem; color: var(--color-primary); margin-left: 0.35rem; }
+                button.rep-view { background: none; border: 0; padding: 0; font-family: inherit; cursor: pointer; }
+                .rep-post { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.75rem 0.85rem; border: 1px solid var(--color-gray-200); border-radius: 0.6rem; background: var(--color-gray-50, #f9fafb); font-size: 0.9rem; }
+                .rep-post.muted { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.5rem; color: var(--color-gray-600); }
+                .rep-post-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; font-size: 0.82rem; color: var(--color-gray-500); }
+                .rep-post-meta b { color: var(--color-gray-900); font-size: 0.9rem; }
+                .rep-post-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+                .rep-post-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-gray-900); }
+                .rep-post-text.muted { color: var(--color-gray-500); font-style: italic; }
+                .rep-post-media { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+                .rep-post-media a { display: inline-flex; align-items: center; gap: 0.25rem; max-width: 100%; font-size: 0.82rem; font-weight: 600; color: var(--color-primary); overflow-wrap: anywhere; }
+                .rep-retry { padding: 0.25rem 0.65rem; }
                 .rep-details { margin: 0; font-size: 0.9rem; color: var(--color-gray-700); white-space: pre-wrap; overflow-wrap: anywhere; }
                 .rep-meta { margin: 0; font-size: 0.82rem; color: var(--color-gray-500); }
                 .rep-note { width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem; border: 1px solid var(--color-gray-200); border-radius: 0.6rem; font: inherit; font-size: 0.9rem; resize: vertical; background: var(--color-surface); color: inherit; }

@@ -24,6 +24,7 @@ import TicketPurchaseModal from '../components/TicketPurchaseModal';
 import ModerationSheet from '../components/moderation/ModerationSheet';
 import { useModerationDialogs } from '../components/moderation/useModerationDialogs';
 import { BiesTag, PriceLine, TicketButton, namesText } from '../components/events/EventBits';
+import { isOver, rsvpErrorText } from '../components/events/eventRsvp';
 import InvitePill from '../components/events/InvitePill';
 import InviteSheet from '../components/events/InviteSheet';
 import biesLogo from '../assets/logo-icon.svg';
@@ -98,6 +99,13 @@ const EventDetail = () => {
     const [menu, setMenu] = useState(false);
     const [sheet, setSheet] = useState(null); // 'delete' | 'callOff' | 'invite' | 'callOffDate'
     const [notice, setNotice] = useState('');
+    // "I'm going" didn't save (full, offline…): said beside the button, for a while.
+    const [rsvpError, setRsvpError] = useState('');
+    useEffect(() => {
+        if (!rsvpError) return undefined;
+        const timer = setTimeout(() => setRsvpError(''), 6000);
+        return () => clearTimeout(timer);
+    }, [rsvpError]);
     const [ticket, setTicket] = useState(null);
     const [buying, setBuying] = useState(false);
     const menuButton = useRef(null);
@@ -164,15 +172,19 @@ const EventDetail = () => {
     // over (no dates ahead), at its last date, as ended: nothing to answer.
     const repeatText = repeatLabel(event.repeat, event.firstStartDate || event.startDate, t, lang);
     // (It shows its next date while it has one, so the date it shows is over only then.)
-    const shownOver = new Date(event.endDate || new Date(event.startDate).getTime() + 6 * 3600_000).getTime() < Date.now();
+    const shownOver = isOver(event);
     const seriesOver = !!repeatText && shownOver;
+    // A one-off that's over: nothing to answer either (saying "I'm going"
+    // would still post it to the Feed).
+    const oneOffOver = !repeatText && shownOver;
     // With tickets sold elsewhere, members still say they're going here.
-    const rsvpRow = hasTickets && isFull && !seriesOver;
+    const rsvpRow = hasTickets && isFull && !seriesOver && !oneOffOver;
 
     const rsvp = async (next) => {
         setGoing(next);
         setBusy(true);
         setNotice('');
+        setRsvpError('');
         try {
             const res = next ? await eventsApi.rsvp(event.id, 'GOING') : await eventsApi.cancelRsvp(event.id);
             // That made a proposal's number: it's on.
@@ -182,6 +194,8 @@ const EventDetail = () => {
             // On a proposal, say why (called off, full…).
             const reason = err?.data?.reason;
             if (event.stage) setNotice(t(`events.proposals.errors.${reason}`, { defaultValue: t('events.proposals.errors.generic') }));
+            // Otherwise beside the button: the server's reason (full…), or ours (offline…).
+            else setRsvpError(rsvpErrorText(err, t('events.detail.rsvpFailed')));
             if (reason === 'called_off') load();
         } finally {
             setBusy(false);
@@ -577,10 +591,13 @@ const EventDetail = () => {
                         )}
                     </div>
                 )}
+                {rsvpRow && rsvpError && <p className="ev-notice ev-rsvp-error" role="alert">{rsvpError}</p>}
             </div>
 
-            {stage !== 'calledOff' && !seriesOver && (
+            {stage !== 'calledOff' && !seriesOver && !oneOffOver && (
             <div className={`ev-bar${!proposed && !satsTickets && bothTicketLinks(event) ? ' two' : ''}`}>
+                {/* "I'm going" (a free event's, below) didn't save: said just above the bar. */}
+                {!rsvpRow && rsvpError && <p className="ev-notice ev-rsvp-error ev-bar-error" role="alert">{rsvpError}</p>}
                 {proposed ? (
                     <>
                         <span className="ev-bar-who">
@@ -823,6 +840,8 @@ const EventDetail = () => {
                     background: var(--color-surface); border-top: 1px solid var(--color-gray-200); box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
                 }
                 .ev-bar.two { flex-direction: column; align-items: stretch; gap: 10px; }
+                /* Over the page, just above the bar, without moving what's in it. */
+                .ev-bar-error { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 8px); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12); }
                 @media (max-width: 768px) {
                     .ev-bar { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
                 }
