@@ -24,7 +24,7 @@ import {
     MAX_OPEN_PROPOSALS, MAX_PROPOSAL, MIN_PROPOSAL, VENUE_SELECT, confirmIfReached, openProposals, proposalStage, tellPeopleIn, venueFor, whenAndWhere,
 } from '../services/eventProposals.service';
 import {
-    INVITE_EVENT_SELECT, InviteError, MAX_INVITES, inviteMore, invitedMembers, myInvite, planInviteList, sendInvites, withdrawInvites,
+    INVITE_EVENT_SELECT, InviteError, MAX_INVITES, MAX_INVITES_PER_DAY, inviteMore, sentToday, invitedMembers, myInvite, planInviteList, sendInvites, withdrawInvites,
 } from '../services/eventInvites.service';
 import {
     DATES_AHEAD, DATE_FIELDS, SERIES_REACH, SIX_HOURS, dateChangeProblem, dateIndex, endOfDay, hasEnded, hasOverrides, isRepeat, keyAt,
@@ -46,7 +46,7 @@ export const createEventSchema = z.object({
     description: z.string().max(20_000),
     category: z.enum(['NETWORKING', 'CONFERENCE', 'WORKSHOP', 'HACKATHON', 'MEETUP', 'DEMO_DAY', 'HEALTH_FITNESS', 'FOOD_DRINK', 'EXCURSION', 'OTHER']).default('NETWORKING'),
     visibility: z.enum(['PUBLIC', 'LIMITED_SPACES', 'INVITE_ONLY', 'PRIVATE', 'DRAFT']).default('PUBLIC'),
-    location: z.string().max(200).optional(),
+    location: z.string().max(800).optional(), // "name, address": both fields fit
     isOnline: z.boolean().default(false),
     onlineUrl: webLink.optional(),
     startDate: z.string().max(40), // More lenient, parse in controller
@@ -60,9 +60,9 @@ export const createEventSchema = z.object({
     shareFrame: coverFrameSchema.optional(),
     ticketUrl: webLink.optional(),
     bitcoinUrl: webLink.optional(),
-    maxAttendees: z.number().int().optional().nullable(),
-    priceSats: z.number().int().min(0).optional().nullable(), // null/0 = free (RSVP-only)
-    ticketCapacity: z.number().int().positive().optional().nullable(),
+    maxAttendees: z.number().int().min(1).max(100_000).optional().nullable(),
+    priceSats: z.number().int().min(0).max(100_000_000).optional().nullable(), // null/0 = free (RSVP-only)
+    ticketCapacity: z.number().int().positive().max(100_000).optional().nullable(),
     payoutLightningAddress: z.string().max(320).optional(),
     tags: z.array(z.string().max(60)).max(30).optional(),
     isOfficial: z.boolean().optional(),
@@ -667,7 +667,8 @@ export async function listAttendingEvents(req: Request, res: Response): Promise<
         const where = {
             userId: me.id,
             status: { in: ['GOING', 'INTERESTED', 'INVITED'] },
-            event: { hostId: { notIn: hidden }, host: { isBanned: false, deletedAt: null } },
+            // Not a draft either: the host took it down, or hasn't put it up.
+            event: { isPublished: true, hostId: { notIn: hidden }, host: { isBanned: false, deletedAt: null } },
             NOT: [
                 { status: 'INVITED', event: { calledOffAt: { not: null } } },
                 { status: 'INVITED', event: { confirmedAt: null, decideBy: { lt: new Date() } } },
@@ -820,6 +821,9 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
         if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
+        if (data.startDate && data.endDate && data.endDate.getTime() < data.startDate.getTime()) {
+            res.status(400).json({ error: 'The end is before the start', reason: 'date_end_before_start' }); return;
+        }
         // A repeating event: not a proposal (that's one date people say yes to).
         if (badDate(data.repeatUntil)) { res.status(400).json({ error: 'Pick the last day it repeats', reason: 'repeat_until_invalid' }); return; }
         if (data.repeat && proposal) { res.status(400).json({ error: 'A proposed meetup doesn\'t repeat', reason: 'repeat_on_proposal' }); return; }
@@ -986,6 +990,9 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             res.status(400).json({ error: 'Pick when it starts', reason: 'start_invalid' }); return;
         }
         if (badDate(data.endDate)) { res.status(400).json({ error: 'Pick when it ends', reason: 'end_invalid' }); return; }
+        if (data.startDate && data.endDate && data.endDate.getTime() < data.startDate.getTime()) {
+            res.status(400).json({ error: 'The end is before the start', reason: 'date_end_before_start' }); return;
+        }
         // Repeating: the rule, first date and last day as the edit leaves
         // them, checked when one of them is sent. Never on a proposal.
         if (badDate(data.repeatUntil)) { res.status(400).json({ error: 'Pick the last day it repeats', reason: 'repeat_until_invalid' }); return; }
@@ -1256,6 +1263,13 @@ export async function updateEvent(req: Request, res: Response): Promise<void> {
             }
             if (repeats(existing)) await changeDates(tx, existing, data, dateEdit, seriesFrom, now);
             const updated = await tx.event.update({ where: { id: existing.id }, data, include: eventInclude(now) });
+            // Taken off a private event's guest list: their answer goes too,
+            // since an answer is what lets a guest see the event (invitedTo).
+            if (data.guestList !== undefined && (updated.visibility === 'PRIVATE' || updated.visibility === 'INVITE_ONLY')) {
+                const kept = new Set(guestIds(updated.guestList));
+                const removed = guestIds(existing.guestList).filter((id) => !kept.has(id));
+                if (removed.length) await tx.eventAttendee.deleteMany({ where: { eventId: existing.id, userId: { in: removed } } });
+            }
             // One date's change moves no answers: the event's dates stay where they were.
             if (!dateEdit && (repeats(existing) || repeats(updated))) await moveAnswers(tx, existing, updated, now);
             return updated;
@@ -1540,10 +1554,15 @@ export async function endorseEvent(req: Request, res: Response): Promise<void> {
  * list. Invite-only events let only them, the host and admins RSVP or buy.
  */
 export async function invitedTo(event: { id: string; guestList?: string | null }, userId: string): Promise<boolean> {
-    let guests: { userId?: string }[] = [];
-    try { guests = JSON.parse(event.guestList || '[]'); } catch { guests = []; }
-    if (Array.isArray(guests) && guests.some((g) => g?.userId === userId)) return true;
+    if (guestIds(event.guestList).includes(userId)) return true;
     return !!(await prisma.eventAttendee.findFirst({ where: { eventId: event.id, userId }, select: { id: true } }));
+}
+
+/** The members on an event's guest list (its JSON), by id. */
+function guestIds(guestList: string | null | undefined): string[] {
+    let guests: unknown;
+    try { guests = JSON.parse(guestList || '[]'); } catch { return []; }
+    return Array.isArray(guests) ? guests.map((g) => g?.userId).filter((id): id is string => typeof id === 'string') : [];
 }
 
 /**
@@ -1589,6 +1608,11 @@ export async function rsvpEvent(req: Request, res: Response): Promise<void> {
         const stage = proposalStage(event);
         if (stage === 'calledOff' || (stage === 'proposed' && event.decideBy && event.decideBy.getTime() < Date.now())) {
             res.status(409).json({ error: 'This meetup was called off', reason: 'called_off' }); return;
+        }
+        // A one-off event that's over takes no more answers (a repeating
+        // one answers for its next date).
+        if (!repeats(event) && status !== 'NOT_GOING' && hasEnded(event, new Date())) {
+            res.status(409).json({ error: 'This event is over', reason: 'event_over' }); return;
         }
         // Whoever proposed it counts towards it: they call it off instead.
         if (stage === 'proposed' && event.hostId === userId && status !== 'GOING') {
@@ -1914,6 +1938,11 @@ export async function inviteToEvent(req: Request, res: Response): Promise<void> 
             if (!invited.length) { res.status(409).json({ error: 'User already has an RSVP for this event' }); return; }
             res.status(201).json({ message: 'Invitation sent' });
             return;
+        }
+
+        // As many a day as for meetups, across all of this member's events.
+        if ((await sentToday(inviterId)) >= MAX_INVITES_PER_DAY) {
+            res.status(429).json({ error: `You can invite up to ${MAX_INVITES_PER_DAY} members a day`, reason: 'too_many_today' }); return;
         }
 
         // Create INVITED attendee record

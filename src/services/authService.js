@@ -13,8 +13,9 @@
 
 import { authApi } from './api.js';
 import { forgetInvite, inviteStorage } from '../utils/inviteCode.js';
-import { nip19, getPublicKey, finalizeEvent } from 'nostr-tools';
+import { getPublicKey, finalizeEvent } from 'nostr-tools';
 import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
+import { decodeNsec } from '../utils/secretKey.js';
 import { nostrSigner } from './nostrSigner.js';
 import { toSignerError, isDeadSessionError, SIGNER_ERROR } from './signerError.js';
 import { isNativePlatform } from '../utils/platform.js';
@@ -188,11 +189,7 @@ export const authService = {
      * The secret key is never stored — only held in memory during signing.
      */
     loginWithNsec: async (nsecString) => {
-        const decoded = nip19.decode(nsecString.trim());
-        if (decoded.type !== 'nsec') {
-            throw new Error('Invalid nsec key.');
-        }
-        const sk = decoded.data;
+        const sk = decodeNsec(nsecString);
         const pubkey = getPublicKey(sk);
 
         const { challenge } = await authApi.nostrChallenge(pubkey);
@@ -495,6 +492,12 @@ export const authService = {
         try {
             localStorage.removeItem('bies_member_names');
         } catch { /* unavailable */ }
+        // Members' Nostr profiles the feed kept, and the relay connection
+        // signed in as this member (the next account opens its own).
+        import('./nostrService.js').then(({ nostrService, profileCache }) => {
+            profileCache.clear();
+            nostrService.closeBiesRelay();
+        }).catch(() => { /* not loaded */ });
     },
 
     // ─── Role management ────────────────────────────────────────────────────

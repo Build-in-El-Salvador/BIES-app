@@ -116,10 +116,8 @@ describe("a business's team", () => {
         expect(await represented(ana)).toEqual([expect.objectContaining({ id, role: 'team' })]);
         expect(await represented(owner)).toEqual([expect.objectContaining({ id, role: 'runs' })]);
 
-        // Signed out, the page names no one on it.
-        const publicView = await call('GET', `/api/directory/${id}`);
-        expect(publicView.body.team).toEqual([]);
-        expect(JSON.stringify(publicView.body)).not.toContain('Ana Team');
+        // Signed out, there's no page to read (a shared one has its preview).
+        expect((await call('GET', `/api/directory/${id}`)).status).toBe(401);
     });
 
     it("a member who only recommended it can't; an admin can", async () => {
@@ -151,6 +149,22 @@ describe("a business's team", () => {
         expect(await teamOf(owner, id)).toEqual([]);
         expect(await represented(carl)).toEqual([]);
         expect((await call('DELETE', `/api/directory/${id}/team/${dana.id}`, { token: owner.token })).status).toBe(404);
+    });
+
+    it("putting a critic on the team doesn't take their downvote away; the team's own vouches don't count", async () => {
+        const owner = await member();
+        const critic = await member();
+        const friend = await member();
+        const id = await business(owner, true);
+        const vote = (m: Member, v: 1 | -1) => call('POST', `/api/directory/${id}/endorse`, { token: m.token, body: { vote: v, comment: 'Slow and overpriced, and they never called back.' } });
+        expect((await vote(critic, -1)).status).toBeLessThan(300);
+        expect((await vote(friend, 1)).status).toBeLessThan(300);
+        const score = async () => (await prisma.directoryListing.findUnique({ where: { id }, select: { reputationScore: true, vouchCount: true, downvoteCount: true } }))!;
+        expect(await score()).toEqual({ reputationScore: 0, vouchCount: 1, downvoteCount: 1 });
+
+        await add(owner, id, critic.id);
+        await add(owner, id, friend.id);
+        expect(await score()).toEqual({ reputationScore: -1, vouchCount: 0, downvoteCount: 1 });
     });
 
     it('turns away the owner, someone on it already, a suspended member, a block, and a full team', async () => {
@@ -244,5 +258,13 @@ describe("a business's team", () => {
         expect(await represented(owner)).toEqual([]);
         expect((await add(owner, id, lou.id)).status).toBe(403);
         expect((await add(linked, id, lou.id)).status).toBe(201);
+
+        // Whoever added it still edits its details, but no longer hands it over or deletes it;
+        // the linked member edits and deletes it.
+        expect((await call('PUT', `/api/directory/${id}`, { token: owner.token, body: { hours: 'Closed' } })).status).toBe(200);
+        expect((await call('POST', `/api/directory/${id}/transfer`, { token: owner.token, body: { toUserId: kim.id } })).status).toBe(403);
+        expect((await call('DELETE', `/api/directory/${id}`, { token: owner.token })).status).toBe(403);
+        expect((await call('PUT', `/api/directory/${id}`, { token: linked.token, body: { hours: 'Mon–Fri 8–5' } })).status).toBe(200);
+        expect((await call('DELETE', `/api/directory/${id}`, { token: linked.token })).status).toBe(200);
     });
 });

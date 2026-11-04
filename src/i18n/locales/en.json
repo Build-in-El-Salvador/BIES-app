@@ -55,7 +55,37 @@
     "encrypting": "Encrypting...",
     "saving": "Saving...",
     "connecting": "Connecting...",
-    "searchPlaceholder": "Search projects, builders..."
+    "searchPlaceholder": "Search projects, builders...",
+    "fieldNames": {
+      "name": "the name",
+      "title": "the title",
+      "phone": "the phone number",
+      "whatsapp": "the WhatsApp number",
+      "email": "the email address",
+      "website": "the website",
+      "instagram": "the Instagram",
+      "location": "the place",
+      "locationAddress": "the address",
+      "locationName": "the place’s name",
+      "hours": "the hours",
+      "about": "the description",
+      "bio": "the bio",
+      "company": "the company",
+      "links": "the links",
+      "pricing": "the prices",
+      "category": "the category",
+      "languages": "the languages",
+      "products": "the products",
+      "skills": "the skills",
+      "onlineUrl": "the online link",
+      "description": "the description",
+      "link": "the link",
+      "year": "the year",
+      "something": "a field"
+    },
+    "checkFields": "Check {{fields}}, then try again.",
+    "checkTheForm": "Check the form, then try again.",
+    "and": "and"
   },
   "nav": {
     "discover": "Discover",
@@ -149,7 +179,14 @@
     "layoutCards": "Cards",
     "layoutIcons": "Icons",
     "logOut": "Log out",
-    "privacy": "Privacy"
+    "privacy": "Privacy",
+    "signOutOthers": "Sign out of other devices",
+    "signOutOthersDesc": "Phones and computers you were signed in on before",
+    "signOutOthersConfirm": "Sign out of BIES everywhere else? You stay signed in here.",
+    "signOutOthersDone_one": "Signed out of {{count}} other device",
+    "signOutOthersDone_other": "Signed out of {{count}} other devices",
+    "signOutOthersNone": "You weren’t signed in anywhere else",
+    "signOutOthersFailed": "Couldn’t sign out your other devices. Try again."
   },
   "landing": {
     "forInvestors": "For Global Investors",
@@ -742,7 +779,8 @@
       "rsvpAskOn": "Going on {{date}}?",
       "youreGoingOn": "You're going on {{date}}",
       "goingOn_one": "{{count}} member is going on {{date}}",
-      "goingOn_other": "{{count}} members are going on {{date}}"
+      "goingOn_other": "{{count}} members are going on {{date}}",
+      "rsvpFailed": "Couldn't save your answer. Try again."
     },
     "form": {
       "newTitle": "New event",
@@ -1245,7 +1283,11 @@
     "searching": "Searching...",
     "deleteReply": "Delete",
     "deleteReplyConfirm": "Delete this reply?",
-    "removeAttachment": "Remove"
+    "removeAttachment": "Remove",
+    "postFailed": "Couldn’t post. Check your connection and try again.",
+    "replyFailed": "Couldn’t send your reply. Try again.",
+    "unreachableTitle": "Can’t reach the feed",
+    "unreachableText": "Trying again. Check your connection."
   },
   "nostrFeed": {
     "publicTab": "Public",
@@ -2478,7 +2520,10 @@
       "unmark": "Not BIES's own page",
       "badge": "BIES's own page",
       "events": "Events"
-    }
+    },
+    "deleteListing": "Delete listing",
+    "deleteConfirm": "Delete this listing? Its photos, reviews and team go with it. This can’t be undone.",
+    "deleteFailed": "Couldn’t delete the listing. Try again."
   },
   "talent": {
     "search": "Search skills or people",

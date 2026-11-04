@@ -142,6 +142,16 @@ describe('uploading', () => {
         expect(record).toMatchObject({ userId: ana.id, mimeType: 'image/jpeg', size: file.length, isPrivate: false });
     });
 
+    it('a member stores so much a day; then tomorrow', async () => {
+        const ana = await member('Ana Full');
+        await prisma.upload.create({ data: { name: `big-${Date.now()}.mp4`, userId: ana.id, mimeType: 'video/mp4', size: 500 * 1024 * 1024 } });
+        const res = await upload(ana, await photo(++seed));
+        expect(res.status).toBe(429);
+        expect(res.body.reason).toBe('daily_storage');
+        await prisma.upload.updateMany({ where: { userId: ana.id }, data: { createdAt: new Date(Date.now() - 25 * 3600_000) } });
+        expect((await upload(ana, await photo(++seed))).status).toBe(200);
+    });
+
     it('turns away a file that isn\'t the photo it says, and keeps nothing of it', async () => {
         const ana = await member('Ana B');
         const before = await prisma.upload.count();

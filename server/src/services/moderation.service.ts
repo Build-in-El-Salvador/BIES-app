@@ -309,12 +309,24 @@ async function emailModerators(reportId: string, lastToday = false): Promise<voi
 
 type Moderator = { id: string; isAdmin: boolean };
 
-/** A moderator never handles reports about themselves; an admin may. */
-const visibleTo = (viewer: Moderator) =>
-    viewer.isAdmin ? {} : { OR: [{ targetUserId: null }, { targetUserId: { not: viewer.id } }] };
+/**
+ * A moderator never handles reports about themselves; an admin may. A review
+ * of a listing the moderator answers for counts as about them too: they
+ * mustn't be the one to take down a review of their own business.
+ */
+async function visibleTo(viewer: Moderator) {
+    if (viewer.isAdmin) return {};
+    const notThem = { OR: [{ targetUserId: null }, { targetUserId: { not: viewer.id } }] };
+    const reviewsOfTheirs = await prisma.directoryEndorsement.findMany({
+        where: { listing: { OR: [{ memberUserId: viewer.id }, { memberUserId: null, ownerId: viewer.id }] } },
+        select: { id: true },
+    });
+    if (!reviewsOfTheirs.length) return notThem;
+    return { AND: [notThem, { NOT: { targetType: 'endorsement', targetId: { in: reviewsOfTheirs.map((r) => r.id) } } }] };
+}
 
 export async function listReports({ status, page = 1, limit = 20, viewer }: { status?: ReportStatus; page?: number; limit?: number; viewer: Moderator }) {
-    const where = { ...(status ? { status } : {}), ...visibleTo(viewer) };
+    const where = { ...(status ? { status } : {}), ...(await visibleTo(viewer)) };
     const [rows, total, open] = await Promise.all([
         prisma.report.findMany({
             where,
@@ -327,7 +339,7 @@ export async function listReports({ status, page = 1, limit = 20, viewer }: { st
             },
         }),
         prisma.report.count({ where }),
-        prisma.report.count({ where: { status: 'OPEN', ...visibleTo(viewer) } }),
+        prisma.report.count({ where: { status: 'OPEN', ...(await visibleTo(viewer)) } }),
     ]);
     const targetUserIds = [...new Set(rows.map((r) => r.targetUserId).filter((id): id is string => !!id))];
     const targetUsers = await prisma.user.findMany({
@@ -370,7 +382,7 @@ export async function listReports({ status, page = 1, limit = 20, viewer }: { st
 export async function resolveReport(id: string, moderator: Moderator, status: ReportStatus, resolution: string): Promise<boolean> {
     const closing = status !== 'OPEN';
     const { count } = await prisma.report.updateMany({
-        where: { id, ...visibleTo(moderator) },
+        where: { id, ...(await visibleTo(moderator)) },
         data: {
             status,
             resolution: resolution.trim().slice(0, MAX_DETAILS),
@@ -383,7 +395,7 @@ export async function resolveReport(id: string, moderator: Moderator, status: Re
 
 /** Whether a moderator may act on this report (not one about themselves, unless an admin). */
 export async function canHandleReport(id: string, moderator: Moderator): Promise<boolean> {
-    return !!(await prisma.report.findFirst({ where: { id, ...visibleTo(moderator) }, select: { id: true } }));
+    return !!(await prisma.report.findFirst({ where: { id, ...(await visibleTo(moderator)) }, select: { id: true } }));
 }
 
 /** Closed reports leave after 12 months (privacy notice). */

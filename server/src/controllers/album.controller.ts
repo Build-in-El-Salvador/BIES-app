@@ -57,9 +57,9 @@ type AlbumWithOwner = NonNullable<Awaited<ReturnType<typeof loadAlbum>>>;
 
 /** A listing's album: the listing, and the names of the members who answer for it. */
 const LISTING_SELECT = {
-    id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true,
-    owner: { select: { profile: { select: { name: true } } } },
-    memberUser: { select: { profile: { select: { name: true } } } },
+    id: true, name: true, type: true, ownerId: true, memberUserId: true, status: true, isPublished: true,
+    owner: { select: { isBanned: true, deletedAt: true, profile: { select: { name: true } } } },
+    memberUser: { select: { isBanned: true, deletedAt: true, profile: { select: { name: true } } } },
 } as const;
 
 function loadAlbum(id: string) {
@@ -90,7 +90,11 @@ async function canView(req: Request, album: AlbumWithOwner): Promise<boolean> {
     // Staff see the rest, to handle reports, even from members who blocked them.
     if (isStaff(req)) return true;
     if (album.user?.deletedAt || album.user?.isBanned) return false;
-    if (album.listing && album.listing.status !== 'active') return false;
+    if (album.listing && (album.listing.status !== 'active' || !album.listing.isPublished)) return false;
+    // A listing's albums go with it while the member who answers for it is
+    // suspended or gone, as its page does.
+    const runner = album.listing ? (album.listing.memberUserId ? album.listing.memberUser : album.listing.owner) : null;
+    if (runner && (runner.isBanned || runner.deletedAt)) return false;
     if (album.visibility === 'MEMBERS' && !req.user) return false;
     const member = albumMember(album);
     if (req.user && member && member !== req.user.id && await blockedEitherWay(req.user.id, member)) return false;

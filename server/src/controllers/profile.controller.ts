@@ -403,7 +403,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
         // events they're going to, while Events is on.
         // Whether the viewer follows them, for the Follow button (the viewer's
         // own, so outside the shared cache): the app needn't fetch who they follow.
-        const [projectsOn, eventsOn, follow] = await Promise.all([
+        const [projectsOn, eventsOn, follow, hiddenHosts] = await Promise.all([
             isEnabled('projects'),
             isEnabled('events'),
             req.user && req.user.id !== result.userId
@@ -412,10 +412,13 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                     select: { id: true },
                 })
                 : null,
+            // Events whose host is in a block with the viewer stay out of the list.
+            hiddenFromIds(req.user?.id, { staff: isStaffUser(req.user) }).then((ids) => new Set(ids)),
         ]);
+        const going = (user.eventRSVPs || []).filter((r: any) => !hiddenHosts.has(r.event?.hostId));
         const shown = {
             ...result,
-            user: result.user && { ...user, projects: projectsOn ? user.projects : [], eventRSVPs: eventsOn ? user.eventRSVPs : [] },
+            user: result.user && { ...user, projects: projectsOn ? user.projects : [], eventRSVPs: eventsOn ? going : [] },
         };
         res.json({ ...profileForViewer(shown, viewerOf(req, result.userId)), followedByMe: !!follow });
     };
@@ -466,12 +469,20 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
                             orderBy: { createdAt: 'desc' },
                         },
                         eventRSVPs: {
-                            // Only events anyone can see: not private, draft or invite-only ones.
-                            where: { status: { in: ['GOING', 'INTERESTED'] }, event: { isPublished: true, visibility: { in: ['PUBLIC', 'LIMITED_SPACES'] } } },
+                            // Only events anyone can see: not private, draft or invite-only
+                            // ones, nor called off or hosted by a member who is suspended or gone.
+                            where: {
+                                status: { in: ['GOING', 'INTERESTED'] },
+                                event: {
+                                    isPublished: true, visibility: { in: ['PUBLIC', 'LIMITED_SPACES'] }, calledOffAt: null,
+                                    host: { isBanned: false, deletedAt: null },
+                                },
+                            },
                             include: {
                                 event: {
                                     select: {
                                         id: true,
+                                        hostId: true,
                                         title: true,
                                         startDate: true,
                                         thumbnail: true,
@@ -594,6 +605,8 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         await Promise.all([
             cache.del(cacheKey.profileDetail(req.user!.id)),
             cache.del(cacheKey.profileDetail(profile.id)),
+            // A profile is looked up by its Nostr key too.
+            cache.del(cacheKey.profileDetail(profile.user.nostrPubkey)),
             cache.delPattern('profiles:'),
         ]);
 

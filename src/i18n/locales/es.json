@@ -55,7 +55,37 @@
     "encrypting": "Encriptando...",
     "saving": "Guardando...",
     "connecting": "Conectando...",
-    "searchPlaceholder": "Buscar proyectos, constructores..."
+    "searchPlaceholder": "Buscar proyectos, constructores...",
+    "fieldNames": {
+      "name": "el nombre",
+      "title": "el título",
+      "phone": "el teléfono",
+      "whatsapp": "el número de WhatsApp",
+      "email": "el correo",
+      "website": "el sitio web",
+      "instagram": "el Instagram",
+      "location": "el lugar",
+      "locationAddress": "la dirección",
+      "locationName": "el nombre del lugar",
+      "hours": "el horario",
+      "about": "la descripción",
+      "bio": "la biografía",
+      "company": "la empresa",
+      "links": "los enlaces",
+      "pricing": "los precios",
+      "category": "la categoría",
+      "languages": "los idiomas",
+      "products": "los productos",
+      "skills": "las habilidades",
+      "onlineUrl": "el enlace en línea",
+      "description": "la descripción",
+      "link": "el enlace",
+      "year": "el año",
+      "something": "un campo"
+    },
+    "checkFields": "Revisa {{fields}} e inténtalo de nuevo.",
+    "checkTheForm": "Revisa el formulario e inténtalo de nuevo.",
+    "and": "y"
   },
   "nav": {
     "discover": "Descubrir",
@@ -149,7 +179,14 @@
     "layoutCards": "Tarjetas",
     "layoutIcons": "Iconos",
     "logOut": "Cerrar sesión",
-    "privacy": "Privacidad"
+    "privacy": "Privacidad",
+    "signOutOthers": "Cerrar sesión en otros dispositivos",
+    "signOutOthersDesc": "Teléfonos y computadoras donde iniciaste sesión antes",
+    "signOutOthersConfirm": "¿Cerrar tu sesión de BIES en todos los demás lugares? Aquí sigues con la sesión iniciada.",
+    "signOutOthersDone_one": "Sesión cerrada en {{count}} dispositivo más",
+    "signOutOthersDone_other": "Sesión cerrada en {{count}} dispositivos más",
+    "signOutOthersNone": "No tenías la sesión iniciada en ningún otro lugar",
+    "signOutOthersFailed": "No se pudo cerrar la sesión en tus otros dispositivos. Inténtalo de nuevo."
   },
   "landing": {
     "forInvestors": "Para Inversionistas Globales",
@@ -741,7 +778,8 @@
       "rsvpAskOn": "¿Vas el {{date}}?",
       "youreGoingOn": "Vas el {{date}}",
       "goingOn_one": "{{count}} miembro va el {{date}}",
-      "goingOn_other": "{{count}} miembros van el {{date}}"
+      "goingOn_other": "{{count}} miembros van el {{date}}",
+      "rsvpFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo."
     },
     "form": {
       "newTitle": "Nuevo evento",
@@ -1063,7 +1101,11 @@
     "searching": "Buscando...",
     "deleteReply": "Eliminar",
     "deleteReplyConfirm": "¿Eliminar esta respuesta?",
-    "removeAttachment": "Quitar"
+    "removeAttachment": "Quitar",
+    "postFailed": "No se pudo publicar. Revisa tu conexión e inténtalo de nuevo.",
+    "replyFailed": "No se pudo enviar tu respuesta. Inténtalo de nuevo.",
+    "unreachableTitle": "No se puede cargar el feed",
+    "unreachableText": "Lo intentamos de nuevo. Revisa tu conexión."
   },
   "nostrFeed": {
     "publicTab": "Publico",
@@ -2337,7 +2379,10 @@
       "unmark": "No es la página propia de BIES",
       "badge": "Página propia de BIES",
       "events": "Eventos"
-    }
+    },
+    "deleteListing": "Eliminar listado",
+    "deleteConfirm": "¿Eliminar este listado? Sus fotos, reseñas y equipo se eliminan con él. No se puede deshacer.",
+    "deleteFailed": "No se pudo eliminar el listado. Inténtalo de nuevo."
   },
   "talent": {
     "search": "Buscar habilidades o personas",

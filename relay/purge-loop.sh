@@ -18,10 +18,12 @@ while true; do
     for request in "$QUEUE"/*; do
         [ -f "$request" ] || continue
         name=$(basename "$request")
-        # One event a moderator removed.
+        # One event a moderator removed, and the reposts of it (kinds 6 and
+        # 16 carry the post itself, so they'd keep showing it).
         if [[ "$name" =~ ^event-([0-9a-f]{64})$ ]]; then
             id="${BASH_REMATCH[1]}"
-            if "${STRFRY[@]}" delete --filter "{\"ids\":[\"$id\"]}"; then
+            if "${STRFRY[@]}" delete --filter "{\"ids\":[\"$id\"]}" &&
+               "${STRFRY[@]}" delete --filter "{\"kinds\":[6,16],\"#e\":[\"$id\"]}"; then
                 rm -f -- "$request"
                 echo "purge-loop: deleted event ${id:0:8}..."
             else

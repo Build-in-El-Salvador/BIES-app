@@ -32,10 +32,9 @@ class GifStore {
                 limit: 200,
             };
 
-            const events = await nostrService.pool.querySync(
-                [nostrService.biesRelay, ...nostrService.publicRelays],
-                filter
-            );
+            // BIES members' GIFs only: from the open network they'd be
+            // anyone's images, unmoderated, loaded from anyone's server.
+            const events = await nostrService.pool.querySync([nostrService.biesRelay], filter);
 
             const gifMap = new Map();
             for (const event of events) {
@@ -110,8 +109,9 @@ class GifStore {
             tags: eventTags,
         };
 
+        // On BIES's relay only, like the members-only posts it's for.
         const signed = await nostrSigner.signEvent(event);
-        await Promise.any(nostrService.pool.publish(nostrService.relays, signed));
+        await nostrService.publishSigned(signed, { biesOnly: true });
 
         const newGif = {
             id: signed.id,

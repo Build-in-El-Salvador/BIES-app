@@ -20,6 +20,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
 import { config } from '../config';
 import { checkSession, onSessionsEnded, verifyAccessToken } from './session.service';
+import { isEnabled } from './featureFlags.service';
+import { blockedEitherWay } from './moderation.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,7 @@ const pending = new Set<AuthenticatedWebSocket>();
 export const WS_PROTOCOL = 'bies.v1';
 
 // Close codes the app acts on: refresh the token and reconnect, or sign out.
+const MAX_SOCKETS_PER_MEMBER = 12;
 const CLOSE_REFRESH = 4001;
 const CLOSE_SESSION_ENDED = 4003;
 
@@ -149,9 +152,18 @@ export function attachWebSocketServer(httpServer: Server): void {
         ws.sessionId = sessionId;
         ws.isAlive = true;
 
-        // Track connection
+        // Track connection. A member's tabs and devices, a dozen at most: the
+        // oldest goes to make room, so nobody holds hundreds open.
         if (!connections.has(userId)) connections.set(userId, new Set());
-        connections.get(userId)!.add(ws);
+        const theirs = connections.get(userId)!;
+        if (theirs.size >= MAX_SOCKETS_PER_MEMBER) {
+            const oldest = theirs.values().next().value;
+            if (oldest) {
+                theirs.delete(oldest);
+                oldest.close(1008, 'Too many connections');
+            }
+        }
+        theirs.add(ws);
 
         console.log(`[WS] User ${userId} connected (total: ${countConnections()})`);
 
@@ -214,12 +226,15 @@ function handleClientMessage(
 
         case 'typing_start':
         case 'typing_stop':
-            // Relay typing indicator to recipient
-            if (msg.recipientId && typeof msg.recipientId === 'string') {
-                sendToUser(msg.recipientId as string, {
-                    type: msg.type,
-                    fromUserId: userId,
-                });
+            // "Typing…" in a conversation: only while Messages is on, and
+            // never between members in a block either way.
+            if (msg.recipientId && typeof msg.recipientId === 'string' && msg.recipientId !== userId) {
+                const recipientId = msg.recipientId;
+                const type = msg.type;
+                void (async () => {
+                    if (!(await isEnabled('messages')) || await blockedEitherWay(userId, recipientId)) return;
+                    sendToUser(recipientId, { type, fromUserId: userId });
+                })().catch(() => { /* not sent */ });
             }
             break;
 

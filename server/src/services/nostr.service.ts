@@ -56,6 +56,18 @@ export async function publishEvent(
 }
 
 /**
+ * Events on BIES's own relay that match a filter, read directly inside the
+ * box (NOSTR_PRIVATE_RELAY). Null when no private relay is set up (a
+ * development server), so a caller can tell "not checked" from "none".
+ * Signatures are checked by the pool.
+ */
+export async function queryPrivateRelay(filter: Filter, timeoutMs = 4000): Promise<NostrEvent[] | null> {
+    if (!config.nostrPrivateRelay) return null;
+    const pool = await getPool();
+    return pool.querySync([config.nostrPrivateRelay], filter, { maxWait: timeoutMs });
+}
+
+/**
  * Fetch a single event by id from the configured relays (private relay
  * first, then public). Signature is verified by the pool. Returns null on
  * miss or timeout — callers treat that as "event does not exist".

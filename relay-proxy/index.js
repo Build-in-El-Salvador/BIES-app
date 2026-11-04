@@ -2,7 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
 import fs from 'fs';
 import { verifyEvent } from 'nostr-tools/pure';
+import path from 'path';
 import { refusal } from './noteFilter.js';
+import { createWriteRules } from './writeRules.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 const LISTEN_PORT    = parseInt(process.env.PROXY_PORT || '7778', 10);
@@ -23,6 +25,10 @@ const MAX_UNAUTHED_PER_IP = parseInt(process.env.MAX_UNAUTHED_PER_IP || '40', 10
 // How often open connections are checked against the whitelist, so a
 // member who is suspended or deletes their account stops reading.
 const RECHECK_MS     = parseInt(process.env.RECHECK_MS || '60000', 10);
+// Posts moderators removed, beside the whitelist (writeRules.js).
+const REMOVED_PATH   = process.env.REMOVED_PATH || path.join(path.dirname(WHITELIST_PATH), 'removed.txt');
+const writeRules = createWriteRules({ removedPath: REMOVED_PATH });
+setInterval(() => writeRules.prune(), 60 * 60 * 1000).unref();
 
 // ─── Whitelist check ─────────────────────────────────────────────────────────
 function isWhitelisted(pubkey) {
@@ -219,7 +225,7 @@ wss.on('connection', (clientWs, req) => {
     // answered OK false, as the relay itself refuses an event, and goes no
     // further.
     function forward(text, msg) {
-        const refused = refusal(msg);
+        const refused = refusal(msg) || writeRules.refusal(msg, authedSockets.get(clientWs), text.length);
         if (refused) {
             if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(refused));
             return;

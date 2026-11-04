@@ -3,6 +3,8 @@ import { authenticate } from '../middleware/auth';
 import { requireTerms, screenContent } from '../middleware/contentRules';
 import { validate } from '../middleware/validate';
 import { moneyLimiter } from '../middleware/rateLimit';
+import rateLimit from 'express-rate-limit';
+import { rateLimitKey } from '../utils/rateLimitKey';
 import {
     listEvents,
     getEvent,
@@ -55,7 +57,16 @@ router.get('/tickets/mine', authenticate, listMyTickets);
 router.get('/:id', authenticate, getEvent);
 
 // Protected routes
-router.post('/import-url', authenticate, importEventFromUrl);
+// Each import fetches and reads a page of up to 2 MB: 20 an hour per member.
+const importLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    message: { error: 'Too many imports, please try again later' },
+});
+router.post('/import-url', authenticate, importLimiter, importEventFromUrl);
 router.post('/', authenticate, requireTerms, validate(createEventSchema), screenContent(EVENT_TEXT), createEvent);
 router.put('/:id', authenticate, requireTerms, validate(updateEventSchema), screenContent(EVENT_TEXT), updateEvent);
 router.delete('/:id', authenticate, deleteEvent);

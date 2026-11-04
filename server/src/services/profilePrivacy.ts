@@ -103,6 +103,12 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
     }
 
     const out: Record<string, any> = { ...profile, verified };
+    // Who is staff (a moderator or an admin) is for staff to know: to other
+    // members they're members. A member's own profile still says.
+    if (out.user && typeof out.user === 'object') {
+        const { isAdmin: _isAdmin, ...user } = out.user;
+        out.user = user.role === 'ADMIN' || user.role === 'MOD' ? { ...user, role: 'MEMBER' } : user;
+    }
     delete out.privacy;
     delete out.publicNostr;
     delete out.nip05ClaimedAt;

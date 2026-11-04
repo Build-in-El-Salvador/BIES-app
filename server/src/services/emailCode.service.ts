@@ -62,6 +62,14 @@ const ESTABLISHED_AFTER_MS = 24 * 60 * 60 * 1000;
 // account or taking its key still go out on a day sign-ins used it up.
 const SIGN_IN_SHARE = 0.9;
 const RETENTION_MS = DAY;
+const SENSITIVE_WINDOW_MS = 7 * DAY;
+const MAX_WRONG_PER_WEEK = 15;
+// Each member's address gets this many codes a day beyond the shared daily
+// ceiling, so a few addresses (members' or made up) using it up can't stop
+// everyone else signing in. At most this many extra in all, so pretix's
+// share of the email provider's daily limit stays its own.
+const MEMBER_CODES_PAST_CEILING = 2;
+const MAX_PAST_CEILING = 20;
 
 const REVIEW_CODE_RE = /^\d{6}$/;
 if (config.reviewLogin.email && !REVIEW_CODE_RE.test(config.reviewLogin.code)) {
@@ -102,9 +110,14 @@ function waitForAddressLimits(
     sent: { at: number; purpose: string }[],
     purpose: EmailCodePurpose,
     now: number,
+    review = false,
 ): number {
     let wait = 0;
     for (const { windowMs, max, samePurposeOnly } of PER_EMAIL_LIMITS) {
+        // App Review's address gets no email, so no wait between codes: its
+        // reviewers sign out and in again at once. The hourly and daily
+        // limits still hold, since its code doesn't change.
+        if (review && samePurposeOnly) continue;
         const inWindow = sent
             .filter((s) => s.at > now - windowMs && (!samePurposeOnly || s.purpose === purpose))
             .map((s) => s.at);
@@ -222,7 +235,34 @@ async function reserveCode(
     newAddress: boolean,
 ): Promise<Reservation> {
     const now = Date.now();
-    await prisma.emailCode.deleteMany({ where: { createdAt: { lt: new Date(now - RETENTION_MS) } } });
+    // Sign-in codes go after a day; the ones that delete an account or show
+    // its key are kept a week, for the weekly count of wrong tries below.
+    await prisma.emailCode.deleteMany({
+        where: {
+            OR: [
+                { purpose: 'login', createdAt: { lt: new Date(now - RETENTION_MS) } },
+                { createdAt: { lt: new Date(now - SENSITIVE_WINDOW_MS) } },
+            ],
+        },
+    });
+
+    // Deleting the account or taking the key: after this many wrong tries in
+    // a week, no more of those codes for the address until the week is out.
+    // (Not sign-in: anyone who knows an address could lock its member out.)
+    if (purpose !== 'login') {
+        const tried = await prisma.emailCode.findMany({
+            where: { emailHash, purpose, createdAt: { gte: new Date(now - SENSITIVE_WINDOW_MS) } },
+            select: { attempts: true, consumedAt: true, createdAt: true },
+            orderBy: { createdAt: 'asc' },
+        });
+        // A code used up before its last try was entered right once; one that
+        // reached its last try was burnt by wrong ones (or, rarely, right on it).
+        const wrong = tried.reduce((sum, r) => sum + r.attempts - (r.consumedAt && r.attempts < MAX_ATTEMPTS ? 1 : 0), 0);
+        if (wrong >= MAX_WRONG_PER_WEEK) {
+            const frees = tried[0].createdAt.getTime() + SENSITIVE_WINDOW_MS - now;
+            return { ok: false, reason: 'rate_limited', retryAfterSeconds: Math.max(60, Math.ceil(frees / 1000)) };
+        }
+    }
 
     // Per-address limits protect the inbox: the hourly and daily ones count
     // every purpose.
@@ -235,6 +275,7 @@ async function reserveCode(
         recent.map((r) => ({ at: r.createdAt.getTime(), purpose: r.purpose })),
         purpose,
         now,
+        review,
     );
     if (wait > 0) {
         return { ok: false, reason: 'rate_limited', retryAfterSeconds: Math.ceil(wait / 1000) };
@@ -259,7 +300,10 @@ async function reserveCode(
         const ceiling = purpose === 'login'
             ? Math.floor(config.email.maxCodesPerDay * SIGN_IN_SHARE)
             : config.email.maxCodesPerDay;
-        if (sentToday >= ceiling) {
+        const memberPastCeiling = !newAddress
+            && recent.length < MEMBER_CODES_PAST_CEILING
+            && sentToday < config.email.maxCodesPerDay + MAX_PAST_CEILING;
+        if (sentToday >= ceiling && !memberPastCeiling) {
             console.error(`[EmailCode] Daily ceiling of ${config.email.maxCodesPerDay} codes reached; email is refusing new ${purpose} codes`);
             return { ok: false, reason: 'busy', retryAfterSeconds: 60 * 60 };
         }

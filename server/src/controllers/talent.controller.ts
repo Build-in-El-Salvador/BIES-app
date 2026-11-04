@@ -36,7 +36,8 @@ export const MAX_WORKS = 8;
 /** Photos and videos, together, for one example of their work. */
 export const MAX_WORK_MEDIA = 4;
 
-const phoneRegex = /^[+0-9\s()-]*$/;
+// Digits and what people write between them, several numbers too ("7000-0000 / 2222-3333").
+const phoneRegex = /^[+0-9\s()\-/,.]*$/;
 // http(s) only — never javascript:/data: etc. as a link
 const webLink = z.string().url().max(300).regex(/^https?:\/\//i);
 const uploadLink = z.string().min(1).max(500);

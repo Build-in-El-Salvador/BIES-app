@@ -277,6 +277,15 @@ describe('photo albums', () => {
         await prisma.directoryListing.update({ where: { id: farm.id }, data: { ownerId: ben.id } });
         expect((await call('PATCH', `/api/albums/${album.body.id}`, { token: ben.token, body: { title: 'Coffee rows, 2026' } })).status).toBe(200);
         expect((await call('PATCH', `/api/albums/${album.body.id}`, { token: sofia.token, body: { title: 'x' } })).status).toBe(403);
+
+        // While the member who runs it is suspended, or it's taken down, its albums go with it.
+        const viewer = await member('Viewer I');
+        await prisma.user.update({ where: { id: ben.id }, data: { isBanned: true } });
+        expect((await call('GET', `/api/albums/${album.body.id}`, { token: viewer.token })).status).toBe(404);
+        await prisma.user.update({ where: { id: ben.id }, data: { isBanned: false } });
+        expect((await call('GET', `/api/albums/${album.body.id}`, { token: viewer.token })).status).toBe(200);
+        await prisma.directoryListing.update({ where: { id: farm.id }, data: { isPublished: false } });
+        expect((await call('GET', `/api/albums/${album.body.id}`, { token: viewer.token })).status).toBe(404);
     });
 
     it('the cover, and what happens when its photo goes', async () => {

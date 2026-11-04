@@ -6,6 +6,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
+import { handOverListingEvents } from '../services/listingEvents.service';
 import { cache, cacheKey, invalidateLeaderboardCache } from '../services/redis.service';
 import { broadcast } from '../services/websocket.service';
 import { removeFromRelayWhitelist, addToRelayWhitelist } from '../services/relayWhitelist.service';
@@ -30,6 +31,7 @@ import { followPublicProfile } from './publicNostr.controller';
 import { publishCourseBadgeDefinition } from '../services/badges.publisher';
 import { mirrorCourseToNostr, unpublishCourseFromNostr } from '../services/courses.service';
 import { deleteListingAndFiles, mirrorToNostr } from './directory.controller';
+import { adminsOnlyListing } from './listingTransfer.controller';
 import { filesOf } from './talent.controller';
 import { discardOpportunityFiles, opportunityFileNames } from './project.controller';
 import { uploadNameOf } from '../services/uploads.service';
@@ -111,6 +113,8 @@ export async function banUser(req: Request, res: Response): Promise<void> {
             removeFromRelayWhitelist(user.nostrPubkey);
             await revokeUserSessions(user.id, 'suspended');
             await removePushTargets(user.id);
+            // Events they host as a business stay up, with whoever answers for it.
+            await handOverListingEvents(user.id).catch((err) => console.error('[Admin] Listing events hand-over failed:', err));
         } else {
             addToRelayWhitelist(user.nostrPubkey);
         }
@@ -1728,9 +1732,14 @@ export async function recomputeDirectoryScores(req: Request, res: Response): Pro
  */
 export async function deleteDirectoryListing(req: Request, res: Response): Promise<void> {
     try {
-        const exists = await prisma.directoryListing.count({ where: { id: req.params.id } });
-        if (!exists) {
+        const listing = await prisma.directoryListing.findUnique({ where: { id: req.params.id }, select: { ownerId: true, isOfficial: true } });
+        if (!listing) {
             res.status(404).json({ error: 'Listing not found' });
+            return;
+        }
+        // BIES's own page, or an admin's listing: an admin removes those.
+        if (await adminsOnlyListing(listing, req)) {
+            res.status(403).json({ error: 'Only an admin can remove this listing', reason: 'admins_only' });
             return;
         }
         await deleteListingAndFiles(req.params.id, req.user!.id);

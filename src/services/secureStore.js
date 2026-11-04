@@ -1,7 +1,8 @@
 /**
  * Secrets the phone app keeps between launches, in the iOS Keychain or the
  * Android Keystore: the session's refresh token, a pasted Nostr key, the
- * remote signer's (NIP-46) client key and bunker, and a wallet (NWC) link.
+ * remote signer's (NIP-46) client key and bunker, a wallet (NWC) link, and
+ * the tokens of a sign-out made offline.
  *
  * The rest of the app reads them synchronously, so the Keychain is read into
  * memory once before the app renders (loadSecureStore, from main.jsx), and
@@ -22,6 +23,9 @@ const FALLBACK = {
     nip46Sk: { storage: () => localStorage, key: 'bies_nip46_client_sk' },
     nip46Bunker: { storage: () => localStorage, key: 'bies_nip46_bunker' },
     nwc: { storage: () => localStorage, key: 'bies_nwc_uri' },
+    // Sign-outs the server hasn't heard about yet: they hold the session's
+    // tokens until it has (session.js).
+    logoutPending: { storage: () => localStorage, key: 'bies_logout_pending' },
 };
 
 // iOS keeps Keychain items after the app is deleted. Marked in localStorage,

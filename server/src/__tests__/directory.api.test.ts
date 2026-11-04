@@ -90,6 +90,13 @@ async function member({ role = 'MEMBER', admin = false } = {}): Promise<Member> 
     return { id: user.id, token: signAccessToken({ id: user.id, role, isAdmin: admin }, session.sessionId) };
 }
 
+let viewing: Member | null = null;
+/** A list as some member sees it. */
+async function asViewer(url: string) {
+    viewing ??= await member();
+    return call('GET', url, { token: viewing.token });
+}
+
 const REASON = 'They took the deposit and never came back to finish the job.';
 
 /** A member adds a business, which goes live at once. */
@@ -136,7 +143,7 @@ describe('adding a business', () => {
         expect(reviews[0]).toMatchObject({ userId: ana.id, vote: 1, comment: 'Fixed a burst pipe at night and charged a fair price.' });
         expect(await row(res.body.id)).toMatchObject({ vouchCount: 1, reputationScore: 1, isCertified: false });
 
-        const list = await call('GET', '/api/directory?type=PROVIDER&limit=50');
+        const list = await asViewer('/api/directory?type=PROVIDER&limit=50');
         expect(list.body.data.map((l: any) => l.id)).toContain(res.body.id);
     });
 
@@ -232,7 +239,7 @@ describe('vouching and downvoting', () => {
         const res = await vote(await member(), id, 1);
         expect(res.status).toBe(409);
         expect(res.body.reason).toBe('not_live');
-        expect((await call('GET', '/api/directory?type=PROVIDER&limit=50')).body.data.map((l: any) => l.id)).not.toContain(id);
+        expect((await asViewer('/api/directory?type=PROVIDER&limit=50')).body.data.map((l: any) => l.id)).not.toContain(id);
 
         // Put back, it's BIES Trusted again.
         expect((await staffReview(id, 'approve')).status).toBe(200);
@@ -312,19 +319,19 @@ describe('BIES Trusted', () => {
     });
 
     it('is a filter and a sort order in the directory', async () => {
-        const list = await call('GET', '/api/directory?type=PROVIDER&certified=true&limit=50');
+        const list = await asViewer('/api/directory?type=PROVIDER&certified=true&limit=50');
         expect(list.status).toBe(200);
         expect(list.body.trustedThreshold).toBe(5);
         expect(list.body.data.length).toBeGreaterThan(0);
         expect(list.body.data.every((l: any) => l.isCertified)).toBe(true);
 
-        const byScore = await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=50');
+        const byScore = await asViewer('/api/directory?type=PROVIDER&sort=score&limit=50');
         const scores = byScore.body.data.map((l: any) => l.reputationScore);
         expect(scores).toEqual([...scores].sort((a, b) => b - a));
 
-        const home = await call('GET', '/api/directory?type=PROVIDER&category=home&limit=50');
+        const home = await asViewer('/api/directory?type=PROVIDER&category=home&limit=50');
         expect(home.body.data.every((l: any) => l.category === 'home')).toBe(true);
-        expect((await call('GET', '/api/directory?type=PROVIDER&category=legal')).body.data).toHaveLength(0);
+        expect((await asViewer('/api/directory?type=PROVIDER&category=legal')).body.data).toHaveLength(0);
     });
 
     it('sorts A–Z as people read it, by price (none last) and by the most recommended', async () => {
@@ -335,7 +342,7 @@ describe('BIES Trusted', () => {
         for (const voter of await Promise.all([1, 2].map(() => member()))) await vote(voter, arbol, 1);
 
         const ids = async (query: string) =>
-            (await call('GET', `/api/directory?type=PROVIDER&category=auto&limit=50&${query}`)).body.data.map((l: any) => l.id);
+            (await asViewer(`/api/directory?type=PROVIDER&category=auto&limit=50&${query}`)).body.data.map((l: any) => l.id);
         expect(await ids('sort=name')).toEqual([arbol, taller, zona]);
         expect(await ids('sort=price-low')).toEqual([taller, zona, arbol]);
         expect(await ids('sort=price-high')).toEqual([zona, taller, arbol]);
@@ -343,7 +350,7 @@ describe('BIES Trusted', () => {
         expect(await ids('sort=newest')).toEqual([taller, arbol, zona]);
 
         // Pages follow the order sorted in code, and count every match.
-        const second = await call('GET', '/api/directory?type=PROVIDER&category=auto&sort=name&limit=2&page=2');
+        const second = await asViewer('/api/directory?type=PROVIDER&category=auto&sort=name&limit=2&page=2');
         expect(second.body.data.map((l: any) => l.id)).toEqual([zona]);
         expect(second.body.pagination).toMatchObject({ page: 2, total: 3, totalPages: 2 });
     });
@@ -358,11 +365,11 @@ describe('BIES Trusted', () => {
             data: { createdAt: new Date('2026-01-01T00:00:00Z'), reputationScore: 50, vouchCount: 1 },
         });
 
-        const whole = (await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=50')).body;
+        const whole = (await asViewer('/api/directory?type=PROVIDER&sort=score&limit=50')).body;
         expect(whole.pagination.total).toBeLessThanOrEqual(50);
         const paged: string[] = [];
         for (let page = 1; ; page++) {
-            const res = await call('GET', `/api/directory?type=PROVIDER&sort=score&limit=2&page=${page}`);
+            const res = await asViewer(`/api/directory?type=PROVIDER&sort=score&limit=2&page=${page}`);
             expect(res.body.pagination).toMatchObject({ page, limit: 2 });
             paged.push(...res.body.data.map((l: any) => l.id));
             if (page >= res.body.pagination.totalPages) break;
@@ -370,7 +377,7 @@ describe('BIES Trusted', () => {
         expect(paged).toEqual(whole.data.map((l: any) => l.id));
 
         // Asked for more than 50 at a time: pages of 50, page 2 after the first 50.
-        const big = await call('GET', '/api/directory?type=PROVIDER&sort=score&limit=500&page=1');
+        const big = await asViewer('/api/directory?type=PROVIDER&sort=score&limit=500&page=1');
         expect(big.body.pagination.limit).toBe(50);
         expect(big.body.data.map((l: any) => l.id)).toEqual(whole.data.map((l: any) => l.id));
     });
@@ -440,11 +447,11 @@ describe('the farm directory', () => {
         });
         expect(await row(ownFarm.body.id)).toMatchObject({ status: 'active', vouchCount: 0 });
 
-        const farms = await call('GET', '/api/directory?type=FARM&sort=score&limit=50');
+        const farms = await asViewer('/api/directory?type=FARM&sort=score&limit=50');
         const ids = farms.body.data.map((l: any) => l.id);
         expect(ids.slice(0, 2)).toEqual([farm.body.id, ownFarm.body.id]);
         expect(farms.body.data.every((l: any) => l.type === 'FARM')).toBe(true);
-        const businesses = await call('GET', '/api/directory?type=PROVIDER&limit=50');
+        const businesses = await asViewer('/api/directory?type=PROVIDER&limit=50');
         expect(businesses.body.data.some((l: any) => l.type === 'FARM')).toBe(false);
     });
 });
@@ -468,7 +475,7 @@ describe('saving a listing', () => {
         expect(mine.body.data.map((l: any) => l.id)).toEqual([id]);
         expect(mine.body.data.map((l: any) => l.id)).not.toContain(otherId);
         // Signed out, or someone else: nothing saved.
-        expect((await call('GET', '/api/directory?type=PROVIDER&saved=true')).body.data).toHaveLength(0);
+        expect((await asViewer('/api/directory?type=PROVIDER&saved=true')).body.data).toHaveLength(0);
         expect((await call('GET', '/api/directory?type=PROVIDER&saved=true', { token: (await member()).token })).body.data).toHaveLength(0);
 
         expect((await call('DELETE', `/api/directory/${id}/save`, { token: me.token })).body).toEqual({ saved: false });
@@ -508,10 +515,9 @@ describe('reading a listing', () => {
         expect(signedIn.body.endorsements.map((e: any) => e.vote).sort()).toEqual([-1, 1]);
         expect(signedIn.body.endorsements.find((e: any) => e.vote === -1).comment).toBe(REASON);
 
-        const signedOut = await call('GET', `/api/directory/${id}`);
-        expect(signedOut.status).toBe(200);
-        expect(signedOut.body.endorsements).toEqual([]);
-        expect(signedOut.body).toMatchObject({ vouchCount: 1, downvoteCount: 1 });
+        // Signed out, listings are for members only (a shared one has its preview).
+        expect((await call('GET', `/api/directory/${id}`)).status).toBe(401);
+        expect((await call('GET', '/api/directory?type=PROVIDER')).status).toBe(401);
     });
 
     it('dates a changed vote from the change, so recommenders keep the order they recommended in', async () => {
@@ -740,6 +746,37 @@ describe('handing a listing over', () => {
         expect(await row(id)).toMatchObject({ ownerId: runner.id, isOwnBusiness: true });
         expect(await prisma.listingTransfer.count({ where: { listingId: id, status: 'pending' } })).toBe(0);
         expect(await prisma.listingTransfer.count({ where: { listingId: id, kind: 'staff', status: 'accepted' } })).toBe(1);
+    });
+
+    it("BIES's own page and an admin's listing change hands or go only through an admin", async () => {
+        const admin = await member({ role: 'ADMIN', admin: true });
+        const mod = await member({ role: 'MOD' });
+        const someone = await member();
+        const official = await liveListing(admin, { name: 'Build in El Salvador' });
+        await prisma.directoryListing.update({ where: { id: official }, data: { isOfficial: true } });
+        const adminsOwn = await liveListing(admin, { name: 'Taller de Mike' });
+
+        for (const id of [official, adminsOwn]) {
+            const move = await call('POST', `/api/admin/directory/${id}/owner`, { token: mod.token, body: { userId: someone.id } });
+            expect(move.status).toBe(403);
+            expect(move.body.reason).toBe('admins_only');
+            expect((await call('DELETE', `/api/admin/directory/${id}`, { token: mod.token })).status).toBe(403);
+            // A member's claim can't be accepted by a moderator either.
+            const claim = await call('POST', `/api/directory/${id}/claim`, { token: someone.token, body: {} });
+            expect((await call('POST', `/api/directory/transfers/${claim.body.id}/accept`, { token: mod.token })).status).toBe(403);
+            expect(await row(id)).toMatchObject({ ownerId: admin.id });
+        }
+
+        // Given BIES's page, a member can't pass it on.
+        const given = await call('POST', `/api/admin/directory/${official}/owner`, { token: admin.token, body: { userId: someone.id } });
+        expect(given.status).toBe(200);
+        const other = await member();
+        expect((await call('POST', `/api/directory/${official}/transfer`, { token: someone.token, body: { toUserId: other.id } })).body.reason).toBe('admins_only');
+
+        // A moderator still moves and removes ordinary listings.
+        const ordinary = await liveListing(someone);
+        expect((await call('POST', `/api/admin/directory/${ordinary}/owner`, { token: mod.token, body: { userId: other.id } })).status).toBe(200);
+        expect((await call('DELETE', `/api/admin/directory/${ordinary}`, { token: mod.token })).status).toBe(200);
     });
 
     it('a request goes stale if the listing changed hands in between', async () => {

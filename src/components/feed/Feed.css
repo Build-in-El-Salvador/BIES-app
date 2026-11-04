@@ -1012,9 +1012,16 @@
   border-radius: 8px;
   font-size: 0.85rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  z-index: 9999;
+  z-index: 10100; /* above the phone's bottom bar (MobileBottomNav, 10000) */
   animation: toast-in 0.2s ease-out;
   pointer-events: none;
+}
+
+/* On a phone, clear of the bottom bar (as GamificationToast). */
+@media (max-width: 768px) {
+  .primal-copy-toast {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @keyframes toast-in {

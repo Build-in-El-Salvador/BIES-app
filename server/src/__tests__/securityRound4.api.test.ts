@@ -89,7 +89,9 @@ async function member(name: string, { role = 'MEMBER', isAdmin = false, nip05Nam
     const user = await prisma.user.create({
         data: {
             nostrPubkey: pubkey, role, isAdmin,
-            termsVersion: '2026-10', termsAcceptedAt: new Date(), profile: { create: { name, nip05Name } },
+            termsVersion: '2026-10', termsAcceptedAt: new Date(),
+            // A BIES address the member claimed (Settings → Nostr).
+            profile: { create: { name, nip05Name, ...(nip05Name ? { nip05ClaimedAt: new Date() } : {}) } },
         },
     });
     const session = await createSession(user.id, 'native');
@@ -116,6 +118,20 @@ describe('suspended and deleted members', () => {
         const staff = await call('GET', `/api/profiles/${gone.id}`, { token: admin.token });
         expect(staff.status).toBe(200);
         expect(staff.body.user?.isBanned).toBeUndefined();
+    });
+
+    it('who is staff is for staff: to other members a moderator or admin is a member', async () => {
+        const viewer = await member('Viewer Three');
+        const mod = await member('Moderator Mo', { role: 'MOD' });
+        const admin = await member('Admin Al', { role: 'ADMIN', isAdmin: true });
+        for (const staff of [mod, admin]) {
+            const seen = await call('GET', `/api/profiles/${staff.id}`, { token: viewer.token });
+            expect(seen.status).toBe(200);
+            expect(seen.body.user.role).toBe('MEMBER');
+            expect(seen.body.user.isAdmin).toBeUndefined();
+        }
+        const list = await call('GET', '/api/profiles?search=Moderator%20Mo', { token: viewer.token });
+        expect(JSON.stringify(list.body)).not.toMatch(/"role":"MOD"|"isAdmin":true/);
     });
 
     it("aren't listed or found, and lose their NIP-05", async () => {

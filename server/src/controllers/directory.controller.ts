@@ -16,7 +16,8 @@ import { ADDED_AS_STAFF, runByWhere, runnerId, worksAtWhere } from './listingTea
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-const phoneRegex = /^[+0-9\s()-]*$/;
+// Digits and what people write between them, several numbers too ("7000-0000 / 2222-3333").
+const phoneRegex = /^[+0-9\s()\-/,.]*$/;
 
 /** Kinds of business in BIES Trusted (labels: directory.categories.* in the app). */
 export const DIRECTORY_CATEGORIES = [
@@ -98,9 +99,10 @@ const isStaff = (req: Request) => !!req.user && (req.user.isAdmin || req.user.ro
 
 const JSON_ARRAY_FIELDS = ['photos', 'languages', 'products', 'practices', 'skills'] as const;
 
+// Not their role: who is staff isn't for every member to read.
 const ownerSelect = {
     select: {
-        id: true, nostrPubkey: true, role: true,
+        id: true, nostrPubkey: true,
         profile: { select: { name: true, avatar: true } },
     },
 };
@@ -109,7 +111,7 @@ const ownerSelect = {
 // ZapButton passes as lud16/bolt12Offer (same shape Discover's cards use).
 const memberUserSelect = {
     select: {
-        id: true, nostrPubkey: true, role: true,
+        id: true, nostrPubkey: true,
         profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true, privacy: true } },
     },
 };
@@ -193,6 +195,15 @@ const DIRECTORY_ORDERS_IN_CODE: Record<string, (a: ListingSortKeys, b: ListingSo
 };
 
 /**
+ * Whether `userId` answers for a listing, and so deletes it: the member staff
+ * linked to it, or else the member who added it. Once staff link the member
+ * who runs it, whoever added it can still edit its details, not delete it.
+ */
+export function answersFor(listing: { ownerId: string; memberUserId: string | null }, userId: string): boolean {
+    return (listing.memberUserId ?? listing.ownerId) === userId;
+}
+
+/**
  * Whether the viewer may see which businesses `userId` runs and works at
  * ("Runs" and "Works at" on their profile), as they may see that profile's
  * details (services/profilePrivacy.ts): members only; not a member blocked
@@ -251,6 +262,9 @@ export async function listListings(req: Request, res: Response): Promise<void> {
 
         if (type && typeof type === 'string') where.type = type.toUpperCase();
         if (ownerId && typeof ownerId === 'string') {
+            // Someone else's listings say which businesses they run: only to
+            // whoever may see their profile's details, like ?runBy=.
+            if (ownerId !== req.user?.id && !(await showsWorkOf(req, ownerId))) { reply([], 0); return; }
             where.ownerId = ownerId;
             // When viewing own listings, show all statuses
             if (req.user && req.user.id === ownerId) {
@@ -323,7 +337,9 @@ export async function listListings(req: Request, res: Response): Promise<void> {
  */
 async function similarListings(name: unknown, req: Request) {
     if (typeof name !== 'string' || name.trim().length < 3) return [];
-    const typed = name.trim().slice(0, 120);
+    // A name's first 60 letters say which place it is; comparing more words
+    // costs more than the square of their number (similarNames.ts).
+    const typed = name.trim().slice(0, 60);
     const listings = await prisma.directoryListing.findMany({
         where: { status: 'active', isPublished: true, AND: [ACTIVE_MEMBER_RUNS_IT] },
         select: { id: true, name: true, type: true, location: true, photo: true, coverFrame: true, ownerId: true, memberUserId: true },
@@ -582,7 +598,9 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
-        if (existing.ownerId !== req.user!.id && !req.user!.isAdmin) {
+        // Whoever added it keeps its details up to date ("I work there"), and
+        // so does the member staff linked as its runner.
+        if (existing.ownerId !== req.user!.id && !answersFor(existing, req.user!.id) && !req.user!.isAdmin) {
             res.status(403).json({ error: 'Not authorized to update this listing' }); return;
         }
 
@@ -691,17 +709,17 @@ export async function updateListing(req: Request, res: Response): Promise<void> 
 
 /**
  * DELETE /directory/:id
- * Delete a listing (owner or admin).
+ * Delete a listing (the member who answers for it, or an admin).
  */
 export async function deleteListing(req: Request, res: Response): Promise<void> {
     try {
         const existing = await prisma.directoryListing.findUnique({
             where: { id: req.params.id },
-            select: { ownerId: true },
+            select: { ownerId: true, memberUserId: true },
         });
 
         if (!existing) { res.status(404).json({ error: 'Listing not found' }); return; }
-        if (existing.ownerId !== req.user!.id && !req.user!.isAdmin) {
+        if (!answersFor(existing, req.user!.id) && !req.user!.isAdmin) {
             res.status(403).json({ error: 'Not authorized to delete this listing' }); return;
         }
 

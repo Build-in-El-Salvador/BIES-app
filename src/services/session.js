@@ -22,7 +22,7 @@ export const API_BASE = import.meta.env?.VITE_API_URL || '/api';
 const ACCESS_KEY = 'bies_token';
 const USER_KEY = 'bies_user';
 const SKEW_KEY = 'bies_clock_skew';
-const LOGOUT_PENDING_KEY = 'bies_logout_pending';
+const LOGOUT_PENDING = 'logoutPending'; // secureStore.js
 
 /**
  * Refresh this long before the access token expires: a minute, or a quarter
@@ -281,7 +281,7 @@ export async function retryPendingLogout() {
 
 function readPending() {
     try {
-        const value = JSON.parse(localStorage.getItem(LOGOUT_PENDING_KEY) || '[]');
+        const value = JSON.parse(secureGet(LOGOUT_PENDING) || '[]');
         return Array.isArray(value) ? value : [];
     } catch {
         return [];
@@ -289,8 +289,9 @@ function readPending() {
 }
 
 function writePending(records) {
-    if (records.length) localStorage.setItem(LOGOUT_PENDING_KEY, JSON.stringify(records));
-    else localStorage.removeItem(LOGOUT_PENDING_KEY);
+    // In the Keychain in the phone app: the records hold live tokens.
+    if (records.length) secureSet(LOGOUT_PENDING, JSON.stringify(records));
+    else secureRemove(LOGOUT_PENDING);
 }
 
 /** True once the server has confirmed the logout. */

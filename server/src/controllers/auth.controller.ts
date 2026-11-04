@@ -17,6 +17,7 @@ import {
     deliverSession,
     refreshSession,
     refreshTokenFromRequest,
+    revokeOtherSessions,
     revokeSession,
     sessionFromRefreshToken,
     startSession,
@@ -353,8 +354,9 @@ async function completeEmailSignIn(req: Request, res: Response, user: any, isNew
         return;
     }
 
-    // Relay access, re-granted on every sign-in as Nostr login does.
-    addToRelayWhitelist(user.nostrPubkey, { proven: true });
+    // Relay access, re-granted on every sign-in as Nostr login does, once
+    // the member has accepted the terms of use (acceptTerms grants it then).
+    if (user.termsAcceptedAt) addToRelayWhitelist(user.nostrPubkey, { proven: true });
 
     if (isNewUser) {
         // Attribute the signup to an onboarding voucher (fire-and-forget — never blocks signup)
@@ -559,8 +561,9 @@ export async function nostrLogin(req: Request, res: Response): Promise<void> {
 
         // Add pubkey to relay whitelist so user can publish to the BIES relay.
         // Signing in proves the key, so a member rejoining after deleting
-        // their account gets access back.
-        addToRelayWhitelist(pubkey, { proven: true });
+        // their account gets access back. Not before they've accepted the
+        // terms of use: acceptTerms grants it then.
+        if (user.termsAcceptedAt) addToRelayWhitelist(pubkey, { proven: true });
 
         res.locals.auditUserId = user.id;
         res.json({ user: publicUser(user), ...session });
@@ -624,6 +627,21 @@ export async function refresh(req: Request, res: Response): Promise<void> {
  * phone's push registration, removed so it stops getting the account's
  * notifications.
  */
+/**
+ * POST /auth/end-other-sessions
+ * End every other session of this member, at once: their next request or
+ * refresh fails and their sockets close. This device stays signed in.
+ */
+export async function logoutOthers(req: Request, res: Response): Promise<void> {
+    try {
+        const ended = await revokeOtherSessions(req.user!.id, req.sessionId!, 'logout_others');
+        res.json({ ended });
+    } catch (error) {
+        console.error('Logout others error:', error);
+        res.status(500).json({ error: 'Failed to sign out your other devices' });
+    }
+}
+
 export async function logout(req: Request, res: Response): Promise<void> {
     let ended: { sessionId: string; userId: string } | null = null;
     const authHeader = req.headers.authorization;

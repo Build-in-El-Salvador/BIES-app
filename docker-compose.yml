@@ -85,7 +85,9 @@ services:
         limits:
           memory: 128M
 
+  # Off (nginx answers /bugs with 404): start it with --profile bugs.
   bies-bugs:
+    profiles: ["bugs"]
     build:
       context: ./bugs
     restart: unless-stopped
@@ -99,13 +101,23 @@ services:
           memory: 128M
 
   bies-translate:
-    image: libretranslate/libretranslate:latest
+    # Pinned: the image running since April 2026. Update it on purpose.
+    image: libretranslate/libretranslate@sha256:ccaf779244ce0956e6318fc4e23e6daa95fa45363b4a795d6cba07668efb0bdf
     restart: unless-stopped
+    volumes:
+      - translate-models:/home/libretranslate/.local
     environment:
       LT_LOAD_ONLY: "en,es"
       LT_DISABLE_WEB_UI: "true"
+      # Reached only through nginx's members-only /translate/translate; these
+      # bound what one request can cost (a long event description fits).
+      LT_CHAR_LIMIT: "10000"
+      LT_BATCH_LIMIT: "1"
+      LT_DISABLE_FILES_TRANSLATION: "true"
+    # Its own network, shared with nginx only: it can't reach the relay,
+    # the API or the database.
     networks:
-      - bies-net
+      - translate-net
     deploy:
       resources:
         limits:
@@ -131,6 +143,7 @@ services:
         condition: service_healthy
     networks:
       - bies-net
+      - translate-net
     deploy:
       resources:
         limits:
@@ -142,7 +155,10 @@ volumes:
   bugs-data:
   relay-data:
   relay-whitelist:
+  translate-models:
 
 networks:
   bies-net:
+    driver: bridge
+  translate-net:
     driver: bridge

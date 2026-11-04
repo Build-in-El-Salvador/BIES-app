@@ -24,6 +24,10 @@ export async function forgetOldAuditIps(): Promise<number> {
         where: { createdAt: { lt: cutoff }, OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }] },
         data: { ipAddress: null, userAgent: null },
     });
+    // The same 90 days for the IPs kept beside voucher redemptions and the
+    // old contact form's messages.
+    await prisma.voucherRedemption.updateMany({ where: { createdAt: { lt: cutoff }, ipAddress: { not: null } }, data: { ipAddress: null } });
+    await prisma.contactSubmission.updateMany({ where: { createdAt: { lt: cutoff }, ipAddress: { not: null } }, data: { ipAddress: null } });
     return count;
 }
 
@@ -48,6 +52,7 @@ const ACTION_MAP: Array<{ method: string; pattern: RegExp; action: string }> = [
     { method: 'POST', pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
     { method: 'PUT',  pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
     { method: 'DELETE', pattern: /^\/api\/admin\//, action: 'ADMIN_ACTION' },
+    { method: 'POST', pattern: /^\/api\/auth\/end-other-sessions/, action: 'AUTH_LOGOUT_OTHERS' },
     { method: 'POST', pattern: /^\/api\/auth\/logout/, action: 'AUTH_LOGOUT' },
     { method: 'POST', pattern: /^\/api\/projects\/.*\/deck\/request/, action: 'DECK_REQUEST' },
     { method: 'PUT',  pattern: /^\/api\/projects\/.*\/deck\/requests\//, action: 'DECK_REVIEW' },
@@ -77,6 +82,9 @@ function resolveAction(method: string, path: string): string | null {
     return null;
 }
 
+// A voucher's code is a bearer secret: the log keeps that one was used, not the code.
+const loggedPath = (path: string) => path.replace(/^(\/api\/vouchers\/code\/)[^/]+/i, '$1:code');
+
 export function auditLog(req: Request, res: Response, next: NextFunction): void {
     const action = resolveAction(req.method, req.path);
 
@@ -95,7 +103,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
 
         const metadata: Record<string, unknown> = {
             statusCode: res.statusCode,
-            path: req.path,
+            path: loggedPath(req.path),
         };
 
         // Include non-sensitive body keys for context
@@ -111,7 +119,7 @@ export function auditLog(req: Request, res: Response, next: NextFunction): void 
                 // Sign-in routes have no req.user; they name the account in res.locals.
                 userId: req.user?.id || res.locals.auditUserId || null,
                 action,
-                resource: req.path,
+                resource: loggedPath(req.path),
                 ipAddress,
                 userAgent,
                 metadata: JSON.stringify(metadata),

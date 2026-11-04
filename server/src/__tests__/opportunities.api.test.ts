@@ -431,16 +431,16 @@ describe('finding opportunities', () => {
         await call('PUT', `/api/projects/${closed.id}`, { token: ana.token, body: { closed: true } });
 
         const signedOut = await call('GET', `/api/search?q=${tag}&type=projects`);
-        expect(signedOut.body.projects).toEqual([]);
+        expect(signedOut.status).toBe(401);
         const found = await call('GET', `/api/search?q=${tag}&type=projects`, { token: ben.token });
         expect(found.body.projects.map((p: any) => p.id)).toEqual([open.id]);
         expect(found.body.projects[0]).toMatchObject({ type: 'business-for-sale' });
         expect(found.body.projects[0].whatsapp).toBeUndefined();
-        // From the cache too: signed out still gets none.
-        expect((await call('GET', `/api/search?q=${tag}&type=projects`)).body.projects).toEqual([]);
+        // From the cache too: signed out still gets nothing.
+        expect((await call('GET', `/api/search?q=${tag}&type=projects`)).status).toBe(401);
         const suggested = await call('GET', `/api/search/suggestions?q=${tag}`, { token: ben.token });
         expect(suggested.body.suggestions.map((s: any) => s.id)).toEqual([open.id]);
-        expect((await call('GET', `/api/search/suggestions?q=${tag}`)).body.suggestions).toEqual([]);
+        expect((await call('GET', `/api/search/suggestions?q=${tag}`)).status).toBe(401);
 
         expect((await call('POST', '/api/blocks', { token: ana.token, body: { userId: carl.id } })).status).toBe(201);
         expect((await call('GET', `/api/search?q=${tag}&type=projects`, { token: carl.token })).body.projects).toEqual([]);

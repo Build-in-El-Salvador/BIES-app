@@ -61,7 +61,8 @@ export default function ImageCropModal({ imageSrc, aspect = 1, shape = 'rect', o
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
+            // Above the bottom bar (10000), like the app's other sheets.
+            position: 'fixed', inset: 0, zIndex: 10100,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'rgba(0,0,0,0.7)',
         }}>
@@ -83,7 +84,8 @@ export default function ImageCropModal({ imageSrc, aspect = 1, shape = 'rect', o
                 </div>
 
                 {/* Cropper */}
-                <div style={{ position: 'relative', width: '100%', height: 400, background: '#111' }}>
+                {/* Short enough on a small phone for the buttons under it to show. */}
+                <div style={{ position: 'relative', width: '100%', height: 'min(400px, 55vh)', background: '#111' }}>
                     <Cropper
                         image={imageSrc}
                         crop={crop}

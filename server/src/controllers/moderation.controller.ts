@@ -17,7 +17,7 @@ import {
     isStaffUser,
 } from '../services/moderation.service';
 import { recomputeListingScore } from '../services/directoryReputation.service';
-import { requestEventRemoval } from '../services/relayWhitelist.service';
+import { addToRelayWhitelist, requestEventRemoval } from '../services/relayWhitelist.service';
 import { publicUser } from './auth.controller';
 import { discardUploads, linksIn } from '../services/uploads.service';
 
@@ -160,6 +160,8 @@ export async function acceptTerms(req: Request, res: Response): Promise<void> {
             data: { termsVersion: config.termsVersion, termsAcceptedAt: new Date() },
             include: { profile: true },
         });
+        // The members' relay, from now on (sign-in waits for the terms).
+        addToRelayWhitelist(user.nostrPubkey, { proven: true });
         res.json({ user: publicUser(user) });
     } catch (error) {
         console.error('[Terms] Accept failed:', error);

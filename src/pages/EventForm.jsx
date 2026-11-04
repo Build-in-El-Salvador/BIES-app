@@ -242,7 +242,8 @@ export default function EventForm() {
             category: form.category,
             visibility,
             startDate,
-            ...(endDate ? { endDate } : {}),
+            // On an edit, no end time is sent as none, so a cleared one goes.
+            ...(endDate ? { endDate } : editing ? { endDate: null } : {}),
             // The last day it may be on, as a day ("2026-12-19"): the server counts it to its end.
             ...(proposal ? {} : { repeat, repeatUntil: repeat && form.repeatUntil ? form.repeatUntil : null }),
             isOnline: form.online,

@@ -7,10 +7,11 @@ import {
     Sprout, RefreshCw, WheatOff, HeartHandshake,
     Languages, Target, Tag, Bitcoin, Flag, Ban, MoreHorizontal, Clock, Store,
     Building2, MessageCircle, Navigation, Share, Check, Bookmark, BookmarkCheck,
-    UserCheck, ArrowRightLeft, BadgeCheck,
+    UserCheck, ArrowRightLeft, BadgeCheck, Trash2,
 } from 'lucide-react';
 import { adminApi, directoryApi } from '../../services/api';
 import { cachedDetail, fetchDetail, forgetDetail, rememberDetail } from '../../utils/detailCache';
+import { clearLists } from '../../utils/listCache';
 import { listingPage } from '../../utils/detailPages';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
@@ -178,12 +179,28 @@ const ListingDetail = () => {
     }
 
     const isOwner = !!user?.id && listing.ownerId === user.id;
-    // The member who added it edits it. Admins can too (the API allows it),
-    // but from the ⋯ menu, so someone else's listing isn't changed by a slip.
-    const canAdminEdit = isAdmin && !isOwner;
     // Who answers for the listing: its linked member when staff entered it,
     // otherwise its creator (server: directory.controller.ts listingMember).
     const listingMemberId = listing.memberUserId || listing.ownerId;
+    // That member deletes it; they and whoever added it edit it ("I work
+    // there"); whoever added it hands it over while no one else is linked.
+    // Admins can edit too (the API allows it), but from the ⋯ menu, so
+    // someone else's listing isn't changed by a slip.
+    const manages = !!user?.id && listingMemberId === user.id;
+    const canEdit = isOwner || manages;
+    const canAdminEdit = isAdmin && !canEdit;
+    const deleteListing = async () => {
+        setShowMenu(false);
+        if (!window.confirm(t('directory.deleteConfirm'))) return;
+        try {
+            await directoryApi.delete(listing.id);
+            forgetDetail(listingPage(listing.id)[0]);
+            clearLists();
+            navigate(backPath, { replace: true });
+        } catch (err) {
+            window.alert(err?.message || t('directory.deleteFailed'));
+        }
+    };
     const listingMemberName = listing.memberUser?.profile?.name || listing.owner?.profile?.name || listing.name;
     const canModerate = !!user?.id && listingMemberId !== user.id && !isOwner;
     const isPending = listing.status === 'pending-review';
@@ -194,7 +211,7 @@ const ListingDetail = () => {
     const canClaim = !!user?.id && !isOwner && listing.status === 'active'
         && !transfers.some((tr) => tr.kind === 'claim' && tr.toUserId === user.id);
     const canMove = isStaff && !isOwner;
-    const hasMenu = canClaim || isOwner || canMove || canAdminEdit || canModerate || isAdmin;
+    const hasMenu = canClaim || isOwner || manages || canMove || canAdminEdit || canModerate || isAdmin;
     // BIES's own page (admins): events hosted as it are BIES events.
     const toggleOfficial = async () => {
         setShowMenu(false);
@@ -381,7 +398,7 @@ const ListingDetail = () => {
                                 <>
                                     <div className="dir-menu-backdrop" onClick={() => setShowMenu(false)} />
                                     <div className="dir-menu" role="menu">
-                                        {isOwner && (
+                                        {canEdit && (
                                             <button type="button" role="menuitem" onClick={() => { setShowMenu(false); navigate(`${backPath}/${listing.id}/edit`); }}>
                                                 <Edit3 size={16} /> {t('directory.editListing')}
                                             </button>
@@ -391,9 +408,14 @@ const ListingDetail = () => {
                                                 <UserCheck size={16} /> {t('directory.ownership.claimMenu', { context: isFarm ? 'farm' : undefined })}
                                             </button>
                                         )}
-                                        {isOwner && (
+                                        {manages && isOwner && (
                                             <button type="button" role="menuitem" onClick={() => openOwnership('offer')}>
                                                 <ArrowRightLeft size={16} /> {t('directory.ownership.offerMenu')}
+                                            </button>
+                                        )}
+                                        {manages && (
+                                            <button type="button" role="menuitem" className="danger" onClick={deleteListing}>
+                                                <Trash2 size={16} /> {t('directory.deleteListing')}
                                             </button>
                                         )}
                                         {canMove && (

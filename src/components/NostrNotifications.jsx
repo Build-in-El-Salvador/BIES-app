@@ -37,6 +37,72 @@ const appLink = (n) => {
     return actor ? `/builder/${actor}` : null;
 };
 
+// BIES's relay asks who's reading (NIP-42). Never with a signer that needs a
+// tap (Amber): these subscriptions open again by themselves, with no one
+// there to tap (as nostrService's handleRelayAuth).
+const relayAuth = async (evt) => {
+    if (!nostrSigner.canSignSilently) return undefined;
+    try { return await nostrSigner.signEvent(evt); } catch { return undefined; }
+};
+
+const sameIds = (a, b) => a.size === b.size && [...a].every((id) => b.has(id));
+
+const RETRY_FIRST_MS = 5000;
+const RETRY_MAX_MS = 30000;
+
+/**
+ * Keeps a subscription on BIES's relay open while the bell is up. It closes
+ * by itself when the connection goes: the app in the background, the Feed
+ * or sign-out closing the shared pool's connection, the relay dropping it.
+ * Then it's opened again after 5 s (longer while that keeps failing, up to
+ * 30 s), and at once when the page is shown again (the connection may have
+ * died in the background without a word).
+ * open({ onclose, oneose }) subscribes, passing both on to subscribeMany.
+ * Returns stop(): it closes the subscription, which then isn't reopened.
+ */
+function keepSubscribed(open) {
+    let sub = null;
+    let live = null; // the open one's token: a close from an older one is ours
+    let timer = null;
+    let wait = RETRY_FIRST_MS;
+    let stopped = false;
+    const start = () => {
+        clearTimeout(timer);
+        timer = null;
+        if (stopped) return;
+        const previous = sub;
+        const token = {};
+        live = token;
+        sub = open({
+            oneose: () => { if (live === token) wait = RETRY_FIRST_MS; },
+            onclose: () => {
+                // Not when we closed it (replaced, or stopped), nor twice.
+                if (stopped || live !== token || timer) return;
+                timer = setTimeout(start, wait);
+                wait = Math.min(wait * 2, RETRY_MAX_MS);
+            },
+        });
+        previous?.close();
+    };
+    // After the page's other listeners: the Feed's closes the connection then.
+    const onVisible = () => {
+        if (stopped || document.visibilityState !== 'visible') return;
+        clearTimeout(timer);
+        wait = RETRY_FIRST_MS;
+        timer = setTimeout(start, 0);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    start();
+    return () => {
+        stopped = true;
+        clearTimeout(timer);
+        timer = null;
+        document.removeEventListener('visibilitychange', onVisible);
+        sub?.close();
+        sub = null;
+    };
+}
+
 /**
  * NostrNotifications — subscribes to the BIES private relay for reactions,
  * reposts, and replies targeting the current user's posts.  Renders a bell
@@ -56,8 +122,6 @@ const NostrNotifications = ({ mobile = false }) => {
     });
     const navigate = useNavigate();
     const fetchedProfiles = useRef(new Set());
-    const subRef = useRef(null);
-    const postsSubRef = useRef(null);
 
     const { user, notifications: appNotifications, refreshNotifications } = useAuth();
     const { flags } = useFeatureFlags();
@@ -124,36 +188,44 @@ const NostrNotifications = ({ mobile = false }) => {
     }, []);
 
     // Step 1: Subscribe to the user's own posts on BIES relay to know which post IDs are "mine"
+    // (kept open: keepSubscribed). Opened again, the same posts leave step 2
+    // as it is; a post that's new (since, or after it was opened) opens step 2 again with it.
     useEffect(() => {
-        if (!myPubkey) return;
+        if (!myPubkey) return undefined;
 
-        const postIds = new Set();
-        const sub = nostrService.pool.subscribeMany(
-            [BIES_RELAY],
-            { kinds: [1], authors: [myPubkey], limit: 200 },
-            {
-                onevent: (event) => {
-                    postIds.add(event.id);
-                },
-                oneose: () => {
-                    setMyPostIds(postIds);
-                },
-                onauth: async (evt) => { try { return await nostrSigner.signEvent(evt); } catch { return undefined; } },
-            }
-        );
-        postsSubRef.current = sub;
-        return () => { if (sub) sub.close(); };
+        return keepSubscribed(({ onclose, oneose }) => {
+            const postIds = new Set();
+            let eosed = false;
+            return nostrService.pool.subscribeMany(
+                [BIES_RELAY],
+                { kinds: [1], authors: [myPubkey], limit: 200 },
+                {
+                    onevent: (event) => {
+                        postIds.add(event.id);
+                        if (eosed) setMyPostIds(prev => (prev.has(event.id) ? prev : new Set([...prev, event.id])));
+                    },
+                    oneose: () => {
+                        oneose();
+                        eosed = true;
+                        setMyPostIds(prev => (sameIds(prev, postIds) ? prev : new Set(postIds)));
+                    },
+                    onclose,
+                    onauth: relayAuth,
+                }
+            );
+        });
     }, [myPubkey]);
 
     // Step 2: Subscribe to reactions, reposts, and replies on the BIES relay
+    // (kept open: keepSubscribed; what it sends again is skipped by id).
     useEffect(() => {
-        if (!myPubkey || myPostIds.size === 0) return;
+        if (!myPubkey || myPostIds.size === 0) return undefined;
 
         const postIdArray = [...myPostIds];
         const profileQueue = new Set();
         let debounceTimer = null;
 
-        const sub = nostrService.pool.subscribeMany(
+        const stop = keepSubscribed(({ onclose, oneose }) => nostrService.pool.subscribeMany(
             [BIES_RELAY],
             { kinds: [7, 6, 1], '#e': postIdArray, limit: 200 },
             {
@@ -197,20 +269,21 @@ const NostrNotifications = ({ mobile = false }) => {
                     }, 500);
                 },
                 oneose: () => {
+                    oneose();
                     // Fetch all queued profiles
                     if (profileQueue.size > 0) {
                         fetchProfiles([...profileQueue]);
                         profileQueue.clear();
                     }
                 },
-                onauth: async (evt) => { try { return await nostrSigner.signEvent(evt); } catch { return undefined; } },
+                onclose,
+                onauth: relayAuth,
             }
-        );
+        ));
 
-        subRef.current = sub;
         return () => {
             clearTimeout(debounceTimer);
-            if (sub) sub.close();
+            stop();
         };
     }, [myPubkey, myPostIds, fetchProfiles]);
 

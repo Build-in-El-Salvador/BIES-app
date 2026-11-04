@@ -72,44 +72,60 @@ export async function importEventFromUrl(req: Request, res: Response): Promise<v
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function extractOgTags(html: string): Record<string, string> {
+const META_TAG_MAX = 2048;
+const META_ATTR = /([^\s=/>"']+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
+
+/**
+ * The page's <meta property|name="…" content="…"> tags, in any attribute
+ * order. A linear scan: each tag is read once, from its `<meta` to the next
+ * `>`, and the scan carries on after that `>`, so no part of the page is
+ * read twice. (A regex over the whole page took seconds on a crafted page of
+ * unclosed tags, and the server is one process.)
+ */
+export function extractOgTags(html: string): Record<string, string> {
     const tags: Record<string, string> = {};
-    // Match <meta property="og:*" content="*"> and <meta name="*" content="*">
-    // Runs inside a tag are bounded ({0,1000}): unbounded ones take minutes
-    // on a crafted page of unclosed tags, and the server is one process.
-    const metaRegex = /<meta\s+(?:[^>]{0,1000}?\s)?(?:property|name)=["']([^"']+)["']\s+content=["']([^"']*)["'][^>]{0,1000}>/gi;
-    let match;
-    while ((match = metaRegex.exec(html)) !== null) {
-        tags[match[1].toLowerCase()] = decodeHtmlEntities(match[2]);
-    }
-    // Also try reversed order: content before property
-    const metaRegex2 = /<meta\s+content=["']([^"']*)["']\s+(?:property|name)=["']([^"']+)["'][^>]{0,1000}>/gi;
-    while ((match = metaRegex2.exec(html)) !== null) {
-        tags[match[2].toLowerCase()] = decodeHtmlEntities(match[1]);
+    const lower = html.toLowerCase();
+    let from = 0;
+    while (from < html.length) {
+        const start = lower.indexOf('<meta', from);
+        if (start === -1) break;
+        const end = html.indexOf('>', start + 5);
+        if (end === -1) break;
+        from = end + 1;
+        if (!/\s/.test(html[start + 5] ?? '') || end - start > META_TAG_MAX) continue;
+        const attrs: Record<string, string> = {};
+        for (const m of html.slice(start + 5, end).matchAll(META_ATTR)) {
+            const name = m[1].toLowerCase();
+            if (!(name in attrs)) attrs[name] = m[2] ?? m[3] ?? m[4] ?? '';
+        }
+        const key = attrs.property || attrs.name;
+        if (key && 'content' in attrs) tags[key.toLowerCase()] = decodeHtmlEntities(attrs.content);
     }
     return tags;
 }
 
+const JSON_LD_TYPE = /\btype\s*=\s*["']?application\/ld\+json["'\s]?/i;
+
 /**
- * The JSON-LD blocks in a page. A linear scan: each opening tag is matched
- * only at its own position, and the search for its closing tag moves on, so
- * a crafted page of unclosed tags can't make it quadratic.
+ * The JSON-LD blocks in a page. A linear scan, like extractOgTags: each
+ * `<script` tag is read once, up to its `>`, and the scan carries on after
+ * it (or after the block's `</script>`), so no part of the page is read
+ * twice, however many tags are left unclosed.
  */
 export function jsonLdBlocks(html: string): string[] {
     const blocks: string[] = [];
-    const opening = /<script[^>]{0,1000}type=["']application\/ld\+json["'][^>]{0,1000}>/giy;
     const lower = html.toLowerCase();
     let from = 0;
     while (from < html.length) {
         const start = lower.indexOf('<script', from);
         if (start === -1) break;
-        opening.lastIndex = start;
-        const tag = opening.exec(html);
-        if (!tag) { from = start + 7; continue; }
-        const bodyStart = start + tag[0].length;
-        const end = lower.indexOf('</script>', bodyStart);
+        const tagEnd = html.indexOf('>', start + 7);
+        if (tagEnd === -1) break;
+        from = tagEnd + 1;
+        if (tagEnd - start > META_TAG_MAX || !JSON_LD_TYPE.test(html.slice(start + 7, tagEnd))) continue;
+        const end = lower.indexOf('</script>', tagEnd + 1);
         if (end === -1) break;
-        blocks.push(html.slice(bodyStart, end));
+        blocks.push(html.slice(tagEnd + 1, end));
         from = end + 9;
     }
     return blocks;

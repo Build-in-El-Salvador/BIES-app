@@ -38,7 +38,7 @@ function oneAtATime<T>(eventId: string, task: () => Promise<T>): Promise<T> {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Invites this member sent in the last day, as notifications that went out. */
-async function sentToday(actorId: string): Promise<number> {
+export async function sentToday(actorId: string): Promise<number> {
     return prisma.notification.count({
         where: { type: 'EVENT_RSVP', createdAt: { gte: new Date(Date.now() - DAY_MS) }, data: { contains: `"inviterId":"${actorId}","status":"INVITED"` } },
     });

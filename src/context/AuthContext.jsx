@@ -414,7 +414,10 @@ export const AuthProvider = ({ children }) => {
 
     const fetchInitialNotifications = async () => {
         try {
-            const result = await notificationsApi.list({ limit: 20 });
+            // As many as the server gives (50): the bell shows only some kinds
+            // (NostrNotifications.jsx inBell), so 20 newer ones of other kinds
+            // would push a hand-over request or a new report out of it.
+            const result = await notificationsApi.list({ limit: 50 });
             const list = result?.data || result || [];
             if (Array.isArray(list)) {
                 setNotifications(list);

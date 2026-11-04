@@ -40,6 +40,7 @@ import adminRoutes from '../routes/admin.routes';
 import moderationRoutes from '../routes/moderation.routes';
 import previewRoutes from '../routes/preview.routes';
 import { setFlags } from '../services/featureFlags.service';
+import { deleteAccount } from '../services/account.service';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 
@@ -167,6 +168,33 @@ describe('who hosts an event', () => {
     });
 });
 
+describe('when the member who made a business\'s event goes', () => {
+    it('suspended or deleted, the events they hosted as a business stay up with whoever runs it; their own go', async () => {
+        const owner = await member();
+        const teammate = await member();
+        const admin = await member({ admin: true });
+        const viewer = await member();
+        const cafe = await business(owner, true, 'Café Sigue');
+        await call('POST', `/api/directory/${cafe}/team`, { token: owner.token, body: { userId: teammate.id } });
+        const asCafe = (await event(teammate, { hostListingId: cafe })).body.id;
+        const asThemselves = (await event(teammate)).body.id;
+
+        expect((await call('PUT', `/api/admin/users/${teammate.id}/ban`, { token: admin.token, body: { banned: true } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id: asCafe } }))!.hostId).toBe(owner.id);
+        expect((await call('GET', `/api/events/${asCafe}`, { token: viewer.token })).status).toBe(200);
+
+        // Deleted: the business's event stays, their own goes.
+        const other = await member();
+        const second = (await event(other, { hostListingId: (await business(other, true)) })).body.id;
+        const theirs = (await event(other)).body.id;
+        await prisma.event.update({ where: { id: second }, data: { hostListing: { update: { ownerId: owner.id, isOwnBusiness: true } } } });
+        await deleteAccount(other.id, { notify: false });
+        expect((await prisma.event.findUnique({ where: { id: second } }))?.hostId).toBe(owner.id);
+        expect(await prisma.event.findUnique({ where: { id: theirs } })).toBeNull();
+        expect(await prisma.event.findUnique({ where: { id: asThemselves } })).not.toBeNull(); // suspended, not deleted
+    });
+});
+
 describe('co-hosts and sponsors', () => {
     it('are members, businesses or names, in order; the people named hear about it', async () => {
         const host = await member({ name: 'Mateo Host' });
@@ -200,6 +228,9 @@ describe('co-hosts and sponsors', () => {
         const blocker = await member();
         await call('POST', '/api/blocks', { token: blocker.token, body: { userId: host.id } });
         expect((await event(host, { partners: [{ role: 'COHOST', userId: blocker.id }] })).body.reason).toBe('blocked');
+        // Nor the business that member runs.
+        const theirs = await business(blocker);
+        expect((await event(host, { partners: [{ role: 'SPONSOR', listingId: theirs }] })).body.reason).toBe('no_listing');
         expect((await event(host, { partners: [{ role: 'SPONSOR', name: 'X', logo: '/uploads/public/1761400000000-0123456789abcdef0123456789abcdef.jpg' }] })).body.reason).toBe('logo_not_yours');
         const many = Array.from({ length: 13 }, (_, i) => ({ role: 'SPONSOR', name: `Sponsor ${i}` }));
         expect((await event(host, { partners: many })).status).toBe(400);
@@ -529,6 +560,42 @@ describe('the events list and page', () => {
         expect((await call('POST', `/api/events/${created.body.id}/rsvp`, { token: guest.token, body: { status: 'GOING' } })).status).toBe(200);
         expect((await call('GET', `/api/events/${created.body.id}`, { token: other.token })).status).toBe(404);
         expect((await call('POST', `/api/events/${created.body.id}/rsvp`, { token: other.token, body: { status: 'GOING' } })).status).toBe(404);
+    });
+
+    it('a one-off event that\'s over takes no more answers', async () => {
+        const host = await member();
+        const late = await member();
+        const done = await event(host, { startDate: inDays(-2), endDate: inDays(-1.9) });
+        const res = await call('POST', `/api/events/${done.body.id}/rsvp`, { token: late.token, body: { status: 'GOING' } });
+        expect(res.status).toBe(409);
+        expect(res.body.reason).toBe('event_over');
+    });
+
+    it('an end time can be taken off on an edit, and can\'t come before the start', async () => {
+        const host = await member();
+        const created = await event(host, { startDate: inDays(5), endDate: inDays(5.1) });
+        const id = created.body.id;
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(5), endDate: null } })).status).toBe(200);
+        expect((await prisma.event.findUnique({ where: { id } }))!.endDate).toBeNull();
+        const backwards = await call('PUT', `/api/events/${id}`, { token: host.token, body: { startDate: inDays(5), endDate: inDays(4) } });
+        expect(backwards.status).toBe(400);
+        expect(backwards.body.reason).toBe('date_end_before_start');
+        expect((await event(host, { startDate: inDays(5), endDate: inDays(4) })).body.reason).toBe('date_end_before_start');
+    });
+
+    it('a guest taken off a private event\'s list loses it, even after answering', async () => {
+        const host = await member();
+        const stays = await member();
+        const goes = await member();
+        const created = await event(host, { visibility: 'PRIVATE', guestList: [{ name: 'Stays', userId: stays.id }, { name: 'Goes', userId: goes.id }] });
+        const id = created.body.id;
+        for (const m of [stays, goes]) expect((await call('POST', `/api/events/${id}/rsvp`, { token: m.token, body: { status: 'GOING' } })).status).toBe(200);
+
+        expect((await call('PUT', `/api/events/${id}`, { token: host.token, body: { guestList: [{ name: 'Stays', userId: stays.id }] } })).status).toBe(200);
+        expect((await call('GET', `/api/events/${id}`, { token: goes.token })).status).toBe(404);
+        expect((await call('POST', `/api/events/${id}/rsvp`, { token: goes.token, body: { status: 'GOING' } })).status).toBe(404);
+        expect((await call('GET', `/api/events/${id}`, { token: stays.token })).status).toBe(200);
+        expect(await prisma.eventAttendee.count({ where: { eventId: id, userId: stays.id } })).toBe(1);
     });
 });
 

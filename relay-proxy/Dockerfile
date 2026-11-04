@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY index.js contentFilter.js noteFilter.js ./
+COPY index.js contentFilter.js noteFilter.js writeRules.js ./
 
 RUN chown -R appuser:appuser /app
 USER appuser

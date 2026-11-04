@@ -80,7 +80,8 @@ const TYPE_FIELDS: Record<OpportunityType, readonly string[]> = {
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
-const phoneRegex = /^[+0-9\s()-]*$/;
+// Digits and what people write between them, several numbers too ("7000-0000 / 2222-3333").
+const phoneRegex = /^[+0-9\s()\-/,.]*$/;
 
 // http(s) links only.
 const webLink = z.string().trim().max(2000)

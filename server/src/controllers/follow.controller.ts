@@ -20,7 +20,13 @@ async function networkHidden(req: Request, userId: string): Promise<boolean> {
  * ways, as their profile is (staff: only blocks they made themselves).
  */
 async function blockedNetwork(req: Request, userId: string): Promise<boolean> {
-    if (!req.user || req.user.id === userId) return false;
+    if (req.user?.id === userId) return false;
+    // A suspended or deleted member's lists go with their profile (staff still see them).
+    if (!isStaffUser(req.user)) {
+        const member = await prisma.user.findUnique({ where: { id: userId }, select: { isBanned: true, deletedAt: true } });
+        if (!member || member.isBanned || member.deletedAt) return true;
+    }
+    if (!req.user) return false;
     return isStaffUser(req.user)
         ? hasBlocked(req.user.id, { id: userId })
         : blockedEitherWay(req.user.id, userId);
@@ -156,7 +162,7 @@ export async function getFollowers(req: Request, res: Response): Promise<void> {
                 include: {
                     follower: {
                         select: {
-                            id: true, nostrPubkey: true, role: true, isVerified: true,
+                            id: true, nostrPubkey: true, isVerified: true,
                             profile: { select: { name: true, avatar: true, bio: true, company: true } },
                         },
                     },
@@ -219,7 +225,7 @@ export async function getFollowing(req: Request, res: Response): Promise<void> {
                 include: {
                     following: {
                         select: {
-                            id: true, nostrPubkey: true, role: true, isVerified: true,
+                            id: true, nostrPubkey: true, isVerified: true,
                             profile: { select: { name: true, avatar: true, bio: true, company: true } },
                         },
                     },

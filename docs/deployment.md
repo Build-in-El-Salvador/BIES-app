@@ -499,9 +499,9 @@ If the container crash-loops right after a deploy, check the logs for Prisma
 migration errors first (`P3009` failed migration, `P3018` object already
 exists). Recovery: `prisma migrate resolve --rolled-back <name>` for a
 migration that died before applying, `--applied <name>` for one whose objects
-already exist — see the Migrations section above. Note that while a deploy
-fails, `deploy/auto-deploy.sh` retries the full `--no-cache` rebuild on every
-cron tick until it succeeds (check `deploy/deploy.log`).
+already exist — see the Migrations section above. Deploys are by hand (there
+is no auto-deploy: the old `deploy/auto-deploy.sh` was removed in Nov 2026), so
+a failed one stays failed until it's rolled back or redone.
 
 ### Relay Auth Fails
 

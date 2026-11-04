@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import prisma from '../lib/prisma';
@@ -66,6 +66,50 @@ const upload = multer({
 
 export const uploadMiddleware = upload.single('file');
 
+// Uploads being received and made, counted before multer reads them: a photo
+// or deck is held whole in memory (up to 50 MB) until it's done, so as many
+// as arrive at once could take the server past its memory. A post's worth
+// per member, and a score in all; more are turned away until those are done.
+const RECEIVING_PER_MEMBER = 6;
+const RECEIVING_AT_ONCE = 20;
+const receivingOf = new Map<string, number>();
+let receivingInAll = 0;
+
+// What one member may store in a day: hundreds of photos, or a dozen long
+// videos. Past it, the disk the box shares with every service is safe.
+const DAILY_STORAGE_BYTES = 500 * 1024 * 1024;
+
+async function overDailyStorage(userId: string, adding: number): Promise<boolean> {
+    const stored = await prisma.upload.aggregate({
+        where: { userId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        _sum: { size: true },
+    });
+    return (stored._sum.size ?? 0) + adding > DAILY_STORAGE_BYTES;
+}
+
+export function uploadSlot(req: Request, res: Response, next: NextFunction): void {
+    const userId = req.user!.id;
+    const mine = receivingOf.get(userId) ?? 0;
+    if (mine >= RECEIVING_PER_MEMBER || receivingInAll >= RECEIVING_AT_ONCE) {
+        res.status(429).json({ error: 'Too many uploads at once. Try again in a moment.', reason: 'busy' });
+        return;
+    }
+    receivingOf.set(userId, mine + 1);
+    receivingInAll += 1;
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        const left = (receivingOf.get(userId) ?? 1) - 1;
+        if (left > 0) receivingOf.set(userId, left);
+        else receivingOf.delete(userId);
+        receivingInAll = Math.max(0, receivingInAll - 1);
+    };
+    res.on('finish', release);
+    res.on('close', release);
+    next();
+}
+
 // Videos wait for their turn (mediaProcessing.ts makes one at a time): as
 // many of one member's as a post has attachments, and a dozen in all, so one
 // member can't keep everyone else's waiting. More are turned away until
@@ -114,6 +158,10 @@ export async function uploadMedia(req: Request, res: Response): Promise<void> {
         const allowedMedia = MEDIA_TYPES;
         if (!allowedMedia.includes(req.file.mimetype)) {
             res.status(400).json({ error: 'Only images and videos are allowed for media upload' });
+            return;
+        }
+        if (await overDailyStorage(req.user!.id, req.file.size)) {
+            res.status(429).json({ error: 'You\'ve added a lot of photos and videos today. Try again tomorrow.', reason: 'daily_storage' });
             return;
         }
 
@@ -268,6 +316,10 @@ export async function uploadDeck(req: Request, res: Response): Promise<void> {
     } catch (error) {
         console.error('Upload deck error:', error);
         res.status(500).json({ error: 'Failed to upload deck' });
+    } finally {
+        // A file sent as a video went to disk (onDisk above) and is refused
+        // here: it goes now, not at the next restart.
+        if (req.file?.path) await fs.promises.rm(req.file.path, { force: true }).catch(() => {});
     }
 }
 

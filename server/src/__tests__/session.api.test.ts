@@ -30,6 +30,7 @@ const db = vi.hoisted(() => {
             if (cond && typeof cond === 'object' && !(cond instanceof Date) && 'lt' in cond) {
                 return row[key] instanceof Date && row[key] < cond.lt;
             }
+            if (cond && typeof cond === 'object' && !(cond instanceof Date) && 'not' in cond) return row[key] !== cond.not;
             return row[key] === cond || (cond === null && row[key] == null);
         });
     }
@@ -430,6 +431,25 @@ describe('web app cookie', () => {
 // ─── Logout ──────────────────────────────────────────────────────────────────
 
 describe('logout', () => {
+    it('signing out other devices ends every other session of the member, and only those', async () => {
+        const here = await signIn();
+        const phone = await signIn();
+        const laptop = await signIn();
+        const bobs = await signIn(BOB);
+        const res = await fetch(`${base}/api/auth/end-other-sessions`, { method: 'POST', headers: { Authorization: `Bearer ${here.token}` } });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ended: 2 });
+        for (const gone of [phone, laptop]) {
+            expect(sessionRow(gone.sessionId).revokedReason).toBe('logout_others');
+            expect((await getPrivate(gone.token)).body.reason).toBe('session_ended');
+            expect((await refresh({ refreshToken: gone.refreshToken })).status).toBe(401);
+        }
+        expect((await getPrivate(here.token)).status).toBe(200);
+        expect((await getPrivate(bobs.token)).status).toBe(200);
+        // Signed out, there's nothing to sign out.
+        expect((await fetch(`${base}/api/auth/end-other-sessions`, { method: 'POST' })).status).toBe(401);
+    });
+
     it('ends the session: neither token works afterwards', async () => {
         const first = await signIn();
         expect((await logout({ Authorization: `Bearer ${first.token}` })).status).toBe(200);

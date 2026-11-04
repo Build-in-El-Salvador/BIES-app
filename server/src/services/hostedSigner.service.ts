@@ -132,7 +132,7 @@ export async function exportHostedKey(userId: string): Promise<string | null> {
  * - 31777, passkey key backups: there is no key on the device to back up.
  */
 export const APP_SIGNABLE_KINDS = new Set([
-    0, 1, 3, 5, 6, 7, 1984, 9734, 10002, 22242, 24242, 30402, 31923, 31925,
+    0, 1, 3, 5, 6, 7, 1063, 1984, 9734, 10002, 22242, 24242, 30402, 31923, 31925,
 ]);
 
 const MAX_PAST_SECONDS = 60 * 60;

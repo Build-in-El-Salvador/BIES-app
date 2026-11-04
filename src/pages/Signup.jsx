@@ -119,7 +119,14 @@ const Signup = () => {
                 const { authService } = await import('../services/authService.js');
                 const profileData = { name: profile.name };
                 if (nip05Name.trim()) profileData.nip05Name = nip05Name.trim().toLowerCase();
-                await authService.completeNostrProfile(profileData);
+                try {
+                    await authService.completeNostrProfile(profileData);
+                } catch (err) {
+                    // The BIES address was taken meanwhile: the name is kept all
+                    // the same, and an address can be claimed in Settings → Nostr.
+                    if (err?.status !== 409 || !profileData.nip05Name) throw err;
+                    await authService.completeNostrProfile({ name: profile.name });
+                }
                 // The profile step (ProfileGate) then only asks for a photo.
                 await refreshUser();
 

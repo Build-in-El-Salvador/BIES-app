@@ -74,6 +74,11 @@ describe('photos', () => {
         await expect(prepareMedia(Buffer.from('%PDF-1.7'), 'application/pdf')).rejects.toBeInstanceOf(UnreadableMediaError);
     });
 
+    it('a PNG sent as a JPEG (saved as .jpg) is still a photo', async () => {
+        const png = await sharp({ create: { width: 40, height: 40, channels: 3, background: '#00a' } }).png().toBuffer();
+        expect((await prepareMedia(png, 'image/jpeg')).width).toBe(40);
+    });
+
     it('GIFs are kept as they are', async () => {
         const gif = await solid(40, 30).gif().toBuffer();
         const out = await prepareMedia(gif, 'image/gif');
