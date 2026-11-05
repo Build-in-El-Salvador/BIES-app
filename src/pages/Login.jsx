@@ -121,7 +121,7 @@ const Login = ({ nostr = false }) => {
             // In place of the sign-in page, so back doesn't return to it.
             navigate(afterSignIn, { replace: true });
         } else {
-            const message = result.error || 'Login failed. Please try again.';
+            const message = result.error || t('login.errors.failed');
             setError(message);
             setInviteError(INVITE_REASONS.includes(result.reason) ? message : null);
         }
@@ -200,7 +200,7 @@ const Login = ({ nostr = false }) => {
             const result = await loginWithNostr();
             handleResult(result);
         } catch (err) {
-            setError(err.message || 'An unexpected error occurred.');
+            setError(err.message || t('login.errors.unexpected'));
         } finally {
             setLoading(false);
         }
@@ -209,24 +209,20 @@ const Login = ({ nostr = false }) => {
     const friendlyPasskeyError = (msg = '') => {
         if (/rp\.?id.*origin|origin.*rp\.?id/i.test(msg)) {
             if (isLikelyExtensionInterference(msg)) {
-                return 'A password manager extension is intercepting passkey requests. ' +
-                    'Disable it (e.g. Bitwarden, 1Password) and try again.';
+                return t('login.errors.passkeyExtension');
             }
-            return 'Cross-origin passkey failed. Try disabling password manager extensions, ' +
-                'or use Chrome, Edge, or Safari.';
+            return t('login.errors.passkeyOrigin');
         }
         if (/credential manager/i.test(msg)) {
-            return 'The credential manager encountered an error. ' +
-                'Try restarting your browser or use your nsec key to log in.';
+            return t('login.errors.credentialManager');
         }
         if (/prf/i.test(msg)) {
             return t('passkeySave.prfUnsupported');
         }
         if (/no discoverable passkey found|no event matches credential/i.test(msg)) {
-            return 'No passkey found for this device. ' +
-                'Log in with your nsec key, then set up a new passkey in Settings.';
+            return t('login.errors.noPasskey');
         }
-        return msg || 'Passkey login failed.';
+        return msg || t('login.errors.passkeyFailed');
     };
 
     const handlePasskeyLogin = async () => {
@@ -313,7 +309,7 @@ const Login = ({ nostr = false }) => {
             await signInWithKey(nsecInput.trim());
         } catch (err) {
             console.error('nsec login error:', err);
-            setError(err?.message || String(err) || 'Invalid nsec key or login failed.');
+            setError(err?.message || String(err) || t('login.errors.nsec'));
         } finally {
             setLoading(false);
         }
@@ -334,7 +330,7 @@ const Login = ({ nostr = false }) => {
                 handleResult(await loginWithSeedPhrase(seedInput));
             }
         } catch (err) {
-            setError(err.message || 'Invalid seed phrase or login failed.');
+            setError(err.message || t('login.errors.seed'));
         } finally {
             setLoading(false);
         }
@@ -349,7 +345,7 @@ const Login = ({ nostr = false }) => {
             const result = await loginWithBunker(bunkerInput);
             handleResult(result);
         } catch (err) {
-            setError(err.message || 'Failed to connect to remote signer.');
+            setError(err.message || t('login.errors.remoteSigner'));
         } finally {
             setLoading(false);
         }
@@ -370,7 +366,7 @@ const Login = ({ nostr = false }) => {
                 setLoginMode('bunker');
                 setBunkerView('scan');
             } else if (!/timed out/i.test(err.message || '')) {
-                setError(err.message || 'Amber login failed.');
+                setError(err.message || t('login.errors.amber'));
             }
         }
     };
@@ -620,7 +616,7 @@ const Login = ({ nostr = false }) => {
                             <input
                                 type="password"
                                 name="password"
-                                placeholder="Paste your nsec key..."
+                                placeholder={t('login.pasteNsec')}
                                 value={nsecInput}
                                 onChange={(e) => setNsecInput(e.target.value)}
                                 className="key-input"
@@ -640,7 +636,7 @@ const Login = ({ nostr = false }) => {
                             ) : (
                                 <NostrIcon size={20} color="#8b5cf6" />
                             )}
-                            <span>{loading && nsecInput.trim() ? 'Connecting...' : 'Login with nsec'}</span>
+                            <span>{loading && nsecInput.trim() ? t('login.connecting') : t('login.loginWithNsec')}</span>
                         </button>
                     </form>
                 )}
@@ -649,7 +645,7 @@ const Login = ({ nostr = false }) => {
                 {loginMode === 'seed' && (
                     <form onSubmit={handleSeedLogin} className="w-full" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <textarea
-                            placeholder="Enter your 12 or 24 word seed phrase..."
+                            placeholder={t('login.seedPlaceholder')}
                             value={seedInput}
                             onChange={(e) => setSeedInput(e.target.value)}
                             className="seed-input"
@@ -666,7 +662,7 @@ const Login = ({ nostr = false }) => {
                             ) : (
                                 <NostrIcon size={20} color="#8b5cf6" />
                             )}
-                            <span>{loading && seedInput.trim() ? 'Connecting...' : 'Login with Seed Phrase'}</span>
+                            <span>{loading && seedInput.trim() ? t('login.connecting') : t('login.loginWithSeed')}</span>
                         </button>
                     </form>
                 )}
@@ -703,7 +699,7 @@ const Login = ({ nostr = false }) => {
                                     <Smartphone size={16} className="key-input-icon" />
                                     <input
                                         type="text"
-                                        placeholder="bunker://... or name@domain.com"
+                                        placeholder={t('login.bunkerPlaceholder')}
                                         value={bunkerInput}
                                         onChange={(e) => setBunkerInput(e.target.value)}
                                         className="key-input"
@@ -766,11 +762,11 @@ const Login = ({ nostr = false }) => {
                                 disabled={loading}
                                 className="login-link-btn"
                             >
-                                Login with Extension
+                                {t('login.loginWithExtension')}
                             </button>
                         </p>
                         <div className="extension-links">
-                            <p className="login-hint">No extension detected? Install one:</p>
+                            <p className="login-hint">{t('login.installExtension')}</p>
                             <div className="flex gap-3 mt-1 justify-center">
                                 <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgcdlhiodkdc" target="_blank" rel="noopener noreferrer" className="extension-link">
                                     Chrome (nos2x)
@@ -976,7 +972,7 @@ const Login = ({ nostr = false }) => {
                     min-width: 0;
                     border: none;
                     outline: none;
-                    font-size: 0.875rem;
+                    font-size: 0.95rem;
                     background: transparent;
                     color: var(--color-text, inherit);
                 }
@@ -989,7 +985,7 @@ const Login = ({ nostr = false }) => {
                     padding: 0.75rem;
                     border: 1px solid var(--color-gray-200);
                     border-radius: 1rem;
-                    font-size: 0.875rem;
+                    font-size: 0.95rem;
                     font-family: monospace;
                     outline: none;
                     resize: none;

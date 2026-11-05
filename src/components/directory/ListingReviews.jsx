@@ -443,16 +443,17 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                     box-sizing: border-box;
                     padding: 0.65rem 0.85rem;
                     border: 1px solid var(--color-gray-300);
-                    border-radius: 10px;
+                    border-radius: var(--radius-md);
                     background: var(--color-surface);
                     color: inherit;
-                    font-size: 0.92rem;
+                    font-size: 0.95rem;
                     font-family: inherit;
                     line-height: 1.5;
                     resize: vertical;
                     outline: none;
+                    transition: border-color 0.2s, box-shadow 0.2s;
                 }
-                .dir-review-textarea:focus { border-color: var(--color-primary); }
+                .dir-review-textarea:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1); }
                 .dir-review-count {
                     margin: 0.35rem 0 0;
                     font-size: 0.78rem;

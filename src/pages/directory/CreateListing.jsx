@@ -915,7 +915,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                 <div className="dir-form-group">
                                     <label className="dir-label" htmlFor="dir-languages">{t('directory.languages')}</label>
-                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder="e.g. Español, English…" />
+                                    <TagInput id="dir-languages" tags={languages} onChange={setLanguages} placeholder={t('directory.languagesPlaceholder')} />
                                 </div>
 
                                 <label className="dir-btc-toggle" style={{ marginBottom: 0 }}>
@@ -936,16 +936,18 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                     <div className="dir-form-group" style={{ marginBottom: 0 }}>
                                         <span className="dir-label" id="dir-practices-label">{t('directory.practicesLabel')}</span>
-                                        <div className="dir-practices-checks" role="group" aria-labelledby="dir-practices-label">
+                                        <div className="dir-chips" role="group" aria-labelledby="dir-practices-label">
                                             {FARM_PRACTICES.map((p) => (
-                                                <label key={p.id} className="dir-check-label">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={practices.includes(p.id)}
-                                                        onChange={() => togglePractice(p.id)}
-                                                    />
+                                                <button
+                                                    key={p.id}
+                                                    type="button"
+                                                    role="checkbox"
+                                                    aria-checked={practices.includes(p.id)}
+                                                    className={`dir-chip${practices.includes(p.id) ? ' active' : ''}`}
+                                                    onClick={() => togglePractice(p.id)}
+                                                >
                                                     {t(p.tKey)}
-                                                </label>
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
@@ -956,7 +958,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                                     <div className="dir-form-group">
                                         <label className="dir-label" htmlFor="dir-skills">{t('directory.skillsLabel')}</label>
-                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder="e.g. Web design, Accounting…" />
+                                        <TagInput id="dir-skills" tags={skills} onChange={setSkills} placeholder={t('directory.skillsPlaceholder')} />
                                     </div>
 
                                     <div className="dir-form-group">
@@ -1243,8 +1245,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 24px;
-                    height: 24px;
+                    width: 30px;
+                    height: 30px;
                     border-radius: 50%;
                     border: none;
                     background: var(--color-gray-100);
@@ -1260,7 +1262,7 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                 .dir-form-row {
                     display: grid;
-                    grid-template-columns: 1fr 1fr;
+                    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                     gap: 0.75rem;
                 }
 
@@ -1465,8 +1467,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 .dir-icon-select {
                     width: 130px;
                     flex-shrink: 0;
-                    padding: 0.55rem 0.5rem;
-                    font-size: 0.85rem;
+                    padding: 0.6rem 0.5rem;
+                    font-size: 0.95rem;
                 }
 
                 .dir-row-remove {
@@ -1500,28 +1502,27 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
                 }
                 .dir-add-row-btn:hover { border-color: var(--color-primary); background: var(--color-blue-tint); }
 
-                .dir-practices-checks {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 0.6rem;
-                }
-
-                .dir-check-label {
+                /* Choices as chips, as the newer forms do (Opportunities). */
+                .dir-chips {
                     display: flex;
-                    align-items: center;
+                    flex-wrap: wrap;
                     gap: 8px;
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                    color: var(--color-gray-700);
-                    cursor: pointer;
-                    margin: 0;
                 }
-                .dir-check-label input[type='checkbox'] {
-                    width: 16px;
-                    height: 16px;
-                    margin: 0;
-                    accent-color: var(--color-primary);
+                .dir-chip {
+                    min-height: 0;
+                    padding: 0.5rem 0.95rem;
+                    border-radius: var(--radius-full);
+                    border: 1px solid var(--color-gray-300);
+                    background: var(--color-surface);
+                    color: var(--color-gray-700);
+                    font-size: 0.88rem;
+                    font-weight: 600;
                     cursor: pointer;
+                }
+                .dir-chip.active {
+                    background: var(--color-primary);
+                    border-color: var(--color-primary);
+                    color: white;
                 }
 
                 .dir-form-actions {
@@ -1533,11 +1534,8 @@ const CreateListing = ({ type: typeProp, editMode = false }) => {
 
                 @media (max-width: 600px) {
                     .dir-form-row {
-                        grid-template-columns: 1fr;
+                        grid-template-columns: minmax(0, 1fr);
                         gap: 0;
-                    }
-                    .dir-practices-checks {
-                        grid-template-columns: 1fr;
                     }
                     .dir-icon-select {
                         width: 104px;

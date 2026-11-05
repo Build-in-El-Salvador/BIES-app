@@ -5,7 +5,8 @@ import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { FEEDBACK_PAGES, pageFromPath } from '../config/feedbackPages';
 import { lastPage } from '../utils/lastPage';
 import { deviceInfo } from '../utils/deviceInfo';
-import { CheckCircle, ChevronDown, Loader2, Send, ImagePlus, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, Loader2, Send, ImagePlus, X } from 'lucide-react';
+import BackButton from '../components/BackButton';
 import './Feedback.css';
 
 // What the form sends as the report's type: a problem, or anything else.
@@ -44,8 +45,14 @@ const Feedback = () => {
     const [preview, setPreview] = useState('');
     const [loading, setLoading] = useState(false);
     const [submitted, setSubmitted] = useState(false);
+    // A problem with one field shows under it; one sending shows at the top.
+    const [fieldError, setFieldError] = useState(null); // { id, message }
     const [error, setError] = useState('');
     const fileRef = useRef(null);
+    const fieldErrorFor = (id) => (fieldError?.id === id
+        ? <p className="feedback-field-error" id={`${id}-error`} role="alert">{fieldError.message}</p>
+        : null);
+    const invalid = (id) => (fieldError?.id === id ? { 'aria-invalid': true, 'aria-describedby': `${id}-error` } : {});
 
     useEffect(() => {
         if (!screenshot) {
@@ -62,28 +69,29 @@ const Feedback = () => {
         e.target.value = '';
         if (!file) return;
         if (!file.type.startsWith('image/')) {
-            setError(t('feedback.errorNotPicture'));
+            setFieldError({ id: 'feedback-shot', message: t('feedback.errorNotPicture') });
             return;
         }
         if (file.size > MAX_SCREENSHOT_BYTES) {
-            setError(t('feedback.errorTooBig'));
+            setFieldError({ id: 'feedback-shot', message: t('feedback.errorTooBig') });
             return;
         }
-        setError('');
+        setFieldError(null);
         setScreenshot(file);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         if (!page) {
-            setError(t('feedback.errorPage'));
+            setFieldError({ id: 'feedback-page', message: t('feedback.errorPage') });
             return;
         }
         if (message.trim().length < 5) {
-            setError(t('feedback.errorShort'));
+            setFieldError({ id: 'feedback-message', message: t('feedback.errorShort') });
             return;
         }
-        setError('');
+        setFieldError(null);
         setLoading(true);
         try {
             const device = await deviceInfo({ path: cameFrom.current, language: i18n.language });
@@ -101,6 +109,7 @@ const Feedback = () => {
         setMessage('');
         setScreenshot(null);
         setError('');
+        setFieldError(null);
     };
 
     if (submitted) {
@@ -121,9 +130,16 @@ const Feedback = () => {
 
     return (
         <div className="feedback-page">
+            {/* On phones the top bar already shows the title: the back button sits beside the description. */}
+            <div className="feedback-header">
+                <BackButton fallback="/" />
+                <div className="feedback-heading">
+                    <h1 className="feedback-title">{t('feedback.title')}</h1>
+                    <p className="feedback-subtitle">{t('feedback.subtitle')}</p>
+                </div>
+            </div>
+            {error && <div className="feedback-error-banner" role="alert"><AlertCircle size={16} /> {error}</div>}
             <div className="feedback-card">
-                <h1>{t('feedback.title')}</h1>
-                <p className="feedback-subtitle">{t('feedback.subtitle')}</p>
 
                 <div className="feedback-kinds" role="radiogroup" aria-label={t('feedback.title')}>
                     {KINDS.map((kind) => {
@@ -150,8 +166,9 @@ const Feedback = () => {
                             id="feedback-page"
                             className="feedback-select"
                             value={page}
-                            onChange={(e) => setPage(e.target.value)}
-                            aria-describedby={pageGuessed ? 'feedback-page-hint' : undefined}
+                            onChange={(e) => { setPage(e.target.value); if (fieldError?.id === 'feedback-page') setFieldError(null); }}
+                            aria-describedby={fieldError?.id === 'feedback-page' ? 'feedback-page-error' : pageGuessed ? 'feedback-page-hint' : undefined}
+                            aria-invalid={fieldError?.id === 'feedback-page' || undefined}
                         >
                             {!page && <option value="">{t('feedback.pageChoose')}</option>}
                             {pages.map((p) => (
@@ -163,6 +180,7 @@ const Feedback = () => {
                     {pageGuessed && (
                         <p id="feedback-page-hint" className="feedback-hint">{t('feedback.pageGuessed')}</p>
                     )}
+                    {fieldErrorFor('feedback-page')}
 
                     <label className="feedback-label" htmlFor="feedback-message">
                         {problem ? t('feedback.messageLabelProblem') : t('feedback.messageLabelFeedback')}
@@ -175,7 +193,9 @@ const Feedback = () => {
                         rows={5}
                         maxLength={5000}
                         className="feedback-textarea"
+                        {...invalid('feedback-message')}
                     />
+                    {fieldErrorFor('feedback-message')}
                     <div className="feedback-char-count">{message.length} / 5000</div>
 
                     <span className="feedback-label">
@@ -195,10 +215,9 @@ const Feedback = () => {
                             <span>{t('feedback.screenshotAdd')}</span>
                         </button>
                     )}
+                    {fieldErrorFor('feedback-shot')}
 
                     <p className="feedback-note">{t('feedback.deviceNote')}</p>
-
-                    {error && <p className="feedback-error-text" role="alert">{error}</p>}
 
                     <button type="submit" disabled={loading || !message.trim()} className="feedback-submit-btn">
                         {loading ? <Loader2 size={18} className="feedback-spin" /> : <Send size={18} />}

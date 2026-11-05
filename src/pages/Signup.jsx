@@ -99,7 +99,7 @@ const Signup = () => {
         if (enableCoinos && COINOS_SIGNUP_WALLET) {
             const u = coinosUsername.trim();
             if (!u || u.length < 2 || u.length > 24 || !/^[a-zA-Z0-9]+$/.test(u)) {
-                setCoinosError('Username must be 2-24 alphanumeric characters');
+                setCoinosError(t('signup.own.walletUsernameError'));
                 return;
             }
             setCoinosError('');
@@ -142,11 +142,11 @@ const Signup = () => {
 
                 navigate('/home');
             } else {
-                setError(result.error || 'Failed to register. Please try again.');
+                setError(result.error || t('signup.own.errorRegister'));
             }
         } catch (err) {
             console.error('Signup error:', err);
-            setError(err?.message || String(err) || 'Registration failed.');
+            setError(err?.message || String(err) || t('signup.own.errorRegister'));
         } finally {
             setSubmitting(false);
         }
@@ -195,222 +195,163 @@ const Signup = () => {
                 )}
 
                 {step === 1 && keys && (
-                    <div className="key-display">
-                        <h2 className="text-xl font-bold mb-2 text-center text-red-500 flex items-center justify-center gap-2">
-                            <ShieldAlert size={24} />
-                            Save Your Secret Key!
-                        </h2>
-                        <p className="text-sm text-gray-500 mb-6 text-center">
-                            We cannot recover this for you. If you lose it, your account is gone forever.
-                        </p>
+                    <div className="su-step">
+                        <h2 className="su-title su-title-warn"><ShieldAlert size={22} aria-hidden="true" /> {t('signup.own.title')}</h2>
+                        <p className="su-sub">{t('signup.own.cannotRecover')}</p>
 
-                        <div className="flex flex-col gap-5 mb-4">
-                            <div className="flex items-center justify-between p-3 rounded-2xl" style={{ background: 'var(--color-gray-100)', color: 'var(--color-text, inherit)' }}>
-                                <span className="text-xs font-black shrink-0 tracking-wide" style={{ color: 'var(--color-gray-400)' }}>PUBLIC ID</span>
-                                <span className="text-sm tracking-widest font-mono truncate" style={{ opacity: 0.8, flex: 1, textAlign: 'center', margin: '0 0.5rem' }}>
-                                    {truncateKey(keys.npub)}
-                                </span>
-                                <button onClick={() => copyToClipboard(keys.npub, 'npub')} className="text-xs font-semibold flex items-center gap-2 px-2 py-1 shrink-0" style={{ background: 'transparent', color: 'var(--color-primary)', border: 'none' }}>
-                                    <Copy size={14} /> {copiedItem === 'npub' ? 'Copied!' : 'Copy'}
+                        <div className="su-keys">
+                            <div className="su-key">
+                                <span className="su-key-label">{t('signup.own.publicId')}</span>
+                                <span className="su-key-value">{truncateKey(keys.npub)}</span>
+                                <button type="button" className="su-copy" onClick={() => copyToClipboard(keys.npub, 'npub')}>
+                                    <Copy size={14} /> {copiedItem === 'npub' ? t('signup.own.copied') : t('signup.own.copy')}
                                 </button>
                             </div>
-
-                            <div className="flex items-center justify-between p-3 rounded-2xl border" style={{ background: 'var(--color-red-tint)', borderColor: 'var(--badge-error-bg)', color: 'var(--color-error)' }}>
-                                <span className="text-xs font-black shrink-0 tracking-wide" style={{ color: 'var(--color-error)' }}>SECRET KEY</span>
-                                <span className="text-sm tracking-widest font-mono truncate" style={{ opacity: 0.8, flex: 1, textAlign: 'center', margin: '0 0.5rem' }}>
-                                    {truncateKey(keys.nsec)}
-                                </span>
-                                <button onClick={() => copyToClipboard(keys.nsec, 'nsec')} className="text-xs font-semibold flex items-center gap-2 px-2 py-1 shrink-0" style={{ background: 'transparent', color: 'inherit', border: 'none' }}>
-                                    <Copy size={14} /> {copiedItem === 'nsec' ? 'Copied!' : 'Copy'}
+                            <div className="su-key su-key-secret">
+                                <span className="su-key-label">{t('signup.own.secretKey')}</span>
+                                <span className="su-key-value">{truncateKey(keys.nsec)}</span>
+                                <button type="button" className="su-copy" onClick={() => copyToClipboard(keys.nsec, 'nsec')}>
+                                    <Copy size={14} /> {copiedItem === 'nsec' ? t('signup.own.copied') : t('signup.own.copy')}
                                 </button>
                             </div>
                         </div>
 
-                        <div 
-                            className="key-box mb-6 transition-all"
-                            style={{ 
-                                background: showSeedPhrase ? 'var(--color-gray-50)' : 'var(--color-surface)',
-                                border: '1px solid var(--color-gray-200)', 
-                                borderRadius: '1.5rem',
-                                overflow: 'hidden',
-                                boxShadow: 'var(--shadow-sm)'
-                            }}
-                        >
-                            <button
-                                onClick={() => setShowSeedPhrase(!showSeedPhrase)}
-                                className="w-full flex items-center justify-between"
-                                style={{ padding: '0.625rem 1rem', color: 'var(--color-gray-800)', borderBottom: showSeedPhrase ? '1px solid var(--color-gray-200)' : 'none' }}
-                            >
-                                <span className="text-sm font-bold flex items-center gap-2">
-                                    <ShieldAlert size={18} style={{ color: 'var(--color-error)' }} /> Seed Phrase Backup
-                                </span>
-                                <div style={{ background: 'var(--color-gray-100)', borderRadius: '50%', padding: '4px', display: 'flex', color: 'var(--color-gray-500)' }}>
-                                    {showSeedPhrase ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                </div>
+                        <div className={`su-seed${showSeedPhrase ? ' open' : ''}`}>
+                            <button type="button" className="su-seed-toggle" onClick={() => setShowSeedPhrase(!showSeedPhrase)} aria-expanded={showSeedPhrase}>
+                                <span><ShieldAlert size={18} aria-hidden="true" /> {t('signup.own.seedTitle')}</span>
+                                <span className="su-chevron" aria-hidden="true">{showSeedPhrase ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
                             </button>
-
                             {showSeedPhrase && (
-                                <div className="p-5" style={{ background: 'transparent' }}>
-                                    <div className="flex justify-between items-center mb-4">
-                                        <span className="text-xs font-black tracking-wide" style={{ color: 'var(--color-error)' }}>12 WORDS (Keep Safe!)</span>
-                                        <button onClick={() => copyToClipboard(keys.mnemonic, 'seed')} className="text-xs font-semibold flex items-center gap-2 px-2 py-1" style={{ background: 'transparent', color: 'var(--color-primary)', border: 'none' }}>
-                                            <Copy size={14} /> {copiedItem === 'seed' ? 'Copied!' : 'Copy Phrase'}
+                                <div className="su-seed-body">
+                                    <div className="su-seed-head">
+                                        <span className="su-seed-label">{t('signup.own.seedWords')}</span>
+                                        <button type="button" className="su-copy" onClick={() => copyToClipboard(keys.mnemonic, 'seed')}>
+                                            <Copy size={14} /> {copiedItem === 'seed' ? t('signup.own.copied') : t('signup.own.copyPhrase')}
                                         </button>
                                     </div>
-                                    <div className="shadow-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', background: 'var(--color-red-tint)', padding: '1rem', borderRadius: '1.25rem', border: '1px solid var(--badge-error-bg)', fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--color-error)' }}>
+                                    <ol className="su-words">
                                         {keys.mnemonic.split(' ').map((word, i) => (
-                                            <span key={i} style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                                                <span style={{ color: '#fca5a5', fontSize: '0.75rem', minWidth: '1.25rem' }}>{i + 1}.</span>
-                                                <span style={{ fontWeight: '500' }}>{word}</span>
-                                            </span>
+                                            <li key={i}><span className="su-word-n">{i + 1}.</span> {word}</li>
                                         ))}
-                                    </div>
-                                    <p className="text-xs mt-4 text-center" style={{ color: 'var(--color-gray-500)', maxWidth: '280px', margin: '1rem auto 0' }}>
-                                        You can log in with this 12-word seed phrase instead of your secret key.
-                                    </p>
+                                    </ol>
+                                    <p className="su-hint su-center">{t('signup.own.seedHelp')}</p>
                                 </div>
                             )}
                         </div>
 
-                        {error && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-red-tint)', color: 'var(--color-error)', padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.875rem', width: '100%', marginBottom: '0.75rem', border: '1px solid var(--badge-error-bg)' }}>
-                                <AlertCircle size={16} />
-                                <span>{error}</span>
-                            </div>
-                        )}
+                        {error && <div className="su-error" role="alert"><AlertCircle size={16} /> <span>{error}</span></div>}
 
-                        <div className="backup-buttons">
-                            {/* ── Backup section ── */}
-                            <div style={{ borderTop: '1px solid var(--color-gray-200)', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
-                                <p className="text-sm font-bold" style={{ marginBottom: 4, color: 'var(--color-gray-600)' }}>Backup Your Keys</p>
-                                <p className="text-xs" style={{ marginBottom: '0.75rem', color: 'var(--color-gray-400)' }}>
-                                    Copy the nsec or seed phrase above to back up your keys.
-                                </p>
-                                {savedKeyAvailable() && (
-                                    <>
-                                        <button
-                                            type="button"
-                                            onClick={handleSaveToPasswords}
-                                            disabled={keySave === 'saving' || keySave === 'saved'}
-                                            className="btn-outline w-full py-3 rounded-full flex items-center justify-center gap-2"
-                                        >
-                                            {keySave === 'saved' ? <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
-                                                : keySave === 'saving' ? <Loader2 size={16} className="spin" />
-                                                : <KeyRound size={16} />}
-                                            {keySave === 'saved' ? t('savedKey.saved') : t('savedKey.saveButton')}
-                                        </button>
-                                        {keySave === 'failed' && (
-                                            <p className="text-xs" role="alert" style={{ marginTop: '0.5rem', color: 'var(--color-error)' }}>
-                                                {t('savedKey.saveFailed')}
-                                            </p>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-
-                            <button
-                                onClick={handleBackupConfirm}
-                                className="w-full btn-primary py-3 rounded-full"
-                                style={{ marginTop: '0.25rem' }}
-                            >
-                                Continue
-                            </button>
+                        <div className="su-backup">
+                            <p className="su-backup-title">{t('signup.own.backupTitle')}</p>
+                            <p className="su-hint">{t('signup.own.backupHint')}</p>
+                            {savedKeyAvailable() && (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveToPasswords}
+                                        disabled={keySave === 'saving' || keySave === 'saved'}
+                                        className="su-btn su-btn-outline"
+                                    >
+                                        {keySave === 'saved' ? <CheckCircle size={16} style={{ color: 'var(--color-success)' }} />
+                                            : keySave === 'saving' ? <Loader2 size={16} className="spin" />
+                                            : <KeyRound size={16} />}
+                                        {keySave === 'saved' ? t('savedKey.saved') : t('savedKey.saveButton')}
+                                    </button>
+                                    {keySave === 'failed' && <p className="su-field-error" role="alert">{t('savedKey.saveFailed')}</p>}
+                                </>
+                            )}
                         </div>
+
+                        <button type="button" onClick={handleBackupConfirm} className="su-btn su-btn-primary">
+                            {t('signup.own.continue')}
+                        </button>
                     </div>
                 )}
 
                 {step === 2 && (
-                    <form onSubmit={handleProfileSubmit} className="w-full">
-                        <h2 className="text-2xl font-bold mb-6 text-center">Complete Profile</h2>
+                    <form onSubmit={handleProfileSubmit} className="su-step" noValidate>
+                        <h2 className="su-title">{t('signup.own.profileTitle')}</h2>
+                        <p className="su-sub">{t('signup.own.profileHint')}</p>
 
-                        <p className="text-sm text-gray-500 mb-4 text-center">
-                            Set up your display name to get started.
-                        </p>
+                        {error && <div className="su-error" role="alert"><AlertCircle size={16} /> <span>{error}</span></div>}
 
-                        {error && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-red-tint)', color: 'var(--color-error)', padding: '0.75rem 1rem', borderRadius: 8, fontSize: '0.875rem', width: '100%', marginBottom: '1rem', border: '1px solid var(--badge-error-bg)' }}>
-                                <AlertCircle size={16} />
-                                <span>{error}</span>
-                            </div>
-                        )}
-
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-gray-700)' }}>Display Name</label>
+                        <div className="su-group">
+                            <label className="su-label" htmlFor="su-name">{t('signup.own.nameLabel')}</label>
                             <input
+                                id="su-name"
                                 type="text"
                                 required
-                                className="w-full p-3 border input-box"
-                                placeholder="e.g. Satoshi Nakamoto"
+                                className="su-input"
+                                placeholder={t('signup.own.namePlaceholder')}
                                 value={profile.name}
                                 onChange={e => setProfile({ ...profile, name: e.target.value })}
+                                maxLength={100}
+                                autoComplete="name"
                             />
                         </div>
 
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--color-gray-700)' }}>Choose your BIES identity</label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                    <AtSign size={16} style={{ position: 'absolute', left: '0.75rem', color: 'var(--color-gray-400)' }} />
+                        <div className="su-group">
+                            <label className="su-label" htmlFor="su-address">{t('signup.own.addressLabel')}</label>
+                            <div className="su-address">
+                                <div className="su-icon-input">
+                                    <AtSign size={16} aria-hidden="true" />
                                     <input
+                                        id="su-address"
                                         type="text"
-                                        className="w-full p-3 border input-box"
-                                        style={{ paddingLeft: '2.25rem' }}
+                                        className="su-input"
                                         placeholder="satoshi"
                                         value={nip05Name}
                                         onChange={e => setNip05Name(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        aria-invalid={nip05Available === false || undefined}
+                                        aria-describedby={nip05Name ? 'su-address-hint' : undefined}
                                     />
                                 </div>
-                                {nip05Checking && <Loader2 size={16} className="spin" style={{ color: 'var(--color-gray-400)' }} />}
+                                {nip05Checking && <Loader2 size={16} className="spin su-muted" />}
                                 {!nip05Checking && nip05Available === true && <CheckCircle size={16} style={{ color: '#16a34a' }} />}
-                                {!nip05Checking && nip05Available === false && <X size={16} style={{ color: '#ef4444' }} />}
+                                {!nip05Checking && nip05Available === false && <X size={16} style={{ color: '#b91c1c' }} />}
                             </div>
                             {nip05Name && (
-                                <p className="text-xs" style={{ marginTop: '0.25rem', color: nip05Available === false ? '#ef4444' : 'var(--color-gray-400)' }}>
-                                    {nip05Available === false ? 'Taken — try another name' : `${nip05Name.toLowerCase()}@buildinelsalvador.com`}
+                                <p id="su-address-hint" className={nip05Available === false ? 'su-field-error' : 'su-hint'}>
+                                    {nip05Available === false ? t('signup.own.addressTaken') : `${nip05Name.toLowerCase()}@buildinelsalvador.com`}
                                 </p>
                             )}
                         </div>
 
                         {COINOS_SIGNUP_WALLET && (
-                            <div className="mb-4" style={{ border: '1px solid var(--color-gray-200)', borderRadius: 12, padding: '0.75rem', background: 'var(--color-surface)' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-gray-700)' }}>
+                            <div className="su-wallet">
+                                <label className="su-check">
                                     <input
                                         type="checkbox"
                                         checked={enableCoinos}
                                         onChange={(e) => { setEnableCoinos(e.target.checked); setCoinosError(''); }}
-                                        style={{ accentColor: '#f7931a', width: 18, height: 18 }}
                                     />
-                                    Enable Instant Wallet (Coinos)
+                                    {t('signup.own.walletLabel')}
                                 </label>
-                                <p className="text-xs" style={{ color: 'var(--color-gray-400)', marginTop: 4, lineHeight: 1.4 }}>
-                                    Get a Lightning wallet instantly so you can send and receive sats right away. You can also connect your own wallet later in Settings.
-                                </p>
+                                <p className="su-hint">{t('signup.own.walletHint')}</p>
                                 {enableCoinos && (
-                                    <div style={{ marginTop: '0.5rem' }}>
+                                    <div className="su-group su-mt">
                                         <input
                                             type="text"
-                                            className="w-full p-2 border input-box"
-                                            placeholder="Choose a wallet username (2-24 chars, alphanumeric)"
+                                            className="su-input"
+                                            placeholder={t('signup.own.walletPlaceholder')}
                                             value={coinosUsername}
                                             onChange={(e) => { setCoinosUsername(e.target.value.replace(/[^a-zA-Z0-9]/g, '')); setCoinosError(''); }}
                                             maxLength={24}
-                                            style={{ fontSize: '0.85rem' }}
+                                            aria-label={t('signup.own.walletPlaceholder')}
+                                            aria-invalid={!!coinosError || undefined}
                                         />
-                                        {coinosUsername && (
-                                            <p className="text-xs" style={{ color: 'var(--color-gray-500)', marginTop: 4 }}>
-                                                Your Lightning address: <strong>{coinosUsername}@coinos.io</strong>
-                                            </p>
-                                        )}
-                                        {coinosError && (
-                                            <p className="text-xs" style={{ color: 'var(--color-error)', marginTop: 4 }}>{coinosError}</p>
-                                        )}
+                                        {coinosUsername && <p className="su-hint">{t('signup.own.walletAddress')} <strong>{coinosUsername}@coinos.io</strong></p>}
+                                        {coinosError && <p className="su-field-error" role="alert">{coinosError}</p>}
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        <button type="submit" className="btn-primary w-full py-3 rounded-full flex items-center justify-center gap-2">
-                            Enter Dashboard <ArrowRight size={18} />
+                        <button type="submit" className="su-btn su-btn-primary" disabled={submitting || !profile.name.trim()}>
+                            {submitting ? <Loader2 size={18} className="spin" /> : null}
+                            {t('signup.own.enter')} {!submitting && <ArrowRight size={18} />}
                         </button>
                     </form>
                 )}
@@ -513,24 +454,80 @@ const Signup = () => {
                 .btn-outline:hover { background: var(--color-gray-100); color: var(--color-gray-900); }
                 .btn-outline:disabled { opacity: 0.5; pointer-events: none; }
 
-                .input-box {
-                    background: var(--color-surface);
-                    border: 1px solid var(--color-gray-200);
-                    border-radius: 1rem;
-                    color: var(--color-text, inherit);
-                    transition: border-color 0.2s;
-                    outline: none;
+                /* Create-your-own-key steps, as the newer forms draw them */
+                .su-step { width: 100%; display: flex; flex-direction: column; }
+                .su-title { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 0 0 0.4rem; font-size: 1.4rem; font-weight: 700; text-align: center; color: var(--color-gray-900); }
+                .su-title-warn { color: #b91c1c; }
+                .su-sub { margin: 0 0 1.25rem; text-align: center; font-size: 0.92rem; line-height: 1.5; color: var(--color-gray-500); }
+                .su-keys { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+                .su-key {
+                    display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.85rem; border-radius: var(--radius-md);
+                    background: var(--color-gray-100); border: 1px solid var(--color-gray-200); min-width: 0;
                 }
-                .input-box:focus {
-                    border-color: var(--color-primary);
+                .su-key-secret { background: var(--color-red-tint); border-color: #fecaca; color: #b91c1c; }
+                .su-key-label { flex: none; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-gray-500); }
+                .su-key-secret .su-key-label { color: #b91c1c; }
+                .su-key-value { flex: 1; min-width: 0; text-align: center; font-family: var(--font-mono, monospace); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .su-copy {
+                    flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 0; padding: 0.3rem 0.5rem;
+                    border: none; background: none; color: var(--color-primary); font-size: 0.82rem; font-weight: 700; cursor: pointer;
                 }
-
-                .backup-buttons {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.75rem;
-                    width: 100%;
+                .su-key-secret .su-copy { color: inherit; }
+                .su-seed { border: 1px solid var(--color-gray-200); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 1rem; background: var(--color-surface); }
+                .su-seed-toggle {
+                    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem;
+                    border: none; background: none; color: var(--color-gray-900); font-size: 0.92rem; font-weight: 700; cursor: pointer;
                 }
+                .su-seed-toggle > span:first-child { display: inline-flex; align-items: center; gap: 0.5rem; }
+                .su-seed-toggle > span:first-child :global(svg) { color: #b91c1c; }
+                .su-seed.open .su-seed-toggle { border-bottom: 1px solid var(--color-gray-200); }
+                .su-chevron { display: inline-flex; padding: 4px; border-radius: 50%; background: var(--color-gray-100); color: var(--color-gray-500); }
+                .su-seed-body { padding: 1rem; }
+                .su-seed-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+                .su-seed-label { font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #b91c1c; }
+                .su-words {
+                    list-style: none; margin: 0; padding: 0.9rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem;
+                    background: var(--color-red-tint); border: 1px solid #fecaca; border-radius: var(--radius-md);
+                    font-family: var(--font-mono, monospace); font-size: 0.9rem; font-weight: 500; color: #b91c1c;
+                }
+                .su-words li { white-space: nowrap; }
+                .su-word-n { color: #f87171; font-size: 0.75rem; }
+                /* Phones: two columns, so a word stays beside its number */
+                @media (max-width: 440px) { .su-words { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+                .su-backup { border-top: 1px solid var(--color-gray-200); padding-top: 0.9rem; margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.5rem; }
+                .su-backup-title { margin: 0; font-size: 0.92rem; font-weight: 700; color: var(--color-gray-700); }
+                .su-group { margin-bottom: 1.1rem; min-width: 0; }
+                .su-mt { margin: 0.6rem 0 0; }
+                .su-label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--color-gray-700); margin-bottom: 0.4rem; }
+                .su-input {
+                    width: 100%; box-sizing: border-box; padding: 0.65rem 0.9rem; border: 1px solid var(--color-gray-300); border-radius: var(--radius-md);
+                    background: var(--color-surface); color: inherit; font: inherit; font-size: 0.95rem; outline: none;
+                    transition: border-color 0.2s, box-shadow 0.2s;
+                }
+                .su-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1); }
+                .su-input[aria-invalid='true'] { border-color: #b91c1c; }
+                .su-address { display: flex; align-items: center; gap: 0.4rem; }
+                .su-icon-input { position: relative; flex: 1; min-width: 0; }
+                .su-icon-input > :global(svg) { position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: var(--color-gray-400); pointer-events: none; }
+                .su-icon-input .su-input { padding-left: 2.3rem; }
+                .su-hint { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.45; color: var(--color-gray-500); }
+                .su-center { text-align: center; }
+                .su-field-error { margin: 0.35rem 0 0; font-size: 0.82rem; font-weight: 600; color: #b91c1c; }
+                .su-error {
+                    display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: var(--radius-md);
+                    background: var(--color-red-tint); color: var(--color-error, #B91C1C); font-size: 0.9rem;
+                }
+                .su-wallet { margin-bottom: 1.1rem; padding: 0.85rem; border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); background: var(--color-surface); }
+                .su-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.92rem; font-weight: 600; color: var(--color-gray-700); cursor: pointer; }
+                .su-check input { width: 18px; height: 18px; margin: 0; accent-color: #f7931a; flex: none; }
+                .su-btn {
+                    width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 46px; padding: 0 1.25rem;
+                    border-radius: var(--radius-full); font-size: 0.98rem; font-weight: 700; cursor: pointer;
+                }
+                .su-btn:disabled { opacity: 0.55; cursor: default; }
+                .su-btn-primary { border: none; background: var(--color-primary); color: white; }
+                .su-btn-outline { border: 1px solid var(--color-gray-300); background: var(--color-surface); color: var(--color-gray-700); }
+                .su-muted { color: var(--color-gray-400); }
 
                 /* :global() for the icon components: styled-jsx only scopes plain elements */
                 .signup-card :global(.spin) {
