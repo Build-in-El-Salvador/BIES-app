@@ -67,6 +67,7 @@ const ProfileEdit = () => {
     const [avatarImageLoading, setAvatarImageLoading] = useState(false);
     const [bannerImageLoading, setBannerImageLoading] = useState(false);
     const [cropImage, setCropImage] = useState(null); // { src, type: 'avatar'|'banner' }
+    const [uploadingSection, setUploadingSection] = useState(null); // index of the custom section uploading a photo
     const [error, setError] = useState('');
     const [hasExistingProfile, setHasExistingProfile] = useState(false);
     // memberRole removed — roles are now earned through proof of work
@@ -500,14 +501,17 @@ const ProfileEdit = () => {
 
     const handleSectionImageUpload = async (index, file) => {
         if (!file) return;
+        setUploadingSection(index);
         try {
             const result = await uploadApi.media(file);
             updateSection(index, 'imageUrl', result.url);
         } catch { setError('Failed to upload image.'); }
+        finally { setUploadingSection(null); }
     };
 
     const handleCarouselImageUpload = async (index, file) => {
         if (!file) return;
+        setUploadingSection(index);
         try {
             const result = await uploadApi.media(file);
             setForm(prev => {
@@ -516,6 +520,7 @@ const ProfileEdit = () => {
                 return { ...prev, customSections: updated };
             });
         } catch { setError('Failed to upload carousel image.'); }
+        finally { setUploadingSection(null); }
     };
 
     const removeCarouselImage = (sIdx, iIdx) =>
@@ -566,29 +571,35 @@ const ProfileEdit = () => {
                     )}
                     {stype === 'PHOTO' && (
                         section.imageUrl
-                            ? <div style={{ position: 'relative', display: 'inline-block' }}>
-                                <img src={section.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: '8px' }} />
-                                <button type="button" onClick={() => updateSection(idx, 'imageUrl', '')} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}><X size={12} /> Remove</button>
+                            // The photo as the profile shows it. getAssetUrl: the
+                            // upload's /uploads/ path only resolves on the website.
+                            ? <div className="pe-photo-preview">
+                                <img src={getAssetUrl(section.imageUrl)} alt="" />
+                                <button type="button" className="x-remove pe-photo-remove" onClick={() => updateSection(idx, 'imageUrl', '')} aria-label="Remove photo"><X size={16} /></button>
                               </div>
-                            : <label style={{ border: '2px dashed var(--color-gray-300)', borderRadius: '12px', padding: '2rem 1rem', textAlign: 'center', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--color-gray-50)' }}>
-                                <Upload size={24} style={{ color: 'var(--color-gray-400)', marginBottom: '0.4rem' }} />
-                                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#22c55e', margin: '0 0 0.2rem' }}>Upload Photo</p>
+                            : <label className="pe-photo-drop" style={{ cursor: uploadingSection === idx ? 'default' : 'pointer' }}>
+                                {uploadingSection === idx
+                                    ? <Loader2 size={24} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-gray-400)', marginBottom: '0.4rem' }} />
+                                    : <Upload size={24} style={{ color: 'var(--color-gray-400)', marginBottom: '0.4rem' }} />}
+                                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#22c55e', margin: '0 0 0.2rem' }}>{uploadingSection === idx ? 'Uploading…' : 'Upload Photo'}</p>
                                 <p style={{ fontSize: '0.72rem', color: 'var(--color-gray-400)', margin: 0 }}>JPG, PNG, WebP</p>
-                                <input type="file" accept="image/*" onChange={e => handleSectionImageUpload(idx, e.target.files?.[0])} style={{ display: 'none' }} />
+                                <input type="file" accept="image/*" disabled={uploadingSection === idx} onChange={e => { handleSectionImageUpload(idx, e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
                               </label>
                     )}
                     {stype === 'CAROUSEL' && (
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             {(section.images || []).map((img, iIdx) => (
                                 <div key={iIdx} style={{ position: 'relative', width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-gray-200)' }}>
-                                    <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    <img src={getAssetUrl(img)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     <button type="button" className="x-remove" onClick={() => removeCarouselImage(idx, iIdx)} style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', cursor: 'pointer' }}><X size={12} /></button>
                                 </div>
                             ))}
                             <label style={{ width: '80px', height: '80px', border: '2px dashed var(--color-gray-300)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '2px', cursor: 'pointer', background: 'var(--color-gray-50)' }}>
-                                <Plus size={20} style={{ color: 'var(--color-gray-400)' }} />
+                                {uploadingSection === idx
+                                    ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-gray-400)' }} />
+                                    : <Plus size={20} style={{ color: 'var(--color-gray-400)' }} />}
                                 <span style={{ fontSize: '0.6rem', color: 'var(--color-gray-400)' }}>Add</span>
-                                <input type="file" accept="image/*" onChange={e => handleCarouselImageUpload(idx, e.target.files?.[0])} style={{ display: 'none' }} />
+                                <input type="file" accept="image/*" disabled={uploadingSection === idx} onChange={e => { handleCarouselImageUpload(idx, e.target.files?.[0]); e.target.value = ''; }} style={{ display: 'none' }} />
                             </label>
                         </div>
                     )}
@@ -991,7 +1002,7 @@ const ProfileEdit = () => {
                                                 <div key={project.id} className={`pe-project-item ${alreadyAdded ? 'pe-project-added' : ''}`}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
                                                         {project.image ? (
-                                                            <img src={project.image} alt="" className="pe-project-img" />
+                                                            <img src={getAssetUrl(project.image)} alt="" className="pe-project-img" />
                                                         ) : (
                                                             <div className="pe-project-img pe-project-img-placeholder">{project.name.charAt(0)}</div>
                                                         )}
@@ -1044,7 +1055,7 @@ const ProfileEdit = () => {
                                                     className="pe-dropdown-item"
                                                     onClick={() => handleAddProject({ ...project, name: project.name || project.title })}
                                                 >
-                                                    {(project.image || project.thumbnail) && <img src={project.image || project.thumbnail} alt="" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover' }} />}
+                                                    {(project.image || project.thumbnail) && <img src={getAssetUrl(project.image || project.thumbnail)} alt="" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover' }} />}
                                                     <div style={{ minWidth: 0 }}>
                                                         <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-gray-900)' }}>{project.name || project.title}</p>
                                                         <p style={{ fontSize: '0.7rem', color: 'var(--color-gray-500)' }}>{project.status || project.stage}</p>
@@ -1064,7 +1075,7 @@ const ProfileEdit = () => {
                                     {form.biesProjects.map(project => (
                                         <div key={project.id} className="pe-project-item">
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
-                                                {project.image && <img src={project.image} alt="" className="pe-project-img" />}
+                                                {project.image && <img src={getAssetUrl(project.image)} alt="" className="pe-project-img" />}
                                                 <div style={{ minWidth: 0 }}>
                                                     <p className="pe-project-name">{project.name}</p>
                                                     <p className="pe-project-role">{project.role}</p>
@@ -1136,7 +1147,10 @@ const ProfileEdit = () => {
                 }
                 .pe-grid {
                     display: grid;
-                    grid-template-columns: 2fr 1fr;
+                    /* minmax(0, …): a column never grows wider than the
+                       screen to fit what's in it (a text section's toolbar
+                       did, and phones cut the cards off on the right). */
+                    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
                     gap: 1.5rem;
                     align-items: start;
                 }
@@ -1144,9 +1158,10 @@ const ProfileEdit = () => {
                     display: flex;
                     flex-direction: column;
                     gap: 1rem;
+                    min-width: 0;
                 }
                 @media (max-width: 768px) {
-                    .pe-grid { grid-template-columns: 1fr; }
+                    .pe-grid { grid-template-columns: minmax(0, 1fr); }
                 }
                 .pe-topbar {
                     display: flex;
@@ -1474,6 +1489,37 @@ const ProfileEdit = () => {
                     gap: 0.35rem;
                     font-size: 0.8rem;
                     font-weight: 500;
+                }
+
+                /* ── Custom section photo ── */
+                .pe-photo-preview {
+                    position: relative;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    background: var(--color-gray-100, #f3f4f6);
+                    min-height: 120px;
+                }
+                .pe-photo-preview img { display: block; width: 100%; max-height: 320px; object-fit: cover; }
+                .pe-photo-remove {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    width: 30px;
+                    height: 30px;
+                    border: none;
+                    background: rgba(0, 0, 0, 0.6);
+                    color: white;
+                    cursor: pointer;
+                }
+                .pe-photo-drop {
+                    border: 2px dashed var(--color-gray-300);
+                    border-radius: 12px;
+                    padding: 2rem 1rem;
+                    text-align: center;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    background: var(--color-gray-50);
                 }
 
                 /* ── Collapsible Sections ── */
