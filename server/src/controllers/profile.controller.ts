@@ -17,6 +17,7 @@ import { isClaimedNip05, isReservedNip05, looksGivenAtSignup } from '../services
 import { nip05IsHeld, recordReleasedNip05 } from '../services/releasedNip05';
 import { allowedParts, publicNostrOf, publicUrl, sourceFields } from '../services/publicNostrProfile';
 import { followPublicProfile, isFollowing } from './publicNostr.controller';
+import { config } from '../config';
 
 export { isReservedNip05 };
 
@@ -41,6 +42,30 @@ function memberCard(p: any) {
         // When their account was made, as their profile's "Joined" shows it.
         joinedAt: p.user?.createdAt ?? null,
     };
+}
+
+/**
+ * A profile's custom sections, with their photos as full links. Photos are
+ * saved as /uploads/... paths, which the website resolves on its own; the
+ * phone app runs on its own origin, and its builds up to 18 show the links
+ * as they come.
+ */
+export function sectionsWithFullLinks(raw: string | null | undefined): unknown[] {
+    let sections: unknown;
+    try { sections = JSON.parse(raw || '[]'); } catch { return []; }
+    if (!Array.isArray(sections)) return [];
+    const full = (link: unknown) => (typeof link === 'string' && link.startsWith('/') && !link.startsWith('//')
+        ? `${config.appPublicUrl}${link}`
+        : link);
+    return sections.map((section) => {
+        if (!section || typeof section !== 'object') return section;
+        const s = section as Record<string, unknown>;
+        return {
+            ...s,
+            ...(typeof s.imageUrl === 'string' ? { imageUrl: full(s.imageUrl) } : {}),
+            ...(Array.isArray(s.images) ? { images: s.images.map(full) } : {}),
+        };
+    });
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -298,7 +323,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
             lookingFor: JSON.parse(p.lookingFor || '[]'),
             experience: JSON.parse(p.experience || '[]'),
             biesProjects: JSON.parse(p.biesProjects || '[]'),
-            customSections: JSON.parse(p.customSections || '[]'),
+            customSections: sectionsWithFullLinks(p.customSections),
         }));
 
         const result = {
@@ -513,7 +538,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             lookingFor: JSON.parse(profile.lookingFor || '[]'),
             experience: JSON.parse(profile.experience || '[]'),
             biesProjects: JSON.parse(profile.biesProjects || '[]'),
-            customSections: JSON.parse(profile.customSections || '[]'),
+            customSections: sectionsWithFullLinks(profile.customSections),
         };
 
         await cache.setJson(cKey, result, TTL.PROFILE_DETAIL);
@@ -626,6 +651,7 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         for (const f of arrayParsedFields) {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }
+        parsed.customSections = sectionsWithFullLinks(profile.customSections);
 
         // Sync to Nostr Kind 0 if identity-related fields changed
         // (as Settings → Privacy allows: "Links: Only me" leaves those out)
@@ -749,6 +775,7 @@ export async function getMyProfile(req: Request, res: Response): Promise<void> {
         for (const f of arrayFields) {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }
+        parsed.customSections = sectionsWithFullLinks(profile.customSections);
 
         res.json(parsed);
     } catch (error) {

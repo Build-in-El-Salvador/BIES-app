@@ -324,7 +324,7 @@ const AdminFeedback = () => {
                                 <div className="feedback-footer">
                                     <span className="feedback-user">
                                         {item.user?.profile?.avatar && (
-                                            <img src={item.user.profile.avatar} alt="" className="user-avatar" />
+                                            <img src={getAssetUrl(item.user.profile.avatar)} alt="" className="user-avatar" />
                                         )}
                                         {item.user?.profile?.name || item.user?.email || 'Unknown user'}
                                     </span>

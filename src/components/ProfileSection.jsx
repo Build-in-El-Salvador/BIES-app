@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import TranslatableText from './TranslatableText';
+import { getAssetUrl } from '../utils/assets';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Label } from 'recharts';
 
 const PIE_COLORS = ['#0052cc', '#16a34a', '#7c3aed', '#ea580c', '#dc2626', '#0891b2', '#ca8a04', '#be185d'];
@@ -11,7 +12,7 @@ const SectionCarousel = ({ images }) => {
     return (
         <div style={{ position: 'relative' }}>
             <img
-                src={images[idx]}
+                src={getAssetUrl(images[idx])}
                 alt={`Slide ${idx + 1}`}
                 style={{ width: '100%', borderRadius: '10px', objectFit: 'cover', maxHeight: '400px' }}
             />
@@ -62,7 +63,7 @@ const ProfileSection = ({ section, isSidebar }) => {
                 </>
             )}
             {stype === 'PHOTO' && section.imageUrl && (
-                <img src={section.imageUrl} alt={section.title || ''} style={{ width: '100%', borderRadius: '10px', objectFit: 'cover' }} />
+                <img src={getAssetUrl(section.imageUrl)} alt={section.title || ''} style={{ width: '100%', borderRadius: '10px', objectFit: 'cover' }} />
             )}
             {stype === 'CAROUSEL' && section.images?.length > 0 && (
                 <SectionCarousel images={section.images} />

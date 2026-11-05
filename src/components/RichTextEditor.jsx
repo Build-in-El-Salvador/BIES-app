@@ -133,6 +133,7 @@ const RichTextEditor = ({ value, onChange, placeholder, minHeight = '120px' }) =
                 }
                 .rte-toolbar {
                     display: flex;
+                    flex-wrap: wrap; /* on a narrow phone, a second row rather than wider than the screen */
                     gap: 0.25rem;
                     padding: 0.5rem;
                     background: var(--color-gray-100);
