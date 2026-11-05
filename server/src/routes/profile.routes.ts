@@ -26,6 +26,7 @@ const PROFILE_TEXT = [
     'name', 'bio', 'location', 'skills', 'company', 'title', 'tags', 'experience',
     'customSections', 'lookingFor', 'nip05Name', 'twitter', 'linkedin', 'github',
     'website', 'lightningAddress', 'investmentFocus', 'investmentStage', 'biesProjects',
+    'firstName', 'lastName', 'roles', 'instagram', 'customLinks',
 ];
 
 // NIP-05 availability check (before /:id to avoid being swallowed)

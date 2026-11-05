@@ -169,6 +169,11 @@ model Profile {
   id           String   @id @default(cuid())
   userId       String   @unique @map("user_id")
   name         String   @default("")
+  // Edit profile asks for these; `name` is them joined, and stays what the
+  // rest of BIES shows and searches. Kept as typed, so "Mary Ann" + "Smith"
+  // opens as it was saved (services/profileFields.ts).
+  firstName    String   @default("") @map("first_name")
+  lastName     String   @default("") @map("last_name")
   bio          String   @default("")
   avatar       String   @default("")
   banner       String   @default("")
@@ -181,6 +186,15 @@ model Profile {
   github       String   @default("")
   company      String   @default("")
   title        String   @default("")
+  // "What you do": JSON [{ title, company }]. The first is the headline,
+  // copied into title and company for cards, search and older app builds.
+  roles        String   @default("[]")
+  instagram    String   @default("")
+  // A member's own links (YouTube, Substack...): JSON [{ label, url }].
+  customLinks  String   @default("[]") @map("custom_links")
+  // Edit profile sections switched off (hidden from others, kept): JSON
+  // array of links | projects | custom | tags. Experience has showExperience.
+  hiddenSections String @default("[]") @map("hidden_sections")
   tags         String   @default("[]")  // JSON array
   // Investor-specific
   investmentFocus String @default("[]") @map("investment_focus") // JSON array of sectors

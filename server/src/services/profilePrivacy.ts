@@ -9,6 +9,7 @@
  */
 
 import { isClaimedNip05, nip05Address } from './nip05';
+import { hiddenSectionsOf, rolesOf } from './profileFields';
 
 export type Viewer = 'self' | 'member' | 'public';
 
@@ -50,15 +51,24 @@ export function privacyOf(raw: unknown): Privacy {
 // The fields each setting covers, with what they read as when hidden.
 const HIDDEN_AS: Record<'location' | 'links' | 'details', Record<string, unknown>> = {
     location: { location: '' },
-    links: { website: '', twitter: '', linkedin: '', github: '', lightningAddress: '', bolt12Offer: '', coinosUsername: null, nip05Name: null },
+    links: { website: '', twitter: '', linkedin: '', github: '', instagram: '', customLinks: [], lightningAddress: '', bolt12Offer: '', coinosUsername: null, nip05Name: null },
     details: {
         experience: [], customSections: [], biesProjects: [], skills: [], tags: [], lookingFor: [],
         investmentFocus: [], investmentStage: [], minTicket: null, maxTicket: null, portfolioCount: 0,
     },
 };
 
-// All a signed-out visitor gets, at most.
-const PUBLIC_FIELDS = ['id', 'userId', 'name', 'avatar', 'banner', 'coverFrame', 'title', 'company', 'bio', 'isPublic', 'createdAt'];
+// Edit profile sections switched off: to everyone else, as if empty. Links
+// & Social leaves the BIES address alone (Settings → Nostr has it).
+const SECTION_HIDDEN_AS: Record<'links' | 'projects' | 'custom' | 'tags', Record<string, unknown>> = {
+    links: { website: '', twitter: '', linkedin: '', github: '', instagram: '', customLinks: [], lightningAddress: '', bolt12Offer: '' },
+    projects: { biesProjects: [] },
+    custom: { customSections: [] },
+    tags: { tags: [] },
+};
+
+// All a signed-out visitor gets, at most. Roles are the headline, as title and company.
+const PUBLIC_FIELDS = ['id', 'userId', 'name', 'firstName', 'lastName', 'avatar', 'banner', 'coverFrame', 'title', 'company', 'roles', 'bio', 'isPublic', 'createdAt'];
 
 /** Who is looking at a member's profile: themselves, another member, or anyone. */
 export function viewerFor(viewerId: string | null | undefined, memberId: string | null | undefined): Viewer {
@@ -115,6 +125,8 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
     for (const key of ['location', 'links', 'details'] as const) {
         if (privacy[key] === 'ONLY_ME') Object.assign(out, HIDDEN_AS[key]);
     }
+    for (const section of hiddenSectionsOf(profile.hiddenSections)) Object.assign(out, SECTION_HIDDEN_AS[section]);
+    if (profile.showExperience === false) out.experience = [];
     out.networkHidden = !canSeeNetwork(privacy, viewer);
     return out;
 }
@@ -125,7 +137,8 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
  */
 export function matchesVisibly(profile: Record<string, any>, term: string, viewer: Viewer): boolean {
     const shown = profileForViewer(profile, viewer);
-    const text = [shown.name, shown.title, shown.company, shown.bio, shown.location]
+    const roles = rolesOf(shown).flatMap((r) => [r.title, r.company]);
+    const text = [shown.name, shown.title, shown.company, ...roles, shown.bio, shown.location]
         .filter((v) => typeof v === 'string')
         .join(' ')
         .toLowerCase();
@@ -141,8 +154,12 @@ export function matchesVisibly(profile: Record<string, any>, term: string, viewe
 export function nostrProfileFor(profile: {
     name?: string | null; bio?: string | null; avatar?: string | null; banner?: string | null;
     website?: string | null; nip05Name?: string | null; lightningAddress?: string | null; bolt12Offer?: string | null;
+    hiddenSections?: unknown;
 }, privacy: Privacy) {
-    const links = privacy.links !== 'ONLY_ME';
+    // Links & Social switched off in Edit profile leaves the links out too,
+    // but not the BIES address.
+    const shownLinks = privacy.links !== 'ONLY_ME';
+    const links = shownLinks && !hiddenSectionsOf(profile.hiddenSections).has('links');
     const isLnurl = !!profile.lightningAddress?.toLowerCase().startsWith('lnurl1');
     return {
         name: profile.name || '',
@@ -150,7 +167,7 @@ export function nostrProfileFor(profile: {
         picture: profile.avatar || '',
         banner: profile.banner || '',
         website: links ? profile.website || '' : '',
-        nip05: links && profile.nip05Name ? nip05Address(profile.nip05Name) : '',
+        nip05: shownLinks && profile.nip05Name ? nip05Address(profile.nip05Name) : '',
         lud16: links && !isLnurl ? profile.lightningAddress || '' : '',
         lud06: links && isLnurl ? profile.lightningAddress || '' : '',
         bolt12: links ? profile.bolt12Offer || '' : '',

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { nip19 } from 'nostr-tools';
 import {
-    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, User, ImageOff, Plus, CalendarDays,
+    Briefcase, Store, Leaf, Rocket, MapPin, Globe, Twitter, Linkedin, Instagram, Link2, User, ImageOff, Plus, CalendarDays,
 } from 'lucide-react';
 import { profilesApi, directoryApi, talentApi } from '../../services/api';
 import { useFeature } from '../../context/FeatureFlagsContext';
@@ -13,6 +13,7 @@ import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { joinedDate } from '../../utils/joinedDate';
 import { sectionHasContent } from '../../utils/profileSections';
+import { asOthersSeeIt, customLinksOf, instagramLink, rolesOf } from '../../utils/profileFields';
 import Feed from '../../pages/Feed';
 import ZappableTag from '../ZappableTag';
 import ProfileSection from '../ProfileSection';
@@ -181,12 +182,14 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     // The businesses and farms they run (theirs, or one staff linked them to),
     // then the ones they work at (not one they run as well). The one named as
     // their company links from there instead.
+    // "What you do": each role's company links to its listing, when it's one of these.
+    const roles = rolesOf(profile);
     const businesses = listings.filter((l) => runsListing(l, userId));
     const workplaces = worksAt(teamListings, userId, businesses);
-    const companyListing = businesses.find((l) => sameName(l.name, profile.company))
-        || workplaces.find((l) => sameName(l.name, profile.company));
-    const otherBusinesses = businesses.filter((l) => l !== companyListing);
-    const otherWorkplaces = workplaces.filter((l) => l !== companyListing);
+    const listingFor = (company) => businesses.find((l) => sameName(l.name, company)) || workplaces.find((l) => sameName(l.name, company));
+    const roleListings = new Set(roles.map((r) => listingFor(r.company)).filter(Boolean));
+    const otherBusinesses = businesses.filter((l) => !roleListings.has(l));
+    const otherWorkplaces = workplaces.filter((l) => !roleListings.has(l));
 
     // Pictures from their own posts (not ones they reposted).
     const photos = useMemo(
@@ -205,25 +208,34 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
     const avatar = profile.avatar || nostrProfile?.picture || '';
     const banner = profile.banner || nostrProfile?.banner || '';
     const name = profile.name || t('common.unnamed', 'Unnamed');
-    const projects = projectsEnabled && Array.isArray(profile.biesProjects) ? profile.biesProjects : [];
-    // Edit profile → Experience → Show: Off hides it from the profile.
-    const experience = profile.showExperience !== false && Array.isArray(profile.experience)
-        ? profile.experience.filter((e) => e?.title || e?.company)
+    // Sections switched off in Edit profile: the server leaves them out for
+    // everyone else; their member's own page leaves them out too.
+    const shown = isOwn ? asOthersSeeIt(profile) : profile;
+    const projects = projectsEnabled && Array.isArray(shown.biesProjects) ? shown.biesProjects : [];
+    // Edit profile → Experience switched off hides it from the profile.
+    const experience = shown.showExperience !== false && Array.isArray(shown.experience)
+        ? shown.experience.filter((e) => e?.title || e?.company)
         : [];
     // A section left blank in Edit profile would show as an empty box.
-    const sections = Array.isArray(profile.customSections) ? profile.customSections.filter(sectionHasContent) : [];
+    const sections = Array.isArray(shown.customSections) ? shown.customSections.filter(sectionHasContent) : [];
+    const instagram = instagramLink(shown.instagram);
     const links = [
-        profile.website && isSafeUrl(profile.website) && { key: 'web', Icon: Globe, href: profile.website, label: profile.website.replace(/^https?:\/\//, '').replace(/\/$/, '') },
-        profile.twitter && { key: 'x', Icon: Twitter, href: `https://x.com/${profile.twitter.replace('@', '')}`, label: `@${profile.twitter.replace('@', '')}` },
-        profile.linkedin && isSafeUrl(profile.linkedin) && { key: 'in', Icon: Linkedin, href: profile.linkedin, label: 'LinkedIn' },
+        shown.website && isSafeUrl(shown.website) && { key: 'web', Icon: Globe, href: shown.website, label: shown.website.replace(/^https?:\/\//, '').replace(/\/$/, '') },
+        instagram && { key: 'ig', Icon: Instagram, href: instagram.href, label: instagram.label },
+        shown.twitter && { key: 'x', Icon: Twitter, href: `https://x.com/${shown.twitter.replace('@', '')}`, label: `@${shown.twitter.replace('@', '')}` },
+        shown.linkedin && isSafeUrl(shown.linkedin) && { key: 'in', Icon: Linkedin, href: shown.linkedin, label: 'LinkedIn' },
+        ...customLinksOf(shown).map((l, i) => ({ key: `link-${i}`, Icon: Link2, href: l.url, label: l.label })),
     ].filter(Boolean);
-    const role = profile.title && profile.company ? 'both' : profile.title ? 'title' : profile.company ? 'company' : null;
-    const filledIn = role || otherBusinesses.length || otherWorkplaces.length || projects.length || profile.location || links.length || profile.tags?.length;
+    const tags = Array.isArray(shown.tags) ? shown.tags : [];
+    const filledIn = roles.length || otherBusinesses.length || otherWorkplaces.length || projects.length || profile.location || links.length || tags.length;
     const joined = joinedDate(profile.user?.createdAt, i18n.language);
 
-    const companyText = companyListing
-        ? <Link to={listingPath(companyListing)} className="pv-link">{profile.company}</Link>
-        : <strong>{profile.company}</strong>;
+    const companyText = (company) => {
+        const listing = listingFor(company);
+        return listing
+            ? <Link to={listingPath(listing)} className="pv-link">{company}</Link>
+            : <strong>{company}</strong>;
+    };
 
     return (
         <div className="pv">
@@ -369,16 +381,16 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                     <section className="pv-section">
                         <h2 className="pv-h2">{t('profileView.details')}</h2>
                         <ul className="pv-details">
-                            {role && (
-                                <li>
+                            {roles.map((r, i) => (
+                                <li key={`role-${i}`}>
                                     <Briefcase size={20} aria-hidden="true" />
                                     <span>
-                                        {role === 'both' && <>{profile.title} {t('profileView.at')} {companyText}</>}
-                                        {role === 'title' && profile.title}
-                                        {role === 'company' && companyText}
+                                        {r.title && r.company && <>{r.title} {t('profileView.at')} {companyText(r.company)}</>}
+                                        {r.title && !r.company && r.title}
+                                        {!r.title && r.company && companyText(r.company)}
                                     </span>
                                 </li>
-                            )}
+                            ))}
                             {otherBusinesses.map((l) => (
                                 <li key={l.id}>
                                     {l.type === 'FARM' ? <Leaf size={20} aria-hidden="true" /> : <Store size={20} aria-hidden="true" />}
@@ -413,9 +425,9 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                                 <li><CalendarDays size={20} aria-hidden="true" /><span>{t('profileView.joined', { date: joined })}</span></li>
                             )}
                         </ul>
-                        {profile.tags?.length > 0 && (
+                        {tags.length > 0 && (
                             <div className="pv-tags">
-                                {profile.tags.map((tag, i) => <ZappableTag key={`${tag}-${i}`} tag={tag} />)}
+                                {tags.map((tag, i) => <ZappableTag key={`${tag}-${i}`} tag={tag} />)}
                             </div>
                         )}
                         {isOwn && !filledIn && (

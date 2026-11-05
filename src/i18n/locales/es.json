@@ -1708,6 +1708,125 @@
     "uploading": "Subiendo...",
     "loadingImage": "Cargando..."
   },
+  "profileForm": {
+    "title": "Editar perfil",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "strength": "Tu perfil está {{percent}}% completo",
+    "next": {
+      "photo": "Siguiente: agrega una foto de perfil, para que los miembros te reconozcan.",
+      "role": "Siguiente: agrega a qué te dedicas.",
+      "location": "Siguiente: agrega dónde vives.",
+      "about": "Siguiente: escribe unas líneas sobre ti.",
+      "links": "Siguiente: agrega tus enlaces, para que los miembros encuentren tu trabajo.",
+      "experience": "Siguiente: agrega tu experiencia, para que los miembros conozcan tu trayectoria."
+    },
+    "cover": "Portada",
+    "changePhoto": "Cambiar tu foto de perfil",
+    "uploading": "Subiendo…",
+    "photosHint": "Tu foto y tu portada, como las ven los miembros.",
+    "basicInfo": "Información básica",
+    "firstName": "Nombre",
+    "lastName": "Apellido",
+    "firstNameRequired": "Agrega tu nombre.",
+    "whatYouDo": "A qué te dedicas",
+    "firstShows": "El primero aparece en tu tarjeta",
+    "role": "Cargo",
+    "company": "Empresa",
+    "rolePlaceholder": "Cargo, p. ej. Fundador",
+    "companyPlaceholder": "Empresa",
+    "addRole": "Agregar otro cargo",
+    "removeRole": "Quitar este cargo",
+    "location": "Ubicación",
+    "locationPlaceholder": "p. ej. El Zonte, La Libertad",
+    "about": "Sobre ti",
+    "aboutPlaceholder": "Quién eres y qué estás construyendo",
+    "aboutHint": "Unas líneas sobre quién eres y qué estás construyendo.",
+    "sections": {
+      "links": {
+        "title": "Enlaces y redes",
+        "sub": "Sitio web, Instagram, X, LinkedIn y tus propios enlaces."
+      },
+      "experience": {
+        "title": "Experiencia",
+        "sub": "Trabajos y cargos que has tenido."
+      },
+      "projects": {
+        "title": "En qué trabajas",
+        "sub": "Proyectos de BIES de los que formas parte."
+      },
+      "custom": {
+        "title": "Secciones propias",
+        "sub": "Texto o fotos, con tus palabras."
+      },
+      "tags": {
+        "title": "Etiquetas",
+        "sub": "Palabras con las que los miembros te encuentran."
+      }
+    },
+    "showOnProfile": "Mostrar {{section}} en tu perfil",
+    "offHint": "Apagada, una sección no se muestra en tu perfil. Lo que agregaste se guarda, para cuando la vuelvas a encender.",
+    "website": "Sitio web",
+    "websitePlaceholder": "tusitio.com",
+    "otherLinks": "Otros enlaces",
+    "otherLinksNote": "(YouTube, TikTok, Substack…)",
+    "linkLabel": "Nombre",
+    "linkUrl": "Enlace",
+    "addLink": "Agregar un enlace",
+    "removeLink": "Quitar este enlace",
+    "lightning": "Dirección Lightning",
+    "lightningHint": "Una dirección Lightning (tu@billetera.com) o un LNURL.",
+    "bolt12": "Oferta Bolt12",
+    "bolt12Hint": "Para zaps privados con Bolt12: Phoenix, Zeus, CLN…",
+    "from": "Desde",
+    "to": "Hasta",
+    "present": "Actualidad",
+    "whatYouDid": "Qué hiciste",
+    "addExperience": "Agregar experiencia",
+    "removeExperience": "Quitar esta experiencia",
+    "yourProjects": "Tus proyectos",
+    "otherProjects": "Otros proyectos",
+    "searchProjects": "Buscar proyectos de BIES",
+    "yourRole": "Tu papel en él",
+    "yourRolePlaceholder": "Tu papel en él, p. ej. Cofundador",
+    "add": "Agregar",
+    "added": "Agregado",
+    "noProjects": "No se encontraron proyectos",
+    "removeProject": "Quitar {{name}}",
+    "customHint": "Cualquier otra cosa que quieras en tu perfil: una historia, tu trabajo, fotos.",
+    "types": {
+      "text": "Texto",
+      "photos": "Fotos",
+      "chart": "Gráfico"
+    },
+    "sectionTitle": "Título",
+    "sectionTitlePlaceholder": "Título, p. ej. Mi historia",
+    "bodyPlaceholder": "Escribe algo…",
+    "addPhotos": "Agregar fotos",
+    "removePhoto": "Quitar esta foto",
+    "removeSection": "Quitar esta sección",
+    "dragHint": "Arrastra para reordenar",
+    "chart": {
+      "type": "Tipo de gráfico",
+      "bar": "Barras",
+      "line": "Líneas",
+      "pie": "Circular",
+      "label": "Etiqueta",
+      "value": "Valor",
+      "add": "Agregar un punto",
+      "remove": "Quitar este punto"
+    },
+    "tagsPlaceholder": "Escribe una etiqueta y presiona Enter",
+    "errors": {
+      "uploadAvatar": "No se pudo subir tu foto. Inténtalo de nuevo.",
+      "uploadCover": "No se pudo subir tu portada. Inténtalo de nuevo.",
+      "uploadSection": "No se pudo subir esa foto. Inténtalo de nuevo.",
+      "save": "No se pudo guardar tu perfil. Inténtalo de nuevo."
+    },
+    "removeSectionAsk": "¿Quitarla?",
+    "keep": "Dejar",
+    "remove": "Quitar"
+  },
   "projectDetail": {
     "loadingProject": "Cargando proyecto...",
     "projectNotFound": "Proyecto no encontrado",
