@@ -1,42 +1,30 @@
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import TranslatableText from './TranslatableText';
 import { getAssetUrl } from '../utils/assets';
+import { useLightbox } from '../context/LightboxContext';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Label } from 'recharts';
 
 const PIE_COLORS = ['#0052cc', '#16a34a', '#7c3aed', '#ea580c', '#dc2626', '#0891b2', '#ca8a04', '#be185d'];
 
-const SectionCarousel = ({ images }) => {
-    const [idx, setIdx] = useState(0);
-    if (!images?.length) return null;
+/**
+ * A section's photos as small thumbnails; tapped, they open full size and
+ * can be swiped through (the lightbox). One photo (PHOTO) or several (CAROUSEL).
+ */
+const SectionPhotos = ({ section }) => {
+    const lightbox = useLightbox();
+    const urls = (section.type === 'PHOTO' ? [section.imageUrl] : section.images || []).filter(Boolean).map(getAssetUrl);
+    if (!urls.length) return null;
     return (
-        <div style={{ position: 'relative' }}>
-            <img
-                src={getAssetUrl(images[idx])}
-                alt={`Slide ${idx + 1}`}
-                style={{ width: '100%', borderRadius: '10px', objectFit: 'cover', maxHeight: '400px' }}
-            />
-            {images.length > 1 && (
-                <>
-                    <button
-                        onClick={() => setIdx((idx - 1 + images.length) % images.length)}
-                        style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                    >
-                        <ChevronLeft size={18} />
-                    </button>
-                    <button
-                        onClick={() => setIdx((idx + 1) % images.length)}
-                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                    >
-                        <ChevronRight size={18} />
-                    </button>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '0.5rem' }}>
-                        {images.map((_, i) => (
-                            <button key={i} onClick={() => setIdx(i)} style={{ width: 8, height: 8, borderRadius: '50%', border: 'none', background: i === idx ? 'var(--color-primary, #0052cc)' : '#d1d5db', cursor: 'pointer', padding: 0 }} />
-                        ))}
-                    </div>
-                </>
-            )}
+        <div className="ps-photos">
+            {urls.map((src, i) => (
+                <button key={`${src}-${i}`} type="button" className="ps-photo" onClick={() => lightbox?.open(src, urls)} aria-label={section.title || undefined}>
+                    <img src={src} alt="" loading="lazy" />
+                </button>
+            ))}
+            <style>{`
+                .ps-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; max-width: 520px; }
+                .ps-photo { padding: 0; min-height: 0; border: none; border-radius: 8px; aspect-ratio: 1; overflow: hidden; background: var(--color-gray-100); cursor: zoom-in; }
+                .ps-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+            `}</style>
         </div>
     );
 };
@@ -62,12 +50,7 @@ const ProfileSection = ({ section, isSidebar }) => {
                     )}
                 </>
             )}
-            {stype === 'PHOTO' && section.imageUrl && (
-                <img src={getAssetUrl(section.imageUrl)} alt={section.title || ''} style={{ width: '100%', borderRadius: '10px', objectFit: 'cover' }} />
-            )}
-            {stype === 'CAROUSEL' && section.images?.length > 0 && (
-                <SectionCarousel images={section.images} />
-            )}
+            {(stype === 'PHOTO' || stype === 'CAROUSEL') && <SectionPhotos section={section} />}
             {stype === 'GRAPH' && section.dataPoints?.length > 0 && (
                 <div style={{ width: '100%', height: isSidebar ? '240px' : '340px', marginTop: section.title ? '0.5rem' : '0' }}>
                     <ResponsiveContainer width="100%" height="100%">

@@ -18,6 +18,7 @@ import { nip05IsHeld, recordReleasedNip05 } from '../services/releasedNip05';
 import { allowedParts, publicNostrOf, publicUrl, sourceFields } from '../services/publicNostrProfile';
 import { followPublicProfile, isFollowing } from './publicNostr.controller';
 import { config } from '../config';
+import { applyEditFields, editFieldsOf, HIDEABLE_SECTIONS, MAX_CUSTOM_LINKS, MAX_ROLES } from '../services/profileFields';
 
 export { isReservedNip05 };
 
@@ -86,6 +87,17 @@ const withHttps = (value: unknown) => {
 
 export const updateProfileSchema = z.object({
     name: z.string().max(100).optional(),
+    // Edit profile (services/profileFields.ts): the name in two, more than
+    // one role, Instagram, the member's own links, sections switched off.
+    firstName: z.string().max(50).optional(),
+    lastName: z.string().max(50).optional(),
+    roles: list(z.object({ title: short.optional(), company: short.optional() }), MAX_ROLES).optional(),
+    instagram: short.optional(),
+    customLinks: list(z.object({
+        label: z.string().max(40).optional(),
+        url: z.preprocess(withHttps, z.string().max(2000).url().refine((u) => /^https?:\/\//i.test(u), 'Use a web link (https://…)')),
+    }), MAX_CUSTOM_LINKS).optional(),
+    hiddenSections: z.array(z.enum(HIDEABLE_SECTIONS)).max(HIDEABLE_SECTIONS.length).optional(),
     bio: longText.optional(),
     avatar: url.optional(),
     banner: url.optional(),
@@ -282,6 +294,8 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
                 { company: { contains: search } },
                 { location: { contains: search } },
                 { title: { contains: search } },
+                // Every role "What you do" lists (the first is title/company).
+                { roles: { contains: search } },
             ];
         }
 
@@ -324,6 +338,7 @@ export async function listProfiles(req: Request, res: Response): Promise<void> {
             experience: JSON.parse(p.experience || '[]'),
             biesProjects: JSON.parse(p.biesProjects || '[]'),
             customSections: sectionsWithFullLinks(p.customSections),
+            ...editFieldsOf(p),
         }));
 
         const result = {
@@ -539,6 +554,7 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
             experience: JSON.parse(profile.experience || '[]'),
             biesProjects: JSON.parse(profile.biesProjects || '[]'),
             customSections: sectionsWithFullLinks(profile.customSections),
+            ...editFieldsOf(profile),
         };
 
         await cache.setJson(cKey, result, TTL.PROFILE_DETAIL);
@@ -562,7 +578,7 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             'investmentFocus', 'investmentStage', 'minTicket', 'maxTicket',
             'lookingFor', 'isPublic', 'nostrNpub', 'experience', 'biesProjects',
             'customSections', 'showExperience', 'nostrFeedMode', 'nip05Name', 'lightningAddress',
-            'bolt12Offer',
+            'bolt12Offer', 'firstName', 'lastName', 'roles', 'instagram', 'customLinks', 'hiddenSections',
         ];
         const data: any = {};
         for (const field of allowedFields) {
@@ -576,8 +592,10 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             select: {
                 name: true, bio: true, avatar: true, banner: true, website: true, nip05Name: true, nip05ClaimedAt: true,
                 lightningAddress: true, bolt12Offer: true,
+                firstName: true, lastName: true, roles: true, title: true, company: true,
             },
         });
+        applyEditFields(data, oldProfile);
 
         // A BIES address claimed, changed or removed (Settings → Nostr). A
         // new name the member chose is what makes them verified; the same
@@ -652,11 +670,12 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }
         parsed.customSections = sectionsWithFullLinks(profile.customSections);
+        Object.assign(parsed, editFieldsOf(profile));
 
         // Sync to Nostr Kind 0 if identity-related fields changed
         // (as Settings → Privacy allows: "Links: Only me" leaves those out)
         const privacy = privacyOf(profile.privacy);
-        if (req.body.nip05Name !== undefined || req.body.lightningAddress !== undefined || req.body.bolt12Offer !== undefined || req.body.name !== undefined) {
+        if (['nip05Name', 'lightningAddress', 'bolt12Offer', 'name', 'firstName', 'lastName', 'website', 'hiddenSections'].some((f) => req.body[f] !== undefined)) {
             publishProfileUpdate(req.user!.id, nostrProfileFor(profile, privacy))
                 .catch((err) => console.error('[Nostr] Profile sync failed:', err));
         }
@@ -776,6 +795,7 @@ export async function getMyProfile(req: Request, res: Response): Promise<void> {
             parsed[f] = JSON.parse((profile as any)[f] || '[]');
         }
         parsed.customSections = sectionsWithFullLinks(profile.customSections);
+        Object.assign(parsed, editFieldsOf(profile));
 
         res.json(parsed);
     } catch (error) {

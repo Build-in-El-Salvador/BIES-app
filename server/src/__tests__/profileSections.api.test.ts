@@ -164,3 +164,170 @@ describe("a profile's section photos", () => {
         expect(res.body.customSections).toEqual([]);
     });
 });
+
+// ─── Edit profile fields (services/profileFields.ts) ───────────────────────────
+
+describe('first and last name', () => {
+    it('are kept as typed, make the name, and open as they were saved', async () => {
+        const m = await member();
+        const saved = await call('PUT', '/api/profiles/me', { token: m.token, body: { firstName: ' Mary Ann ', lastName: 'Smith' } });
+        expect(saved.status).toBe(200);
+        expect(saved.body.name).toBe('Mary Ann Smith');
+        const me = (await call('GET', '/api/profiles/me', { token: m.token })).body;
+        expect([me.firstName, me.lastName]).toEqual(['Mary Ann', 'Smith']);
+    });
+
+    it('a last name is optional, and a name is never emptied', async () => {
+        const m = await member();
+        expect((await call('PUT', '/api/profiles/me', { token: m.token, body: { firstName: 'Murphslife', lastName: '' } })).body.name).toBe('Murphslife');
+        const blank = await call('PUT', '/api/profiles/me', { token: m.token, body: { firstName: '', lastName: '' } });
+        expect(blank.body.name).toBe('Murphslife');
+        expect(blank.body.firstName).toBe('Murphslife');
+    });
+
+    it('an app from before them: the same name keeps the parts, a new one is split', async () => {
+        const m = await member();
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { firstName: 'Mary Ann', lastName: 'Smith' } });
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { name: 'Mary Ann Smith', bio: 'Hi' } });
+        let me = (await call('GET', '/api/profiles/me', { token: m.token })).body;
+        expect([me.firstName, me.lastName]).toEqual(['Mary Ann', 'Smith']);
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { name: 'Ana Beltrán López' } });
+        me = (await call('GET', '/api/profiles/me', { token: m.token })).body;
+        expect([me.name, me.firstName, me.lastName]).toEqual(['Ana Beltrán López', 'Ana', 'Beltrán López']);
+    });
+
+    it('a name changed elsewhere is split again, and a sign-in placeholder opens empty', async () => {
+        const renamed = await member({ name: 'Diego Ramos', firstName: 'Old', lastName: 'Name' });
+        const me = (await call('GET', '/api/profiles/me', { token: renamed.token })).body;
+        expect([me.firstName, me.lastName]).toEqual(['Diego', 'Ramos']);
+        const placeholder = await member({ name: 'nostr:1a2b3c4d' });
+        const p = (await call('GET', '/api/profiles/me', { token: placeholder.token })).body;
+        expect([p.firstName, p.lastName]).toEqual(['', '']);
+    });
+});
+
+describe('what you do (roles)', () => {
+    it('the first is the headline; the rest are kept and found by search', async () => {
+        const m = await member();
+        const viewer = await member();
+        const saved = await call('PUT', '/api/profiles/me', {
+            token: m.token,
+            body: { roles: [{ title: ' Founder ', company: 'Café Cumbre' }, { title: '', company: '' }, { title: 'Mentor', company: 'Zebralab Studio' }] },
+        });
+        expect(saved.status).toBe(200);
+        expect(saved.body.roles).toEqual([{ title: 'Founder', company: 'Café Cumbre' }, { title: 'Mentor', company: 'Zebralab Studio' }]);
+        expect([saved.body.title, saved.body.company]).toEqual(['Founder', 'Café Cumbre']);
+
+        const found = await call('GET', '/api/profiles?search=zebralab', { token: viewer.token });
+        expect(found.body.data.map((p: any) => p.userId)).toContain(m.id);
+        // Public, like the headline.
+        const anyone = await call('GET', `/api/profiles/${m.id}`);
+        expect(anyone.body.roles).toHaveLength(2);
+    });
+
+    it('an app from before roles changes the first one only', async () => {
+        const m = await member();
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { roles: [{ title: 'Founder', company: 'A' }, { title: 'Mentor', company: 'B' }] } });
+        const old = await call('PUT', '/api/profiles/me', { token: m.token, body: { title: 'CEO', company: 'A' } });
+        expect(old.body.roles).toEqual([{ title: 'CEO', company: 'A' }, { title: 'Mentor', company: 'B' }]);
+    });
+
+    it('a profile from before roles reads its title and company as its one role', async () => {
+        const m = await member({ title: 'Architect', company: 'Estudio' });
+        expect((await call('GET', '/api/profiles/me', { token: m.token })).body.roles).toEqual([{ title: 'Architect', company: 'Estudio' }]);
+        const none = await member();
+        expect((await call('GET', '/api/profiles/me', { token: none.token })).body.roles).toEqual([]);
+    });
+
+    it('takes ten at most', async () => {
+        const m = await member();
+        const roles = Array.from({ length: 11 }, (_, i) => ({ title: `Role ${i}`, company: '' }));
+        expect((await call('PUT', '/api/profiles/me', { token: m.token, body: { roles } })).status).toBe(400);
+    });
+});
+
+describe('Instagram and your own links', () => {
+    it('are saved, completed with https, and refused when not a web link', async () => {
+        const m = await member();
+        const saved = await call('PUT', '/api/profiles/me', {
+            token: m.token,
+            body: { instagram: ' @cafecumbre ', customLinks: [{ label: 'YouTube', url: 'youtube.com/@cafecumbre' }] },
+        });
+        expect(saved.status).toBe(200);
+        expect(saved.body.instagram).toBe('@cafecumbre');
+        expect(saved.body.customLinks).toEqual([{ label: 'YouTube', url: 'https://youtube.com/@cafecumbre' }]);
+        for (const url of ['javascript://%0aalert(1)', 'data://text/html,hi', 'ftp://files.example.org/a']) {
+            const bad = await call('PUT', '/api/profiles/me', { token: m.token, body: { customLinks: [{ label: 'x', url }] } });
+            expect(bad.status, url).toBe(400);
+        }
+    });
+
+    it('follow Settings → Privacy → Links, and a signed-out visitor never gets them', async () => {
+        const m = await member();
+        const viewer = await member();
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { instagram: '@ana', customLinks: [{ label: 'Blog', url: 'https://blog.example.org' }] } });
+        expect((await call('GET', `/api/profiles/${m.id}`, { token: viewer.token })).body.instagram).toBe('@ana');
+        const anyone = (await call('GET', `/api/profiles/${m.id}`)).body;
+        expect(anyone.instagram).toBeUndefined();
+        expect(anyone.customLinks).toBeUndefined();
+
+        // Links: Only me (set before anyone reads the profile; Settings → Privacy clears the cache itself).
+        const quiet = await member({ privacy: JSON.stringify({ links: 'ONLY_ME' }) });
+        await call('PUT', '/api/profiles/me', { token: quiet.token, body: { instagram: '@quiet', customLinks: [{ label: 'Blog', url: 'https://blog.example.org' }] } });
+        const seen = (await call('GET', `/api/profiles/${quiet.id}`, { token: viewer.token })).body;
+        expect(seen.instagram).toBe('');
+        expect(seen.customLinks).toEqual([]);
+        expect((await call('GET', '/api/profiles/me', { token: quiet.token })).body.instagram).toBe('@quiet');
+    });
+});
+
+describe('sections switched off', () => {
+    it('are hidden from everyone else and kept for their member', async () => {
+        const m = await member();
+        const viewer = await member();
+        const photo = await uploaded(m);
+        const body = {
+            website: 'https://cafecumbre.example', twitter: '@ana', instagram: '@ana',
+            customLinks: [{ label: 'Blog', url: 'https://blog.example.org' }],
+            tags: ['coffee'], experience: [{ title: 'Lead', company: 'Finca', date: '2019 - 2023' }],
+            biesProjects: [{ id: 'p1', name: 'Co-op' }],
+            customSections: [{ title: 'P', type: 'PHOTO', imageUrl: photo }],
+            location: 'El Zonte',
+        };
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { ...body, hiddenSections: ['links', 'tags', 'custom', 'projects', 'nonsense'] } });
+        // An unknown section isn't saved (it's refused).
+        const refused = await call('PUT', '/api/profiles/me', { token: m.token, body: { hiddenSections: ['nonsense'] } });
+        expect(refused.status).toBe(400);
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { ...body, hiddenSections: ['links', 'tags', 'custom', 'projects'], showExperience: false } });
+
+        const seen = (await call('GET', `/api/profiles/${m.id}`, { token: viewer.token })).body;
+        expect([seen.website, seen.twitter, seen.instagram]).toEqual(['', '', '']);
+        expect(seen.customLinks).toEqual([]);
+        expect(seen.tags).toEqual([]);
+        expect(seen.customSections).toEqual([]);
+        expect(seen.biesProjects).toEqual([]);
+        expect(seen.experience).toEqual([]);
+        expect(seen.location).toBe('El Zonte'); // not a section
+
+        const own = (await call('GET', '/api/profiles/me', { token: m.token })).body;
+        expect(own.hiddenSections.sort()).toEqual(['custom', 'links', 'projects', 'tags']);
+        expect(own.website).toBe('https://cafecumbre.example');
+        expect(own.tags).toEqual(['coffee']);
+        expect(own.experience).toHaveLength(1);
+
+        // Switched back on: all there again.
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { hiddenSections: [], showExperience: true } });
+        const again = (await call('GET', `/api/profiles/${m.id}`, { token: viewer.token })).body;
+        expect(again.website).toBe('https://cafecumbre.example');
+        expect(again.customSections).toHaveLength(1);
+        expect(again.experience).toHaveLength(1);
+    });
+
+    it('a member search no longer finds them by a hidden tag-free field, but by role still', async () => {
+        const m = await member();
+        const viewer = await member();
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { roles: [{ title: 'Quokkaologist', company: '' }], hiddenSections: ['links'] } });
+        const found = await call('GET', '/api/profiles?search=quokkaolog', { token: viewer.token });
+        expect(found.body.data.map((p: any) => p.userId)).toContain(m.id);
+    });
+});

@@ -1890,6 +1890,125 @@
     "uploading": "Uploading...",
     "loadingImage": "Loading..."
   },
+  "profileForm": {
+    "title": "Edit profile",
+    "save": "Save",
+    "saving": "Saving…",
+    "strength": "Your profile is {{percent}}% done",
+    "next": {
+      "photo": "Next: add a profile photo, so members recognise you.",
+      "role": "Next: add what you do.",
+      "location": "Next: add where you're based.",
+      "about": "Next: write a few lines about yourself.",
+      "links": "Next: add your links, so members can find your work.",
+      "experience": "Next: add your experience, so members know your background."
+    },
+    "cover": "Cover",
+    "changePhoto": "Change your profile photo",
+    "uploading": "Uploading…",
+    "photosHint": "Your photo and cover, as members see them.",
+    "basicInfo": "Basic info",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "firstNameRequired": "Add your first name.",
+    "whatYouDo": "What you do",
+    "firstShows": "The first one shows on your card",
+    "role": "Role",
+    "company": "Company",
+    "rolePlaceholder": "Role, e.g. Founder",
+    "companyPlaceholder": "Company",
+    "addRole": "Add another role",
+    "removeRole": "Remove this role",
+    "location": "Location",
+    "locationPlaceholder": "e.g. El Zonte, La Libertad",
+    "about": "About",
+    "aboutPlaceholder": "Who you are and what you're building",
+    "aboutHint": "A few lines on who you are and what you're building.",
+    "sections": {
+      "links": {
+        "title": "Links & Social",
+        "sub": "Website, Instagram, X, LinkedIn and your own links."
+      },
+      "experience": {
+        "title": "Experience",
+        "sub": "Jobs and roles you've had."
+      },
+      "projects": {
+        "title": "Working on",
+        "sub": "BIES projects you're part of."
+      },
+      "custom": {
+        "title": "Custom sections",
+        "sub": "Text or photos, in your own words."
+      },
+      "tags": {
+        "title": "Tags",
+        "sub": "Words members can find you by."
+      }
+    },
+    "showOnProfile": "Show {{section}} on your profile",
+    "offHint": "Switched off, a section is hidden from your profile. What you added stays, for when you switch it back on.",
+    "website": "Website",
+    "websitePlaceholder": "yoursite.com",
+    "otherLinks": "Other links",
+    "otherLinksNote": "(YouTube, TikTok, Substack…)",
+    "linkLabel": "Label",
+    "linkUrl": "Link",
+    "addLink": "Add a link",
+    "removeLink": "Remove this link",
+    "lightning": "Lightning address",
+    "lightningHint": "A Lightning address (you@wallet.com) or an LNURL.",
+    "bolt12": "Bolt12 offer",
+    "bolt12Hint": "For private Bolt12 zaps: Phoenix, Zeus, CLN…",
+    "from": "From",
+    "to": "To",
+    "present": "Present",
+    "whatYouDid": "What you did",
+    "addExperience": "Add experience",
+    "removeExperience": "Remove this experience",
+    "yourProjects": "Your projects",
+    "otherProjects": "Other projects",
+    "searchProjects": "Search BIES projects",
+    "yourRole": "Your role in it",
+    "yourRolePlaceholder": "Your role in it, e.g. Co-founder",
+    "add": "Add",
+    "added": "Added",
+    "noProjects": "No projects found",
+    "removeProject": "Remove {{name}}",
+    "customHint": "Anything else you want on your profile: a story, your work, photos.",
+    "types": {
+      "text": "Text",
+      "photos": "Photos",
+      "chart": "Chart"
+    },
+    "sectionTitle": "Title",
+    "sectionTitlePlaceholder": "Title, e.g. My story",
+    "bodyPlaceholder": "Write something…",
+    "addPhotos": "Add photos",
+    "removePhoto": "Remove this photo",
+    "removeSection": "Remove this section",
+    "dragHint": "Drag to reorder",
+    "chart": {
+      "type": "Chart type",
+      "bar": "Bar chart",
+      "line": "Line chart",
+      "pie": "Pie chart",
+      "label": "Label",
+      "value": "Value",
+      "add": "Add a point",
+      "remove": "Remove this point"
+    },
+    "tagsPlaceholder": "Add a tag and press Enter",
+    "errors": {
+      "uploadAvatar": "Couldn't upload your photo. Try again.",
+      "uploadCover": "Couldn't upload your cover. Try again.",
+      "uploadSection": "Couldn't upload that photo. Try again.",
+      "save": "Couldn't save your profile. Try again."
+    },
+    "removeSectionAsk": "Remove it?",
+    "keep": "Keep",
+    "remove": "Remove"
+  },
   "projectDetail": {
     "loadingProject": "Loading project...",
     "projectNotFound": "Project not found",
