@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, X, UserPlus, Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
 import Avatar from './Avatar';
@@ -15,7 +16,8 @@ import Avatar from './Avatar';
  *   inline?: results in the flow under the field, not floating over what's
  *     below (in a sheet, which would clip them)
  */
-const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES members by name...', taken = {}, inline = false }) => {
+const MemberSearchSelect = ({ value = [], onChange, placeholder, taken = {}, inline = false }) => {
+    const { t } = useTranslation();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -60,7 +62,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
     const handleAdd = (profile) => {
         const userId = profile.userId || profile.user?.id || profile.id;
         if (isSelected(userId) || taken[userId]) return;
-        const name = profile.name || profile.user?.profile?.name || 'Unknown';
+        const name = profile.name || profile.user?.profile?.name || t('common.unnamed');
         const avatar = profile.avatar || profile.user?.profile?.avatar || '';
         onChange([...value, { name, userId, avatar }]);
         setQuery('');
@@ -91,7 +93,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                                 type="button"
                                 className="chip-remove x-remove"
                                 onClick={() => handleRemove(g.userId)}
-                                title={`Remove ${g.name}`}
+                                aria-label={t('fields.remove', { name: g.name })}
                             >
                                 <X size={12} />
                             </button>
@@ -109,7 +111,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     onFocus={() => results.length > 0 && setOpen(true)}
-                    placeholder={placeholder}
+                    placeholder={placeholder ?? t('fields.memberSearchPlaceholder')}
                     className="search-input"
                     autoComplete="off"
                 />
@@ -121,7 +123,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                 <div ref={dropdownRef} className={`results-dropdown${inline ? ' inline' : ''}`}>
                     {results.map(profile => {
                         const userId = profile.userId || profile.user?.id || profile.id;
-                        const name = profile.name || 'Unknown';
+                        const name = profile.name || t('common.unnamed');
                         const avatar = profile.avatar || '';
                         const company = profile.company || profile.user?.profile?.company || '';
                         const selected = isSelected(userId);
@@ -144,7 +146,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                                 {takenLabel ? (
                                     <span className="result-taken">{takenLabel}</span>
                                 ) : selected ? (
-                                    <span className="result-added">Added</span>
+                                    <span className="result-added">{t('fields.added')}</span>
                                 ) : (
                                     <UserPlus size={14} className="result-add-icon" />
                                 )}
@@ -204,8 +206,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    width: 20px;
-                    height: 20px;
+                    width: 22px;
+                    height: 22px;
                     border-radius: 50%;
                     border: none;
                     background: #bfdbfe;
@@ -231,20 +233,23 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     pointer-events: none;
                 }
 
+                /* As the newer forms' fields: white, a grey line, blue when in use, 0.95rem text. */
                 .search-input {
                     width: 100%;
                     padding: 0.65rem 2.25rem 0.65rem 2.25rem;
-                    border: 1px solid var(--color-gray-200);
+                    border: 1px solid var(--color-gray-300);
                     border-radius: var(--radius-md);
-                    font-size: 0.9rem;
-                    background: var(--color-gray-50);
+                    font: inherit;
+                    font-size: 0.95rem;
+                    color: inherit;
+                    background: var(--color-surface);
                     outline: none;
                     box-sizing: border-box;
-                    transition: border-color 0.2s;
+                    transition: border-color 0.2s, box-shadow 0.2s;
                 }
                 .search-input:focus {
-                    border-color: var(--color-secondary);
-                    box-shadow: 0 0 0 3px rgba(255,91,0,0.1);
+                    border-color: var(--color-primary);
+                    box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1);
                 }
 
                 .search-spin {
@@ -308,8 +313,8 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder = 'Search BIES m
                     gap: 1px;
                     min-width: 0;
                 }
-                .result-name { font-size: 0.88rem; font-weight: 600; color: var(--color-gray-900); }
-                .result-company { font-size: 0.75rem; color: var(--color-gray-500); }
+                .result-name { font-size: 0.92rem; font-weight: 600; color: var(--color-gray-900); }
+                .result-company { font-size: 0.8rem; color: var(--color-gray-500); }
 
                 .result-added { font-size: 0.75rem; color: #16a34a; font-weight: 600; }
                 .result-taken { font-size: 0.75rem; color: var(--color-gray-500); font-weight: 600; }

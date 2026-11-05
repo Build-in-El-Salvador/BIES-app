@@ -87,6 +87,12 @@
     "checkTheForm": "Check the form, then try again.",
     "and": "and"
   },
+  "fields": {
+    "remove": "Remove {{name}}",
+    "added": "Added",
+    "tagsPlaceholder": "Bitcoin, Lightning, Workshop…",
+    "memberSearchPlaceholder": "Search BIES members by name"
+  },
   "nav": {
     "discover": "Discover",
     "trusted": "Businesses",
@@ -284,7 +290,26 @@
     "keyFilePasswordLabel": "Password of the key file",
     "keyFileSignIn": "Unlock and sign in",
     "backToEmail": "Back to email sign-in",
-    "keyFileUnlocking": "Unlocking…"
+    "keyFileUnlocking": "Unlocking…",
+    "connecting": "Connecting…",
+    "loginWithNsec": "Log in with nsec",
+    "loginWithSeed": "Log in with seed phrase",
+    "seedPlaceholder": "Your 12 or 24 seed words",
+    "bunkerPlaceholder": "bunker://… or name@domain.com",
+    "installExtension": "No extension yet? Install one:",
+    "errors": {
+      "failed": "Couldn't log in. Try again.",
+      "unexpected": "Something went wrong. Try again.",
+      "passkeyExtension": "A password manager extension is getting in the way of passkeys. Turn it off (e.g. Bitwarden, 1Password) and try again.",
+      "passkeyOrigin": "The passkey didn't work here. Turn off password manager extensions, or use Chrome, Edge or Safari.",
+      "credentialManager": "Your browser's credential manager hit an error. Restart the browser, or log in with your nsec key.",
+      "noPasskey": "No passkey on this device. Log in with your nsec key, then set up a new passkey in Settings.",
+      "passkeyFailed": "Couldn't log in with your passkey.",
+      "nsec": "That nsec key didn't work. Check it and try again.",
+      "seed": "That seed phrase didn't work. Check the words and try again.",
+      "remoteSigner": "Couldn't reach your remote signer.",
+      "amber": "Couldn't log in with Amber."
+    }
   },
   "sharePreview": {
     "signIn": "Sign in",
@@ -429,7 +454,35 @@
     "educatorDesc": "teaching & community",
     "member": "Member",
     "memberDesc": "supporting the ecosystem",
-    "enterDashboard": "Enter Dashboard"
+    "enterDashboard": "Enter Dashboard",
+    "own": {
+      "title": "Save your secret key",
+      "cannotRecover": "We can't recover it for you. If you lose it, your account is gone for good.",
+      "publicId": "Public ID",
+      "secretKey": "Secret key",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyPhrase": "Copy phrase",
+      "seedTitle": "Seed phrase backup",
+      "seedWords": "12 words · keep them safe",
+      "seedHelp": "You can log in with these 12 words instead of your secret key.",
+      "backupTitle": "Back up your keys",
+      "backupHint": "Copy your secret key or seed phrase above and keep it somewhere safe.",
+      "continue": "Continue",
+      "profileTitle": "Complete your profile",
+      "profileHint": "Choose the name members will see.",
+      "nameLabel": "Your name",
+      "namePlaceholder": "e.g. Ana Beltrán",
+      "addressLabel": "Your BIES address",
+      "addressTaken": "That one's taken. Try another name.",
+      "enter": "Enter BIES",
+      "walletLabel": "Turn on an instant wallet (Coinos)",
+      "walletHint": "A Lightning wallet straight away, to send and receive sats. You can connect your own wallet later in Settings.",
+      "walletPlaceholder": "Wallet username (2–24 letters or numbers)",
+      "walletAddress": "Your Lightning address:",
+      "walletUsernameError": "Use 2 to 24 letters or numbers.",
+      "errorRegister": "Couldn't sign you up. Try again."
+    }
   },
   "passkeySave": {
     "title": "Save your login?",
@@ -2642,7 +2695,9 @@
     },
     "deleteListing": "Delete listing",
     "deleteConfirm": "Delete this listing? Its photos, reviews and team go with it. This can’t be undone.",
-    "deleteFailed": "Couldn’t delete the listing. Try again."
+    "deleteFailed": "Couldn’t delete the listing. Try again.",
+    "languagesPlaceholder": "e.g. Español, English…",
+    "skillsPlaceholder": "e.g. Web design, Accounting…"
   },
   "talent": {
     "search": "Search skills or people",

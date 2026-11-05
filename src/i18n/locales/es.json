@@ -87,6 +87,12 @@
     "checkTheForm": "Revisa el formulario e inténtalo de nuevo.",
     "and": "y"
   },
+  "fields": {
+    "remove": "Quitar {{name}}",
+    "added": "Agregado",
+    "tagsPlaceholder": "Bitcoin, Lightning, Taller…",
+    "memberSearchPlaceholder": "Busca miembros de BIES por nombre"
+  },
   "nav": {
     "discover": "Descubrir",
     "trusted": "Negocios",
@@ -284,7 +290,26 @@
     "keyFilePasswordLabel": "Contraseña del archivo de clave",
     "keyFileSignIn": "Desbloquear e iniciar sesión",
     "backToEmail": "Volver a iniciar sesión con correo",
-    "keyFileUnlocking": "Desbloqueando…"
+    "keyFileUnlocking": "Desbloqueando…",
+    "connecting": "Conectando…",
+    "loginWithNsec": "Entrar con nsec",
+    "loginWithSeed": "Entrar con frase semilla",
+    "seedPlaceholder": "Tus 12 o 24 palabras semilla",
+    "bunkerPlaceholder": "bunker://… o nombre@dominio.com",
+    "installExtension": "¿Aún sin extensión? Instala una:",
+    "errors": {
+      "failed": "No se pudo entrar. Inténtalo de nuevo.",
+      "unexpected": "Algo salió mal. Inténtalo de nuevo.",
+      "passkeyExtension": "Una extensión de contraseñas está interfiriendo con las llaves de acceso. Desactívala (p. ej. Bitwarden, 1Password) e inténtalo de nuevo.",
+      "passkeyOrigin": "La llave de acceso no funcionó aquí. Desactiva las extensiones de contraseñas, o usa Chrome, Edge o Safari.",
+      "credentialManager": "El gestor de credenciales de tu navegador tuvo un error. Reinicia el navegador o entra con tu clave nsec.",
+      "noPasskey": "No hay llave de acceso en este dispositivo. Entra con tu clave nsec y luego crea una nueva llave en Ajustes.",
+      "passkeyFailed": "No se pudo entrar con tu llave de acceso.",
+      "nsec": "Esa clave nsec no funcionó. Revísala e inténtalo de nuevo.",
+      "seed": "Esa frase semilla no funcionó. Revisa las palabras e inténtalo de nuevo.",
+      "remoteSigner": "No se pudo conectar con tu firmante remoto.",
+      "amber": "No se pudo entrar con Amber."
+    }
   },
   "sharePreview": {
     "signIn": "Iniciar sesión",
@@ -429,7 +454,35 @@
     "educatorDesc": "ensenanza y comunidad",
     "member": "Miembro",
     "memberDesc": "apoyando el ecosistema",
-    "enterDashboard": "Entrar al Panel"
+    "enterDashboard": "Entrar al Panel",
+    "own": {
+      "title": "Guarda tu clave secreta",
+      "cannotRecover": "No podemos recuperarla por ti. Si la pierdes, tu cuenta se pierde para siempre.",
+      "publicId": "ID público",
+      "secretKey": "Clave secreta",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copyPhrase": "Copiar frase",
+      "seedTitle": "Respaldo con frase semilla",
+      "seedWords": "12 palabras · guárdalas bien",
+      "seedHelp": "Puedes entrar con estas 12 palabras en lugar de tu clave secreta.",
+      "backupTitle": "Respalda tus claves",
+      "backupHint": "Copia tu clave secreta o tu frase semilla y guárdala en un lugar seguro.",
+      "continue": "Continuar",
+      "profileTitle": "Completa tu perfil",
+      "profileHint": "Elige el nombre que verán los miembros.",
+      "nameLabel": "Tu nombre",
+      "namePlaceholder": "p. ej. Ana Beltrán",
+      "addressLabel": "Tu dirección BIES",
+      "addressTaken": "Ese ya está tomado. Prueba otro nombre.",
+      "enter": "Entrar a BIES",
+      "walletLabel": "Activar una billetera instantánea (Coinos)",
+      "walletHint": "Una billetera Lightning al instante, para enviar y recibir sats. Puedes conectar tu propia billetera más tarde en Ajustes.",
+      "walletPlaceholder": "Usuario de la billetera (2–24 letras o números)",
+      "walletAddress": "Tu dirección Lightning:",
+      "walletUsernameError": "Usa de 2 a 24 letras o números.",
+      "errorRegister": "No se pudo crear tu cuenta. Inténtalo de nuevo."
+    }
   },
   "passkeySave": {
     "title": "Guardar tu inicio de sesion?",
@@ -2501,7 +2554,9 @@
     },
     "deleteListing": "Eliminar listado",
     "deleteConfirm": "¿Eliminar este listado? Sus fotos, reseñas y equipo se eliminan con él. No se puede deshacer.",
-    "deleteFailed": "No se pudo eliminar el listado. Inténtalo de nuevo."
+    "deleteFailed": "No se pudo eliminar el listado. Inténtalo de nuevo.",
+    "languagesPlaceholder": "p. ej. Español, English…",
+    "skillsPlaceholder": "p. ej. Diseño web, Contabilidad…"
   },
   "talent": {
     "search": "Buscar habilidades o personas",

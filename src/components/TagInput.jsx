@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 /** `id` goes on the text input, so a <label htmlFor> can name it. */
-const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ€¦', id }) => {
+const TagInput = ({ tags, onChange, placeholder, id }) => {
+    const { t } = useTranslation();
     const [input, setInput] = useState('');
     const inputRef = useRef(null);
 
@@ -31,7 +33,7 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ
             {tags.map(tag => (
                 <span key={tag} className="tag-chip">
                     {tag}
-                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove x-remove" aria-label={`Remove ${tag}`}>
+                    <button type="button" onClick={() => onChange(tags.filter(t => t !== tag))} className="tag-chip-remove x-remove" aria-label={t('fields.remove', { name: tag })}>
                         <X size={12} />
                     </button>
                 </span>
@@ -43,19 +45,21 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={handleBlur}
-                placeholder={tags.length ? '' : placeholder}
+                placeholder={tags.length ? '' : (placeholder ?? t('fields.tagsPlaceholder'))}
                 className="tag-chip-input"
             />
             <style>{`
+                /* As the newer forms' fields (Opportunities, Events): white, a
+                   grey line, blue when in use, 0.95rem text. */
                 .tag-input-wrap {
                     display: flex; flex-wrap: wrap; gap: 0.4rem;
-                    padding: 0.5rem 0.75rem; border: 1px solid var(--color-gray-200);
-                    border-radius: var(--radius-md); background: var(--color-gray-50);
-                    cursor: text; min-height: 44px; align-items: center;
+                    padding: 0.45rem 0.75rem; border: 1px solid var(--color-gray-300);
+                    border-radius: var(--radius-md); background: var(--color-surface);
+                    cursor: text; min-height: 44px; align-items: center; box-sizing: border-box;
                     transition: border-color 0.2s, box-shadow 0.2s;
                 }
                 .tag-input-wrap:focus-within {
-                    border-color: var(--color-secondary); box-shadow: 0 0 0 3px rgba(255,91,0,0.1);
+                    border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1);
                 }
                 .tag-chip {
                     display: inline-flex; align-items: center; gap: 4px;
@@ -64,15 +68,15 @@ const TagInput = ({ tags, onChange, placeholder = 'Bitcoin, Lightning, Workshopâ
                 }
                 .tag-chip-remove {
                     display: flex; align-items: center; justify-content: center;
-                    width: 20px; height: 20px; border-radius: 50%; border: none;
+                    width: 22px; height: 22px; border-radius: 50%; border: none;
                     background: #fed7aa; color: #9a3412; cursor: pointer; padding: 0;
                     transition: background 0.1s;
                 }
                 .tag-chip-remove:hover { background: #fb923c; color: white; }
                 .tag-chip-input {
-                    border: none; background: transparent; outline: none; font-size: 0.9rem;
-                    color: var(--color-gray-900); min-width: 140px; flex: 1;
-                    padding: 2px 0;
+                    border: none; background: transparent; outline: none; font: inherit; font-size: 0.95rem;
+                    color: inherit; min-width: 120px; flex: 1;
+                    padding: 4px 0;
                 }
             `}</style>
         </div>

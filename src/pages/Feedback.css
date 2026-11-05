@@ -1,7 +1,7 @@
 .feedback-page {
-    max-width: 600px;
+    max-width: 640px;
     margin: 0 auto;
-    padding: 2rem 1rem;
+    padding: var(--page-top, 1.5rem) 1rem 4rem;
 }
 
 .feedback-card {
@@ -11,16 +11,66 @@
     padding: 2rem;
 }
 
-.feedback-card h1 {
-    font-size: 1.5rem;
+/* A back button and the title, as the newer forms (Opportunities, Events) */
+.feedback-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 1.25rem;
+}
+
+.feedback-heading {
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.feedback-title {
+    margin: 0;
+    font-size: 1.6rem;
     font-weight: 700;
-    margin-bottom: 0.25rem;
+    color: var(--color-gray-900);
 }
 
 .feedback-subtitle {
     color: var(--color-gray-500);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin: 0.35rem 0 0;
+}
+
+/* Phones: the top bar shows the title, so here it's for screen readers only. */
+@media (max-width: 768px) {
+    .feedback-header { align-items: center; }
+    .feedback-heading { padding-top: 0; }
+    .feedback-title {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    }
+    .feedback-subtitle { margin: 0; }
+}
+
+.feedback-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+    background: var(--color-red-tint);
+    color: var(--color-error, #B91C1C);
+    border-radius: var(--radius-md);
     font-size: 0.9rem;
-    margin-bottom: 1.5rem;
+}
+
+.feedback-field-error {
+    margin: 0.4rem 0 1rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #b91c1c;
+}
+
+.feedback-select[aria-invalid='true'],
+.feedback-textarea[aria-invalid='true'] {
+    border-color: #b91c1c;
 }
 
 /* Report a problem | Give feedback */
@@ -81,7 +131,7 @@
 .feedback-select {
     width: 100%;
     padding: 0.75rem 2.75rem 0.75rem 1rem;
-    border: 1px solid var(--color-gray-200);
+    border: 1px solid var(--color-gray-300);
     border-radius: 0.75rem;
     font-size: 1rem;
     font-family: inherit;
@@ -111,6 +161,7 @@
 .feedback-select:focus {
     outline: none;
     border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1);
 }
 
 .feedback-shot-add {
@@ -175,9 +226,9 @@
 .feedback-textarea {
     width: 100%;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--color-gray-200);
+    border: 1px solid var(--color-gray-300);
     border-radius: 0.75rem;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-family: inherit;
     resize: vertical;
     min-height: 120px;
@@ -190,6 +241,7 @@
 
 .feedback-textarea:focus {
     border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(0, 71, 171, 0.1);
 }
 
 .feedback-textarea::placeholder {
@@ -204,11 +256,6 @@
     margin-bottom: 0.75rem;
 }
 
-.feedback-error-text {
-    color: var(--color-error);
-    font-size: 0.85rem;
-    margin-bottom: 0.75rem;
-}
 
 .feedback-submit-btn {
     display: flex;
@@ -279,12 +326,6 @@
 @keyframes feedback-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
-}
-
-@media (max-width: 768px) {
-    .feedback-card h1 {
-        display: none;
-    }
 }
 
 @media (max-width: 480px) {
