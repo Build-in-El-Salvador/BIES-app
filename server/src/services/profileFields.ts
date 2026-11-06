@@ -20,6 +20,8 @@ export type HideableSection = (typeof HIDEABLE_SECTIONS)[number];
 
 export const MAX_ROLES = 10;
 export const MAX_CUSTOM_LINKS = 10;
+// A name is up to 100 characters (sign-up), and either half may be most of it.
+export const MAX_NAME = 100;
 
 export type Role = { title: string; company: string };
 export type CustomLink = { label: string; url: string };
@@ -82,6 +84,20 @@ const isWebLink = (url: string) => {
     }
 };
 
+/**
+ * An Instagram username, as "@name", from what a member typed: "@name",
+ * "name" or their instagram.com link. '' for nothing, null when it isn't a
+ * username (so a link to another site never shows under the Instagram icon).
+ */
+export function instagramHandle(raw: unknown): string | null {
+    let value = typeof raw === 'string' ? raw.trim() : '';
+    if (!value) return '';
+    const link = value.match(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i);
+    if (link) value = link[1];
+    value = value.replace(/^@/, '');
+    return /^[A-Za-z0-9._]{1,30}$/.test(value) ? `@${value}` : null;
+}
+
 /** A member's own links: a label and a web link each (http or https only), ten at most. */
 export function cleanCustomLinks(raw: unknown): CustomLink[] {
     const list = Array.isArray(parse(raw)) ? (parse(raw) as unknown[]) : [];
@@ -103,6 +119,7 @@ export function editFieldsOf(profile: Record<string, any>) {
     return {
         ...namePartsOf(profile),
         roles: rolesOf(profile),
+        instagram: instagramHandle(profile.instagram) ?? '',
         customLinks: cleanCustomLinks(profile.customLinks),
         hiddenSections: [...hiddenSectionsOf(profile.hiddenSections)],
     };
@@ -119,8 +136,8 @@ export function applyEditFields(
     // Names: from first and last when sent; a new whole name splits.
     if (data.firstName !== undefined || data.lastName !== undefined) {
         const before = old ? namePartsOf(old) : { firstName: '', lastName: '' };
-        const firstName = text(data.firstName ?? before.firstName, 50);
-        const lastName = text(data.lastName ?? before.lastName, 50);
+        const firstName = text(data.firstName ?? before.firstName, MAX_NAME);
+        const lastName = text(data.lastName ?? before.lastName, MAX_NAME);
         const name = joinName(firstName, lastName);
         if (name) Object.assign(data, { firstName, lastName, name });
         else { delete data.firstName; delete data.lastName; } // a name is never emptied here
@@ -141,10 +158,14 @@ export function applyEditFields(
     } else if (data.title !== undefined || data.company !== undefined) {
         const roles = old ? rolesOf(old) : [];
         const first = { title: data.title ?? roles[0]?.title ?? '', company: data.company ?? roles[0]?.company ?? '' };
-        data.roles = JSON.stringify(cleanRoles([first, ...roles.slice(1)]));
+        const kept = cleanRoles([first, ...roles.slice(1)]);
+        data.roles = JSON.stringify(kept);
+        // The headline is the first role left (the next one, when this one was cleared).
+        data.title = kept[0]?.title ?? '';
+        data.company = kept[0]?.company ?? '';
     }
 
-    if (data.instagram !== undefined) data.instagram = text(data.instagram, 200);
+    if (data.instagram !== undefined) data.instagram = instagramHandle(data.instagram) ?? '';
     if (data.customLinks !== undefined) data.customLinks = JSON.stringify(cleanCustomLinks(data.customLinks));
     if (data.hiddenSections !== undefined) data.hiddenSections = JSON.stringify([...hiddenSectionsOf(data.hiddenSections)]);
 }

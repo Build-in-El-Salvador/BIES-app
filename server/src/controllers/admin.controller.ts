@@ -756,6 +756,8 @@ export async function syncAccounts(req: Request, res: Response): Promise<void> {
                 'investmentFocus', 'investmentStage', 'minTicket', 'maxTicket',
                 'portfolioCount', 'lookingFor', 'experience', 'biesProjects',
                 'showExperience', 'nostrFeedMode', 'nostrNpub', 'lightningAddress', 'bolt12Offer', 'isPublic',
+                // Edit profile's fields, and what the member hid, travel with them.
+                'firstName', 'lastName', 'roles', 'instagram', 'customLinks', 'customSections', 'hiddenSections', 'privacy',
             ];
 
             for (const field of profileFields) {

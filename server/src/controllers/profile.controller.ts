@@ -15,10 +15,11 @@ import { networkPreviews } from '../services/memberNetwork';
 import { coverFrameSchema, frameNewCover } from '../utils/coverFrame';
 import { isClaimedNip05, isReservedNip05, looksGivenAtSignup } from '../services/nip05';
 import { nip05IsHeld, recordReleasedNip05 } from '../services/releasedNip05';
-import { allowedParts, publicNostrOf, publicUrl, sourceFields } from '../services/publicNostrProfile';
-import { followPublicProfile, isFollowing } from './publicNostr.controller';
+import { allowedParts, publicLimitsOf, publicNostrOf, publicUrl, sourceFields } from '../services/publicNostrProfile';
+import { followPublicProfile, hideFromPublicProfile, isFollowing } from './publicNostr.controller';
 import { config } from '../config';
-import { applyEditFields, editFieldsOf, HIDEABLE_SECTIONS, MAX_CUSTOM_LINKS, MAX_ROLES } from '../services/profileFields';
+import { applyEditFields, editFieldsOf, HIDEABLE_SECTIONS, instagramHandle, MAX_CUSTOM_LINKS, MAX_NAME, MAX_ROLES } from '../services/profileFields';
+import { objectionableField, objectionableResponse } from '../services/contentFilter';
 
 export { isReservedNip05 };
 
@@ -89,10 +90,10 @@ export const updateProfileSchema = z.object({
     name: z.string().max(100).optional(),
     // Edit profile (services/profileFields.ts): the name in two, more than
     // one role, Instagram, the member's own links, sections switched off.
-    firstName: z.string().max(50).optional(),
-    lastName: z.string().max(50).optional(),
+    firstName: z.string().max(MAX_NAME).optional(),
+    lastName: z.string().max(MAX_NAME).optional(),
     roles: list(z.object({ title: short.optional(), company: short.optional() }), MAX_ROLES).optional(),
-    instagram: short.optional(),
+    instagram: short.optional().refine((v) => v === undefined || instagramHandle(v) !== null, 'Use your Instagram username, like @buildinelsalvador'),
     customLinks: list(z.object({
         label: z.string().max(40).optional(),
         url: z.preprocess(withHttps, z.string().max(2000).url().refine((u) => /^https?:\/\//i.test(u), 'Use a web link (https://…)')),
@@ -592,10 +593,16 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
             select: {
                 name: true, bio: true, avatar: true, banner: true, website: true, nip05Name: true, nip05ClaimedAt: true,
                 lightningAddress: true, bolt12Offer: true,
-                firstName: true, lastName: true, roles: true, title: true, company: true,
+                firstName: true, lastName: true, roles: true, title: true, company: true, hiddenSections: true,
             },
         });
         applyEditFields(data, oldProfile);
+        // The name as it's saved (first and last joined) is checked like the
+        // name field.
+        if (typeof data.name === 'string' && objectionableField({ name: data.name })) {
+            res.status(422).json(objectionableResponse('name'));
+            return;
+        }
 
         // A BIES address claimed, changed or removed (Settings → Nostr). A
         // new name the member chose is what makes them verified; the same
@@ -685,8 +692,13 @@ export async function updateMyProfile(req: Request, res: Response): Promise<void
         // holds; for a key on the member's device the answer says so
         // (`publicNostrStale`) and the app does it.
         if (isFollowing(publicNostr)) {
+            // Links & Social just switched off: the website and Lightning
+            // come off public Nostr too, as with "Links: Only me".
+            const linksOff = (p: { hiddenSections?: unknown } | null) => publicLimitsOf(p ?? {}).linksOff;
+            const hid = linksOff(profile) && !linksOff(oldProfile)
+                && await hideFromPublicProfile(req.user!.id, ['website', 'lightning']);
             const same = (a: unknown, b: unknown) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b);
-            const changed = sourceFields(allowedParts(publicNostr.publishedParts, privacy))
+            const changed = hid || sourceFields(allowedParts(publicNostr.publishedParts, publicLimitsOf(profile)))
                 .some((f) => !same((oldProfile as Record<string, unknown> | null)?.[f] ?? null, (profile as Record<string, unknown>)[f] ?? null));
             if (changed && owner.encryptedPrivkey) followPublicProfile(req.user!.id);
             else if (changed) parsed.publicNostrStale = true;

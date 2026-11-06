@@ -9,6 +9,7 @@ const KNOWN = new Set([
     'name', 'title', 'phone', 'whatsapp', 'email', 'website', 'instagram', 'location',
     'locationAddress', 'locationName', 'hours', 'about', 'bio', 'company', 'links', 'pricing',
     'category', 'languages', 'products', 'skills', 'onlineUrl', 'description', 'link', 'year',
+    'firstName', 'lastName', 'roles', 'customLinks',
 ]);
 
 /** "the phone number", "the website": the field's own words, or its name spelled out. */

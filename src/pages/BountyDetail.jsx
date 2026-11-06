@@ -218,7 +218,7 @@ const BountyDetail = () => {
                             <span className="bounty-avatar">
                                 {posterAvatar
                                     ? <img src={getAssetUrl(posterAvatar)} alt={posterName} />
-                                    : <InitialAvatar name={posterName} />}
+                                    : <InitialAvatar name={bounty.poster?.profile?.name} />}
                             </span>
                             <span className="bounty-poster-name">{posterName}</span>
                             <span className="bounty-posted-date">
@@ -363,7 +363,7 @@ const BountyDetail = () => {
                                             <span className="bounty-avatar">
                                                 {subAvatar
                                                     ? <img src={getAssetUrl(subAvatar)} alt={subName} />
-                                                    : <InitialAvatar name={subName} />}
+                                                    : <InitialAvatar name={subUser?.profile?.name} />}
                                             </span>
                                             <div className="bounty-submission-body">
                                                 <div className="bounty-submission-meta">

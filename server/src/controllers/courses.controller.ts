@@ -428,7 +428,7 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
                         id: true,
                         nostrPubkey: true,
                         profile: {
-                            select: { name: true, avatar: true, lightningAddress: true, privacy: true },
+                            select: { name: true, avatar: true, lightningAddress: true, privacy: true, hiddenSections: true },
                         },
                     },
                 },

@@ -81,7 +81,11 @@
       "description": "the description",
       "link": "the link",
       "year": "the year",
-      "something": "a field"
+      "something": "a field",
+      "firstName": "the first name",
+      "lastName": "the last name",
+      "roles": "what you do",
+      "customLinks": "your links"
     },
     "checkFields": "Check {{fields}}, then try again.",
     "checkTheForm": "Check the form, then try again.",
@@ -2056,7 +2060,8 @@
       "uploadAvatar": "Couldn't upload your photo. Try again.",
       "uploadCover": "Couldn't upload your cover. Try again.",
       "uploadSection": "Couldn't upload that photo. Try again.",
-      "save": "Couldn't save your profile. Try again."
+      "save": "Couldn't save your profile. Try again.",
+      "load": "Couldn't load your profile. Check your connection and try again."
     },
     "removeSectionAsk": "Remove it?",
     "keep": "Keep",

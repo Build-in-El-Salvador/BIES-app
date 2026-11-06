@@ -112,7 +112,7 @@ const ownerSelect = {
 const memberUserSelect = {
     select: {
         id: true, nostrPubkey: true,
-        profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true, privacy: true } },
+        profile: { select: { name: true, avatar: true, lightningAddress: true, bolt12Offer: true, privacy: true, hiddenSections: true } },
     },
 };
 

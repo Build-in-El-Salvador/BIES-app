@@ -44,7 +44,10 @@ test('switched-off sections: what others see, and Experience from showExperience
 test('Instagram: a handle, a link, or nothing safe', () => {
     assert.deepEqual(instagramLink('@cafe.cumbre'), { href: 'https://instagram.com/cafe.cumbre', label: '@cafe.cumbre' });
     assert.deepEqual(instagramLink('instagram.com/cafecumbre'), { href: 'https://instagram.com/cafecumbre', label: '@cafecumbre' });
-    assert.deepEqual(instagramLink('https://www.instagram.com/cafecumbre/'), { href: 'https://www.instagram.com/cafecumbre/', label: '@cafecumbre' });
+    assert.deepEqual(instagramLink('https://www.instagram.com/cafecumbre/'), { href: 'https://instagram.com/cafecumbre', label: '@cafecumbre' });
+    // Another site's link never shows under the Instagram icon.
+    assert.equal(instagramLink('https://example.org/cafecumbre'), null);
+    assert.equal(instagramLink('https://instagram.com.example.org/cafecumbre'), null);
     assert.equal(instagramLink(''), null);
     assert.equal(instagramLink('not a handle!'), null);
     assert.equal(instagramLink('javascript:alert(1)'), null);

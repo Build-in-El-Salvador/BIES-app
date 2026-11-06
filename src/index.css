@@ -757,6 +757,10 @@ textarea {
   height: 100%;
   border-radius: 50%;
 }
+/* The global `* { font-family: inherit }` would set the letter in Inter. */
+.bies-initial text {
+  font-family: var(--font-display);
+}
 
 /* Safe area adjustments for notched phones (iPhone X+) */
 @supports (padding-top: env(safe-area-inset-top)) {

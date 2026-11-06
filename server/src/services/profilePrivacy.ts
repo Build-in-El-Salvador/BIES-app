@@ -67,7 +67,7 @@ const SECTION_HIDDEN_AS: Record<'links' | 'projects' | 'custom' | 'tags', Record
     tags: { tags: [] },
 };
 
-// All a signed-out visitor gets, at most. Roles are the headline, as title and company.
+// All a signed-out visitor gets, at most. Of the roles, only the first (the headline, as title and company).
 const PUBLIC_FIELDS = ['id', 'userId', 'name', 'firstName', 'lastName', 'avatar', 'banner', 'coverFrame', 'title', 'company', 'roles', 'bio', 'isPublic', 'createdAt'];
 
 /** Who is looking at a member's profile: themselves, another member, or anyone. */
@@ -106,6 +106,8 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
     if (viewer === 'public') {
         const out: Record<string, any> = { verified };
         for (const field of PUBLIC_FIELDS) if (field in profile) out[field] = profile[field];
+        // The headline only (Settings → Privacy says so): other roles are for members.
+        if ('roles' in profile) out.roles = rolesOf(profile).slice(0, 1);
         if (privacy.bio !== 'PUBLIC') out.bio = '';
         if (profile.user) out.user = { id: profile.user.id, nostrPubkey: profile.user.nostrPubkey };
         out.networkHidden = true;
@@ -122,6 +124,7 @@ export function profileForViewer<T extends Record<string, any>>(profile: T, view
     delete out.privacy;
     delete out.publicNostr;
     delete out.nip05ClaimedAt;
+    delete out.hiddenSections; // which sections are switched off is the member's business
     for (const key of ['location', 'links', 'details'] as const) {
         if (privacy[key] === 'ONLY_ME') Object.assign(out, HIDDEN_AS[key]);
     }

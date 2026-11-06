@@ -81,7 +81,11 @@
       "description": "la descripción",
       "link": "el enlace",
       "year": "el año",
-      "something": "un campo"
+      "something": "un campo",
+      "firstName": "el nombre",
+      "lastName": "el apellido",
+      "roles": "a qué te dedicas",
+      "customLinks": "tus enlaces"
     },
     "checkFields": "Revisa {{fields}} e inténtalo de nuevo.",
     "checkTheForm": "Revisa el formulario e inténtalo de nuevo.",
@@ -1874,7 +1878,8 @@
       "uploadAvatar": "No se pudo subir tu foto. Inténtalo de nuevo.",
       "uploadCover": "No se pudo subir tu portada. Inténtalo de nuevo.",
       "uploadSection": "No se pudo subir esa foto. Inténtalo de nuevo.",
-      "save": "No se pudo guardar tu perfil. Inténtalo de nuevo."
+      "save": "No se pudo guardar tu perfil. Inténtalo de nuevo.",
+      "load": "No pudimos cargar tu perfil. Revisa tu conexión e inténtalo de nuevo."
     },
     "removeSectionAsk": "¿Quitarla?",
     "keep": "Dejar",

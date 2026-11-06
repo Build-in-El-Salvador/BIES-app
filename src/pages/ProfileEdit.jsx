@@ -100,11 +100,16 @@ const ProfileEdit = () => {
     // Lightning and Bolt12 receive addresses: on the website (a member's way
     // to be paid), not in the store app. Hidden, they're left as saved.
     const walletFields = !isNativePlatform();
+    // The sections switched off when the form opened.
+    const hiddenAtLoad = useRef(new Set());
     const searchRef = useRef(null);
     // Where "Next: add …" takes the member.
     const fieldRefs = useRef({});
 
     const [loading, setLoading] = useState(true);
+    // The profile didn't load (not "there's none yet"): no form, so a save can't empty it.
+    const [loadFailed, setLoadFailed] = useState(false);
+    const [loadTry, setLoadTry] = useState(0);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [fieldError, setFieldError] = useState(null); // { id, message }
@@ -172,7 +177,8 @@ const ProfileEdit = () => {
                             if (/^\d{4}$/.test(parts[0]?.trim() || '')) fromYear = parts[0].trim();
                             if (/^\d{4}$/.test(parts[1]?.trim() || '')) toYear = parts[1].trim();
                         }
-                        return { title: exp.title || '', company: exp.company || '', description: exp.description || '', fromYear, toYear };
+                        // The date as saved ("Jan 2019 - Mar 2022" too), kept unless the years change.
+                        return { title: exp.title || '', company: exp.company || '', description: exp.description || '', fromYear, toYear, savedDate: { date: exp.date || '', fromYear, toYear } };
                     }),
                     biesProjects: profile.biesProjects || [],
                     customSections: Array.isArray(profile.customSections) ? profile.customSections : [],
@@ -180,17 +186,19 @@ const ProfileEdit = () => {
                     nip05Name: profile.nip05Name || '',
                 };
                 const hidden = hiddenSectionsOf(profile);
+                hiddenAtLoad.current = hidden;
                 setForm((prev) => ({ ...prev, ...next }));
                 // A section opens switched on when it has something and isn't switched off.
                 setOn(Object.fromEntries(SECTIONS.map((s) => [s, !hidden.has(s) && sectionFilled(s, next, walletFields)])));
-            } catch {
-                // New member: the form starts empty
+            } catch (err) {
+                // No profile yet (404): a new member, and the form starts empty.
+                if (!cancelled && err?.status !== 404) setLoadFailed(true);
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [walletFields]);
+    }, [walletFields, loadTry]);
 
     useEffect(() => {
         if (!user?.nostrPubkey) return;
@@ -199,9 +207,19 @@ const ProfileEdit = () => {
             .catch((err) => console.error('Failed to fetch Nostr profile:', err));
     }, [user?.nostrPubkey]);
 
-    // What their Nostr profile has that the BIES one doesn't yet.
+    // The form as last drawn, for the Nostr prefill below.
+    const formRef = useRef(form);
+    useEffect(() => { formRef.current = form; });
+
+    // What their Nostr profile has that the BIES one doesn't yet. A link it
+    // fills in shows: Links & Social opens, unless the member switched it off
+    // (filled in out of sight, a save would hide it, and take it off Nostr).
     useEffect(() => {
         if (!nostrProfile || loading) return;
+        const loaded = formRef.current;
+        const fillsLinks = (!loaded.website && nostrProfile.website)
+            || (walletFields && ((!loaded.lightningAddress && (nostrProfile.lud16 || nostrProfile.lud06)) || (!loaded.bolt12Offer && nostrProfile.bolt12)));
+        if (fillsLinks && !hiddenAtLoad.current.has('links')) setOn((now) => (now.links ? now : { ...now, links: true }));
         setForm((prev) => {
             const updates = {};
             if (!prev.banner && nostrProfile.banner) updates.banner = nostrProfile.banner;
@@ -216,7 +234,7 @@ const ProfileEdit = () => {
             if (!prev.bolt12Offer && nostrProfile.bolt12) updates.bolt12Offer = nostrProfile.bolt12;
             return Object.keys(updates).length ? { ...prev, ...updates } : prev;
         });
-    }, [nostrProfile, loading]);
+    }, [nostrProfile, loading, walletFields]);
 
     useEffect(() => {
         const close = (e) => { if (searchRef.current && !searchRef.current.contains(e.target)) setShowProjectDropdown(false); };
@@ -413,11 +431,16 @@ const ProfileEdit = () => {
             .filter((e) => str(e.title) || str(e.company) || str(e.description))
             .map((e) => ({
                 title: str(e.title), company: str(e.company), description: str(e.description),
-                date: e.fromYear || e.toYear ? `${e.fromYear || ''} - ${e.toYear || 'Present'}` : '',
+                date: e.savedDate && e.savedDate.fromYear === e.fromYear && e.savedDate.toYear === e.toYear
+                    ? e.savedDate.date
+                    : e.fromYear || e.toYear ? `${e.fromYear || ''} - ${e.toYear || 'Present'}` : '',
             }));
         const saved = { ...form, website, customLinks, experience };
-        // Off with something in it: hidden, and kept. Off and empty: nothing to hide.
-        const hiddenSections = ['links', 'projects', 'custom', 'tags'].filter((s) => !on[s] && sectionFilled(s, saved, walletFields));
+        // Off with something in it: hidden, and kept. Off and empty: nothing to
+        // hide. Switched off before and still off: still hidden, even when what
+        // it holds isn't on this form (Lightning, in the app).
+        const hiddenSections = ['links', 'projects', 'custom', 'tags']
+            .filter((s) => !on[s] && (sectionFilled(s, saved, walletFields) || hiddenAtLoad.current.has(s)));
         const showExperience = on.experience || !sectionFilled('experience', saved, walletFields);
 
         try {
@@ -459,9 +482,10 @@ const ProfileEdit = () => {
                     if (form.bio) nostrData.about = form.bio;
                     if (form.avatar) nostrData.picture = form.avatar;
                     if (form.banner) nostrData.banner = form.banner;
-                    // Links as Settings → Privacy allows, and only while Links & Social is on.
+                    // Links as Settings → Privacy allows, unless Links & Social is
+                    // hidden (in the app, a section of Lightning alone opens off, and stays shown).
                     const privacy = await settingsApi.getPrivacy().catch(() => null);
-                    Object.assign(nostrData, on.links
+                    Object.assign(nostrData, !hiddenSections.includes('links')
                         ? nostrLinkFields({ ...form, website }, privacy)
                         : { ...nostrLinkFields({ nip05Name: form.nip05Name }, privacy), website: '', lud16: '', lud06: '', bolt12: '' });
                     await nostrService.updateProfileToBiesRelay(nostrData);
@@ -492,6 +516,16 @@ const ProfileEdit = () => {
         return (
             <div className="container" style={{ textAlign: 'center', padding: '4rem 0' }}>
                 <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-gray-500)' }} />
+            </div>
+        );
+    }
+    if (loadFailed) {
+        return (
+            <div className="container" style={{ textAlign: 'center', padding: '4rem 1rem' }} role="alert">
+                <p style={{ marginBottom: '1rem' }}>{t('profileForm.errors.load')}</p>
+                <button type="button" className="btn btn-primary" onClick={() => { setLoadFailed(false); setLoading(true); setLoadTry((n) => n + 1); }}>
+                    {t('common.tryAgain')}
+                </button>
             </div>
         );
     }
@@ -807,14 +841,14 @@ const ProfileEdit = () => {
                                 <label className="pf-label" htmlFor="pf-first">{t('profileForm.firstName')} *</label>
                                 <input
                                     id="pf-first" ref={(el) => { fieldRefs.current.firstName = el; }} type="text" className="pf-input"
-                                    value={form.firstName} onChange={change('firstName')} maxLength={50} autoComplete="given-name"
+                                    value={form.firstName} onChange={change('firstName')} maxLength={100} autoComplete="given-name"
                                     aria-invalid={fieldError?.id === 'pf-first' || undefined} aria-describedby={fieldError?.id === 'pf-first' ? 'pf-first-error' : undefined}
                                 />
                                 {fieldError?.id === 'pf-first' && <p className="pf-field-error" id="pf-first-error">{fieldError.message}</p>}
                             </div>
                             <div>
                                 <label className="pf-label" htmlFor="pf-last">{t('profileForm.lastName')}</label>
-                                <input id="pf-last" type="text" className="pf-input" value={form.lastName} onChange={change('lastName')} maxLength={50} autoComplete="family-name" />
+                                <input id="pf-last" type="text" className="pf-input" value={form.lastName} onChange={change('lastName')} maxLength={100} autoComplete="family-name" />
                             </div>
                         </div>
 
