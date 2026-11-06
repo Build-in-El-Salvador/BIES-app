@@ -1,6 +1,6 @@
 import { Heart, MessageCircle, Repeat, Share } from 'lucide-react';
-import NostrIcon from './NostrIcon';
 import { useNostrFeed } from '../hooks/useNostr';
+import InitialAvatar from './InitialAvatar';
 
 const FEATURED_NPUBS = [
     'npub1uaxljreqe2j2hgpnhqac3n22syjn8yg6r3n7kmccvqjkdersn3qs0p6gw', // Nayib Bukele
@@ -82,7 +82,7 @@ const SocialPulse = () => {
                                         {post.avatar ? (
                                             <img src={post.avatar} alt={post.user} className="w-full h-full rounded-full object-cover" />
                                         ) : (
-                                            (post.user && post.user[0]) || 'N'
+                                            <InitialAvatar name={post.user} />
                                         )}
                                     </div>
                                     <div className="user-info">
@@ -93,7 +93,6 @@ const SocialPulse = () => {
                                             <span className="text-gray-500 text-sm">{post.time}</span>
                                         </div>
                                     </div>
-                                    <NostrIcon size={16} className="text-purple-400 ml-auto" />
                                 </div>
 
                                 <p className="tweet-content" style={{ whiteSpace: 'pre-wrap' }}>{post.content}</p>

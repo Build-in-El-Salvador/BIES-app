@@ -9,6 +9,7 @@ import { useApiQuery } from '../hooks/useApi';
 import { getAssetUrl } from '../utils/assets';
 import { publicUrl } from '../utils/publicUrl';
 import { RepeatLine } from '../components/events/EventBits';
+import InitialAvatar from '../components/InitialAvatar';
 
 const VISIBILITY_CFG = {
     PUBLIC: { label: 'Public', color: 'var(--badge-success-text)', bg: 'var(--badge-success-bg)', icon: <Globe size={12} /> },
@@ -130,7 +131,7 @@ const EventTicketsModal = ({ event, onClose }) => {
                                 {ticket.buyer?.avatar ? (
                                     <img src={getAssetUrl(ticket.buyer.avatar)} alt="" />
                                 ) : (
-                                    <span>{(ticket.buyer?.name || '?').charAt(0).toUpperCase()}</span>
+                                    <InitialAvatar name={ticket.buyer?.name} />
                                 )}
                             </div>
                             <div className="tkm-row-info">

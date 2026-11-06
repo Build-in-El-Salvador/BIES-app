@@ -5,6 +5,7 @@ import { Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { pointsApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
+import InitialAvatar from '../components/InitialAvatar';
 
 const MEDAL_COLORS = {
     1: { bg: '#F5B301', text: '#3D2E00' }, // gold
@@ -111,9 +112,7 @@ const Leaderboard = () => {
                 style={{ width: size, height: size }}
             />
         ) : (
-            <div className="lb-avatar lb-avatar-fallback" style={{ width: size, height: size }}>
-                {(name || '?').charAt(0).toUpperCase()}
-            </div>
+            <InitialAvatar name={name} size={size} />
         )
     );
 
@@ -393,15 +392,6 @@ const Leaderboard = () => {
                     flex-shrink: 0;
                 }
 
-                .lb-page :global(.lb-avatar-fallback) {
-                    background: var(--color-gray-100);
-                    color: var(--color-gray-500);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: 700;
-                    font-size: 1rem;
-                }
 
                 .lb-page :global(.lb-row-main) {
                     flex: 1;

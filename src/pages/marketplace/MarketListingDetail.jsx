@@ -17,6 +17,7 @@ import {
     isSensitiveListing,
 } from '../../components/marketplace/MarketListingCard';
 import BackButton from '../../components/BackButton';
+import InitialAvatar from '../../components/InitialAvatar';
 
 /**
  * Marketplace listing detail page, modeled on directory/ListingDetail.jsx:
@@ -240,7 +241,7 @@ const MarketListingDetail = () => {
                             {listing.sellerAvatar ? (
                                 <img src={listing.sellerAvatar} alt="" loading="lazy" />
                             ) : (
-                                <User size={18} />
+                                <InitialAvatar name={listing.sellerName} />
                             )}
                         </div>
                         <span className="mk-seller-name">

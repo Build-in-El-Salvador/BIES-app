@@ -31,6 +31,7 @@ import { asWebLink } from '../components/talent/talentOptions';
 import {
     SECTIONS, MAX_ROLES, MAX_CUSTOM_LINKS, joinName, namePartsOf, rolesOf, hiddenSectionsOf, profileStrength,
 } from '../utils/profileFields';
+import InitialAvatar from '../components/InitialAvatar';
 
 /*
  * Edit profile, built like the newer forms (Opportunities, Events): a few
@@ -787,7 +788,7 @@ const ProfileEdit = () => {
                         </div>
                         <div className="pf-avatar-row">
                             <div ref={(el) => { fieldRefs.current.photo = el; }} className="pf-avatar">
-                                {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <span className="pf-avatar-ph">{(form.firstName || user?.email || '?').charAt(0).toUpperCase()}</span>}
+                                {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <InitialAvatar name={form.firstName} />}
                                 {uploadingAvatar && <span className="pf-avatar-busy"><Loader2 size={22} style={{ animation: 'spin 1s linear infinite' }} /></span>}
                                 <label className="pf-avatar-btn" aria-label={t('profileForm.changePhoto')}>
                                     <Camera size={15} />
@@ -974,9 +975,6 @@ const FormStyles = () => (
             border: 4px solid var(--color-surface); background: var(--color-gray-100); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
         }
         .profile-form-page .pf-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
-        .profile-form-page .pf-avatar-ph {
-            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: var(--color-gray-400);
-        }
         .profile-form-page .pf-avatar-busy {
             position: absolute; inset: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
             background: rgba(255, 255, 255, 0.7); color: var(--color-primary);

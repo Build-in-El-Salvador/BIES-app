@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Camera, Loader2, User } from 'lucide-react';
+import { AlertCircle, Camera, Loader2 } from 'lucide-react';
 import { profilesApi, uploadApi } from '../services/api';
 import { nostrService, PUBLIC_RELAYS } from '../services/nostrService';
 import { nostrSigner } from '../services/nostrSigner';
@@ -12,6 +12,7 @@ import ModerationSheet from './moderation/ModerationSheet';
 import ImageCropModal from './ImageCropModal';
 import './moderation/Moderation.css';
 import './ProfileGate.css';
+import InitialAvatar from './InitialAvatar';
 
 const NAME_MAX = 60;
 
@@ -191,7 +192,7 @@ const ProfileGate = ({ user, onDone, onSignOut }) => {
                         disabled={uploading || busy}
                         aria-label={photoLabel}
                     >
-                        {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <User size={44} aria-hidden="true" />}
+                        {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <InitialAvatar name={name} />}
                         <span className="pg-avatar-badge" aria-hidden="true">
                             {uploading ? <Loader2 size={16} className="mod-spin" /> : <Camera size={16} />}
                         </span>

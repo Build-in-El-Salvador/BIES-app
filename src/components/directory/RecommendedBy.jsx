@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { User } from 'lucide-react';
+import {  } from 'lucide-react';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import { recommenders } from './recommenders';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * "Recommended by": the faces of the members who vouch for a listing, in one
@@ -24,8 +25,8 @@ export default function RecommendedBy({ listing, titleStyle }) {
             <ul className="dir-recommended-row">
                 {people.map((r) => {
                     const name = isPlaceholderName(r.user.profile?.name) ? '' : r.user.profile.name.trim();
-                    // No photo: their initial, as in the reviews below.
-                    const fallback = name ? <span className="dir-recommender-initial">{name[0].toUpperCase()}</span> : <User size={26} />;
+                    // No photo: their initial in the BIES ring, as in the reviews below.
+                    const fallback = <InitialAvatar name={name} />;
                     return (
                         <li key={r.id}>
                             <Link to={`/builder/${r.user.nostrPubkey || r.user.id}`} className="dir-recommender">
@@ -67,7 +68,6 @@ export default function RecommendedBy({ listing, titleStyle }) {
                     background: var(--color-gray-100); color: var(--color-gray-400);
                 }
                 .dir-recommender-photo img { width: 100%; height: 100%; object-fit: cover; }
-                .dir-recommender-initial { font-size: 1.5rem; font-weight: 700; color: var(--color-primary); }
                 .dir-recommender-name {
                     max-width: 100%;
                     font-size: 0.82rem; font-weight: 600; line-height: 1.25;

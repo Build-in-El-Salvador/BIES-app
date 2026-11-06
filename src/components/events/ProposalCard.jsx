@@ -5,6 +5,7 @@ import Avatar from '../Avatar';
 import InvitePill from './InvitePill';
 import { dayTile, hostOf, proposalNeeds, timeOf } from '../../utils/eventFormat';
 import { focusOf, parseFrame } from '../../utils/coverFrame';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * A meetup a member proposed, in the Events list: when and where, how many
@@ -44,7 +45,7 @@ export default function ProposalCard({ event, lang, going, onGoing, busy = false
             <div className="pc-track" aria-hidden="true"><span style={{ width: `${min ? Math.min(100, (count / min) * 100) : 0}%` }} /></div>
             <div className="pc-foot">
                 <span className="pc-who">
-                    <span className="pc-face"><Avatar src={host.image} size={26} fallback={<span className="pc-initial">{(host.name || '?')[0].toUpperCase()}</span>} /></span>
+                    <span className="pc-face"><Avatar src={host.image} size={26} fallback={host.kind === 'member' ? <InitialAvatar name={host.name} /> : <span className="pc-initial">{(host.name || '?')[0].toUpperCase()}</span>} /></span>
                     <span className="pc-count">
                         <b>{t('events.proposals.progress', { going: count, min })}</b>
                         {needs > 0 && <> · {t('events.proposals.needs', { count: needs })}</>}

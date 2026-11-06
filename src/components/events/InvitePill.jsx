@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import Avatar from '../Avatar';
 import { firstNameOf } from '../../utils/eventFormat';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * "Edwin invited you": on a proposed meetup the member was invited to and
@@ -13,7 +14,7 @@ export default function InvitePill({ by }) {
     return (
         <span className="ip">
             <span className="ip-face" aria-hidden="true">
-                <Avatar src={by?.avatar} size={18} fallback={<span className="ip-initial">{name[0].toUpperCase()}</span>} />
+                <Avatar src={by?.avatar} size={18} fallback={<InitialAvatar name={by?.name} />} />
             </span>
             {t('events.proposals.invitedYou', { name })}
             <style jsx>{`
@@ -28,7 +29,6 @@ export default function InvitePill({ by }) {
                     background: rgba(255, 91, 0, 0.15); display: inline-flex; align-items: center; justify-content: center;
                 }
                 .ip-face :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-                .ip-initial { font-size: 10px; font-weight: 700; color: var(--color-orange-text); }
             `}</style>
         </span>
     );

@@ -7,6 +7,7 @@ import { resolveLud16, requestInvoice, payWithWebLN, createZapRequest } from '..
 import { profilesApi } from '../services/api';
 import { useWallet } from '../hooks/useWallet';
 import { getAssetUrl } from '../utils/assets';
+import InitialAvatar from './InitialAvatar';
 
 const AMOUNT_PRESETS = [21, 100, 500, 1000, 5000];
 
@@ -301,7 +302,7 @@ const ZapModal = ({ recipients = [], eventId, aTag, fixedAmount, onPaid, onClose
                                                 <div className="zap-recipient-avatar">
                                                     {r.avatar
                                                         ? <img src={getAssetUrl(r.avatar)} alt={r.name} />
-                                                        : <span>{(r.name || '?')[0]?.toUpperCase()}</span>
+                                                        : <InitialAvatar name={r.name} />
                                                     }
                                                 </div>
                                                 <span className="zap-recipient-name">{r.name}</span>
@@ -319,7 +320,7 @@ const ZapModal = ({ recipients = [], eventId, aTag, fixedAmount, onPaid, onClose
                                     <div className="zap-recipient-avatar lg">
                                         {resolvedRecipients[0].avatar
                                             ? <img src={getAssetUrl(resolvedRecipients[0].avatar)} alt={resolvedRecipients[0].name} />
-                                            : <span>{(resolvedRecipients[0].name || '?')[0]?.toUpperCase()}</span>
+                                            : <InitialAvatar name={resolvedRecipients[0].name} />
                                         }
                                     </div>
                                     <span className="zap-recipient-label">{resolvedRecipients[0].name}</span>

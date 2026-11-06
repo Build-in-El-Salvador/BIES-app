@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import NostrIcon from '../NostrIcon';
 
 const NoteHeader = ({ pubkey, profile, timestamp, formatTime }) => {
   const displayName = profile?.display_name || profile?.name || (pubkey ? pubkey.substring(0, 12) + '...' : '');

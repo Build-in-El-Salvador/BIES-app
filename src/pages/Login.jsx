@@ -11,7 +11,6 @@ import { isNativePlatform } from '../utils/platform';
 import { authService } from '../services/authService';
 import { isMobileUA, isAndroid } from '../utils/device';
 import logoIcon from '../assets/logo-icon.svg';
-import NostrIcon from '../components/NostrIcon';
 import NostrConnectQR from '../components/NostrConnectQR';
 import EmailSignIn from '../components/EmailSignIn';
 import { readKeyInput, unlockBackup } from '../services/accountKey';
@@ -432,7 +431,7 @@ const Login = ({ nostr = false }) => {
                     onClick={openNostr}
                     className="w-full btn-nostr flex items-center justify-center gap-3 py-3 rounded-full"
                 >
-                    <NostrIcon size={20} color="#8b5cf6" />
+                    <KeyRound size={20} color="#8b5cf6" />
                     <span>{t('emailSignIn.useNostr')}</span>
                 </button>
                 </>)}
@@ -591,7 +590,7 @@ const Login = ({ nostr = false }) => {
                             disabled={loading || !keyFileText.trim()}
                             className="w-full btn-login flex items-center justify-center gap-3 py-3 rounded-full"
                         >
-                            {loading ? <Loader2 size={20} className="spin" /> : <NostrIcon size={20} color="#8b5cf6" />}
+                            {loading ? <Loader2 size={20} className="spin" /> : <KeyRound size={20} color="#8b5cf6" />}
                             <span>{loading ? t('login.keyFileUnlocking') : t('login.keyFileSignIn')}</span>
                         </button>
                     </form>
@@ -634,7 +633,7 @@ const Login = ({ nostr = false }) => {
                             {loading && nsecInput.trim() ? (
                                 <Loader2 size={20} className="spin" />
                             ) : (
-                                <NostrIcon size={20} color="#8b5cf6" />
+                                <KeyRound size={20} color="#8b5cf6" />
                             )}
                             <span>{loading && nsecInput.trim() ? t('login.connecting') : t('login.loginWithNsec')}</span>
                         </button>
@@ -660,7 +659,7 @@ const Login = ({ nostr = false }) => {
                             {loading && seedInput.trim() ? (
                                 <Loader2 size={20} className="spin" />
                             ) : (
-                                <NostrIcon size={20} color="#8b5cf6" />
+                                <KeyRound size={20} color="#8b5cf6" />
                             )}
                             <span>{loading && seedInput.trim() ? t('login.connecting') : t('login.loginWithSeed')}</span>
                         </button>
@@ -714,7 +713,7 @@ const Login = ({ nostr = false }) => {
                                     {loading && bunkerInput.trim() ? (
                                         <Loader2 size={20} className="spin" />
                                     ) : (
-                                        <NostrIcon size={20} color="#8b5cf6" />
+                                        <KeyRound size={20} color="#8b5cf6" />
                                     )}
                                     <span>{loading && bunkerInput.trim() ? t('login.connectingToSigner') : t('login.loginWithRemoteSigner')}</span>
                                 </button>

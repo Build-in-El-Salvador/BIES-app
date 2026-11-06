@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, BookOpen, Loader2 } from 'lucide-react';
 import { coursesApi } from '../../services/api';
 import { getAssetUrl } from '../../utils/assets';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const CATEGORIES = ['BITCOIN', 'LIGHTNING', 'NOSTR', 'FINTECH', 'BUSINESS', 'TECHNOLOGY', 'OTHER'];
 const LEVELS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
@@ -161,7 +162,7 @@ const CourseCatalog = () => {
                                             {course.author?.profile?.avatar ? (
                                                 <img src={getAssetUrl(course.author.profile.avatar)} alt="" />
                                             ) : (
-                                                <span>{(course.author?.profile?.name || '?').charAt(0)}</span>
+                                                <InitialAvatar name={course.author?.profile?.name} />
                                             )}
                                         </div>
                                         <span className="author-name">{course.author?.profile?.name || ''}</span>

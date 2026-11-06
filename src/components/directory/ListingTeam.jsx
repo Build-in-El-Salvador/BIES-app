@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Loader2, Plus, User, X } from 'lucide-react';
+import { AlertCircle, Loader2, Plus, X } from 'lucide-react';
 import { directoryApi, profilesApi } from '../../services/api';
 import Avatar from '../Avatar';
 import { isPlaceholderName } from '../../utils/profileComplete';
@@ -9,6 +9,7 @@ import ModerationSheet from '../moderation/ModerationSheet';
 import { runnerIdOf, runnerOf, runsListing } from './listingRoles';
 import '../moderation/Moderation.css';
 import './ListingOwnership.css';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * A business's team on its page: the member who runs it (Owner), then the
@@ -64,7 +65,7 @@ export default function ListingTeam({ listing, user, isAdmin, titleStyle, onChan
                             <li key={p.id}>
                                 <Link to={`/builder/${p.user.nostrPubkey || p.user.id}`} className="dir-team-person">
                                     <span className="dir-team-photo">
-                                        <Avatar src={p.user.profile?.avatar} size={64} fallback={<User size={26} />} />
+                                        <Avatar src={p.user.profile?.avatar} size={64} fallback={<InitialAvatar name={p.user.profile?.name} />} />
                                     </span>
                                     <span className="dir-team-name">{name}</span>
                                     <span className={`dir-team-role${p.owner ? ' is-owner' : ''}`}>{p.role}</span>
@@ -196,7 +197,7 @@ function TeamSheet({ listing, user, onClose, onChanged }) {
                 <ul className="team-list">
                     {team.map((m) => (
                         <li key={m.userId} className="team-member">
-                            <span className="own-avatar"><Avatar src={m.user?.profile?.avatar} size={36} fallback={<User size={18} />} /></span>
+                            <span className="own-avatar"><Avatar src={m.user?.profile?.avatar} size={36} fallback={<InitialAvatar name={m.user?.profile?.name} />} /></span>
                             <span className="own-person-text"><span className="own-person-name">{nameOf(m.user, t)}</span></span>
                             <button
                                 type="button"
@@ -229,7 +230,7 @@ function TeamSheet({ listing, user, onClose, onChanged }) {
                         return (
                             <li key={p.user.id}>
                                 <button type="button" className="own-person" onClick={() => add(p)} disabled={!!busy}>
-                                    <span className="own-avatar"><Avatar src={p.avatar} size={36} fallback={<User size={18} />} /></span>
+                                    <span className="own-avatar"><Avatar src={p.avatar} size={36} fallback={<InitialAvatar name={p.name} />} /></span>
                                     <span className="own-person-text">
                                         <span className="own-person-name">{p.name}</span>
                                         {sub && <span className="own-person-sub">{sub}</span>}

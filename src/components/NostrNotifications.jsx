@@ -9,6 +9,7 @@ import { useFeatureFlags } from '../context/FeatureFlagsContext';
 import { pathOrNotifications } from '../utils/appPaths';
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import { nip19 } from 'nostr-tools';
+import InitialAvatar from './InitialAvatar';
 
 // The app's own notices that belong in the bell beside the Feed activity:
 // a listing approved or taken down, a request to hand a listing over, a new
@@ -405,7 +406,7 @@ const NostrNotifications = ({ mobile = false }) => {
                                             {getAvatar(notif.actorPubkey) ? (
                                                 <img src={getAvatar(notif.actorPubkey)} alt="" />
                                             ) : (
-                                                <div className="nostr-notif-item-avatar-placeholder" />
+                                                <InitialAvatar name={profiles[notif.actorPubkey]?.display_name || profiles[notif.actorPubkey]?.name} />
                                             )}
                                             <div className="nostr-notif-item-icon">{getIcon(notif.type)}</div>
                                         </div>

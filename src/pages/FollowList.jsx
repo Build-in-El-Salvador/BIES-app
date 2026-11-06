@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, User } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import FollowIconButton from '../components/FollowIconButton';
@@ -9,6 +9,7 @@ import { isPlaceholderName } from '../utils/profileComplete';
 import { myFollowingIds } from '../utils/myFollowing';
 import BackButton from '../components/BackButton';
 import Avatar from '../components/Avatar';
+import InitialAvatar from '../components/InitialAvatar';
 
 /**
  * A member's followers, who they follow, or their whole network (both,
@@ -79,7 +80,7 @@ const FollowList = ({ kind }) => {
                             <li key={p.id} className="follow-row">
                                 <Link to={`/builder/${p.nostrPubkey}`} className="follow-person">
                                     <span className="follow-avatar">
-                                        <Avatar src={p.profile?.avatar} size={44} fallback={<User size={20} />} />
+                                        <Avatar src={p.profile?.avatar} size={44} fallback={<InitialAvatar name={p.profile?.name} />} />
                                     </span>
                                     <span className="follow-text">
                                         <span className="follow-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>

@@ -12,6 +12,7 @@ import MarkdownView from '../../components/courses/MarkdownView';
 import CertificateCard from '../../components/courses/CertificateCard';
 import CourseUnlockModal from '../../components/courses/CourseUnlockModal';
 import BackButton from '../../components/BackButton';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const titleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : '');
 
@@ -340,7 +341,7 @@ const CourseDetail = () => {
                                     {course.author?.profile?.avatar ? (
                                         <img src={getAssetUrl(course.author.profile.avatar)} alt="" />
                                     ) : (
-                                        <span>{(course.author?.profile?.name || '?').charAt(0)}</span>
+                                        <InitialAvatar name={course.author?.profile?.name} />
                                     )}
                                 </div>
                                 <div className="instructor-name">

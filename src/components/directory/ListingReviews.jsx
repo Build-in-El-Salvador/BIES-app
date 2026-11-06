@@ -8,6 +8,7 @@ import CertifiedBadge from './CertifiedBadge';
 import { objectionableMessage } from '../moderation/objectionable';
 import { reviewCount, writtenReviews } from './recommenders';
 import { connectionOf, onTeam } from './listingRoles';
+import InitialAvatar from '../InitialAvatar';
 
 // The server's DOWNVOTE_REASON_MIN (directory.controller.ts).
 const REASON_MIN = 20;
@@ -360,7 +361,7 @@ export default function ListingReviews({ listing, user, onChanged, openReport, t
                         return (
                             <li key={r.id} className="dir-review">
                                 <div className="dir-review-avatar">
-                                    {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <span>{who[0].toUpperCase()}</span>}
+                                    {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <InitialAvatar name={r.user?.profile?.name} />}
                                 </div>
                                 <div className="dir-review-body">
                                     <div className="dir-review-head">

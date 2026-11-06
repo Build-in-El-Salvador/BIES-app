@@ -10,6 +10,7 @@ import { unmute } from '../../services/muteStore';
 import { getAssetUrl } from '../../utils/assets';
 import BackButton from '../../components/BackButton';
 import './AccountFlows.css';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const shortNpub = (pubkey) => {
     try {
@@ -82,7 +83,7 @@ const BlockedMembers = () => {
                         {members.map((m) => (
                             <li key={m.id}>
                                 <span className="blocked-avatar">
-                                    {m.avatar ? <img src={getAssetUrl(m.avatar)} alt="" /> : (m.name || '?')[0].toUpperCase()}
+                                    {m.avatar ? <img src={getAssetUrl(m.avatar)} alt="" /> : <InitialAvatar name={m.name} />}
                                 </span>
                                 <span className="blocked-name">{m.name || t('common.unnamed')}</span>
                                 <button

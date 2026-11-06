@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, X, UserPlus, Loader2 } from 'lucide-react';
 import { profilesApi } from '../services/api';
 import Avatar from './Avatar';
+import InitialAvatar from './InitialAvatar';
 
 /**
  * MemberSearchSelect — search BIES members and build a guestlist.
@@ -86,7 +87,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder, taken = {}, inl
                                 alt={g.name}
                                 className="chip-avatar"
                                 size={20}
-                                fallback={<span className="chip-initials">{(g.name || '?')[0].toUpperCase()}</span>}
+                                fallback={<InitialAvatar name={g.name} size={20} />}
                             />
                             <span className="chip-name">{g.name}</span>
                             <button
@@ -137,7 +138,7 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder, taken = {}, inl
                                 disabled={selected || !!takenLabel}
                             >
                                 <div className="result-avatar">
-                                    <Avatar src={avatar} alt={name} size={32} fallback={<span>{(name || '?')[0].toUpperCase()}</span>} />
+                                    <Avatar src={avatar} alt={name} size={32} fallback={<InitialAvatar name={name} />} />
                                 </div>
                                 <div className="result-info">
                                     <span className="result-name">{name}</span>
@@ -186,19 +187,6 @@ const MemberSearchSelect = ({ value = [], onChange, placeholder, taken = {}, inl
                     object-fit: cover;
                 }
 
-                .chip-initials {
-                    width: 20px;
-                    height: 20px;
-                    border-radius: 50%;
-                    background: #bfdbfe;
-                    color: #1d4ed8;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 0.7rem;
-                    font-weight: 700;
-                    flex-shrink: 0;
-                }
 
                 .chip-name { font-weight: 600; }
 

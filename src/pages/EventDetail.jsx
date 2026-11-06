@@ -29,6 +29,7 @@ import InvitePill from '../components/events/InvitePill';
 import InviteSheet from '../components/events/InviteSheet';
 import biesLogo from '../assets/logo-icon.svg';
 import '../components/moderation/Moderation.css';
+import InitialAvatar from '../components/InitialAvatar';
 
 /**
  * An event, for members: its cover, when and where, who hosts it (a member
@@ -422,7 +423,7 @@ const EventDetail = () => {
                             <div className="ev-proposal-who">
                                 <span className="ev-going-pile">
                                     {goingPeople.slice(0, 4).map((p) => (
-                                        <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<User size={14} />} /></span>
+                                        <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<InitialAvatar name={p.profile?.name} />} /></span>
                                     ))}
                                 </span>
                                 {inLine && <span>{inLine}</span>}
@@ -570,7 +571,7 @@ const EventDetail = () => {
                         {goingPeople.length > 0 && (
                             <span className="ev-going-pile">
                                 {goingPeople.slice(0, 3).map((p) => (
-                                    <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<User size={14} />} /></span>
+                                    <span key={p.id} className="ev-going-face"><Avatar src={p.profile?.avatar} size={28} fallback={<InitialAvatar name={p.profile?.name} />} /></span>
                                 ))}
                             </span>
                         )}
@@ -603,7 +604,7 @@ const EventDetail = () => {
                         <span className="ev-bar-who">
                             {invitedBy && !closed && (
                                 <span className="ev-bar-face" aria-hidden="true">
-                                    <Avatar src={invitedBy.avatar} size={36} fallback={<span className="ev-bar-initial">{(firstNameOf(invitedBy.name) || '?')[0].toUpperCase()}</span>} />
+                                    <Avatar src={invitedBy.avatar} size={36} fallback={<InitialAvatar name={invitedBy.name} />} />
                                 </span>
                             )}
                             <span className="ev-bar-text">
@@ -752,7 +753,6 @@ const EventDetail = () => {
                 .ev-bar-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
                 .ev-bar-face { width: 36px; height: 36px; border-radius: 50%; overflow: hidden; flex: none; background: var(--color-orange-tint); border: 1px solid rgba(255, 91, 0, 0.3); box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
                 .ev-bar-face :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-                .ev-bar-initial { font-size: 0.85rem; font-weight: 700; color: var(--color-orange-text); }
                 .ev-bar-text { display: flex; flex-direction: column; min-width: 0; }
                 .ev-bar-text b { font-size: 0.95rem; color: var(--color-gray-900); }
                 .ev-bar-text small { font-size: 0.8rem; color: var(--color-gray-500); }
@@ -863,7 +863,7 @@ function PersonRow({ to, href, image, round, name, sub }) {
     const inner = (
         <>
             <span className={`pr-photo${round ? '' : ' square'}`}>
-                <Avatar src={image} size={40} fallback={<span className="pr-initial">{(name || '?')[0].toUpperCase()}</span>} />
+                <Avatar src={image} size={40} fallback={round ? <InitialAvatar name={name} /> : <span className="pr-initial">{(name || '?')[0].toUpperCase()}</span>} />
             </span>
             <span className="pr-text"><b>{name || t('directory.ownership.aMember')}</b><span>{sub}</span></span>
             {(to || href) && (href ? <ExternalLink size={16} className="pr-go" /> : <ChevronRight size={18} className="pr-go" />)}
@@ -894,7 +894,7 @@ function SponsorTile({ partner }) {
     const inner = (
         <>
             <span className={`st-logo${partner.kind === 'member' ? ' round' : ''}`}>
-                <Avatar src={partner.image} size={44} fallback={<span className="st-initial">{(partner.name || '?').slice(0, 2).toUpperCase()}</span>} />
+                <Avatar src={partner.image} size={44} fallback={partner.kind === 'member' ? <InitialAvatar name={partner.name} /> : <span className="st-initial">{(partner.name || '?').slice(0, 2).toUpperCase()}</span>} />
             </span>
             <span className="st-name">{partner.name}</span>
             <style jsx>{`

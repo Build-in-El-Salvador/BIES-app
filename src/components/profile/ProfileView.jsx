@@ -28,6 +28,7 @@ import useVisitState from '../../hooks/useVisitState';
 import { cachedList, rememberList } from '../../utils/listCache';
 import { joinPages, listOf } from '../../utils/listRequests';
 import VerifiedTick from '../VerifiedTick';
+import InitialAvatar from '../InitialAvatar';
 
 // One row: four on a phone, eight on a wide screen (the CSS hides the rest).
 const NETWORK_SHOWN = 8;
@@ -263,7 +264,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                         onClick={() => avatar && lightbox?.open(getAssetUrl(avatar))}
                         aria-label={name}
                     >
-                        {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <User size={44} />}
+                        {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <InitialAvatar name={profile.name} />}
                     </button>
                     <div className="pv-title">
                         <h1 className="pv-name">{name}{profile.verified && <VerifiedTick size={24} />}</h1>
@@ -456,7 +457,7 @@ const ProfileView = ({ profile, nostrProfile, isOwn, bio, actions, showBack, chi
                                 <li key={p.id}>
                                     <Link to={`/builder/${p.nostrPubkey || p.id}`} className="pv-person">
                                         <span className="pv-person-photo">
-                                            {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <User size={26} />}
+                                            {p.profile?.avatar ? <img src={getAssetUrl(p.profile.avatar)} alt="" /> : <InitialAvatar name={p.profile?.name} />}
                                         </span>
                                         <span className="pv-person-name">{isPlaceholderName(p.profile?.name) ? t('profileView.newMember') : p.profile.name}</span>
                                     </Link>

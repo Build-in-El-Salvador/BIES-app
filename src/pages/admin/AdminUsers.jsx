@@ -4,6 +4,7 @@ import { BadgeCheck, Ban, ExternalLink, Loader2, Search, Trash2, RefreshCw, X, R
 import { adminApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getAssetUrl } from '../../utils/assets';
+import InitialAvatar from '../../components/InitialAvatar';
 
 // Addresses sign-up used to hand out: they work but aren't verified (server: services/nip05.ts).
 const GIVEN_AT_SIGNUP = /^nostr-[0-9a-f]{8}\d*$/;
@@ -120,7 +121,7 @@ const SyncModal = ({ isOpen, onClose, users, onSync }) => {
                                                 <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
-                                                    {(u.profile?.name || '?')[0].toUpperCase()}
+                                                    <InitialAvatar name={u.profile?.name} />
                                                 </div>
                                             )}
                                             <div>
@@ -155,7 +156,7 @@ const SyncModal = ({ isOpen, onClose, users, onSync }) => {
                                                 <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
-                                                    {(u.profile?.name || '?')[0].toUpperCase()}
+                                                    <InitialAvatar name={u.profile?.name} />
                                                 </div>
                                             )}
                                             <div>
@@ -585,7 +586,7 @@ const AdminUsers = () => {
                                                         <img src={getAssetUrl(u.profile.avatar)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />
                                                     ) : (
                                                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'var(--color-gray-500)' }}>
-                                                            {(u.profile?.name || '?')[0].toUpperCase()}
+                                                            <InitialAvatar name={u.profile?.name} />
                                                         </div>
                                                     )}
                                                     <span className="font-semibold">{u.profile?.name || '—'}</span>
@@ -736,7 +737,7 @@ const AdminUsers = () => {
                                                         <img src={getAssetUrl(u.profile.avatar)} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', filter: 'grayscale(1)' }} />
                                                     ) : (
                                                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: 'var(--color-gray-500)' }}>
-                                                            {(u.profile?.name || '?')[0].toUpperCase()}
+                                                            <InitialAvatar name={u.profile?.name} />
                                                         </div>
                                                     )}
                                                     <span className="font-semibold">{u.profile?.name || '—'}</span>
