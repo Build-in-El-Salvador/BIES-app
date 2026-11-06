@@ -204,6 +204,17 @@ describe('first and last name', () => {
         const p = (await call('GET', '/api/profiles/me', { token: placeholder.token })).body;
         expect([p.firstName, p.lastName]).toEqual(['', '']);
     });
+
+    it('a long name from sign-up saves back from Edit profile', async () => {
+        const m = await member();
+        const name = 'María José de los Ángeles Fernández-Castellanos y Rodríguez de la Santísima';
+        await call('PUT', '/api/profiles/me', { token: m.token, body: { name } });
+        const me = (await call('GET', '/api/profiles/me', { token: m.token })).body;
+        expect(me.lastName.length).toBeGreaterThan(50);
+        const again = await call('PUT', '/api/profiles/me', { token: m.token, body: { firstName: me.firstName, lastName: me.lastName, bio: 'Hola' } });
+        expect(again.status).toBe(200);
+        expect(again.body.name).toBe(name);
+    });
 });
 
 describe('what you do (roles)', () => {
@@ -220,9 +231,11 @@ describe('what you do (roles)', () => {
 
         const found = await call('GET', '/api/profiles?search=zebralab', { token: viewer.token });
         expect(found.body.data.map((p: any) => p.userId)).toContain(m.id);
-        // Public, like the headline.
+        // Signed out: the headline only (Settings → Privacy), and search finds them by it alone.
         const anyone = await call('GET', `/api/profiles/${m.id}`);
-        expect(anyone.body.roles).toHaveLength(2);
+        expect(anyone.body.roles).toEqual([{ title: 'Founder', company: 'Café Cumbre' }]);
+        const notFound = await call('GET', '/api/profiles?search=zebralab');
+        expect(notFound.body.data.map((p: any) => p.userId)).not.toContain(m.id);
     });
 
     it('an app from before roles changes the first one only', async () => {
@@ -230,6 +243,10 @@ describe('what you do (roles)', () => {
         await call('PUT', '/api/profiles/me', { token: m.token, body: { roles: [{ title: 'Founder', company: 'A' }, { title: 'Mentor', company: 'B' }] } });
         const old = await call('PUT', '/api/profiles/me', { token: m.token, body: { title: 'CEO', company: 'A' } });
         expect(old.body.roles).toEqual([{ title: 'CEO', company: 'A' }, { title: 'Mentor', company: 'B' }]);
+        // Cleared there: the next role is the headline, on cards too.
+        const cleared = await call('PUT', '/api/profiles/me', { token: m.token, body: { title: '', company: '' } });
+        expect(cleared.body.roles).toEqual([{ title: 'Mentor', company: 'B' }]);
+        expect([cleared.body.title, cleared.body.company]).toEqual(['Mentor', 'B']);
     });
 
     it('a profile from before roles reads its title and company as its one role', async () => {
@@ -255,6 +272,15 @@ describe('Instagram and your own links', () => {
         });
         expect(saved.status).toBe(200);
         expect(saved.body.instagram).toBe('@cafecumbre');
+        // A username, from the handle or the member's instagram.com link; any other link is refused.
+        const link = await call('PUT', '/api/profiles/me', { token: m.token, body: { instagram: 'https://www.instagram.com/cafe.cumbre/' } });
+        expect(link.body.instagram).toBe('@cafe.cumbre');
+        for (const instagram of ['https://example.org/cafecumbre', 'instagram.com.example.org/cafe', 'cafe cumbre']) {
+            const bad = await call('PUT', '/api/profiles/me', { token: m.token, body: { instagram } });
+            expect(bad.status, instagram).toBe(400);
+        }
+        const cleared = await call('PUT', '/api/profiles/me', { token: m.token, body: { instagram: '' } });
+        expect(cleared.body.instagram).toBe('');
         expect(saved.body.customLinks).toEqual([{ label: 'YouTube', url: 'https://youtube.com/@cafecumbre' }]);
         for (const url of ['javascript://%0aalert(1)', 'data://text/html,hi', 'ftp://files.example.org/a']) {
             const bad = await call('PUT', '/api/profiles/me', { token: m.token, body: { customLinks: [{ label: 'x', url }] } });

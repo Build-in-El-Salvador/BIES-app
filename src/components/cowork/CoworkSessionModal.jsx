@@ -265,7 +265,7 @@ const CoworkSessionModal = ({ sessionId, open, onClose, onChanged }) => {
                                 <div className="csm-avatar">
                                     {detail.host?.avatar
                                         ? <img src={getAssetUrl(detail.host.avatar)} alt="" />
-                                        : <InitialAvatar name={hostName} />}
+                                        : <InitialAvatar name={detail.host?.name} />}
                                 </div>
                                 <div className="csm-host-meta">
                                     <span className="csm-host-label">{t('cowork.detail.host', 'Host')}</span>

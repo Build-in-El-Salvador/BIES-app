@@ -127,7 +127,7 @@ const Bounties = () => {
                                             <span className="bounty-poster-avatar">
                                                 {posterAvatar
                                                     ? <img src={getAssetUrl(posterAvatar)} alt={posterName} />
-                                                    : <InitialAvatar name={posterName} />}
+                                                    : <InitialAvatar name={b.poster?.profile?.name} />}
                                             </span>
                                             {posterName}
                                         </span>

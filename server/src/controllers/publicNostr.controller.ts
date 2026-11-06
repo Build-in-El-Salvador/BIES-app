@@ -6,9 +6,8 @@ import prisma from '../lib/prisma';
 import { fetchPublicProfile, publishToPublicRelays, type PublicProfileRead } from '../services/nostr.service';
 import { signAsHostedUser } from '../services/hostedSigner.service';
 import { isClaimedNip05 } from '../services/nip05';
-import { privacyOf } from '../services/profilePrivacy';
 import {
-    PUBLIC_PARTS, allowedParts, buildPublicProfile, chosenParts, defaultParts, hiddenByPrivacy, publicNostrOf, sameProfile,
+    PUBLIC_PARTS, allowedParts, buildPublicProfile, chosenParts, defaultParts, hiddenByPrivacy, publicLimitsOf, publicNostrOf, sameProfile,
     type PublicNostr, type PublicPart, type PublishedValues,
 } from '../services/publicNostrProfile';
 
@@ -26,7 +25,7 @@ import {
 
 const PROFILE_FIELDS = {
     name: true, bio: true, avatar: true, banner: true, website: true, nip05Name: true, nip05ClaimedAt: true,
-    lightningAddress: true, bolt12Offer: true, privacy: true, publicNostr: true,
+    lightningAddress: true, bolt12Offer: true, privacy: true, hiddenSections: true, publicNostr: true,
 } as const;
 
 async function memberOf(userId: string) {
@@ -117,7 +116,7 @@ async function nextProfile(member: Member, settings: PublicNostr, { seenAt, foll
         return null;
     }
 
-    const privacy = privacyOf(profile.privacy);
+    const privacy = publicLimitsOf(profile);
     const parts = allowedParts(followUp ? settings.publishedParts ?? [] : chosenParts(settings, profile, privacy), privacy);
     const { content, values } = buildPublicProfile(found?.content ?? null, profile, parts, settings.publishedValues);
     if (followUp && found && sameProfile(found.content, content)) return null;
@@ -266,7 +265,7 @@ function dropTemplate(userId: string, pending: Pending) {
 
 function state(member: Member, settings: PublicNostr, read: PublicProfileRead | null, next: Record<string, unknown> | null) {
     const profile = member.profile as MemberProfile;
-    const privacy = privacyOf(profile.privacy);
+    const privacy = publicLimitsOf(profile);
     return {
         on: settings.on,
         parts: chosenParts(settings, profile, privacy),
@@ -311,7 +310,7 @@ export async function getPublicNostr(req: Request, res: Response): Promise<void>
         const settings = publicNostrOf(member.profile.publicNostr);
         if (req.query.preview === '0') { res.json(state(member, settings, null, null)); return; }
         const read = await fetchPublicProfile(member.nostrPubkey);
-        const privacy = privacyOf(member.profile.privacy);
+        const privacy = publicLimitsOf(member.profile);
         const parts = allowedParts(chosenParts(settings, member.profile, privacy), privacy);
         const next = read.reachable
             ? buildPublicProfile(read.found?.content ?? null, member.profile, parts, settings.publishedValues).content
@@ -345,7 +344,7 @@ export async function updatePublicNostr(req: Request, res: Response): Promise<vo
             if (body.on !== undefined) changes.on = body.on;
             if (body.on === false) changes.publishedParts = null;
             if (body.parts !== undefined) changes.parts = PUBLIC_PARTS.filter((p) => body.parts!.includes(p));
-            else if (body.on && !now.parts) changes.parts = defaultParts(profile, privacyOf(profile.privacy));
+            else if (body.on && !now.parts) changes.parts = defaultParts(profile, publicLimitsOf(profile));
             return changes;
         });
         res.json(state(member, settings, null, null));

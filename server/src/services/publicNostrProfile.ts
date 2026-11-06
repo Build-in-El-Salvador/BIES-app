@@ -19,7 +19,8 @@
  */
 import { config } from '../config';
 import { isClaimedNip05, nip05Address, NIP05_DOMAIN } from './nip05';
-import type { Privacy } from './profilePrivacy';
+import { privacyOf, type Privacy } from './profilePrivacy';
+import { hiddenSectionsOf } from './profileFields';
 
 export const PUBLIC_PARTS = ['name', 'picture', 'banner', 'about', 'website', 'lightning', 'nip05'] as const;
 export type PublicPart = (typeof PUBLIC_PARTS)[number];
@@ -102,18 +103,32 @@ export type BiesProfile = {
 };
 
 /**
- * The parts Settings → Privacy keeps off public Nostr: "Links: Only me" the
- * website, Lightning and BIES address; "Bio: Members" the bio.
+ * What keeps parts off public Nostr: Settings → Privacy, and Links & Social
+ * switched off in Edit profile (`linksOff`), which hides the links but not
+ * the BIES address, as on BIES's own relay (profilePrivacy.ts nostrProfileFor).
  */
-export function hiddenByPrivacy(privacy: Pick<Privacy, 'links' | 'bio'>): PublicPart[] {
+export type PublicLimits = Pick<Privacy, 'links' | 'bio'> & { linksOff?: boolean };
+
+/** A member's limits, from their profile's privacy and hidden sections. */
+export function publicLimitsOf(profile: { privacy?: unknown; hiddenSections?: unknown }): PublicLimits {
+    return { ...privacyOf(profile.privacy), linksOff: hiddenSectionsOf(profile.hiddenSections).has('links') };
+}
+
+/**
+ * The parts kept off public Nostr: "Links: Only me" the website, Lightning
+ * and BIES address; Links & Social switched off the website and Lightning;
+ * "Bio: Members" the bio.
+ */
+export function hiddenByPrivacy(privacy: PublicLimits): PublicPart[] {
     return [
-        ...(privacy.links === 'ONLY_ME' ? ['website', 'lightning', 'nip05'] as PublicPart[] : []),
+        ...(privacy.links === 'ONLY_ME' ? ['website', 'lightning', 'nip05'] as PublicPart[]
+            : privacy.linksOff ? ['website', 'lightning'] as PublicPart[] : []),
         ...(privacy.bio !== 'PUBLIC' ? ['about'] as PublicPart[] : []),
     ];
 }
 
 /** The parts as Privacy allows them. */
-export function allowedParts(parts: readonly PublicPart[], privacy: Pick<Privacy, 'links' | 'bio'>): PublicPart[] {
+export function allowedParts(parts: readonly PublicPart[], privacy: PublicLimits): PublicPart[] {
     const hidden = hiddenByPrivacy(privacy);
     return parts.filter((p) => !hidden.includes(p));
 }
@@ -124,12 +139,12 @@ function hasValue(profile: BiesProfile, part: PublicPart): boolean {
 }
 
 /** The parts ticked when the member first switches it on: those BIES has something for that Privacy allows. */
-export function defaultParts(profile: BiesProfile, privacy: Pick<Privacy, 'links' | 'bio'>): PublicPart[] {
+export function defaultParts(profile: BiesProfile, privacy: PublicLimits): PublicPart[] {
     return allowedParts(DEFAULT_CANDIDATES, privacy).filter((p) => hasValue(profile, p));
 }
 
 /** The ticked parts: as the member chose them, or the defaults until they have. */
-export function chosenParts(settings: PublicNostr, profile: BiesProfile, privacy: Pick<Privacy, 'links' | 'bio'>): PublicPart[] {
+export function chosenParts(settings: PublicNostr, profile: BiesProfile, privacy: PublicLimits): PublicPart[] {
     return settings.parts ?? defaultParts(profile, privacy);
 }
 

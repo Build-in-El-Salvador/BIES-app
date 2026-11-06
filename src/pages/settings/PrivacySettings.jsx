@@ -61,7 +61,12 @@ const PrivacySettings = () => {
             // the BIES relay (the server does it for keys BIES holds).
             if (ok && changes.links !== undefined && nostrSigner.signsOnDevice) {
                 profilesApi.me()
-                    .then((me) => nostrService.updateProfileToBiesRelay(nostrLinkFields(me, { links: changes.links })))
+                    // Links & Social switched off in Edit profile keeps them off (the BIES address stays).
+                    .then((me) => nostrService.updateProfileToBiesRelay(
+                        Array.isArray(me?.hiddenSections) && me.hiddenSections.includes('links')
+                            ? { ...nostrLinkFields({ nip05Name: me.nip05Name }, { links: changes.links }), website: '', lud16: '', lud06: '', bolt12: '' }
+                            : nostrLinkFields(me, { links: changes.links }),
+                    ))
                     .catch((err) => console.error('Relay profile sync failed (non-blocking):', err));
             }
             // Something now hidden comes off a public profile they published

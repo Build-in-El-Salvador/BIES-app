@@ -1861,6 +1861,9 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         <CloudOff size={40} />
                         <h3>{t('feed.unreachableTitle')}</h3>
                         <p>{t('feed.unreachableText')}</p>
+                        <button className="primal-try-public-btn" onClick={handleRefreshFeed} disabled={refreshing}>
+                            <RefreshCw size={14} /> {t('common.tryAgain', 'Try again')}
+                        </button>
                     </div>
                 ) : rootPosts.length === 0 ? (
                     <div className="primal-feed-empty" data-testid="feed-empty">
@@ -1874,6 +1877,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                         {!embedded && feedMode === 'private' && exploreAllowed && (
                             <button className="primal-try-public-btn" onClick={() => setFeedMode('explore')}>
                                 <Globe size={14} /> {t('feed.exploreNostr', 'Explore Nostr')}
+                            </button>
+                        )}
+                        {/* The app has no refresh button (no header): a stalled
+                            connection (a network switch) can be retried here. */}
+                        {!embedded && !exploreAllowed && (
+                            <button className="primal-try-public-btn" onClick={handleRefreshFeed} disabled={refreshing}>
+                                <RefreshCw size={14} /> {t('common.tryAgain', 'Try again')}
                             </button>
                         )}
                     </div>

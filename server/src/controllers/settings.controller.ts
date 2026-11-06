@@ -440,7 +440,7 @@ async function savePrivacy(req: Request, res: Response): Promise<void> {
         where: { userId },
         select: {
             id: true, privacy: true, name: true, bio: true, avatar: true, banner: true,
-            website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true, publicNostr: true,
+            website: true, nip05Name: true, lightningAddress: true, bolt12Offer: true, publicNostr: true, hiddenSections: true,
         },
     });
     if (!profile) { res.status(404).json({ error: 'Profile not found' }); return; }

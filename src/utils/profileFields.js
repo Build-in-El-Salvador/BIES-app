@@ -20,7 +20,8 @@ export const MAX_CUSTOM_LINKS = 10;
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
 export function joinName(first, last) {
-    return [first, last].map(str).filter(Boolean).join(' ');
+    // A name is 100 characters at most (the server's limit), however long each half.
+    return [first, last].map(str).filter(Boolean).join(' ').slice(0, 100);
 }
 
 /** First and last name to start the form with (the server sends them; older servers don't). */
@@ -71,17 +72,16 @@ export function isWebLink(url) {
     }
 }
 
-/** "@handle", "handle" or a link, as the Instagram link and how it reads. */
+/**
+ * "@handle", "handle" or the member's instagram.com link, as the Instagram
+ * link and how it reads. Anything else (another site's link, "@cafe cumbre")
+ * isn't shown: the Instagram icon only ever opens instagram.com.
+ */
 export function instagramLink(value) {
     const raw = str(value);
     if (!raw) return null;
-    if (/^https?:\/\//i.test(raw)) {
-        if (!isWebLink(raw)) return null;
-        const handle = raw.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0];
-        return { href: raw, label: handle && handle !== raw ? `@${handle}` : 'Instagram' };
-    }
-    // The whole of it must be a handle ("@cafe cumbre" isn't one).
-    const handle = raw.replace(/^@+/, '').replace(/^(www\.)?instagram\.com\//i, '').replace(/[/?#].*$/, '');
+    const link = raw.match(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i);
+    const handle = (link ? link[1] : raw).replace(/^@+/, '');
     if (!/^[A-Za-z0-9._]{1,30}$/.test(handle)) return null;
     return { href: `https://instagram.com/${handle}`, label: `@${handle}` };
 }

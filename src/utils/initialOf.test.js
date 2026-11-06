@@ -19,3 +19,10 @@ test('no name, a Nostr placeholder or a leading symbol: no letter (a person figu
     assert.equal(initialOf('@marco'), '');
     assert.equal(initialOf('🌋 Volcán'), '');
 });
+
+test('a name that is not text, or a key shown in its place: no letter, and no crash', () => {
+    for (const odd of [42, true, ['Ana'], { name: 'Ana' }]) assert.equal(initialOf(odd), '');
+    assert.equal(initialOf('npub1qy88wumn8ghj7mn0wvhxcmmv9uq3amnwvaz7tmwdaehgu3wvf5hgcm0d9h'), '');
+    assert.equal(initialOf('3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d'), '');
+    assert.equal(initialOf('Deadbeef Café'), 'D'); // a word that happens to be hex, then more: still a name
+});

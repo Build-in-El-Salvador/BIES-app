@@ -49,6 +49,11 @@ const Feedback = () => {
     const [fieldError, setFieldError] = useState(null); // { id, message }
     const [error, setError] = useState('');
     const fileRef = useRef(null);
+    // A send that failed: its message is at the top, so bring it into view (on a phone it's off-screen).
+    const errorRef = useRef(null);
+    useEffect(() => {
+        if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [error]);
     const fieldErrorFor = (id) => (fieldError?.id === id
         ? <p className="feedback-field-error" id={`${id}-error`} role="alert">{fieldError.message}</p>
         : null);
@@ -138,7 +143,7 @@ const Feedback = () => {
                     <p className="feedback-subtitle">{t('feedback.subtitle')}</p>
                 </div>
             </div>
-            {error && <div className="feedback-error-banner" role="alert"><AlertCircle size={16} /> {error}</div>}
+            {error && <div ref={errorRef} className="feedback-error-banner" role="alert"><AlertCircle size={16} /> {error}</div>}
             <div className="feedback-card">
 
                 <div className="feedback-kinds" role="radiogroup" aria-label={t('feedback.title')}>
