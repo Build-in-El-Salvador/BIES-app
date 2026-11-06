@@ -11,6 +11,7 @@ import { notifyIncomingMessage, requestNotificationPermission, getNotificationPe
 import { useBlocks, useMuted } from '../hooks/useBlocks';
 import BackButton from '../components/BackButton';
 import { getAssetUrl } from '../utils/assets';
+import InitialAvatar from '../components/InitialAvatar';
 
 const Messages = () => {
     const { t } = useTranslation();
@@ -398,7 +399,7 @@ const Messages = () => {
                                                     {user.avatar ? (
                                                         <img src={getAssetUrl(user.avatar)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                                                     ) : (
-                                                        (user.name || '??').substring(0, 2).toUpperCase()
+                                                        <InitialAvatar name={user.name} />
                                                     )}
                                                 </div>
                                                 <div className="user-result-info">
@@ -437,7 +438,7 @@ const Messages = () => {
                                             {avatar ? (
                                                 <img src={getAssetUrl(avatar)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                                             ) : (
-                                                getDisplayName(pubkey).substring(0, 2).toUpperCase()
+                                                <InitialAvatar name={profiles[pubkey]?.name || profiles[pubkey]?.display_name} />
                                             )}
                                         </div>
                                         <div className="chat-info">
@@ -482,7 +483,7 @@ const Messages = () => {
                                         {getAvatar(activeChatPubkey) ? (
                                             <img src={getAvatar(activeChatPubkey)} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                                         ) : (
-                                            getDisplayName(activeChatPubkey).substring(0, 2).toUpperCase()
+                                            <InitialAvatar name={profiles[activeChatPubkey]?.name || profiles[activeChatPubkey]?.display_name} />
                                         )}
                                     </div>
                                     <div>

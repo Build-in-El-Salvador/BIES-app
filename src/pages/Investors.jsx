@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Search, Loader2, User } from 'lucide-react';
+import { TrendingUp, Search, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
 import { getAssetUrl } from '../utils/assets';
 import { stripHtml } from '../utils/text';
+import InitialAvatar from '../components/InitialAvatar';
 
 const Investors = () => {
     const { t } = useTranslation();
@@ -86,9 +87,7 @@ const Investors = () => {
                                         {investor.avatar || investor.image ? (
                                             <img src={investor.avatar || investor.image} alt={investor.name} className="w-full h-full object-cover" />
                                         ) : (
-                                            <div className="w-full h-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <User size={48} style={{ color: 'var(--color-gray-300)' }} />
-                                            </div>
+                                            <InitialAvatar name={investor.name} />
                                         )}
                                     </div>
                                     <div className="p-5 flex-1 flex flex-col">

@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { getAssetUrl } from '../utils/assets';
 import ZapModal from '../components/ZapModal';
 import BackButton from '../components/BackButton';
+import InitialAvatar from '../components/InitialAvatar';
 
 // Presence check works with either an explicit flag or the raw address
 const hasLightning = (u) => !!(u?.hasLightningAddress || u?.profile?.lightningAddress);
@@ -217,7 +218,7 @@ const BountyDetail = () => {
                             <span className="bounty-avatar">
                                 {posterAvatar
                                     ? <img src={getAssetUrl(posterAvatar)} alt={posterName} />
-                                    : <span>{posterName[0]?.toUpperCase()}</span>}
+                                    : <InitialAvatar name={posterName} />}
                             </span>
                             <span className="bounty-poster-name">{posterName}</span>
                             <span className="bounty-posted-date">
@@ -362,7 +363,7 @@ const BountyDetail = () => {
                                             <span className="bounty-avatar">
                                                 {subAvatar
                                                     ? <img src={getAssetUrl(subAvatar)} alt={subName} />
-                                                    : <span>{subName[0]?.toUpperCase()}</span>}
+                                                    : <InitialAvatar name={subName} />}
                                             </span>
                                             <div className="bounty-submission-body">
                                                 <div className="bounty-submission-meta">

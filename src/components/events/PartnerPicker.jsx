@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, Loader2, Building2, User, Sprout, Globe, Upload } from 'lucide-react';
+import { Plus, X, Loader2, Building2, Sprout, Globe, Upload } from 'lucide-react';
 import { directoryApi, profilesApi, uploadApi } from '../../services/api';
 import Avatar from '../Avatar';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * An event's co-hosts and sponsors in the form: one search over members
@@ -50,7 +51,7 @@ export default function PartnerPicker({ value, onChange, exclude = {} }) {
     const remove = (i) => onChange(value.filter((_, j) => j !== i));
     const kindLabel = (p) => (p.kind === 'member' ? t('events.form.kindMember') : p.kind === 'other' ? t('events.form.kindOutside')
         : p.listingType === 'FARM' ? t('events.form.kindFarm') : t('events.form.kindBusiness'));
-    const kindIcon = (p) => (p.kind === 'member' ? <User size={16} /> : p.kind === 'other' ? <Globe size={16} /> : p.listingType === 'FARM' ? <Sprout size={16} /> : <Building2 size={16} />);
+    const kindIcon = (p) => (p.kind === 'member' ? <InitialAvatar name={p.name} /> : p.kind === 'other' ? <Globe size={16} /> : p.listingType === 'FARM' ? <Sprout size={16} /> : <Building2 size={16} />);
 
     const uploadLogo = async (e) => {
         const file = e.target.files?.[0];

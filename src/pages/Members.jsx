@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, SlidersHorizontal, Loader2, User } from 'lucide-react';
+import { Search, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { profilesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import ZapButton from '../components/ZapButton';
 import FollowIconButton from '../components/FollowIconButton';
+import InitialAvatar from '../components/InitialAvatar';
 
 const INTEREST_TAGS = [
     { id: 'Bitcoin', label: 'Bitcoin' },
@@ -226,9 +227,7 @@ const Members = () => {
                                             {member.avatar || member.image ? (
                                                 <img src={member.avatar || member.image} alt={member.name} className="avatar-img" />
                                             ) : (
-                                                <div className="avatar-placeholder">
-                                                    <User size={48} style={{ color: 'var(--color-gray-300)' }} />
-                                                </div>
+                                                <InitialAvatar name={member.name} />
                                             )}
                                             <span className={`role-badge ${badgeClass}`}>
                                                 {badgeLabel}
@@ -489,13 +488,6 @@ const Members = () => {
                     object-fit: cover;
                 }
 
-                .avatar-placeholder {
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
 
                 .role-badge {
                     position: absolute;

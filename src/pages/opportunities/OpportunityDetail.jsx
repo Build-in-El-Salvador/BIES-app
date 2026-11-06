@@ -26,6 +26,7 @@ import DeckPanel from '../../components/opportunities/DeckPanel';
 import { daysLeft, formatDay, fullDollars, hasField, industryOf, isKindHidden, isOpen, isTypeShown, plainText } from '../../components/opportunities/opportunityOptions';
 import { isNativePlatform } from '../../utils/platform';
 import '../../components/moderation/Moderation.css';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const sectionTitleStyle = {
     fontSize: '1.15rem',
@@ -338,7 +339,7 @@ const OpportunityDetail = () => {
 
                         <Link to={profilePath} className="od-by">
                             <span className="od-avatar" style={{ background: tint, color }}>
-                                <Avatar src={avatar} size={32} fallback={<User size={18} />} />
+                                <Avatar src={avatar} size={32} fallback={<InitialAvatar name={owner.profile?.name} />} />
                             </span>
                             <span>{t('opportunities.postedBy', { name })}</span>
                         </Link>

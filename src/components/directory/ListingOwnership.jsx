@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, ArrowRightLeft, Check, Loader2, User } from 'lucide-react';
+import { AlertCircle, ArrowRightLeft, Check, Loader2 } from 'lucide-react';
 import { adminApi, directoryApi, profilesApi } from '../../services/api';
 import { getAssetUrl } from '../../utils/assets';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import ModerationSheet from '../moderation/ModerationSheet';
 import '../moderation/Moderation.css';
 import './ListingOwnership.css';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * Handing a listing to the member who runs it, on the listing page:
@@ -238,7 +239,7 @@ export function OwnershipSheet({ mode, listing, user, isFarm, onClose, onDone })
                                     onClick={() => setPicked(p)}
                                 >
                                     <span className="own-avatar">
-                                        {p.avatar ? <img src={getAssetUrl(p.avatar)} alt="" /> : <User size={18} />}
+                                        {p.avatar ? <img src={getAssetUrl(p.avatar)} alt="" /> : <InitialAvatar name={p.name} />}
                                     </span>
                                     <span className="own-person-text">
                                         <span className="own-person-name">{p.name}</span>

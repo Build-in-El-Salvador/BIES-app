@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { MoreHorizontal, Share, Link as LinkIcon, Type, Hash, Code, Trash2, VolumeX, Flag, Ban } from 'lucide-react';
-import NostrIcon from '../NostrIcon';
+import InitialAvatar from '../InitialAvatar';
 import NoteHeader from './NoteHeader';
 import NoteFooter from './NoteFooter';
 import NoteRepostHeader from './NoteRepostHeader';
@@ -137,7 +137,7 @@ const Note = ({
               {avatar ? (
                 <img src={avatar} alt="" />
               ) : (
-                <NostrIcon size={18} />
+                <InitialAvatar name={profile?.display_name || profile?.name} />
               )}
             </div>
           </Link>

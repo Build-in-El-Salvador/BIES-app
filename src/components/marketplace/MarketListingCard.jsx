@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Package, User } from 'lucide-react';
+import { MapPin, Package } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * Listings whose images are blurred until revealed on the detail page:
@@ -78,7 +79,7 @@ const MarketListingCard = ({ listing }) => {
                             {listing.sellerAvatar ? (
                                 <img className="mk-seller-avatar" src={listing.sellerAvatar} alt="" loading="lazy" />
                             ) : (
-                                <User size={13} />
+                                <InitialAvatar name={listing.sellerName} size={16} />
                             )}
                             <span>{listing.sellerName}</span>
                         </div>

@@ -20,6 +20,7 @@ import CoverPhoto from '../../components/CoverPhoto';
 import EmailSheet from '../../components/EmailSheet';
 import { useLightbox } from '../../context/LightboxContext';
 import '../../components/moderation/Moderation.css';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const sectionTitleStyle = {
     fontSize: '1.15rem',
@@ -215,7 +216,7 @@ const TalentDetail = () => {
                     <div className="tal-head">
                         <Link to={profilePath} className="tal-avatar-link" aria-label={name}>
                             <span className="tal-avatar">
-                                {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <User size={40} />}
+                                {avatar ? <img src={getAssetUrl(avatar)} alt="" /> : <InitialAvatar name={member.profile?.name} />}
                             </span>
                         </Link>
 

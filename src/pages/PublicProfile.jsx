@@ -20,6 +20,7 @@ import { useModerationDialogs } from '../components/moderation/useModerationDial
 import { unblock } from '../services/blockStore';
 import '../components/moderation/Moderation.css';
 import { isNativePlatform } from '../utils/platform';
+import InitialAvatar from '../components/InitialAvatar';
 
 const PublicProfile = ({ type }) => {
     const { id } = useParams();
@@ -224,7 +225,7 @@ const PublicProfile = ({ type }) => {
         return (
             <div className="container py-8">
                 <div className="mod-blocked-card">
-                    <Avatar src={profile.avatar} size={64} />
+                    <Avatar src={profile.avatar} size={64} fallback={<InitialAvatar name={profile.name} size={64} />} />
                     <h1 className="mod-title">{t('moderation.blockedProfile.title', { name: profile.name || t('common.unnamed') })}</h1>
                     <p className="mod-muted">{t('moderation.blockedProfile.body')}</p>
                     <button type="button" className="mod-button secondary" onClick={doUnblock} disabled={unblocking}>

@@ -4,7 +4,7 @@ import { useFeature } from '../context/FeatureFlagsContext';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigationType } from 'react-router-dom';
 import { publicUrl } from '../utils/publicUrl';
-import { Loader2, Send, Globe, Lock, Zap, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
+import { Loader2, Send, Globe, Lock, Zap, MessageSquare, CloudOff, TrendingUp, Flame, Clock, Calendar, X, ImagePlus, Smile, RefreshCw, Heart, ChevronDown } from 'lucide-react';
 import { nostrService, BIES_RELAY, profileCache } from '../services/nostrService';
 import { primalService, EXPLORE_VIEWS } from '../services/primalService';
 import { nostrSigner } from '../services/nostrSigner';
@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { notificationsApi, profilesApi, searchApi, uploadApi } from '../services/api';
 import { getAssetUrl } from '../utils/assets';
 import Avatar from '../components/Avatar';
-import NostrIcon from '../components/NostrIcon';
+import InitialAvatar from '../components/InitialAvatar';
 import ZapModal from '../components/ZapModal';
 import EmojiPicker from '../components/EmojiPicker';
 import NostrGifPicker from '../components/NostrGifPicker';
@@ -1632,11 +1632,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
         <div className={embedded ? 'primal-feed-embedded' : 'primal-feed-page'}>
             {copyToast && <div className="primal-copy-toast">{copyToast}</div>}
             <div className={embedded ? undefined : 'primal-feed-container'}>
-                {/* Feed header */}
-                {!embedded && (
+                {/* Feed header: the website only. The app has one feed, so no tabs, and
+                    its posts arrive live (it reloads when the app comes back), so no
+                    refresh button; the app's top bar already reads "BIES Feed". */}
+                {!embedded && exploreAllowed && (
                     <div className="primal-feed-header">
                         <div className="primal-feed-title">
-                            <NostrIcon size={22} />
+                            <MessageSquare size={22} />
                             <span>{t('feed.biesFeed', 'BIES Feed')}</span>
                         </div>
                         <div className="primal-feed-tabs">
@@ -1648,16 +1650,14 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                 <Lock size={15} className="primal-feed-tab-icon" />
                                 <span>{t('feed.privateRelay', 'Private Relay')}</span>
                             </button>
-                            {exploreAllowed && (
-                                <button
-                                    className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
-                                    onClick={() => setFeedMode('explore')}
-                                    data-testid="tab-explore"
-                                >
-                                    <Globe size={15} className="primal-feed-tab-icon" />
-                                    <span>{t('feed.explore', 'Explore')}</span>
-                                </button>
-                            )}
+                            <button
+                                className={`primal-feed-tab ${feedMode === 'explore' ? 'active' : ''}`}
+                                onClick={() => setFeedMode('explore')}
+                                data-testid="tab-explore"
+                            >
+                                <Globe size={15} className="primal-feed-tab-icon" />
+                                <span>{t('feed.explore', 'Explore')}</span>
+                            </button>
                             <button
                                 className={`primal-feed-refresh${refreshing ? ' spinning' : ''}`}
                                 onClick={handleRefreshFeed}
@@ -1717,7 +1717,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     <div className="primal-compose">
                         <div className="primal-compose-row">
                             <div className="primal-compose-avatar">
-                                <Avatar src={user?.profile?.avatar} size={40} fallback={<NostrIcon size={18} />} />
+                                <Avatar src={user?.profile?.avatar} size={40} fallback={<InitialAvatar name={user?.profile?.name} />} />
                             </div>
                             <textarea
                                 ref={composeInputRef}
@@ -1748,7 +1748,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                         {p.picture ? (
                                             <img src={p.picture} className="primal-mention-avatar" alt="" />
                                         ) : (
-                                            <div className="primal-mention-avatar-placeholder"><NostrIcon size={12} /></div>
+                                            <div className="primal-mention-avatar-placeholder"><InitialAvatar name={p.display_name || p.name} /></div>
                                         )}
                                         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                             <span className="primal-mention-name">{p.display_name || p.name || p.pubkey.slice(0, 10)}</span>
@@ -1858,13 +1858,13 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                     <FeedSkeleton count={embedded ? 2 : 5} />
                 ) : rootPosts.length === 0 && relayTrouble ? (
                     <div className="primal-feed-empty" data-testid="feed-unreachable">
-                        <NostrIcon size={40} />
+                        <CloudOff size={40} />
                         <h3>{t('feed.unreachableTitle')}</h3>
                         <p>{t('feed.unreachableText')}</p>
                     </div>
                 ) : rootPosts.length === 0 ? (
                     <div className="primal-feed-empty" data-testid="feed-empty">
-                        <NostrIcon size={40} />
+                        <MessageSquare size={40} />
                         <h3>{t('feed.noPostsTitle', 'No posts yet')}</h3>
                         <p>
                             {emptyText || (feedMode === 'private'
@@ -1948,7 +1948,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                             {/* Reply compose */}
                                             <div className="primal-comment-compose">
                                                 <div className="primal-avatar primal-avatar-sm">
-                                                    <Avatar src={user?.profile?.avatar} size={28} fallback={<NostrIcon size={13} />} />
+                                                    <Avatar src={user?.profile?.avatar} size={28} fallback={<InitialAvatar name={user?.profile?.name} />} />
                                                 </div>
                                                 <div className="primal-comment-input-row">
                                                     <textarea
@@ -2027,7 +2027,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                             {p.picture ? (
                                                                 <img src={p.picture} className="primal-mention-avatar" alt="" />
                                                             ) : (
-                                                                <div className="primal-mention-avatar-placeholder"><NostrIcon size={12} /></div>
+                                                                <div className="primal-mention-avatar-placeholder"><InitialAvatar name={p.display_name || p.name} /></div>
                                                             )}
                                                             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                                                 <span className="primal-mention-name">{p.display_name || p.name || p.pubkey.slice(0, 10)}</span>
@@ -2059,7 +2059,7 @@ const Feed = ({ author = null, showCompose = true, emptyText, onPosts } = {}) =>
                                                                         {getAvatar(comment.pubkey) ? (
                                                                             <img src={getAvatar(comment.pubkey)} alt="" />
                                                                         ) : (
-                                                                            <NostrIcon size={13} />
+                                                                            <InitialAvatar name={profiles[comment.pubkey]?.display_name || profiles[comment.pubkey]?.name} />
                                                                         )}
                                                                     </div>
                                                                     <div className="primal-comment-body">

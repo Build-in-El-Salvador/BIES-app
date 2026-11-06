@@ -5,6 +5,7 @@ import { Target, Plus, Zap, Trophy, Star, Clock, MessageSquare, Loader2 } from '
 import { bountiesApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { getAssetUrl } from '../utils/assets';
+import InitialAvatar from '../components/InitialAvatar';
 
 const TABS = [
     { key: 'all', tKey: 'bounties.tabs.all' },
@@ -126,7 +127,7 @@ const Bounties = () => {
                                             <span className="bounty-poster-avatar">
                                                 {posterAvatar
                                                     ? <img src={getAssetUrl(posterAvatar)} alt={posterName} />
-                                                    : <span>{posterName[0]?.toUpperCase()}</span>}
+                                                    : <InitialAvatar name={posterName} />}
                                             </span>
                                             {posterName}
                                         </span>

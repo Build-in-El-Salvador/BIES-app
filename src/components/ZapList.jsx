@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Zap } from 'lucide-react';
 import { zapsApi } from '../services/api';
+import InitialAvatar from './InitialAvatar';
 
 const ZapList = ({ projectId, pubkey, limit = 5 }) => {
     const [zaps, setZaps] = useState([]);
@@ -64,7 +65,7 @@ const ZapList = ({ projectId, pubkey, limit = 5 }) => {
                             {zap.senderAvatar ? (
                                 <img src={zap.senderAvatar} alt="" />
                             ) : (
-                                <Zap size={14} style={{ color: '#f7931a' }} />
+                                <InitialAvatar name={zap.senderName} />
                             )}
                         </div>
                         <div className="zap-list-info">

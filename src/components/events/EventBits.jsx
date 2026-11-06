@@ -8,6 +8,7 @@ import { bothTicketLinks, hostOf, isFree, ticketProvider } from '../../utils/eve
 import { repeatLabel } from '../../utils/eventRepeat';
 import { isPlaceholderName } from '../../utils/profileComplete';
 import biesLogo from '../../assets/logo-icon.svg';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * Small pieces an event shows wherever it's listed: the BIES tag, how it
@@ -76,7 +77,7 @@ function Face({ image, name, round = true }) {
     const initial = (name || '?').trim()[0]?.toUpperCase() || '?';
     return (
         <span className={`ev-face${round ? '' : ' square'}`}>
-            <Avatar src={image} size={24} fallback={<span className="ev-face-initial">{initial}</span>} />
+            <Avatar src={image} size={24} fallback={round ? <InitialAvatar name={name} /> : <span className="ev-face-initial">{initial}</span>} />
             <style jsx>{`
                 .ev-face {
                     width: 24px; height: 24px; border-radius: 50%; overflow: hidden; flex-shrink: 0;

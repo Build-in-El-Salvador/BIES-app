@@ -5,8 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useUserMode } from '../context/UserModeContext';
 import { useAuth } from '../context/AuthContext';
 import { useFeatureFlags } from '../context/FeatureFlagsContext';
-import { User, Search, ChevronDown, LogOut, Trophy, X } from 'lucide-react';
-import NostrIcon from './NostrIcon';
+import { Search, ChevronDown, LogIn, LogOut, Trophy, X } from 'lucide-react';
 import NostrNotifications from './NostrNotifications';
 import useMediaQuery from '../hooks/useMediaQuery';
 import { addBackHandler } from '../utils/backHandlers';
@@ -15,6 +14,7 @@ import { MENU_PAGES, MENU_BOTTOM_PAGES, menuPages } from '../config/navPages';
 import logoHorizontalWhite from '../assets/logo-horizontal-white.svg';
 import logoIconDark from '../assets/logo-icon-dark.svg';
 import Avatar from './Avatar';
+import InitialAvatar from './InitialAvatar';
 
 const Navbar = () => {
   const { t } = useTranslation();
@@ -215,7 +215,7 @@ const Navbar = () => {
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               >
                 <div className="avatar">
-                  <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
+                  <Avatar src={user?.profile?.avatar} size={32} fallback={<InitialAvatar name={user?.profile?.name} />} />
                 </div>
                 <div className="flex flex-col items-start hidden-mobile" style={{ lineHeight: 1.2, color: 'white' }}>
                   <span className="text-sm font-semibold">{user?.profile?.name || user?.name || 'Guest'}</span>
@@ -275,7 +275,7 @@ const Navbar = () => {
             </div>
           ) : (
             <Link to="/login" className="login-btn flex items-center gap-sm" style={{ color: 'white', fontWeight: 600, fontSize: '0.9rem', padding: '6px 16px', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 'var(--radius-full)' }}>
-              <NostrIcon size={16} />
+              <LogIn size={16} />
               <span>{t('common.login')}</span>
             </Link>
           )}
@@ -290,7 +290,7 @@ const Navbar = () => {
               aria-expanded={isMenuOpen}
             >
               <div className="avatar" style={{ width: 32, height: 32 }}>
-                <Avatar src={user?.profile?.avatar} size={32} fallback={<User size={18} />} />
+                <Avatar src={user?.profile?.avatar} size={32} fallback={<InitialAvatar name={user?.profile?.name} />} />
               </div>
             </button>
           </div>
@@ -355,7 +355,7 @@ const Navbar = () => {
                     </button>
                   ) : (
                     <Link to="/login" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.9rem 1.5rem', color: 'rgba(255,255,255,0.8)', fontSize: '1rem', fontWeight: 500, textDecoration: 'none', borderLeft: '3px solid transparent' }} onClick={() => setIsMenuOpen(false)}>
-                      <NostrIcon size={16} /> {t('common.logIn')}
+                      <LogIn size={16} /> {t('common.logIn')}
                     </Link>
                   )}
                 </div>

@@ -3,6 +3,7 @@ import { Loader2, Search, RefreshCw, X, Award, Trash2, Plus, Minus } from 'lucid
 import { useTranslation } from 'react-i18next';
 import { adminApi, pointsApi } from '../../services/api';
 import { getAssetUrl } from '../../utils/assets';
+import InitialAvatar from '../../components/InitialAvatar';
 
 const RARITY_COLORS = { legendary: '#D97706', rare: '#7C3AED', uncommon: '#2563EB', common: '#64748B' };
 const POINT_REASONS = ['POST', 'REPLY', 'REACTION_GIVEN', 'REACTION_RECEIVED', 'QUALITY_BONUS', 'ADMIN_ADJUST'];
@@ -283,7 +284,7 @@ const AdminPoints = () => {
                                                 <img src={getAssetUrl(u.profile.avatar)} alt="" className="user-option-avatar" />
                                             ) : (
                                                 <div className="user-option-avatar placeholder">
-                                                    {(u.profile?.name || '?')[0].toUpperCase()}
+                                                    <InitialAvatar name={u.profile?.name} />
                                                 </div>
                                             )}
                                             <div>
@@ -308,7 +309,7 @@ const AdminPoints = () => {
                                     <img src={getAssetUrl(selectedUser.profile.avatar)} alt="" className="user-option-avatar big" />
                                 ) : (
                                     <div className="user-option-avatar big placeholder">
-                                        {(selectedUser.profile?.name || '?')[0].toUpperCase()}
+                                        <InitialAvatar name={selectedUser.profile?.name} />
                                     </div>
                                 )}
                                 <div>
@@ -534,7 +535,7 @@ const AdminPoints = () => {
                                                     <img src={getAssetUrl(ev.user.profile.avatar)} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
                                                 ) : (
                                                     <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--color-gray-200)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--color-gray-500)', flexShrink: 0 }}>
-                                                        {(ev.user?.profile?.name || '?')[0].toUpperCase()}
+                                                        <InitialAvatar name={ev.user?.profile?.name} />
                                                     </div>
                                                 )}
                                                 <span className="font-semibold">

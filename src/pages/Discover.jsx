@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, MapPin, Loader2, User, LayoutGrid, List as ListIcon, Columns, ArrowUpDown, CalendarDays, Lock } from 'lucide-react';
+import { Search, MapPin, Loader2, LayoutGrid, List as ListIcon, Columns, ArrowUpDown, CalendarDays, Lock } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { profilesApi, preferencesApi } from '../services/api';
@@ -17,6 +17,7 @@ import { myFollowingIds } from '../utils/myFollowing';
 import { stripHtml } from '../utils/text';
 import { joinedDate } from '../utils/joinedDate';
 import VerifiedTick from '../components/VerifiedTick';
+import InitialAvatar from '../components/InitialAvatar';
 
 // A member's headline: "Title at Company", or whichever they gave.
 const headline = (m) => (m.title && m.company ? `${m.title} at ${m.company}` : m.title || m.company || '');
@@ -55,7 +56,7 @@ const NetworkLine = ({ network }) => {
       ) : network.people.length > 0 && (
         <span className="mc-faces" aria-hidden="true">
           {network.people.map((p) => (
-            <span key={p.id} className="mc-face"><Avatar src={p.avatar} size={26} fallback={<User size={14} />} /></span>
+            <span key={p.id} className="mc-face"><Avatar src={p.avatar} size={26} fallback={<InitialAvatar name={p.name} />} /></span>
           ))}
         </span>
       )}
@@ -315,11 +316,7 @@ const Discover = () => {
                                 alt={builder.name}
                                 size={memberViewType === 'icons' ? 72 : memberViewType === 'list' ? 64 : 88}
                                 className="builder-avatar-img"
-                                fallback={
-                                    <div className="builder-avatar-fallback w-full h-full" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <User size={memberViewType === 'icons' ? 32 : 40} style={{ color: 'var(--color-gray-300)' }} />
-                                    </div>
-                                }
+                                fallback={<InitialAvatar name={builder.name} />}
                             />
                         );
                         

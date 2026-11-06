@@ -8,6 +8,7 @@ import { getAssetUrl } from '../../utils/assets';
 import CoworkMap from './CoworkMap';
 import OpenWithMapsSheet from './OpenWithMapsSheet';
 import { formatAmenity, formatClock, formatDayTime } from './CoworkerCard';
+import InitialAvatar from '../InitialAvatar';
 
 /**
  * Session detail modal — portal, bottom sheet on mobile (<=768px).
@@ -264,7 +265,7 @@ const CoworkSessionModal = ({ sessionId, open, onClose, onChanged }) => {
                                 <div className="csm-avatar">
                                     {detail.host?.avatar
                                         ? <img src={getAssetUrl(detail.host.avatar)} alt="" />
-                                        : <span>{(hostName.charAt(0) || '?').toUpperCase()}</span>}
+                                        : <InitialAvatar name={hostName} />}
                                 </div>
                                 <div className="csm-host-meta">
                                     <span className="csm-host-label">{t('cowork.detail.host', 'Host')}</span>
@@ -339,7 +340,7 @@ const CoworkSessionModal = ({ sessionId, open, onClose, onChanged }) => {
                                                 <div className="csm-att-avatar">
                                                     {a.avatar
                                                         ? <img src={getAssetUrl(a.avatar)} alt="" />
-                                                        : <span>{((a.name || '?').charAt(0) || '?').toUpperCase()}</span>}
+                                                        : <InitialAvatar name={a.name} />}
                                                 </div>
                                                 <span className="csm-att-name">
                                                     {a.name || t('cowork.card.communityMember', 'BIES member')}
