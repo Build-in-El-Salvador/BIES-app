@@ -12,6 +12,7 @@ import { repeatLabel } from '../utils/eventRepeat';
 import { openExternal } from '../utils/openExternal';
 import { isNativePlatform } from '../utils/platform';
 import { BiesTag, namesText } from '../components/events/EventBits';
+import { isOver } from '../components/events/eventRsvp';
 
 const FALLBACK_ICON = { trusted: Building2, farms: Leaf, opportunities: Briefcase, talents: Sparkles, events: CalendarDays };
 
@@ -86,6 +87,8 @@ export default function SharePreview({ section }) {
     const Fallback = FALLBACK_ICON[section] || Building2;
     const locked = found ? behindSignIn() : [];
     const isEvent = found?.section === 'events';
+    // An event that's over (a series: all of it) says so, and has no tickets to get.
+    const eventOver = isEvent && isOver(found);
     const hostsLine = isEvent ? [
         t('sharePreview.hostedBy', { names: namesText([found.host, ...(found.cohosts || [])], t) }),
         found.sponsors?.length ? t('sharePreview.sponsoredBy', { names: namesText(found.sponsors, t) }) : '',
@@ -151,6 +154,9 @@ export default function SharePreview({ section }) {
                                 {found.pricing && <li><Banknote size={18} aria-hidden="true" /><span className="sp-price">{found.pricing}</span></li>}
                                 {isEvent && found.priceLabel && <li><Banknote size={18} aria-hidden="true" /><span className="sp-price">{found.priceLabel}</span></li>}
                                 {found.available && <li className="sp-good"><CheckCircle size={18} aria-hidden="true" /><span>{t('talent.available')}</span></li>}
+                                {eventOver && (
+                                    <li className="sp-closed" data-testid="event-ended"><XCircle size={18} aria-hidden="true" /><span>{t('events.detail.ended')}</span></li>
+                                )}
                                 {found.section === 'opportunities' && !found.isOpen && (
                                     <li className="sp-closed"><XCircle size={18} aria-hidden="true" /><span>{t('sharePreview.closed')}</span></li>
                                 )}
@@ -162,7 +168,7 @@ export default function SharePreview({ section }) {
                             {hostsLine && <p className="sp-hosts">{hostsLine}</p>}
                             {found.about && <p className="sp-about">{found.about}</p>}
 
-                            {isEvent && (found.ticketUrl || found.bitcoinUrl) && (
+                            {isEvent && !eventOver && (found.ticketUrl || found.bitcoinUrl) && (
                                 <>
                                     {found.ticketUrl && (
                                         <button type="button" className="sp-tickets" onClick={() => openExternal(found.ticketUrl)}>

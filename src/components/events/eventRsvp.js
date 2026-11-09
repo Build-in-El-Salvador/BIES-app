@@ -21,6 +21,23 @@ export function isOver(event, now = Date.now()) {
 }
 
 /**
+ * A new event's times as they're picked (pages/EventForm.jsx): 'over' when
+ * it would already be over, which isn't posted (the server says the same);
+ * 'passed' when only its start has passed (it may still be on); '' else. A
+ * repeating one whose start has passed is 'passed': its later dates may be
+ * ahead, and the server decides.
+ * @param {string|null} startIso
+ * @param {string|null} endIso
+ * @param {{ repeats?: boolean, now?: number }} [opts]
+ * @returns {'over'|'passed'|''}
+ */
+export function startCheck(startIso, endIso, { repeats = false, now = Date.now() } = {}) {
+    const start = startIso ? new Date(startIso).getTime() : NaN;
+    if (!Number.isFinite(start) || start >= now) return '';
+    return !repeats && isOver({ startDate: startIso, endDate: endIso }, now) ? 'over' : 'passed';
+}
+
+/**
  * Why "I'm going" didn't save: the server's words when it said why (full,
  * invite only…), else `fallback` (offline, no answer, the server's fault).
  * @param {Error & { status?: number, data?: { error?: string } }} err the API client's error

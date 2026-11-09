@@ -836,7 +836,8 @@
       "youreGoingOn": "Vas el {{date}}",
       "goingOn_one": "{{count}} miembro va el {{date}}",
       "goingOn_other": "{{count}} miembros van el {{date}}",
-      "rsvpFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo."
+      "rsvpFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo.",
+      "ended": "Este evento ya terminó."
     },
     "form": {
       "newTitle": "Nuevo evento",
@@ -932,7 +933,8 @@
         "date_overlaps": "Esa fecha tiene que terminar antes de que empiece la siguiente, y empezar después de que termine la anterior.",
         "date_too_far": "Una fecha se puede cambiar hasta con un año de anticipación.",
         "too_many_date_changes": "Un evento puede tener hasta {{count}} fechas cambiadas o canceladas por delante.",
-        "too_many_repeating": "Puedes tener hasta {{count}} eventos que se repiten a la vez. Elimina uno que ya no necesites para agregar otro."
+        "too_many_repeating": "Puedes tener hasta {{count}} eventos que se repiten a la vez. Elimina uno que ya no necesites para agregar otro.",
+        "already_over": "Esa hora ya pasó. Revisa la fecha y la hora."
       },
       "hostOnly": "Como coorganizador editas los detalles del evento. Las entradas, el enlace en línea, los coorganizadores, los patrocinadores y quién puede verlo quedan con el anfitrión.",
       "card": "Tarjeta destacada",
@@ -951,7 +953,8 @@
       "shareHintOfficial": "Un evento de BIES comparte su portada tal cual, cuadrada, como los pósters de eventos. Ajústala para que se vea todo el póster.",
       "shareTitle": "Ajustar para la vista previa",
       "sharePlaceholder": "El nombre de tu evento",
-      "shareNoCover": "Agrega una foto de portada y también se mostrará aquí."
+      "shareNoCover": "Agrega una foto de portada y también se mostrará aquí.",
+      "startsPast": "Esa hora de inicio ya pasó. Revisa la fecha y la hora."
     },
     "kinds": {
       "NETWORKING": "Networking",

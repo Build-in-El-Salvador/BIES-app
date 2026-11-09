@@ -119,6 +119,18 @@ function event(host: Member, body: Record<string, unknown> = {}) {
     });
 }
 
+/**
+ * An event that's already over. Posting one is refused (already_over), so it's
+ * posted for a date ahead and then given its own dates, as if it had been
+ * posted before they passed.
+ */
+async function pastEvent(host: Member, body: { startDate: string; endDate?: string } & Record<string, unknown>) {
+    const created = await event(host, { ...body, startDate: inDays(30), endDate: undefined });
+    expect(created.status).toBe(201);
+    await prisma.event.update({ where: { id: created.body.id }, data: { startDate: new Date(body.startDate), endDate: body.endDate ? new Date(body.endDate) : null } });
+    return created;
+}
+
 describe('who hosts an event', () => {
     it('is for members only; signed out, the API says no', async () => {
         const host = await member();
@@ -490,7 +502,7 @@ describe('the events list and page', () => {
         const tag = `List${Date.now()}`;
         const now = await event(host, { title: `${tag} on now`, startDate: inDays(-0.1), endDate: inDays(0.1) });
         const soon = await event(host, { title: `${tag} soon`, startDate: inDays(3) });
-        const done = await event(host, { title: `${tag} done`, startDate: inDays(-3), endDate: inDays(-2.9) });
+        const done = await pastEvent(host, { title: `${tag} done`, startDate: inDays(-3), endDate: inDays(-2.9) });
         const hidden = await event(blockedHost, { title: `${tag} by someone blocked` });
         await call('POST', '/api/blocks', { token: viewer.token, body: { userId: blockedHost.id } });
 
@@ -562,10 +574,35 @@ describe('the events list and page', () => {
         expect((await call('POST', `/api/events/${created.body.id}/rsvp`, { token: other.token, body: { status: 'GOING' } })).status).toBe(404);
     });
 
+    it("isn't posted once it's over: only ever in Past, it would look like it never went up", async () => {
+        const host = await member();
+        const hour = 3600_000;
+        const at = (ms: number) => new Date(Date.now() + ms).toISOString();
+        const refused = async (body: Record<string, unknown>) => {
+            const res = await event(host, body);
+            expect(res.status).toBe(400);
+            expect(res.body).toMatchObject({ reason: 'already_over', error: 'That time is already over. Check the date and time.' });
+        };
+        // Its end has passed; no end, and six hours since it started (the list's rule).
+        await refused({ startDate: at(-3 * hour), endDate: at(-hour) });
+        await refused({ startDate: at(-7 * hour) });
+        // Repeating, with its last day long gone.
+        await refused({ startDate: inDays(-40), repeat: 'WEEKLY', repeatUntil: inDays(-20).slice(0, 10) });
+        // Started earlier but still on: posted, and listed until it ends (as a test event was: 4:01 AM to 11:41 AM, posted at 10:41).
+        const onNow = await event(host, { startDate: at(-6.5 * hour), endDate: at(hour) });
+        expect(onNow.status).toBe(201);
+        expect((await event(host, { startDate: at(-3 * hour) })).status).toBe(201);
+        // Repeating from weeks ago and still going: its next date is ahead.
+        expect((await event(host, { startDate: inDays(-21), repeat: 'WEEKLY' })).status).toBe(201);
+        const viewer = await member();
+        const upcoming = (await call('GET', '/api/events?upcoming=true&limit=50', { token: viewer.token })).body.data.map((e: any) => e.id);
+        expect(upcoming).toContain(onNow.body.id);
+    });
+
     it('a one-off event that\'s over takes no more answers', async () => {
         const host = await member();
         const late = await member();
-        const done = await event(host, { startDate: inDays(-2), endDate: inDays(-1.9) });
+        const done = await pastEvent(host, { startDate: inDays(-2), endDate: inDays(-1.9) });
         const res = await call('POST', `/api/events/${done.body.id}/rsvp`, { token: late.token, body: { status: 'GOING' } });
         expect(res.status).toBe(409);
         expect(res.body.reason).toBe('event_over');

@@ -40,6 +40,7 @@ import previewRoutes from '../routes/preview.routes';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createSession, signAccessToken } from '../services/session.service';
 import { dayName } from '../services/eventDates.service';
+import { endOfDay } from '../utils/eventRepeat';
 
 let server: http.Server;
 let base: string;
@@ -632,12 +633,17 @@ describe('how many date changes, and how far ahead', () => {
         const tag = `longover${Date.now()}`;
         // Every week from 300 days ago until 150 days ago; its last date moved to the beach, the one before it too.
         const first = svAt(-300, '16:00');
+        // Posting one that's over is refused (already_over): it's posted for a date ahead, then given its own dates.
         const res = await call('POST', '/api/events', {
             token: host.token,
-            body: { title: `${tag} soccer`, description: 'Five-a-side.', startDate: iso(first), endDate: iso(svAt(-300, '18:00')), repeat: 'WEEKLY', repeatUntil: new Date(Date.now() - 6 * 3600_000 - 150 * DAY).toISOString().slice(0, 10) },
+            body: { title: `${tag} soccer`, description: 'Five-a-side.', startDate: iso(svAt(30, '16:00')), endDate: iso(svAt(30, '18:00')) },
         });
         expect(res.status).toBe(201);
-        const last = new Date(res.body.startDate);
+        await prisma.event.update({
+            where: { id: res.body.id },
+            data: { startDate: first, endDate: svAt(-300, '18:00'), repeat: 'WEEKLY', repeatUntil: endOfDay(new Date(Date.now() - 6 * 3600_000 - 150 * DAY).toISOString().slice(0, 10)) },
+        });
+        const last = new Date((await call('GET', `/api/events/${res.body.id}`, { token: host.token })).body.startDate);
         await prisma.eventDateChange.create({ data: { eventId: res.body.id, occurrenceStart: last, locationName: 'Final field' } });
         const past = (await call('GET', `/api/events?past=true&search=${tag}`, { token: host.token })).body;
         expect(past.data[0]).toMatchObject({ id: res.body.id, startDate: iso(last), locationName: 'Final field' });
