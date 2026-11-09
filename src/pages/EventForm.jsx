@@ -5,6 +5,7 @@ import { ImagePlus, Loader2, Link2, AlertCircle, MapPin, Video, Move, Download, 
 import { directoryApi, eventsApi, uploadApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { fromFormFields, toFormFields, whenShort } from '../utils/eventFormat';
+import { startCheck } from '../components/events/eventRsvp';
 import { dateChip, editScope, fitRepeat, repeatChoiceLabel, repeatChoices, repeatLabel, scopeTitle } from '../utils/eventRepeat';
 import BackButton from '../components/BackButton';
 import RichTextEditor from '../components/RichTextEditor';
@@ -155,6 +156,11 @@ export default function EventForm() {
     const repeatOptions = repeatChoices(ruleDate);
     const repeat = repeatOptions.includes(form.repeat) ? form.repeat : '';
     const dateName = atDate ? dateChip(atDate.key, i18n.language) : '';
+    // A new event whose start has passed: said under the times as they're
+    // picked, and one that's over by then isn't posted.
+    const startState = editing ? '' : startCheck(firstStart, fromFormFields(form.endDate || (form.endTime ? form.startDate : ''), form.endTime), { repeats: !!repeat });
+    const startPassed = startState !== '';
+    const overAlready = startState === 'over';
 
     const importFrom = async () => {
         if (!importUrl.trim()) return;
@@ -233,6 +239,7 @@ export default function EventForm() {
         const description = (form.description || '').replace(/<p><br><\/p>/g, '').trim();
         if (!form.title.trim() || !description || !startDate) { setError(t('events.form.required')); return; }
         if (endDate && endDate < startDate) { setError(t('events.form.endBeforeStart')); return; }
+        if (overAlready) { setError(t('events.form.reasons.already_over')); return; }
         if (repeat && form.repeatUntil && form.repeatUntil < form.startDate) { setError(t('events.form.reasons.repeat_until_before_start')); return; }
         const location = form.online ? '' : [form.locationName, form.locationAddress].map((s) => s.trim()).filter(Boolean).join(', ');
         const visibility = otherVisibility && form.visibility === 'PUBLIC' ? otherVisibility : form.visibility;
@@ -466,6 +473,12 @@ export default function EventForm() {
                     </div>
                 </div>
                 <p className="ef-hint">{atDate ? t('events.form.timeHintDate', { date: dateName }) : repeat ? t('events.form.timeHintRepeat') : t('events.form.timeHint')}</p>
+                {startPassed && (
+                    <p className="ef-warn" role="status">
+                        <AlertCircle size={16} aria-hidden="true" />
+                        <span>{overAlready ? t('events.form.reasons.already_over') : t('events.form.startsPast')}</span>
+                    </p>
+                )}
                 {!proposal && (
                     <>
                         <label className="ef-label" htmlFor="ef-repeat">{t('events.form.repeats')}</label>
@@ -582,6 +595,8 @@ export default function EventForm() {
                 .ef-label { font-size: 0.85rem; font-weight: 600; color: var(--color-gray-800); margin-top: 4px; }
                 .ef-hint { margin: -2px 0 0; font-size: 0.8rem; color: var(--color-gray-500); }
                 .ef-ok { margin: 0; font-size: 0.8rem; color: var(--color-success-text); font-weight: 600; }
+                .ef-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--color-orange-tint); color: var(--color-orange-text); font-size: 0.85rem; line-height: 1.4; }
+                .ef-warn :global(svg) { flex: none; margin-top: 1px; }
                 .ef-input {
                     width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 12px; border-radius: 12px;
                     border: 1px solid var(--color-gray-200); background: var(--color-surface); font: inherit; font-size: 0.95rem; color: inherit;

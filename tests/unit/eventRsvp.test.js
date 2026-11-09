@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { isOver, rsvpErrorText, OVER_AFTER_MS } from '../../src/components/events/eventRsvp.js';
+import { isOver, rsvpErrorText, startCheck, OVER_AFTER_MS } from '../../src/components/events/eventRsvp.js';
 
 const now = Date.parse('2026-11-03T18:00:00Z');
 const at = (hoursFromNow) => new Date(now + hoursFromNow * 3600_000).toISOString();
@@ -76,4 +76,20 @@ test('the fixed line is there in English and Spanish', () => {
     }
     const en = JSON.parse(fs.readFileSync(new URL('../../src/i18n/locales/en.json', import.meta.url), 'utf8'));
     assert.equal(en.events.detail.rsvpFailed, fallback);
+});
+
+test("a new event's start that has passed is said as it's picked; one that's over isn't posted", () => {
+    // A test event, 8 Nov: posted at 10:41 AM, from 4:01 AM to 11:41 AM (El Salvador): on for an hour, so only 'passed'.
+    const posted = Date.parse('2026-11-08T10:41:00-06:00');
+    assert.equal(startCheck('2026-11-08T10:01:00.000Z', '2026-11-08T17:41:00.000Z', { now: posted }), 'passed');
+    // Its end gone too: over.
+    assert.equal(startCheck(at(-3), at(-1), { now }), 'over');
+    // No end: over six hours after it started, as the list has it.
+    assert.equal(startCheck(at(-5), null, { now }), 'passed');
+    assert.equal(startCheck(at(-7), null, { now }), 'over');
+    // Ahead, or not picked yet: nothing to say.
+    assert.equal(startCheck(at(1), null, { now }), '');
+    assert.equal(startCheck(null, null, { now }), '');
+    // Repeating: its later dates may be ahead (the server decides), so only 'passed'.
+    assert.equal(startCheck(at(-48), at(-47), { repeats: true, now }), 'passed');
 });

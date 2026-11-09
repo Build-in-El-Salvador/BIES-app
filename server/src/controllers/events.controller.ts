@@ -830,6 +830,11 @@ export async function createEvent(req: Request, res: Response): Promise<void> {
         if (!data.repeat) delete data.repeatUntil;
         const repeatIssue = repeatProblem({ startDate: data.startDate, endDate: data.endDate, repeat: data.repeat, repeatUntil: data.repeatUntil });
         if (repeatIssue) { res.status(400).json({ error: 'Check when it repeats', reason: repeatIssue }); return; }
+        // Over before it's posted (a date or time picked wrong): it would only
+        // ever be in Past events. A proposed meetup's times are checked below.
+        if (!proposal && !nextOccurrence({ startDate: data.startDate, endDate: data.endDate, repeat: data.repeat, repeatUntil: data.repeatUntil }, new Date())) {
+            res.status(400).json({ error: 'That time is already over. Check the date and time.', reason: 'already_over' }); return;
+        }
         if (countsAsRepeating(data, new Date()) && await repeatingFull(me, new Date())) { tooManyRepeating(res); return; }
         if (!proposal && !(data.description || '').trim()) {
             res.status(400).json({ error: 'Add what the event is about', reason: 'description_missing' }); return;

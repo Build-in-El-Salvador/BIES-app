@@ -107,6 +107,22 @@ async function event(host: Member, tag: string, body: Record<string, unknown>) {
     expect(res.status).toBe(201);
     return res.body as { id: string; title: string };
 }
+/**
+ * An event that's already over. Posting one is refused (already_over), so it's
+ * posted for a date ahead and then given its own dates, as if it had been
+ * posted before they passed.
+ */
+async function pastEvent(host: Member, tag: string, body: Record<string, any>) {
+    const created = await event(host, tag, { ...body, startDate: iso(svAt(30, '09:00')), endDate: undefined, repeat: undefined, repeatUntil: undefined });
+    await prisma.event.update({
+        where: { id: created.id },
+        data: {
+            startDate: new Date(body.startDate), endDate: body.endDate ? new Date(body.endDate) : null,
+            repeat: body.repeat ?? '', repeatUntil: body.repeatUntil ? endOfDay(body.repeatUntil) : null,
+        },
+    });
+    return created;
+}
 const list = async (who: Member, query: string) => (await call('GET', `/api/events?${query}`, { token: who.token })).body;
 const ids = (body: { data: { id: string }[] }) => body.data.map((e) => e.id);
 
@@ -119,7 +135,7 @@ describe('a repeating event in the list', () => {
         const market = await event(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 4 * 3600_000)), repeat: 'WEEKLY' });
         const soon = await event(host, tag, { startDate: iso(svAt(2, '18:00')) });
         const later = await event(host, tag, { startDate: iso(svAt(9, '18:00')) });
-        const gone = await event(host, tag, { startDate: iso(svAt(-3, '18:00')) });
+        const gone = await pastEvent(host, tag, { startDate: iso(svAt(-3, '18:00')) });
 
         const next = nextOccurrence({ startDate: first, endDate: new Date(first.getTime() + 4 * 3600_000), repeat: 'WEEKLY' }, new Date())!;
         const upcoming = await list(host, `upcoming=true&search=${tag}`);
@@ -169,9 +185,9 @@ describe('a repeating event in the list', () => {
         // Every week for three weeks, ending ten days ago.
         const first = svAt(-24, '09:00');
         const until = endOfDay(svAt(-10, '12:00'))!;
-        const series = await event(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 3600_000)), repeat: 'WEEKLY', repeatUntil: svDay(-10) });
-        const older = await event(host, tag, { startDate: iso(svAt(-30, '18:00')) });
-        const newer = await event(host, tag, { startDate: iso(svAt(-2, '18:00')) });
+        const series = await pastEvent(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 3600_000)), repeat: 'WEEKLY', repeatUntil: svDay(-10) });
+        const older = await pastEvent(host, tag, { startDate: iso(svAt(-30, '18:00')) });
+        const newer = await pastEvent(host, tag, { startDate: iso(svAt(-2, '18:00')) });
 
         expect(ids(await list(host, `upcoming=true&search=${tag}`))).toEqual([]);
         const past = await list(host, `past=true&search=${tag}`);
@@ -393,7 +409,7 @@ describe('a monthly event five weeks apart', () => {
             const host = await member();
             const tag = `firstsat${Date.now()}`;
             const first = new Date('2026-10-03T09:00:00-06:00');
-            const series = await event(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 4 * 3600_000)), repeat: 'MONTHLY_NTH', repeatUntil: '2026-11-06' });
+            const series = await pastEvent(host, tag, { startDate: iso(first), endDate: iso(new Date(first.getTime() + 4 * 3600_000)), repeat: 'MONTHLY_NTH', repeatUntil: '2026-11-06' });
             expect(nextOccurrence({ startDate: first, repeat: 'MONTHLY_NTH' }, new Date())!.startDate.toISOString()).toBe(new Date('2026-11-07T09:00:00-06:00').toISOString());
             expect(ids(await list(host, `upcoming=true&search=${tag}`))).toEqual([]);
             const past = await list(host, `past=true&search=${tag}`);
@@ -410,7 +426,7 @@ describe('repeating events a member can have', () => {
         const host = await member();
         const made: string[] = [];
         // One whose last day was long ago (it's only in Past).
-        await event(host, 'old', { startDate: iso(svAt(-120, '09:00')), repeat: 'WEEKLY', repeatUntil: svDay(-90) });
+        await pastEvent(host, 'old', { startDate: iso(svAt(-120, '09:00')), repeat: 'WEEKLY', repeatUntil: svDay(-90) });
         for (let i = 0; i < MAX_REPEATING; i++) {
             made.push((await event(host, 'cap', { startDate: iso(svAt(-3 + i, '09:00')), repeat: 'WEEKLY' })).id);
         }

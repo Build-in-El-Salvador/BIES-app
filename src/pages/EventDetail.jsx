@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-    CalendarDays, CalendarPlus, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
+    CalendarDays, CalendarPlus, CalendarCheck, MapPin, Video, Share, Check, MoreHorizontal, Edit3, Trash2,
     Flag, UserMinus, UserPlus, ChevronRight, ExternalLink, Lock, Loader2, User, Clock, Info, CheckCircle2, XCircle, Store, Ban, Repeat, Pencil, CalendarX, RotateCcw,
 } from 'lucide-react';
 import { eventsApi } from '../services/api';
@@ -392,6 +392,10 @@ const EventDetail = () => {
                 )}
                 {event.canEdit && (event.visibility === 'DRAFT' || event.visibility === 'PRIVATE') && (
                     <p className="ev-notice"><Lock size={15} aria-hidden="true" /> {event.visibility === 'DRAFT' ? t('events.detail.draft') : t('events.detail.private')}</p>
+                )}
+                {/* Over (a series: all of it): opened from an old link, it still looks like one that's on otherwise. */}
+                {shownOver && stage !== 'calledOff' && (
+                    <p className="ev-notice ended" role="status" data-testid="event-ended"><CalendarCheck size={15} aria-hidden="true" /> {t('events.detail.ended')}</p>
                 )}
                 {stage === 'on' && (
                     <div className="ev-stage on" role="status">
@@ -784,6 +788,7 @@ const EventDetail = () => {
                 .ev-menu button.danger { color: #DC2626; }
                 .ev-body { max-width: 760px; margin: 0 auto; padding: 1.25rem 1rem 0; display: flex; flex-direction: column; gap: 18px; }
                 .ev-notice { margin: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-orange-tint); color: var(--color-orange-text); font-size: 0.875rem; }
+                .ev-notice.ended { background: var(--color-gray-100); color: var(--color-gray-700); }
                 .ev-kind { margin: 0 0 4px; font-size: 0.85rem; font-weight: 600; color: var(--color-primary); }
                 .ev-title { margin: 0; font-family: var(--font-display); font-size: 2rem; line-height: 1.05; color: var(--color-gray-900); text-wrap: balance; overflow-wrap: anywhere; }
                 .ev-facts { background: var(--color-surface); border: 1px solid var(--color-gray-200); border-radius: 16px; padding: 4px 14px; }
