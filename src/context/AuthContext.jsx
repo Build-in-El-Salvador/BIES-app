@@ -359,11 +359,13 @@ export const AuthProvider = ({ children }) => {
 
     /**
      * Login with an already-paired BunkerSigner (nostrconnect:// QR flow).
-     * Same pipeline as loginWithBunker, minus the pairing step.
+     * Same pipeline as loginWithBunker, minus the pairing step. `options` is
+     * `{ onProgress, signal }`: the screen hears when the signer is being
+     * waited on, and can cancel the wait.
      */
-    const loginWithNostrConnect = async (signer) => {
+    const loginWithNostrConnect = async (signer, options) => {
         try {
-            const user = await authService.loginWithConnectedBunker(signer);
+            const user = await authService.loginWithConnectedBunker(signer, options);
             setUser(user);
             initWebSocket(user);
             return { success: true, user };

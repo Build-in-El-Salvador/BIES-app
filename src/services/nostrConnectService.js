@@ -48,8 +48,12 @@ export const NIP46_RELAYS =
 /**
  * Event kinds BIES signs with the user's key — requested as pre-authorized
  * permissions so the signer doesn't prompt for every action. Not 27235
- * (HTTP auth): BIES sign-ins and account deletion are asked for each time,
- * so a stolen client key can't sign them unseen.
+ * (HTTP auth): BIES sign-ins and account deletion (CONFIRMATION_KIND in
+ * accountKey.js, the same kind) are asked for each time, so a stolen client
+ * key can't sign them unseen. Never add it here to make a signer that refuses
+ * it "just work": the signer has to ask the person (hold the request, and send
+ * an auth_url if it has an approval page), and login waits for the answer
+ * (signerWait.js). The Amber list in amberSignerService.js leaves it out too.
  * (1059 gift-wraps and NWC events are signed with throwaway keys, not the
  * user key, so they're absent.)
  */

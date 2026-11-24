@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
-import { Loader2, Copy, CheckCircle, Smartphone, RefreshCw } from 'lucide-react';
-import { nostrConnectService } from '../services/nostrConnectService';
+import { Loader2, Copy, CheckCircle, Smartphone, RefreshCw, ExternalLink } from 'lucide-react';
+import { nostrConnectService, isSafeAuthUrl } from '../services/nostrConnectService';
 import { useAuth } from '../context/AuthContext';
 import { isMobileUA } from '../utils/device';
 
@@ -15,7 +15,10 @@ const NOSTRCONNECT_TIMEOUT_MS = 120_000;
  * scan with Amber/phone signer) and a tappable deep link (mobile: opens
  * the signer app on the same device). Waits for the signer's connect
  * response over the rendezvous relays, then completes the BIES
- * challenge-response login.
+ * challenge-response login. The signer may hold that login for the person to
+ * approve it (Amber asks each time; a bunker can send an auth_url): the screen
+ * says so, links the approval page when there is one, and keeps waiting for a
+ * late approval (authService / signerWait.js) instead of failing at once.
  *
  * @param {function} props.onSuccess - receives the AuthContext login result
  * @param {function} props.onError - receives an error message string
@@ -27,13 +30,70 @@ const NostrConnectQR = ({ onSuccess, onError }) => {
     const [status, setStatus] = useState('waiting');
     const [uri, setUri] = useState('');
     const [copied, setCopied] = useState(false);
+    // While `connecting`: whether the signer is being waited on for the
+    // login's signature (`phase`: 'awaiting-approval', then 'slow'), and the
+    // approval page it sent, if any.
+    const [approval, setApproval] = useState({ phase: null, authUrl: null });
     const controllerRef = useRef(null);
     // Guards stale fromURI resolutions after regenerate/unmount.
     const sessionIdRef = useRef(0);
+    // The login after pairing: its abort controller, and a counter that makes
+    // a cancelled, replaced or unmounted attempt's answer a no-op.
+    const loginAbortRef = useRef(null);
+    const loginIdRef = useRef(0);
     const mobile = isMobileUA();
+
+    // The BIES challenge-response login over a paired signer: first run, and
+    // "Try again" after a refusal (the pairing is kept, so no new QR).
+    const runLogin = useCallback(async (signer) => {
+        loginAbortRef.current?.abort();
+        const controller = new AbortController();
+        loginAbortRef.current = controller;
+        const loginId = ++loginIdRef.current;
+        const current = () => loginId === loginIdRef.current && !controller.signal.aborted;
+
+        // A new attempt drops the last attempt's message from the login screen.
+        onError?.('');
+        setApproval({ phase: null, authUrl: null });
+        setStatus('connecting');
+
+        // The signer's approval page (NIP-46 auth_url), shown here as well as
+        // in the toast. Only http(s): the URL comes from the signer.
+        const onAuthUrl = (e) => {
+            const url = e.detail?.url;
+            if (current() && isSafeAuthUrl(url)) setApproval((prev) => ({ ...prev, authUrl: url }));
+        };
+        window.addEventListener('bies:nip46-auth-url', onAuthUrl);
+        try {
+            const result = await loginWithNostrConnect(signer, {
+                signal: controller.signal,
+                onProgress: ({ phase }) => {
+                    if (current()) setApproval((prev) => ({ ...prev, phase }));
+                },
+            });
+            if (!current()) return;
+            if (result.success) {
+                onSuccess?.(result);
+            } else {
+                // Pairing succeeded and is persisted — only the JWT pipeline
+                // failed. "Try again" retries login without re-pairing.
+                setStatus('error');
+                onError?.(result.error || 'Login failed.');
+            }
+        } catch (err) {
+            if (!current()) return;
+            setStatus('error');
+            onError?.(err.message || 'Login failed.');
+        } finally {
+            window.removeEventListener('bies:nip46-auth-url', onAuthUrl);
+        }
+    }, [loginWithNostrConnect, onSuccess, onError]);
 
     const startSession = useCallback(async () => {
         controllerRef.current?.abort();
+        // A new pairing replaces any login still waiting on the last one.
+        loginIdRef.current++;
+        loginAbortRef.current?.abort();
         const controller = new AbortController();
         controllerRef.current = controller;
         const sessionId = ++sessionIdRef.current;
@@ -76,45 +136,33 @@ const NostrConnectQR = ({ onSuccess, onError }) => {
         if (sessionId !== sessionIdRef.current) return; // stale session
 
         // Paired — now run the BIES challenge-response login.
-        setStatus('connecting');
-        try {
-            const result = await loginWithNostrConnect(signer);
-            if (sessionId !== sessionIdRef.current) return;
-            if (result.success) {
-                onSuccess?.(result);
-            } else {
-                // Pairing succeeded and is persisted — only the JWT pipeline
-                // failed. "Try again" retries login without re-pairing.
-                setStatus('error');
-                onError?.(result.error || 'Login failed.');
-            }
-        } catch (err) {
-            if (sessionId !== sessionIdRef.current) return;
-            setStatus('error');
-            onError?.(err.message || 'Login failed.');
-        }
-    }, [loginWithNostrConnect, onSuccess, onError]);
+        await runLogin(signer);
+    }, [runLogin]);
 
     // Retry just the JWT pipeline with the already-paired signer.
     const retryLogin = useCallback(async () => {
         const signer = nostrConnectService.getSigner();
         if (!signer) { startSession(); return; }
-        setStatus('connecting');
-        try {
-            const result = await loginWithNostrConnect(signer);
-            if (result.success) onSuccess?.(result);
-            else { setStatus('error'); onError?.(result.error || 'Login failed.'); }
-        } catch (err) {
-            setStatus('error');
-            onError?.(err.message || 'Login failed.');
-        }
-    }, [loginWithNostrConnect, onSuccess, onError, startSession]);
+        await runLogin(signer);
+    }, [runLogin, startSession]);
+
+    // Stop waiting for the signer's approval: nothing is signed in afterwards,
+    // even if the signer answers later, and the half-made pairing is dropped.
+    const cancelLogin = useCallback(() => {
+        loginIdRef.current++;
+        loginAbortRef.current?.abort();
+        nostrConnectService.disconnect();
+        onError?.('');
+        setStatus('cancelled');
+    }, [onError]);
 
     useEffect(() => {
         startSession();
         return () => {
             sessionIdRef.current++;
+            loginIdRef.current++;
             controllerRef.current?.abort();
+            loginAbortRef.current?.abort();
         };
          
     }, []);
@@ -174,11 +222,40 @@ const NostrConnectQR = ({ onSuccess, onError }) => {
                 </>
             )}
 
-            {status === 'connecting' && (
+            {status === 'connecting' && !approval.phase && (
                 <p className="ncq-status ncq-center">
                     <Loader2 size={18} className="ncq-spin" />
                     {t('login.connectingToSigner')}
                 </p>
+            )}
+
+            {status === 'connecting' && approval.phase && (
+                <div className="ncq-center-col" data-testid="nostrconnect-awaiting-approval" role="status" aria-live="polite">
+                    <p className="ncq-status">
+                        <Loader2 size={14} className="ncq-spin" />
+                        {t('login.awaitingApproval')}
+                    </p>
+                    {approval.phase === 'slow' && (
+                        <p className="ncq-hint" data-testid="nostrconnect-still-waiting">
+                            {t('login.awaitingApprovalSlow')}
+                        </p>
+                    )}
+                    {approval.authUrl && (
+                        <a
+                            className="ncq-open-link"
+                            data-testid="nostrconnect-approval-link"
+                            href={approval.authUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <ExternalLink size={14} />
+                            {t('signer.openApproval')}
+                        </a>
+                    )}
+                    <button type="button" className="ncq-cancel-btn" onClick={cancelLogin}>
+                        {t('common.cancel', 'Cancel')}
+                    </button>
+                </div>
             )}
 
             {(status === 'timeout' || status === 'cancelled') && (
@@ -274,6 +351,15 @@ const NostrConnectQR = ({ onSuccess, onError }) => {
                     font-size: 0.85rem;
                     color: var(--color-gray-500);
                     margin: 0;
+                }
+
+                .ncq-hint {
+                    max-width: 20rem;
+                    margin: 0;
+                    font-size: 0.8rem;
+                    line-height: 1.4;
+                    text-align: center;
+                    color: var(--color-gray-500);
                 }
 
                 .ncq-center { justify-content: center; padding: 1.5rem 0; }

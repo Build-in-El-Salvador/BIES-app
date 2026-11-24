@@ -18,6 +18,7 @@ import { privateKeyFromSeedWords, validateWords } from 'nostr-tools/nip06';
 import { decodeNsec } from '../utils/secretKey.js';
 import { nostrSigner } from './nostrSigner.js';
 import { toSignerError, isDeadSessionError, SIGNER_ERROR } from './signerError.js';
+import { awaitSignature, SIGNER_SIGN_SOFT_MS, SIGNER_SIGN_HARD_MS } from './signerWait.js';
 import { isNativePlatform } from '../utils/platform.js';
 import { nwcClient } from './nwcService.js';
 import { clearLists } from '../utils/listCache.js';
@@ -36,9 +37,26 @@ const RESTORE_WAIT_MS = 1500;
 const RESTORE_LIMIT_MS = 12000;
 
 // A remote signer answers get_public_key at once; sign_event may wait on a
-// human approving it in the signer app, so it gets longer.
+// human approving it in the signer app, so it waits much longer and keeps the
+// request alive for a late approval (signerWait.js: slow notice at 60 s, give
+// up at 240 s).
 const SIGNER_PUBKEY_WAIT_MS = 30000;
-const SIGNER_SIGN_WAIT_MS = 60000;
+
+/**
+ * The sign_event wait limits. An end-to-end test can shorten them with
+ * `window.__TEST_SIGNER_WAIT = { softMs, hardMs }`, the way
+ * `window.__TEST_NIP46_RELAYS` swaps the relays.
+ */
+function signWait() {
+    const test = typeof window !== 'undefined' ? window.__TEST_SIGNER_WAIT : null;
+    const softMs = Number(test?.softMs);
+    const hardMs = Number(test?.hardMs);
+    // Only ever shorter: the hard limit is what the server's challenge allows.
+    return {
+        softMs: softMs > 0 ? Math.min(softMs, SIGNER_SIGN_HARD_MS) : SIGNER_SIGN_SOFT_MS,
+        hardMs: hardMs > 0 ? Math.min(hardMs, SIGNER_SIGN_HARD_MS) : SIGNER_SIGN_HARD_MS,
+    };
+}
 
 /** The promise's answer, or a rejection (`timedOut`) once `ms` have passed (the request carries on). */
 function withinTime(promise, ms) {
@@ -265,17 +283,38 @@ export const authService = {
      * from the signer, sign the kind-27235 challenge remotely, exchange it for
      * a JWT. Does NOT set the nostrSigner mode — callers do that.
      * Returns { user, pubkey }.
+     *
+     * The signature may wait on a person approving it, so the request is kept
+     * alive for a late approval (signerWait.js). `options.onProgress` hears
+     * `{ phase: 'awaiting-approval' }` once the request is out and
+     * `{ phase: 'slow' }` when the wait is a long one; `options.signal` ends
+     * the login (nothing is signed in afterwards, even if the signer answers).
      */
-    _completeSignerLogin: async (signer) => {
+    _completeSignerLogin: async (signer, { onProgress, signal } = {}) => {
+        // A cancelled login must not go on to ask the signer for a signature.
+        const stopIfCancelled = () => {
+            if (signal?.aborted) throw Object.assign(new Error('Login cancelled.'), { name: 'AbortError' });
+        };
         const pubkey = await authService._fromSigner(signer.getPublicKey(), SIGNER_PUBKEY_WAIT_MS);
+        stopIfCancelled();
         const { challenge } = await authApi.nostrChallenge(pubkey);
+        stopIfCancelled();
 
-        const signedEvent = await authService._fromSigner(signer.signEvent({
+        const signing = signer.signEvent({
             kind: 27235,
             created_at: Math.floor(Date.now() / 1000),
             tags: loginTags(),
             content: challenge,
-        }), SIGNER_SIGN_WAIT_MS);
+        });
+        onProgress?.({ phase: 'awaiting-approval' });
+        const { softMs, hardMs } = signWait();
+        const signedEvent = await awaitSignature(signing, {
+            softMs,
+            hardMs,
+            signal,
+            onSlow: () => onProgress?.({ phase: 'slow' }),
+        });
+        stopIfCancelled();
 
         const session = await authApi.nostrLogin(pubkey, signedEvent);
         const { user } = session;
@@ -307,10 +346,11 @@ export const authService = {
     /**
      * Login with a BunkerSigner that is already connected — the
      * nostrconnect:// client-initiated pairing (see NostrConnectQR).
+     * `options` is `{ onProgress, signal }`, see _completeSignerLogin.
      */
-    loginWithConnectedBunker: async (bunkerSigner) => {
+    loginWithConnectedBunker: async (bunkerSigner, options) => {
         const { nostrConnectService } = await import('./nostrConnectService.js');
-        return authService._loginWithPairedSigner(bunkerSigner, nostrConnectService);
+        return authService._loginWithPairedSigner(bunkerSigner, nostrConnectService, options);
     },
 
     /**
@@ -319,9 +359,9 @@ export const authService = {
      * user can allow it and retry; a dead session (link used, revoked) drops
      * it so the next attempt pairs afresh.
      */
-    _loginWithPairedSigner: async (bunkerSigner, nostrConnectService) => {
+    _loginWithPairedSigner: async (bunkerSigner, nostrConnectService, options) => {
         try {
-            const { user, pubkey } = await authService._completeSignerLogin(bunkerSigner);
+            const { user, pubkey } = await authService._completeSignerLogin(bunkerSigner, options);
             nostrSigner.setBunkerMode(pubkey);
             return user;
         } catch (err) {

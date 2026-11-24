@@ -2,13 +2,18 @@
  * mockBunker — minimal NIP-46 remote signer for E2E tests.
  *
  * Plays the role of Amber/nsecBunker: listens for kind-24133 requests on a
- * relay, approves them (except kinds passed to denyKinds), and signs with an in-memory test key. Wire
- * format verified against nostr-tools/nip46 (nostr-tools 2.23.3):
+ * relay, approves them (except kinds passed to denyKinds, and kinds held by
+ * holdSign until "the person approves"), and signs with an in-memory test key.
+ * Wire format verified against nostr-tools/nip46 (nostr-tools 2.23.3 and
+ * 2.25.2):
  *   request:  kind 24133, author=clientPubkey, p-tag=bunkerPubkey,
  *             content = nip44(JSON{id, method, params}, conv(client, bunker))
  *   response: kind 24133, author=bunkerPubkey, p-tag=clientPubkey,
  *             content = nip44(JSON{id, result, error}, conv(bunker, client))
  *   nostrconnect approval: response with result = <secret from the URI>.
+ *   held request: response {id, result:"auth_url", error:<url>} ONCE (the
+ *             client keeps the request open), then the normal response with
+ *             the same id; a second auth_url would reject the request.
  */
 
 import WebSocket from 'ws';
@@ -29,6 +34,10 @@ export async function startMockBunker(relayUrl) {
     // Kinds sign_event refuses (like Bunker46's default permission seed,
     // which omits the 27235 login kind). Mutable via denyKinds().
     let deniedKinds = new Set();
+    // Kinds sign_event holds until the person "approves" (holdSign), and the
+    // requests being held right now.
+    let hold = null; // { kinds: Set, authUrl, delayMs }
+    const held = new Set(); // { timer, answer }
     let ws;
 
     const send = (payload) => ws.send(JSON.stringify(payload));
@@ -70,13 +79,24 @@ export async function startMockBunker(relayUrl) {
                         respond(clientPubkey, { id, error: `Permission denied for sign_event kind:${template.kind}` });
                         break;
                     }
-                    const signed = finalizeEvent({
-                        kind: template.kind,
-                        created_at: template.created_at ?? Math.floor(Date.now() / 1000),
-                        tags: template.tags ?? [],
-                        content: template.content ?? '',
-                    }, bunkerSk);
-                    respond(clientPubkey, { id, result: JSON.stringify(signed) });
+                    const answer = () => {
+                        const signed = finalizeEvent({
+                            kind: template.kind,
+                            created_at: template.created_at ?? Math.floor(Date.now() / 1000),
+                            tags: template.tags ?? [],
+                            content: template.content ?? '',
+                        }, bunkerSk);
+                        respond(clientPubkey, { id, result: JSON.stringify(signed) });
+                    };
+                    if (hold?.kinds.has(template.kind)) {
+                        // Ask the person: one auth_url, then the answer once they approve.
+                        if (hold.authUrl) respond(clientPubkey, { id, result: 'auth_url', error: hold.authUrl });
+                        const entry = { answer };
+                        entry.timer = setTimeout(() => { held.delete(entry); answer(); }, hold.delayMs);
+                        held.add(entry);
+                        break;
+                    }
+                    answer();
                 } catch (err) {
                     respond(clientPubkey, { id, error: `sign_event failed: ${err.message}` });
                 }
@@ -125,6 +145,27 @@ export async function startMockBunker(relayUrl) {
             deniedKinds = new Set(kinds);
         },
 
+        /**
+         * Hold sign_event for these kinds (default: the 27235 login) like a
+         * signer that asks the person: send `authUrl` once (if given), then
+         * sign and answer after `delayMs`, or at once on releaseHeld().
+         * holdSign(null) stops holding; requests already held still answer.
+         */
+        holdSign(options = {}) {
+            hold = options === null
+                ? null
+                : { kinds: new Set(options.kinds ?? [27235]), authUrl: options.authUrl, delayMs: options.delayMs ?? 1000 };
+        },
+
+        /** The person approves every held request now. */
+        releaseHeld() {
+            for (const entry of [...held]) {
+                clearTimeout(entry.timer);
+                held.delete(entry);
+                entry.answer();
+            }
+        },
+
         /** bunker:// URI for the paste-login flow. */
         bunkerUri(secret = 'e2e-secret') {
             return `bunker://${bunkerPubkey}?relay=${encodeURIComponent(relayUrl)}&secret=${secret}`;
@@ -143,6 +184,8 @@ export async function startMockBunker(relayUrl) {
         },
 
         close: () => new Promise((resolve) => {
+            for (const entry of held) clearTimeout(entry.timer);
+            held.clear();
             ws.once('close', resolve);
             ws.close();
         }),
