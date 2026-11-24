@@ -36,12 +36,15 @@ test.afterEach(() => {
     bunker.denyKinds([]);
 });
 
+// The key-based sign-ins (Remote, nsec, seed, file) live here; /login is the
+// email sign-in, which has none of these tabs.
+const LOGIN_URL = '/login/nostr';
 const LOGGED_IN = /\/(home|feed|dashboard)/;
 const AWAITING = '[data-testid="nostrconnect-awaiting-approval"]';
 
 /** Open the scan view and return the nostrconnect:// URI it shows. */
 async function openScan(page) {
-    await page.goto('/login');
+    await page.goto(LOGIN_URL);
     await page.click('.mode-tab:has-text("Remote")');
     await page.click('.mode-tab:has-text("Scan / Amber")');
     const uriField = page.locator('[data-testid="nostrconnect-uri"]');
@@ -67,7 +70,7 @@ test.describe('NIP-46 nostrconnect QR login', () => {
     test('QR pairing → signer approves → logged in', async ({ page }) => {
         test.setTimeout(120_000);
 
-        await page.goto('/login');
+        await page.goto(LOGIN_URL);
         await page.click('.mode-tab:has-text("Remote")');
         await page.click('.mode-tab:has-text("Scan / Amber")');
 
@@ -105,7 +108,7 @@ test.describe('NIP-46 nostrconnect QR login', () => {
     });
 
     test('cancel tears the session down; regenerate makes a fresh URI', async ({ page }) => {
-        await page.goto('/login');
+        await page.goto(LOGIN_URL);
         await page.click('.mode-tab:has-text("Remote")');
         await page.click('.mode-tab:has-text("Scan / Amber")');
 

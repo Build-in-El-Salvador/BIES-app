@@ -29,12 +29,12 @@ test.describe('NIP-46 bunker login', () => {
     test('paste bunker:// URI → login → session survives a fresh context', async ({ page, browser }) => {
         test.setTimeout(120_000);
 
-        await page.goto('/login');
+        await page.goto('/login/nostr');
         await page.click('.mode-tab:has-text("Remote")');
         // Desktop defaults to the paste view; make sure it's active
         await page.click('.mode-tab:has-text("Paste bunker URI")');
 
-        await page.fill('input[placeholder="bunker://... or name@domain.com"]', bunker.bunkerUri());
+        await page.fill('input[placeholder^="bunker://"]', bunker.bunkerUri());
         await page.click('button:has-text("Login with Remote Signer")');
 
         // Backend challenge is signed by the mock bunker → JWT → app
@@ -83,12 +83,12 @@ test.describe('NIP-46 bunker login', () => {
         bunker.denyKinds([27235]);
         const requestCountBefore = bunker.requests.length;
 
-        await page.goto('/login');
+        await page.goto('/login/nostr');
         await page.click('.mode-tab:has-text("Remote")');
         await page.click('.mode-tab:has-text("Paste bunker URI")');
 
         const uri = bunker.bunkerUri('e2e-deny-secret');
-        await page.fill('input[placeholder="bunker://... or name@domain.com"]', uri);
+        await page.fill('input[placeholder^="bunker://"]', uri);
         await page.click('button:has-text("Login with Remote Signer")');
 
         // The signer's refusal is explained, not "Login failed".
